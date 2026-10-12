@@ -259,6 +259,15 @@ export interface InboundSyncLoyaltyProgramDto {
   rewards: InboundSyncLoyaltyRewardDto[];
 }
 
+/**
+ * Arch §13.5 record kinds of the inbound Loyalty configuration stream.
+ * `LOYALTY_TRANSACTION_APPEND` is a LEDGER append, not configuration, and
+ * travels the outbound LOYALTY_LEDGER flow instead (§13.4).
+ */
+export type InboundSyncLoyaltyConfigRecord =
+  | { type: 'PROGRAM_UPSERT'; payload: InboundSyncLoyaltyProgramDto }
+  | { type: 'REWARD_UPSERT'; payload: InboundSyncLoyaltyRewardDto };
+
 export interface InboundSyncPromotionDto {
   id: string;
   tenantId: string;
@@ -364,6 +373,15 @@ export interface InboundSyncDeltasDto {
    * the other required keys.
    */
   loyaltyPrograms: InboundSyncLoyaltyProgramDto[];
+  /**
+   * T7 (arch §13.5): the same configuration stream as kind-tagged records —
+   * the documented PROGRAM_UPSERT / REWARD_UPSERT stream, derived from the
+   * same real rows as `loyaltyPrograms` (never fabricated). The legacy
+   * camelCase channel stays untouched for existing POS mappers; the tagged
+   * records are the normative §13.5 stream and are always populated (empty
+   * when not requested, the documented `alerts` precedent).
+   */
+  loyaltyConfigRecords?: InboundSyncLoyaltyConfigRecord[];
   /** Promotions delta (slice 5d, finding M2). */
   promotions: InboundSyncPromotionDto[];
   /** Customers delta (slice 5d, finding M3). */

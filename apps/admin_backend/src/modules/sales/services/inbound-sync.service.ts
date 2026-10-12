@@ -49,6 +49,7 @@ import {
   InboundSyncForensicAlertDto,
   InboundSyncLoyaltyProgramDto,
   InboundSyncLoyaltyRewardDto,
+  InboundSyncLoyaltyConfigRecord,
   InboundSyncPromotionDto,
   InboundSyncCustomerDto,
   InboundSyncModifierGroupDto,
@@ -168,6 +169,10 @@ export class InboundSyncService {
       }
     }
 
+    const loyaltyPrograms = requestedTypes.has('loyaltyprograms')
+      ? await this.fetchLoyaltyProgramDeltas(tenantId, sinceDate, entityManager)
+      : [];
+
     const deltas: InboundSyncDeltasDto = {
       products: requestedTypes.has('products')
         ? await this.fetchProductDeltas(tenantId, sinceDate, entityManager)
@@ -201,13 +206,10 @@ export class InboundSyncService {
       users: requestedTypes.has('users')
         ? await this.fetchUserDeltas(tenantId, sinceDate, entityManager)
         : [],
-      loyaltyPrograms: requestedTypes.has('loyaltyprograms')
-        ? await this.fetchLoyaltyProgramDeltas(
-            tenantId,
-            sinceDate,
-            entityManager,
-          )
-        : [],
+      loyaltyPrograms,
+      // T7 (arch §13.5): the same fetched programs/rewards as the tagged
+      // configuration stream records, on the reuse-rule generic endpoint.
+      loyaltyConfigRecords: this.toLoyaltyConfigRecords(loyaltyPrograms),
       promotions: requestedTypes.has('promotions')
         ? await this.fetchPromotionDeltas(tenantId, sinceDate, entityManager)
         : [],
@@ -1103,6 +1105,26 @@ export class InboundSyncService {
         this.toLoyaltyRewardDto(reward),
       ),
     }));
+  }
+
+  /**
+   * T7 (arch §13.5): derives the tagged Loyalty configuration stream records
+   * from the ALREADY-FETCHED real rows — one PROGRAM_UPSERT per program (with
+   * its reward closure embedded, the fail-closed delivery property) and one
+   * REWARD_UPSERT per reward. Never fabricated: an empty tenant yields an
+   * empty stream.
+   */
+  private toLoyaltyConfigRecords(
+    programs: InboundSyncLoyaltyProgramDto[],
+  ): InboundSyncLoyaltyConfigRecord[] {
+    const records: InboundSyncLoyaltyConfigRecord[] = [];
+    for (const program of programs) {
+      records.push({ type: 'PROGRAM_UPSERT', payload: program });
+      for (const reward of program.rewards ?? []) {
+        records.push({ type: 'REWARD_UPSERT', payload: reward });
+      }
+    }
+    return records;
   }
 
   private toLoyaltyRewardDto(

@@ -108,107 +108,127 @@ export class LoyaltyLedgerService {
   async appendTransaction(
     dto: AppendLoyaltyTxDto,
   ): Promise<CustomerPointTransaction> {
-    return runInTenantTransaction(
-      this.dataSource,
-      dto.tenantId,
-      async (manager) => {
-        const txRepo = manager.getRepository(CustomerPointTransaction);
+    return runInTenantTransaction(this.dataSource, dto.tenantId, (manager) =>
+      this.appendTransactionInManager(dto, manager),
+    );
+  }
 
-        if (dto.idempotencyKey) {
-          const existing = await txRepo.findOne({
-            where: {
-              idempotency_key: dto.idempotencyKey,
-              tenant_id: dto.tenantId,
-            },
-          });
-          if (existing) {
-            const matchesCustomer =
-              !dto.customerId || existing.customer_id === dto.customerId;
-            const matchesProgram =
-              !dto.loyaltyProgramId ||
-              existing.loyalty_program_id === dto.loyaltyProgramId;
-            const matchesUnits =
-              dto.units === undefined ||
-              Number(existing.units) === Number(dto.units);
-            const existingType = (
-              existing.transaction_type ?? existing.type
-            )?.toLowerCase();
-            const incomingType = dto.transactionType?.toLowerCase();
-            const matchesType = !incomingType || existingType === incomingType;
+  /**
+   * The ledger append core on a CALLER-SUPPLIED tenant-bound manager. This
+   * stays the single ledger write path: `appendTransaction` (the service's
+   * own tenant transaction) and the sync-batch SERIALIZABLE transaction
+   * (arch §13.4 LOYALTY_LEDGER dispatch, which must atomically persist the
+   * ledger movements AND the batch receipt) both route through here. The
+   * caller must guarantee the manager's `app.tenant_id` binding matches
+   * `dto.tenantId` (issue #512: the bound manager is the only access path).
+   */
+  async appendTransactionInManager(
+    dto: AppendLoyaltyTxDto,
+    manager: EntityManager,
+  ): Promise<CustomerPointTransaction> {
+    return this.appendTransactionBody(dto, manager);
+  }
 
-            if (
-              !matchesCustomer ||
-              !matchesProgram ||
-              !matchesUnits ||
-              !matchesType
-            ) {
-              throw new ConflictException(
-                `Integrity conflict: idempotency key '${dto.idempotencyKey}' already used with different payload`,
-              );
-            }
-            return existing;
-          }
-        }
+  /** @internal shared append body; see appendTransactionInManager. */
+  async appendTransactionBody(
+    dto: AppendLoyaltyTxDto,
+    manager: EntityManager,
+  ): Promise<CustomerPointTransaction> {
+    const txRepo = manager.getRepository(CustomerPointTransaction);
 
-        const now = new Date();
-        const tx = txRepo.create({
+    if (dto.idempotencyKey) {
+      const existing = await txRepo.findOne({
+        where: {
+          idempotency_key: dto.idempotencyKey,
           tenant_id: dto.tenantId,
-          customer_id: dto.customerId,
-          loyalty_program_id: dto.loyaltyProgramId,
-          ticket_id: dto.ticketId ?? null,
-          reward_id: dto.rewardId ?? null,
-          transaction_type: toLegacyPointTransactionType(dto.transactionType),
-          type: toLegacyPointTransactionType(dto.transactionType),
-          units: dto.units,
-          points: dto.units ?? 0,
-          reason: dto.reason ?? null,
-          reversal_of_transaction_id: dto.reversalOfTransactionId ?? null,
-          idempotency_key: dto.idempotencyKey ?? null,
-          source_event_id: dto.sourceEventId ?? null,
-          actor_user_id: dto.actorUserId ?? null,
-          branch_id: dto.branchId ?? null,
-          terminal_id: dto.terminalId ?? null,
-          program_version: dto.programVersion ?? null,
-          reward_version: dto.rewardVersion ?? null,
-          commercial_snapshot: dto.commercialSnapshot ?? null,
-          origin: dto.origin ?? null,
-          occurred_at: dto.occurredAt ?? now,
-          recorded_at: now,
-          legacy_imported: false,
-        } as Partial<CustomerPointTransaction>);
+        },
+      });
+      if (existing) {
+        const matchesCustomer =
+          !dto.customerId || existing.customer_id === dto.customerId;
+        const matchesProgram =
+          !dto.loyaltyProgramId ||
+          existing.loyalty_program_id === dto.loyaltyProgramId;
+        const matchesUnits =
+          dto.units === undefined ||
+          Number(existing.units) === Number(dto.units);
+        const existingType = (
+          existing.transaction_type ?? existing.type
+        )?.toLowerCase();
+        const incomingType = dto.transactionType?.toLowerCase();
+        const matchesType = !incomingType || existingType === incomingType;
 
-        const savedTx = await txRepo.save(tx);
-
-        // Batch 5 slice 5b (finding H2): legacy POS rows may arrive with no
-        // program attribution (LoyaltyEarningHandler writes
-        // loyalty_program_id = null). The projection is keyed by program
-        // (NOT NULL loyalty_program_id) and cannot hold a program-less
-        // balance, so a program-less ledger row records the movement
-        // without touching any projection.
-        if (dto.loyaltyProgramId) {
-          await this.updateProjection(
-            manager,
-            dto.tenantId,
-            dto.customerId,
-            dto.loyaltyProgramId,
-            savedTx.id,
+        if (
+          !matchesCustomer ||
+          !matchesProgram ||
+          !matchesUnits ||
+          !matchesType
+        ) {
+          throw new ConflictException(
+            `Integrity conflict: idempotency key '${dto.idempotencyKey}' already used with different payload`,
           );
         }
+        return existing;
+      }
+    }
 
-        // Batch 11a: the global balance column is derived from the ledger
-        // inside the SAME tenant transaction. The duplicate-idempotency-key
-        // early return above intentionally skips this recompute: the original
-        // append already recomputed the balance within its committed
-        // transaction, so replays stay read-only and cannot double-count.
-        await this.recomputeCustomerBalance(
-          dto.tenantId,
-          dto.customerId,
-          manager,
-        );
+    const now = new Date();
+    const tx = txRepo.create({
+      tenant_id: dto.tenantId,
+      customer_id: dto.customerId,
+      loyalty_program_id: dto.loyaltyProgramId,
+      ticket_id: dto.ticketId ?? null,
+      reward_id: dto.rewardId ?? null,
+      transaction_type: toLegacyPointTransactionType(dto.transactionType),
+      type: toLegacyPointTransactionType(dto.transactionType),
+      units: dto.units,
+      points: dto.units ?? 0,
+      reason: dto.reason ?? null,
+      reversal_of_transaction_id: dto.reversalOfTransactionId ?? null,
+      idempotency_key: dto.idempotencyKey ?? null,
+      source_event_id: dto.sourceEventId ?? null,
+      actor_user_id: dto.actorUserId ?? null,
+      branch_id: dto.branchId ?? null,
+      terminal_id: dto.terminalId ?? null,
+      program_version: dto.programVersion ?? null,
+      reward_version: dto.rewardVersion ?? null,
+      commercial_snapshot: dto.commercialSnapshot ?? null,
+      origin: dto.origin ?? null,
+      occurred_at: dto.occurredAt ?? now,
+      recorded_at: now,
+      legacy_imported: false,
+    } as Partial<CustomerPointTransaction>);
 
-        return savedTx;
-      },
+    const savedTx = await txRepo.save(tx);
+
+    // Batch 5 slice 5b (finding H2): legacy POS rows may arrive with no
+    // program attribution (LoyaltyEarningHandler writes
+    // loyalty_program_id = null). The projection is keyed by program
+    // (NOT NULL loyalty_program_id) and cannot hold a program-less
+    // balance, so a program-less ledger row records the movement
+    // without touching any projection.
+    if (dto.loyaltyProgramId) {
+      await this.updateProjection(
+        manager,
+        dto.tenantId,
+        dto.customerId,
+        dto.loyaltyProgramId,
+        savedTx.id,
+      );
+    }
+
+    // Batch 11a: the global balance column is derived from the ledger
+    // inside the SAME tenant transaction. The duplicate-idempotency-key
+    // early return above intentionally skips this recompute: the original
+    // append already recomputed the balance within its committed
+    // transaction, so replays stay read-only and cannot double-count.
+    await this.recomputeCustomerBalance(
+      dto.tenantId,
+      dto.customerId,
+      manager,
     );
+
+    return savedTx;
   }
 
   /**

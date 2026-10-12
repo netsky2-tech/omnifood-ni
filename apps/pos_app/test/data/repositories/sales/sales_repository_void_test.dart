@@ -61,6 +61,11 @@ void main() {
     String id, {
     required double points,
     String? invoiceId = 'inv-void-1',
+    int? units,
+    String? transactionType,
+    String? loyaltyProgramId,
+    String? ticketId,
+    String? rewardId,
   }) =>
       CustomerPointTransactionEntity(
         id: id,
@@ -71,6 +76,11 @@ void main() {
         balanceAfter: 500,
         conversionRate: 0.1,
         createdAt: 1700000000000,
+        units: units,
+        transactionType: transactionType,
+        loyaltyProgramId: loyaltyProgramId,
+        ticketId: ticketId,
+        rewardId: rewardId,
       );
 
   setUp(() async {
@@ -172,8 +182,8 @@ void main() {
       final txs = await database.customerPointTransactionDao
           .getTransactionsByInvoice('inv-void-1');
       // Exactly ONE reversal exists even though the void ran twice: the
-      // earn granted +50, so the single reversal is -50.
-      expect(txs.where((t) => t.type == 'adjust'), hasLength(1));
+      // earn granted +50, so the single compensating REVERSAL is -50.
+      expect(txs.where((t) => t.type == 'reversal'), hasLength(1));
       final row = await database.customerDao.getCustomerById('cust-1');
       expect(row!.pointsBalance, 450);
     });
@@ -253,31 +263,73 @@ void main() {
     });
   });
 
-  group('D-15: the loyalty reversal rides the void transaction', () {
-    test('single adjust transaction reverses the net points of the invoice',
-        () async {
+  group('T5/B5 (arch §4.3): the void appends per-movement REVERSAL rows', () {
+    test('one append-only REVERSAL per original movement, exact opposite '
+        'sign, linked by reversalOfTransactionId', () async {
       await seedInvoice();
       await database.customerDao.saveCustomer(customer());
-      // Sale granted +50 earn and consumed -20 redeem: net +30 to reverse.
-      await database.customerPointTransactionDao
-          .insertTransaction(pointTx('pt-earn-1', points: 50));
-      await database.customerPointTransactionDao
-          .insertTransaction(pointTx('pt-redeem-1', points: -20));
+      // A declared EARN (+345 units) and a declared REDEEM (-50 units), the
+      // §2.3 canonical shapes the probe also seeds.
+      await database.customerPointTransactionDao.insertTransaction(pointTx(
+        'pt-earn-1',
+        points: 34.5,
+        units: 345,
+        transactionType: 'EARN',
+        loyaltyProgramId: 'prog-1',
+        ticketId: 'inv-void-1',
+      ));
+      await database.customerPointTransactionDao.insertTransaction(pointTx(
+        'pt-redeem-1',
+        points: -5,
+        units: -50,
+        transactionType: 'REDEEM',
+        loyaltyProgramId: 'prog-1',
+        ticketId: 'inv-void-1',
+        rewardId: 'rw-1',
+      ));
 
       await repository.voidInvoice('inv-void-1', 'CLIENTE_DESISTE',
           reasonDetail: 'Se fue sin pagar la cuenta');
 
       final txs = await database.customerPointTransactionDao
           .getTransactionsByInvoice('inv-void-1');
-      final reversals = txs.where((t) => t.type == 'adjust').toList();
-      expect(reversals, hasLength(1));
-      final reversal = reversals.single;
-      expect(reversal.points, -30);
-      expect(reversal.reversalOfTransactionId, 'pt-earn-1');
-      expect(reversal.idempotencyKey, 'void-reversal:inv-void-1');
+      final earnReversals =
+          txs.where((t) => t.reversalOfTransactionId == 'pt-earn-1').toList();
+      final redeemReversals =
+          txs.where((t) => t.reversalOfTransactionId == 'pt-redeem-1').toList();
+      expect(earnReversals, hasLength(1),
+          reason: 'exactly one compensating REVERSAL per original movement');
+      expect(redeemReversals, hasLength(1));
+
+      final earnReversal = earnReversals.single;
+      expect(earnReversal.transactionType, 'REVERSAL');
+      expect(earnReversal.type, 'reversal');
+      expect(earnReversal.points, -34.5);
+      expect(earnReversal.units, -345);
+      expect(earnReversal.loyaltyProgramId, 'prog-1');
+      expect(earnReversal.ticketId, 'inv-void-1');
+      expect(earnReversal.idempotencyKey,
+          'void-reversal:inv-void-1:pt-earn-1');
+
+      final redeemReversal = redeemReversals.single;
+      expect(redeemReversal.transactionType, 'REVERSAL');
+      expect(redeemReversal.points, 5);
+      expect(redeemReversal.units, 50);
+      expect(redeemReversal.rewardId, 'rw-1',
+          reason: 'a REVERSAL inherits the original context (arch §4.3)');
+      expect(redeemReversal.idempotencyKey,
+          'void-reversal:inv-void-1:pt-redeem-1');
+
+      // Append-only: the originals survive untouched.
+      final earn = txs.singleWhere((t) => t.id == 'pt-earn-1');
+      final redeem = txs.singleWhere((t) => t.id == 'pt-redeem-1');
+      expect(earn.reversalOfTransactionId, isNull);
+      expect(redeem.reversalOfTransactionId, isNull);
+
+      // Balance: the NET delta of the reversal rows (EARN compensates
+      // negative, REDEEM positive), applied relatively.
       final row = await database.customerDao.getCustomerById('cust-1');
-      expect(row!.pointsBalance, 470);
-      expect(reversal.balanceAfter, 470);
+      expect(row!.pointsBalance, 500 - 34.5 + 5);
     });
 
     test('the reversal lands on the CURRENT balance, not the sale snapshot',
@@ -409,18 +461,22 @@ void main() {
           invoice(),
           null,
           true, // forced failure for testing (production callers pass false)
-          CustomerPointTransactionEntity(
-            id: 'reversal-1',
-            customerId: 'cust-1',
-            invoiceId: 'inv-void-1',
-            type: 'adjust',
-            points: -50,
-            balanceAfter: 450,
-            conversionRate: 0.1,
-            reason: 'Reversal by void',
-            createdAt: now,
-            idempotencyKey: 'void-reversal:inv-void-1',
-          ),
+          [
+            CustomerPointTransactionEntity(
+              id: 'reversal-1',
+              customerId: 'cust-1',
+              invoiceId: 'inv-void-1',
+              type: 'reversal',
+              points: -50,
+              balanceAfter: 450,
+              conversionRate: 0.1,
+              reason: 'Reversal by void',
+              createdAt: now,
+              transactionType: 'REVERSAL',
+              reversalOfTransactionId: 'pt-earn-1',
+              idempotencyKey: 'void-reversal:inv-void-1:pt-earn-1',
+            ),
+          ],
           now,
         ),
         throwsException,
@@ -431,7 +487,7 @@ void main() {
           reason: 'the whole unit rolls back: no flag flip');
       final txs = await database.customerPointTransactionDao
           .getTransactionsByInvoice('inv-void-1');
-      expect(txs.where((t) => t.type == 'adjust'), isEmpty,
+      expect(txs.where((t) => t.type == 'reversal'), isEmpty,
           reason: 'no reversal survived the rollback');
       final customerRow = await database.customerDao.getCustomerById('cust-1');
       expect(customerRow!.pointsBalance, 500);

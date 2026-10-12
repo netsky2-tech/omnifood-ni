@@ -873,48 +873,72 @@ class SalesRepositoryImpl implements SalesRepository {
         )
         .toList();
 
-    // B1a-2 (D-15): the loyalty reversal rides the SAME transaction. The
-    // sale granted/consumed points through customer_point_transactions (the
-    // view model's try/catch is not trustworthy evidence) — the void
-    // compensates the NET points of the invoice with one 'adjust'
-    // transaction and a relative balance update, atomic with the flag flip.
-    // No customer or no point transactions → clean no-op. The idempotency
-    // key documents the reversal; note the idempotency_key index on
-    // customer_point_transactions is NOT unique, so data-layer uniqueness is
-    // not enforced — protection is the double-void guard above plus the
+    // T5/B5 (arch §4.3 per-movement REVERSAL, owner decision 2026-10-12):
+    // the loyalty reversal rides the SAME transaction. The sale
+    // granted/consumed points through customer_point_transactions (the view
+    // model's try/catch is not trustworthy evidence) — the void appends ONE
+    // compensating REVERSAL row per original movement (exact opposite sign,
+    // linked by reversalOfTransactionId, inherited program/ticket/reward
+    // context), and the customer balance takes the NET delta in one relative
+    // update, atomic with the flag flip. No customer or no point
+    // transactions → clean no-op. The per-movement idempotency keys document
+    // the reversal; note the idempotency_key index on
+    // customer_point_transactions is unique per declared key (v71
+    // identities), and the uq_loyalty_reversal_original identity makes a
+    // second reversal for the same original impossible at the data layer —
+    // protection is the double-void guard above (AC-3) plus the
     // transaction's all-or-nothing rollback.
-    CustomerPointTransactionEntity? loyaltyReversal;
+    final loyaltyReversals = <CustomerPointTransactionEntity>[];
     int? loyaltyReversalUpdatedAt;
     if (entity.customerId != null && entity.customerId!.trim().isNotEmpty) {
       final pointTxs = await database.customerPointTransactionDao
           .getTransactionsByInvoice(invoiceId);
-      if (pointTxs.isNotEmpty) {
-        final reversalDelta =
-            -pointTxs.fold<double>(0, (sum, tx) => sum + tx.points);
-        final customer =
-            await database.customerDao.getCustomerById(entity.customerId!);
-        if (customer != null && reversalDelta != 0) {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          loyaltyReversal = CustomerPointTransactionEntity(
-            id: const Uuid().v4(),
-            customerId: entity.customerId!,
-            invoiceId: invoiceId,
-            type: 'adjust',
-            points: reversalDelta,
-            // Snapshot of the expected post-reversal balance, from the same
-            // fresh read the sale path uses. The row update itself is
-            // relative (points_balance = points_balance + delta) inside the
-            // transaction, so a concurrent adjustment cannot be lost.
-            balanceAfter: customer.pointsBalance + reversalDelta,
-            conversionRate: pointTxs.first.conversionRate,
-            reason: 'Reversal by void',
-            createdAt: now,
-            syncStatus: 'pending',
-            reversalOfTransactionId: pointTxs.first.id,
-            idempotencyKey: 'void-reversal:$invoiceId',
+      // Only original movements are compensated: a REVERSAL row is the
+      // product of a previous void (blocked by AC-3) and is never itself
+      // reversed again.
+      final compensable = pointTxs
+          .where((tx) => tx.transactionType?.toUpperCase() != 'REVERSAL')
+          .toList();
+      final customer = compensable.isEmpty
+          ? null
+          : await database.customerDao.getCustomerById(entity.customerId!);
+      if (customer != null && compensable.isNotEmpty) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        var runningBalance = customer.pointsBalance;
+        for (final tx in compensable) {
+          final compensationPoints = -tx.points;
+          runningBalance += compensationPoints;
+          loyaltyReversals.add(
+            CustomerPointTransactionEntity(
+              id: const Uuid().v4(),
+              customerId: entity.customerId!,
+              invoiceId: invoiceId,
+              type: 'reversal',
+              points: compensationPoints,
+              // Snapshot of the expected post-reversal balance, accumulated
+              // in the same order the rows are inserted; the row update
+              // itself is the single relative net delta inside the
+              // transaction, so a concurrent adjustment cannot be lost.
+              balanceAfter: runningBalance,
+              conversionRate: tx.conversionRate,
+              reason: 'Reversal by void',
+              createdAt: now,
+              syncStatus: 'pending',
+              // Inherited context (arch §4.3): the reversal mirrors the
+              // original movement's attribution so the audit trail can
+              // reconstruct the operation without joining the original.
+              loyaltyProgramId: tx.loyaltyProgramId,
+              ticketId: tx.ticketId,
+              rewardId: tx.rewardId,
+              transactionType: 'REVERSAL',
+              units: tx.units == null ? null : -tx.units!,
+              reversalOfTransactionId: tx.id,
+              idempotencyKey: 'void-reversal:$invoiceId:${tx.id}',
+              origin: tx.origin,
+            ),
           );
-          loyaltyReversalUpdatedAt = now;
         }
+        loyaltyReversalUpdatedAt = now;
       }
     }
 
@@ -974,7 +998,7 @@ class SalesRepositoryImpl implements SalesRepository {
       canceledInvoice,
       auditEntity,
       false,
-      loyaltyReversal,
+      loyaltyReversals,
       loyaltyReversalUpdatedAt,
     );
   }

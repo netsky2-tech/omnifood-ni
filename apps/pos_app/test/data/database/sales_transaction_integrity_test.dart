@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/models/customer/customer_point_transaction_entity.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/audit_log_entity.dart';
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
@@ -329,7 +330,7 @@ void main() {
           buildInvoice(id: 'inv-void', canceled: true),
           buildAudit('SALE_VOIDED', 1, '11111111-1111-4111-8111-111111111111'),
           false, // shouldFail
-          null, // no loyalty reversal: invoice has no customer points
+          const <CustomerPointTransactionEntity>[], // no loyalty reversal: invoice has no customer points
           null,
         );
 
@@ -387,7 +388,7 @@ void main() {
             buildInvoice(id: 'inv-void', canceled: true),
             buildAudit('SALE_VOIDED', 1, '22222222-2222-4222-8222-222222222222'),
             true, // shouldFail: force failure after every inner write
-            null, // no loyalty reversal: invoice has no customer points
+            const <CustomerPointTransactionEntity>[], // no loyalty reversal: invoice has no customer points
             null,
           ),
           throwsA(isA<Object>()),

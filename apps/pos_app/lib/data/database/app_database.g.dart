@@ -4863,12 +4863,12 @@ class _$SalesTransactionDao extends SalesTransactionDao {
     InvoiceEntity canceledInvoice,
     AuditLogEntity? auditLog,
     bool shouldFail,
-    CustomerPointTransactionEntity? loyaltyReversal,
+    List<CustomerPointTransactionEntity> loyaltyReversals,
     int? loyaltyReversalUpdatedAt,
   ) async {
     if (database is sqflite.Transaction) {
       await super.executeVoidTransaction(movements, canceledInvoice, auditLog,
-          shouldFail, loyaltyReversal, loyaltyReversalUpdatedAt);
+          shouldFail, loyaltyReversals, loyaltyReversalUpdatedAt);
     } else {
       await (database as sqflite.Database)
           .transaction<void>((transaction) async {
@@ -4879,7 +4879,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             canceledInvoice,
             auditLog,
             shouldFail,
-            loyaltyReversal,
+            loyaltyReversals,
             loyaltyReversalUpdatedAt);
       });
     }

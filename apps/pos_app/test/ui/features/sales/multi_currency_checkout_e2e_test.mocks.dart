@@ -1457,7 +1457,7 @@ class MockSalesTransactionDao extends _i1.Mock
     _i31.InvoiceEntity? canceledInvoice,
     _i37.AuditLogEntity? auditLog,
     bool? shouldFail,
-    _i38.CustomerPointTransactionEntity? loyaltyReversal,
+    List<_i38.CustomerPointTransactionEntity>? loyaltyReversals,
     int? loyaltyReversalUpdatedAt,
   ) =>
       (super.noSuchMethod(
@@ -1468,7 +1468,7 @@ class MockSalesTransactionDao extends _i1.Mock
             canceledInvoice,
             auditLog,
             shouldFail,
-            loyaltyReversal,
+            loyaltyReversals,
             loyaltyReversalUpdatedAt,
           ],
         ),
