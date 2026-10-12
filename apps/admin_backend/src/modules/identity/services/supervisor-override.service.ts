@@ -353,6 +353,15 @@ export class SupervisorOverrideService {
 
   private recordFailedOverrideAttempt(key: string): void {
     const now = Date.now();
+    // F3 (batch 2 verification): the Map is bounded by pruning expired
+    // windows on every write. Keys are tenant+user+terminal, so an
+    // authenticated caller rotating terminal ids would otherwise grow the
+    // map without limit; sweeping on write keeps it at live identities.
+    for (const [k, e] of this.failedOverrideAttempts) {
+      if (now - e.windowStart >= OVERRIDE_ATTEMPT_WINDOW_MS) {
+        this.failedOverrideAttempts.delete(k);
+      }
+    }
     const entry = this.failedOverrideAttempts.get(key);
     if (!entry || now - entry.windowStart >= OVERRIDE_ATTEMPT_WINDOW_MS) {
       this.failedOverrideAttempts.set(key, { count: 1, windowStart: now });

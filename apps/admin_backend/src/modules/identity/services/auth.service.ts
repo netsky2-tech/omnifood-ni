@@ -44,9 +44,12 @@ const isUserRole = (value?: string): value is UserRole =>
  * login path: an unknown/inactive slug must burn the same password-compare
  * cost as the wrong-password path, so slug probing cannot be distinguished
  * from credential probing by timing alone (issue #556, generic-failure rule).
+ * The digest is maintained at PASSWORD_BCRYPT_COST (batch 2 F1): with real
+ * hashes at cost 12, a cost-10 dummy would make unknown-user failures ~4x
+ * faster than wrong-password failures and re-open the timing signal.
  */
 export const DUMMY_PASSWORD_HASH =
-  '$2b$10$kSsyBHKukSJaWaZM7Q0tBeZQ13hT9NzWEJxbETy0pENCsyfe1ROBO';
+  '$2b$12$8CWUpHfhyj.j4MXvYKV/GuPbjPfEMoKiTIgKbef9fRV1jG7jGp8zi';
 
 interface TenantQueryResult {
   id: string;

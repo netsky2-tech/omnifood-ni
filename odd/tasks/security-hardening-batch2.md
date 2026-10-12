@@ -33,6 +33,21 @@ Remediation of the OWASP gap analysis delivered after PR #880, plus the out-of-s
   8/8 e2e, parent-verified identity 787/787). T5 commit `feat(security): tenant-keyed limits on heavy
   report and export flows` (worker RED→GREEN 34/34 with HTTP-stack 429 and tenant isolation, parent
   verified sales 597/597). T6 commit `chore(security): add weekly dependency audit and security.txt`
-  (contact verified against nhilos_support_policy_v0.1.md). Tooling note: local pnpm resolves
+  (contact verified against docs/nhilos/NHILOS_CLIENT_DELIVERY_READINESS.md; the v0.1 support policy lists only soporte@). Tooling note: local pnpm resolves
   prettier 3.9.6 while CI pins 3.8.3 via package-lock — only new files were formatted with
   prettier@3.8.3 and batch-1 formatting was kept byte-identical; CI remains the lint oracle.
+- L4: Independent verification (high-risk tier) returned S1-S6 PASS with 8 findings. Remediated in
+  the follow-up commit: F1 DUMMY_PASSWORD_HASH raised to cost 12 (timing-equalization asymmetry vs
+  cost-12 real digests), F2 dedicated password.config.spec.ts for needsCostUpgrade incl. unparsable
+  digests, F3 override-attempt Map pruned on every write (unbounded growth via rotated terminal ids),
+  F7 stale frontend fixture updated to the uniform override 401 message, F8 security.txt Expires
+  shortened to <1 year and this log's contact citation corrected — security@nhilospos.com is
+  documented in docs/nhilos/NHILOS_CLIENT_DELIVERY_READINESS.md (the v0.1 support policy lists only
+  soporte@). Accepted residuals, deliberate scope: F4 insufficient-permission keeps its specific 403
+  (S4(b) covered unknown-supervisor/wrong-credential only; the permission fact is known to the
+  requester), F5 the throttler 429 for reports uses the library default body with named
+  Retry-After-tenant-report headers (window stated in the config docs; a custom exception is a
+  follow-up), F6 /sales/reports/x and /z remain unthrottled by design (cheap, cached aggregation
+  paths; the heavy exports are covered). Verifier also corrected a premise: there is no global
+  APP_GUARD ThrottlerGuard anywhere — batch 1 and batch 2 both use per-module ThrottlerModule.forRoot
+  instances with method-level guards; dual registration is source-verified safe, not runtime-verified.
