@@ -8,6 +8,15 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import {
+  ACCOUNT_THROTTLER_NAME,
+  IP_THROTTLER_NAME,
+  LOGIN_PER_ACCOUNT_LIMIT,
+  LOGIN_PER_IP_LIMIT,
+  REFRESH_PER_IP_LIMIT,
+  THROTTLE_TTL_MS,
+} from '../security/auth-throttle.config';
 import { AuthService } from '../services/auth.service';
 import { SupervisorOverrideService } from '../services/supervisor-override.service';
 import { AuthGuard } from '../guards/auth.guard';
@@ -26,11 +35,32 @@ export class AuthController {
   ) {}
 
   @Post('login')
+  // Pre-auth credential seam: aggressive limits per IP and per account
+  // (tenantSlug|email) so brute force and credential stuffing are bounded
+  // (security audit remediation S1).
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [IP_THROTTLER_NAME]: { limit: LOGIN_PER_IP_LIMIT, ttl: THROTTLE_TTL_MS },
+    [ACCOUNT_THROTTLER_NAME]: {
+      limit: LOGIN_PER_ACCOUNT_LIMIT,
+      ttl: THROTTLE_TTL_MS,
+    },
+  })
   async login(@Body() body: LoginDto) {
     return this.authService.login(body.email, body.pass, body.tenantSlug);
   }
 
   @Post('refresh')
+  // Pre-auth credential seam: bound per IP (see security audit remediation
+  // S1). The per-account bucket is login-only: refresh bodies carry no email.
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [ACCOUNT_THROTTLER_NAME]: true })
+  @Throttle({
+    [IP_THROTTLER_NAME]: {
+      limit: REFRESH_PER_IP_LIMIT,
+      ttl: THROTTLE_TTL_MS,
+    },
+  })
   async refresh(@Body() body: RefreshTokenDto) {
     return this.authService.refreshTokens(
       body.userId,

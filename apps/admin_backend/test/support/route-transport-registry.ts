@@ -84,6 +84,14 @@ export const DEVICE_GUARD = 'SyncTransportGuard';
 /** Guards that authenticate a human session (identity JWT). */
 export const HUMAN_AUTH_GUARDS = ['AuthGuard', 'AuthoritativeCurrentUserGuard'];
 
+/**
+ * Guards that harden a route without being an authentication boundary.
+ * Their presence on a `public` route is legitimate and must not fail the
+ * transport contract (security audit remediation S1 rate limits the
+ * pre-auth credential seams).
+ */
+export const NON_AUTH_GUARDS = ['ThrottlerGuard'];
+
 type ModuleRef = Type | DynamicModule;
 
 function moduleClassOf(ref: unknown): Type | undefined {
@@ -396,11 +404,14 @@ export function verifyRouteTransportRegistry(
         );
       }
     } else {
-      if (route.guards.length > 0) {
+      const authGuards = route.guards.filter(
+        (guard) => !NON_AUTH_GUARDS.includes(guard),
+      );
+      if (authGuards.length > 0) {
         findings.push(
           finding(
             route,
-            `declared public but carries guard(s): ${route.guards.join(', ')}`,
+            `declared public but carries guard(s): ${authGuards.join(', ')}`,
           ),
         );
       }

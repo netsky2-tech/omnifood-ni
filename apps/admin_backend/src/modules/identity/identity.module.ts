@@ -44,9 +44,11 @@ import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-tra
 // device secret always comes from DEVICE_SYNC_JWT_CONFIG.
 import { DeviceSyncJwtConfigModule } from './config/device-sync-jwt.config';
 import { SyncTransportGuard } from './guards/sync-transport.guard';
+import { AuthThrottleModule } from './security/auth-throttle.module';
 
 @Module({
   imports: [
+    AuthThrottleModule,
     TypeOrmModule.forFeature([
       User,
       AuditLog,
