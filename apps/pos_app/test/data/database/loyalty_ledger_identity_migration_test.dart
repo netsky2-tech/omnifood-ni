@@ -544,6 +544,29 @@ void main() {
         await db.close();
       });
 
+      test('a declared type outside the §9.3 domain is rejected (it would '
+          'otherwise evade every shape rule)', () async {
+        final db = await openAt70();
+        await migration70_71.migrate(db);
+
+        await expectLater(
+          insertRow(db,
+              id: 'td1',
+              type: 'MILESTONE',
+              ticketId: 'tkt-1',
+              programId: 'prog-1',
+              idempotencyKey: 'k1',
+              units: 10),
+          throwsA(predicate((e) => e
+              .toString()
+              .contains('LOYALTY_LEDGER_TYPE_SEMANTICS_VIOLATION'))),
+        );
+        // the NULL legacy namespace stays permitted
+        await insertRow(db, id: 'td2', ticketId: 'tkt-2');
+
+        await db.close();
+      });
+
       test('fail-closed upgrade: pre-existing residual violations abort the '
           'migration with counts and sample ids', () async {
         final db = await openAt70(

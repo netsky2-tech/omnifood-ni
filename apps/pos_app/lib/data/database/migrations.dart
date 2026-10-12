@@ -3031,6 +3031,15 @@ const _loyaltyLedgerShapeRules = <_LoyaltyShapeRule>[
     "origin IS NOT NULL AND LOWER(origin) NOT IN ('pos', 'cloud')",
     'origin, when present, is POS or CLOUD',
   ),
+  // Follow-up #5: a declared type outside the §9.3 domain would evade every
+  // shape rule above (none of them selects it) — reject it. The NULL legacy
+  // namespace stays permitted.
+  _LoyaltyShapeRule(
+    'type_domain',
+    "transaction_type IS NOT NULL AND LOWER(transaction_type) NOT IN "
+        "('earn', 'redeem', 'adjust', 'reversal')",
+    'a declared transaction_type is one of EARN/REDEEM/ADJUST/REVERSAL',
+  ),
 ];
 
 String _loyaltyIdentityIndexSql(_LoyaltyLedgerIdentity identity) =>
@@ -3059,6 +3068,9 @@ String _loyaltyTypeSemanticsTriggerSql(String triggerName, String event) =>
       OR (NEW.transaction_type IS NOT NULL AND NEW.idempotency_key IS NULL)
       OR (NEW.origin IS NOT NULL
           AND LOWER(NEW.origin) NOT IN ('pos', 'cloud'))
+      OR (NEW.transaction_type IS NOT NULL
+          AND LOWER(NEW.transaction_type) NOT IN
+              ('earn', 'redeem', 'adjust', 'reversal'))
     )
     BEGIN
       SELECT RAISE(ABORT,
@@ -3074,7 +3086,8 @@ String _loyaltyTypeSemanticsViolationMessage(String subject) =>
     'loyalty_program_id and units > 0; declared REDEEM needs ticket_id and '
     'units < 0; declared ADJUST needs non-zero units; declared REVERSAL needs '
     'reversal_of_transaction_id and non-zero units; every declared row needs '
-    'an idempotency_key; origin, when present, is POS or CLOUD; NULL '
+    'an idempotency_key; a declared type is one of EARN/REDEEM/ADJUST/'
+    'REVERSAL; origin, when present, is POS or CLOUD; NULL '
     'transaction_type is the legacy/transitional namespace and stays '
     'permitted)';
 

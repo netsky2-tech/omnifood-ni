@@ -10,6 +10,30 @@ enum PointTransactionType {
   adjust,
 }
 
+/// Follow-up #5: the §9.3 canonical textual forms of the declared ledger
+/// types. SQLite persists exactly these uppercase spec forms; PostgreSQL
+/// persists the lowercase enum members; the case-insensitive guards are
+/// defense-in-depth, never the primary contract.
+const Set<String> loyaltyLedgerTypeForms = <String>{
+  'EARN',
+  'REDEEM',
+  'ADJUST',
+  'REVERSAL',
+};
+
+/// Normalizes a raw declared type to the §9.3 canonical form. An
+/// unclassifiable type (unknown value, blank) returns NULL: it must not be
+/// written as-is, because it would claim a declared namespace the guards do
+/// not know and thereby evade every shape rule — the same fail-safe spirit
+/// as T4 (never fabricate an attribution).
+String? canonicalLoyaltyLedgerType(String? raw) {
+  if (raw == null) {
+    return null;
+  }
+  final upper = raw.trim().toUpperCase();
+  return loyaltyLedgerTypeForms.contains(upper) ? upper : null;
+}
+
 @freezed
 class CustomerPointTransaction with _$CustomerPointTransaction {
   const factory CustomerPointTransaction({
