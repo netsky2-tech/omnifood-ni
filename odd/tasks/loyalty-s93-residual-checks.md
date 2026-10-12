@@ -1,6 +1,6 @@
 # §9.3 CHECK clauses residuales (follow-up #4 de la tabla post-gate)
 
-**Estado:** EN REVISIÓN (opción A implementada)
+**Estado:** CERRADO
 **Fecha:** 2026-02-14
 **Origen:** header de `1809650000000-EnforceLoyaltyLedgerIdentityConstraints.ts`: *"The remaining §9.3 units/version/snapshot clauses are a tracked follow-up, not silently dropped."*
 
@@ -40,6 +40,21 @@ tabla `customer_point_transactions`) **sin refuerzo real**:
   decisión fail-safe de T4 que el owner aprobó implícitamente en #882.
 - **Opción C (A ahora, B después):** reforzar lo compatible ya; enriquecer
   escritores como follow-up propio.
+
+## Log
+
+- L1 2026-02-14 — commit `cec730f7` (POS trigger + migración 1809750000000 +
+  specs) sobre issue #884; review nativa `review-53c88fe0703c17e1` APPROVED
+  (risk+reliability, 4 hallazgos no bloqueantes) y acknowledged.
+- L2 2026-02-14 — 3 iteraciones de CI: (a) `TABLE` sin usar en el spec
+  (`79dda3ba`); (b) subquery de muestra del pre-scan sin alias FROM — detectado
+  por el `test:db` real, no por el unit spec (`1e0c2097`); (c) fixture e2e RLS
+  sembrando probes EARN sin idempotency_key uuid (`d5c46fe9`). E2E backend
+  739/739 local antes del push final.
+- L3 2026-02-14 — CI verde (lint-and-test 12m31s backend / 4m53s POS,
+  build-check, Cloudflare Pages, GitGuardian). Squash merge `c016f6a8`;
+  issue #884 CLOSED. Pendiente declarado: `.db.spec` dedicado de la migración
+  (la cadena completa ya la ejercita vía 180965 db.spec).
 
 ## Decisión del owner (2026-02-14): OPCIÓN A
 
