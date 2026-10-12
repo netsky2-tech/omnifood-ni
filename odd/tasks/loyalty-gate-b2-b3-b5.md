@@ -1,6 +1,6 @@
 # Loyalty gate blockers B2/B3/B5 (T6/T7/T5)
 
-- **Status:** EN CURSO — decisiones del owner 2026-10-12: (1) B5 contract = per-movement REVERSAL (arch §4.3), no el net adjust actual; (2) B2 se cierra arreglando el fixture del probe (sembrar programa + reward vía path de producción) e implementando records taggeados §13.5 sobre filas reales — un tenant sin programas legítimamente tira un stream vacío; NO se inventa un programa default de plataforma.
+- **Status:** CERRADO — los 3 blockers cerrados. Gate `final`: **12/12 PASS, ok:true, gate_held** (baseline gate_failed solo porque el modo baseline exige blockers FAIL — scoreboard de árbol sin tocar). Owner decisions: B5 = per-movement REVERSAL; B2 = fixture seed (no plataforma-default).
 - **Branch:** `feat/loyalty-gate-b2-b3-b5`, from `main` @ `0f665a4d`.
 - **Origin:** handoff from the release-gate adoption session. Gate baseline on main is the scoreboard: `gate_held` with B2/B3/B5 FAIL, all other probes PASS.
 
@@ -43,4 +43,6 @@ then `final` mode (T10) may go all-green.
 - **T7/B2 CLOSED** — commit `f1a70e44` (tagged §13.5 records on the generic inbound
   endpoint, derived from real rows; legacy camelCase channel intact), probe B2 GREEN.
 - Full backend probe run after both: 7/7 GREEN; fulfillment e2e real-App 7/7 GREEN.
-- T5/B5: next (per-movement REVERSAL contract on the POS void path).
+- **T5/B5 CLOSED** — commit `86f34248`: void POS appendea un REVERSAL por movimiento original (signo exacto en points+units, reversalOfTransactionId, contexto heredado, key `void-reversal:<invoice>:<txId>`), delta neto de balance en una sola actualización relativa, atómico con la cancelación; probe B5 GREEN tras sembrar el customer en el fixture (invariante heredado de D-15: una venta con loyalty siempre tiene customer local).
+- Verificación: backend unit 3998 PASS; POS data-layer + e2e 482 PASS; gate final 12/12 PASS.
+- **Pendiente (fuera de alcance de este gate):** el lado POS que DESPACHA los rows del ledger al cloud por el flow LOYALTY_LEDGER que T6 abrió (B3 solo cubre la aceptación backend). T4 follow-up previo (transactionType explícito en el path legacy) sigue abierto.
