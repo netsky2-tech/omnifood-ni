@@ -3,6 +3,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { ReportsController } from './reports.controller';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '../../identity/guards/auth.guard';
@@ -36,6 +37,12 @@ import {
   IDENTITY_JWT_CONFIG,
   type IdentityJwtConfig,
 } from '../../identity/config/identity-jwt.config';
+import {
+  REPORTS_PER_TENANT_LIMIT,
+  REPORT_THROTTLE_TTL_MS,
+  TENANT_REPORT_THROTTLER_NAME,
+  reportThrottlers,
+} from '../security/report-throttle.config';
 
 describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
   const jwtEnvironment = {
@@ -355,6 +362,10 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
             audience: jwtEnvironment.JWT_AUDIENCE,
           },
         }),
+        // T5 (S5, API6:2023): the export/fiscal routes carry a method-level
+        // ThrottlerGuard, so the named tenant-report throttler must be
+        // registered in this module context for the guard to resolve.
+        ThrottlerModule.forRoot(reportThrottlers()),
       ],
       controllers: [ReportsController],
       providers: [
@@ -362,6 +373,7 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
         RolesGuard,
         AuthGuard,
         AuthoritativeCurrentUserGuard,
+        ThrottlerGuard,
         {
           provide: CurrentUserAuthorizationService,
           useValue: { authorize: jest.fn((token: unknown) => token) },
@@ -419,6 +431,54 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
       AuthoritativeCurrentUserGuard,
       RolesGuard,
     ]);
+  });
+
+  // T5 (S5, API6:2023): the heavy report/export flows are the sensitive
+  // business surface — each route must carry the tenant-keyed throttler
+  // guard and a per-tenant limit override, so a 429 is observable.
+  const THROTTLED_ROUTES = [
+    'exportSalesBook',
+    'exportZReports',
+    'getMonthlyFiscalSummary',
+    'getVoidedInvoices',
+    'getSequenceAudit',
+  ] as const;
+
+  it.each(THROTTLED_ROUTES)(
+    'applies the tenant report throttler to %s',
+    (methodName: (typeof THROTTLED_ROUTES)[number]) => {
+      const handler = ReportsController.prototype[methodName] as object;
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+        ThrottlerGuard,
+      );
+      expect(
+        Reflect.getMetadata(
+          `THROTTLER:LIMIT${TENANT_REPORT_THROTTLER_NAME}`,
+          handler,
+        ),
+      ).toBe(REPORTS_PER_TENANT_LIMIT);
+      expect(
+        Reflect.getMetadata(
+          `THROTTLER:TTL${TENANT_REPORT_THROTTLER_NAME}`,
+          handler,
+        ),
+      ).toBe(REPORT_THROTTLE_TTL_MS);
+    },
+  );
+
+  it('does not throttle the light dashboard routes with the tenant report throttler', () => {
+    for (const handler of [
+      ReportsController.prototype.getDashboard,
+      ReportsController.prototype.getXReport,
+      ReportsController.prototype.getZReport,
+    ]) {
+      expect(
+        Reflect.getMetadata(
+          `THROTTLER:LIMIT${TENANT_REPORT_THROTTLER_NAME}`,
+          handler,
+        ),
+      ).toBeUndefined();
+    }
   });
 
   it('returns 403 for CASHIER role on X report route', async () => {
@@ -741,5 +801,41 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
 
     expect(responsePdf.headers['content-type']).toContain('application/pdf');
     expect(responsePdf.headers['content-disposition']).toContain('.pdf');
+  });
+
+  // T5 (S5): the 429 must be observable through the full HTTP stack — a
+  // fresh tenant burns its 30-request budget and the 31st request is
+  // rejected with 429, while another tenant keeps its own budget.
+  it('returns 429 on the 31st report request of one tenant and keeps other tenants isolated', async () => {
+    const jwtService = app.get(JwtService);
+    const signTenantToken = (tenantId: string) =>
+      jwtService.sign({
+        sub: 'user-throttle',
+        email: 'owner@example.com',
+        role: UserRole.OWNER,
+        tenant_id: tenantId,
+        is_active: true,
+        token_type: 'access',
+        security_version: 1,
+      });
+
+    for (let i = 0; i < REPORTS_PER_TENANT_LIMIT; i++) {
+      await request(getHttpServer())
+        .get('/sales/reports/fiscal/sequence-audit?terminalId=001-001')
+        .set('Authorization', `Bearer ${signTenantToken('tenant-throttle-a')}`)
+        .expect(200);
+    }
+
+    const throttled = await request(getHttpServer())
+      .get('/sales/reports/fiscal/sequence-audit?terminalId=001-001')
+      .set('Authorization', `Bearer ${signTenantToken('tenant-throttle-a')}`)
+      .expect(429);
+    expect(throttled.body.message).toContain('Too Many Requests');
+
+    // A different tenant behind the same egress IP keeps its own budget.
+    await request(getHttpServer())
+      .get('/sales/reports/fiscal/sequence-audit?terminalId=001-001')
+      .set('Authorization', `Bearer ${signTenantToken('tenant-throttle-b')}`)
+      .expect(200);
   });
 });

@@ -411,12 +411,12 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
         .expect(403);
     });
 
-    it('returns 404 when supervisor is not found in the tenant', async () => {
+    it('returns the uniform 401 failure when supervisor is not found in the tenant (S4: no enumeration)', async () => {
       const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
 
       auditRepository.save.mockResolvedValue({ id: 'audit-6' });
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/identity/auth/supervisor-override')
         .set('Authorization', `Bearer ${cashierToken}`)
         .send({
@@ -425,7 +425,57 @@ describe('Dual-Channel Supervisor Override (e2e) (Slice 10.2)', () => {
           method: 'PIN',
           permissionRequired: AppPermission.SALES_VOID_INVOICE,
         })
-        .expect(404);
+        .expect(401);
+
+      // Same status and generic message as a wrong-credential rejection:
+      // the endpoint must not reveal whether the supervisor exists.
+      expect((res.body as { message: string }).message).toBe(
+        'No se pudo autorizar la anulación',
+      );
+    });
+
+    it('returns 429 with a retry hint after 5 failed attempts for the same requesting user', async () => {
+      // Dedicated terminal context so this test does not consume the failure
+      // window of the other cashier-driven scenarios (the service keys its
+      // in-memory counter by tenant + requesting user + terminal, and keeps
+      // it for the lifetime of this app fixture).
+      const lockoutTerminalId = 'POS_LOCKOUT_TEST';
+      const cashierToken = generateTestToken(cashierUserId, UserRole.CASHIER);
+      const pinHash = await bcrypt.hash('123456', 10);
+
+      securityProfileRepository.findOne.mockResolvedValue({
+        user_id: supervisorManagerId,
+        pin_hash: pinHash,
+        is_pin_enabled: true,
+        custom_permissions: [],
+      });
+      auditRepository.save.mockResolvedValue({ id: 'audit-7' });
+
+      const post = () =>
+        request(app.getHttpServer())
+          .post('/identity/auth/supervisor-override')
+          .set('Authorization', `Bearer ${cashierToken}`)
+          .send({
+            supervisorId: supervisorManagerId,
+            credential: 'wrong_pin',
+            method: 'PIN',
+            permissionRequired: AppPermission.SALES_VOID_INVOICE,
+            context: { terminalId: lockoutTerminalId },
+          });
+
+      for (let i = 0; i < 5; i++) {
+        await post().expect(401);
+      }
+
+      const res = await post().expect(429);
+      const body = res.body as {
+        statusCode: number;
+        message: string;
+        retryAfterSeconds: number;
+      };
+      expect(body.statusCode).toBe(429);
+      expect(body.message).toContain('segundos');
+      expect(body.retryAfterSeconds).toBeGreaterThan(0);
     });
   });
 

@@ -20,8 +20,11 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   role: UserRole;
 
+  // S3 (security-hardening-batch2): NIST SP 800-63B minimum with the
+  // offline PIN acting as the terminal second factor. Common-password
+  // rejection is the service-layer check (S2), not a DTO rule.
   @IsString()
-  @MinLength(6)
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   @IsOptional()
   password?: string;
 
@@ -40,8 +43,11 @@ export class UpdateUserDto {
   @IsOptional()
   role?: UserRole;
 
+  // S3 (security-hardening-batch2): NIST SP 800-63B minimum with the
+  // offline PIN acting as the terminal second factor. Common-password
+  // rejection is the service-layer check (S2), not a DTO rule.
   @IsString()
-  @MinLength(6)
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
   @IsOptional()
   password?: string;
 

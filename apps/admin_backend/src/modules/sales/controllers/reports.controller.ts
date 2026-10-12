@@ -6,6 +6,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { Response } from 'express';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
@@ -47,6 +48,11 @@ import {
   SalesBookExportDto,
   ZReportsExportDto,
 } from '../dto/sales-export.dto';
+import {
+  REPORTS_PER_TENANT_LIMIT,
+  REPORT_THROTTLE_TTL_MS,
+  TENANT_REPORT_THROTTLER_NAME,
+} from '../security/report-throttle.config';
 
 @Controller('sales/reports')
 @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
@@ -103,8 +109,20 @@ export class ReportsController {
     return this.salesReportsService.getCashierPerformance(tenantId, query);
   }
 
+  // T5 (S5, OWASP API6:2023): heavy fiscal/report reads are limited per
+  // TENANT (not per IP — food-park devices share one egress IP) at a
+  // generous 30 req/min; the tracker mirrors @GetTenantId(). Method-level
+  // ThrottlerGuard runs after the class guards, so only authenticated,
+  // role-authorized requests consume the tenant budget.
   @Get('fiscal/monthly-summary')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
   async getMonthlyFiscalSummary(
     @GetTenantId() tenantId: string,
     @Query() query: MonthlyFiscalSummaryQueryDto,
@@ -114,6 +132,13 @@ export class ReportsController {
 
   @Get('fiscal/voided-invoices')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
   async getVoidedInvoices(
     @GetTenantId() tenantId: string,
     @Query() query: VoidedInvoicesQueryDto,
@@ -123,6 +148,13 @@ export class ReportsController {
 
   @Get('fiscal/sequence-audit')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
   async getSequenceAudit(
     @GetTenantId() tenantId: string,
     @Query() query: SequenceAuditQueryDto,
@@ -132,6 +164,13 @@ export class ReportsController {
 
   @Get('export/sales-book')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
   async exportSalesBook(
     @GetTenantId() tenantId: string,
     @Query() query: ExportSalesBookQueryDto,
@@ -157,6 +196,13 @@ export class ReportsController {
 
   @Get('export/z-reports')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
   async exportZReports(
     @GetTenantId() tenantId: string,
     @Query() query: ExportZReportsQueryDto,

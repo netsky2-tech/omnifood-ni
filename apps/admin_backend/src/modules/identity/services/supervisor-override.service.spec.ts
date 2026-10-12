@@ -4,7 +4,7 @@ import { DataSource } from 'typeorm';
 import {
   UnauthorizedException,
   ForbiddenException,
-  NotFoundException,
+  HttpException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { SupervisorOverrideService } from './supervisor-override.service';
@@ -330,11 +330,11 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
       expect(response.authorized).toBe(true);
     });
 
-    it('throws NotFoundException when supervisor does not exist in tenant or is inactive', async () => {
+    it('returns the uniform 401 failure when supervisor does not exist in tenant or is inactive (S4: no enumeration)', async () => {
       userRepository.findOne.mockResolvedValue(null);
 
-      await expect(
-        service.authorizeOverride(
+      const error = await service
+        .authorizeOverride(
           {
             supervisorId: 'non-existent',
             credential: '123456',
@@ -343,8 +343,17 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
           },
           testTenantId,
           requestingUserId,
-        ),
-      ).rejects.toThrow(NotFoundException);
+        )
+        .then(
+          () => {
+            throw new Error('Expected the override attempt to fail');
+          },
+          (e) => e as HttpException,
+        );
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect(error.getStatus()).toBe(401);
+      expect(error.message).toBe('No se pudo autorizar la anulación');
     });
 
     it('throws UnauthorizedException when requested method is disabled on security profile', async () => {
@@ -375,6 +384,189 @@ describe('SupervisorOverrideService (Slice 10.2)', () => {
           requestingUserId,
         ),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  // S4 (security-hardening-batch2): supervisor override verification
+  // hardening. Failure responses are uniform (no supervisor enumeration)
+  // and failed verification attempts are counted per requesting user and
+  // terminal with a fixed window that returns 429 when exhausted.
+  describe('S4 hardening: uniform failures and failed-attempt window', () => {
+    const GENERIC_FAILURE_MESSAGE = 'No se pudo autorizar la anulación';
+
+    const stubActiveManagerSupervisor = async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: supervisorId,
+        name: 'Manager Supervisor',
+        role: UserRole.MANAGER,
+        tenant_id: testTenantId,
+        is_active: true,
+      });
+      securityProfileRepository.findOne.mockResolvedValue({
+        user_id: supervisorId,
+        pin_hash: await bcrypt.hash('123456', 10),
+        is_pin_enabled: true,
+        custom_permissions: [],
+      });
+    };
+
+    const attempt = (credential: string, requestingUser = requestingUserId) =>
+      service.authorizeOverride(
+        {
+          supervisorId,
+          credential,
+          method: 'PIN',
+          permissionRequired: AppPermission.SALES_VOID_INVOICE,
+        },
+        testTenantId,
+        requestingUser,
+      );
+
+    // Same as `attempt`, but typed for the failure branch: tests that
+    // inspect the thrown HttpException use this helper.
+    const attemptFailure = async (
+      credential: string,
+      requestingUser = requestingUserId,
+    ): Promise<HttpException> => {
+      try {
+        await service.authorizeOverride(
+          {
+            supervisorId,
+            credential,
+            method: 'PIN',
+            permissionRequired: AppPermission.SALES_VOID_INVOICE,
+          },
+          testTenantId,
+          requestingUser,
+        );
+      } catch (e) {
+        return e as HttpException;
+      }
+      throw new Error('Expected the override attempt to fail');
+    };
+
+    it('returns the same 401 generic failure for an unknown supervisor and a wrong PIN (no enumeration)', async () => {
+      await stubActiveManagerSupervisor();
+
+      const wrongPinError = await attemptFailure('wrong-pin');
+      expect(wrongPinError).toBeInstanceOf(UnauthorizedException);
+      expect(wrongPinError.getStatus()).toBe(401);
+      expect(wrongPinError.message).toBe(GENERIC_FAILURE_MESSAGE);
+
+      userRepository.findOne.mockResolvedValue(null);
+      const unknownSupervisorError = await attemptFailure('123456');
+      expect(unknownSupervisorError).toBeInstanceOf(UnauthorizedException);
+      expect(unknownSupervisorError.getStatus()).toBe(401);
+      expect(unknownSupervisorError.message).toBe(GENERIC_FAILURE_MESSAGE);
+
+      // Same wire shape: nothing in the response distinguishes an unknown
+      // supervisor from a wrong credential.
+      expect(unknownSupervisorError.getResponse()).toEqual(
+        wrongPinError.getResponse(),
+      );
+    });
+
+    it('keeps the structured rejection reason in the audit log while hiding it from the response', async () => {
+      userRepository.findOne.mockResolvedValue(null);
+
+      await expect(attempt('123456')).rejects.toThrow(UnauthorizedException);
+
+      expect(auditRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'SUPERVISOR_OVERRIDE_REJECTED',
+          metadata: expect.objectContaining({
+            reason: 'Supervisor not found or inactive',
+          }),
+        }),
+      );
+    });
+
+    it('returns 429 with a retry-window hint after 5 failed attempts for the same user and terminal', async () => {
+      await stubActiveManagerSupervisor();
+
+      for (let i = 0; i < 5; i++) {
+        await expect(attempt('wrong-pin')).rejects.toThrow(
+          UnauthorizedException,
+        );
+      }
+      // Each of the 5 verification attempts wrote its rejection audit row.
+      expect(auditRepository.save).toHaveBeenCalledTimes(5);
+
+      const blocked = await attemptFailure('wrong-pin');
+      expect(blocked.getStatus()).toBe(429);
+      expect(blocked.getResponse()).toMatchObject({
+        statusCode: 429,
+        retryAfterSeconds: expect.any(Number),
+      });
+      expect(blocked.message).toContain('segundos');
+      // The blocked attempt never reaches verification, so no sixth audit
+      // rejection row is written for it.
+      expect(auditRepository.save).toHaveBeenCalledTimes(5);
+    });
+
+    it('counts failures per requesting user and terminal, not globally', async () => {
+      await stubActiveManagerSupervisor();
+
+      for (let i = 0; i < 5; i++) {
+        await expect(attempt('wrong-pin', 'cashier-A')).rejects.toThrow(
+          UnauthorizedException,
+        );
+      }
+
+      // A different requesting user is not locked out by cashier-A's window.
+      await expect(attempt('wrong-pin', 'cashier-B')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      // cashier-A's window is exhausted: the next attempt is throttled.
+      const blocked = await attemptFailure('wrong-pin', 'cashier-A');
+      expect(blocked.getStatus()).toBe(429);
+    });
+
+    it('counts insufficient-permission failures toward the same window', async () => {
+      userRepository.findOne.mockResolvedValue({
+        id: supervisorId,
+        name: 'Cashier User',
+        role: UserRole.CASHIER, // no default permissions
+        tenant_id: testTenantId,
+        is_active: true,
+      });
+      securityProfileRepository.findOne.mockResolvedValue({
+        user_id: supervisorId,
+        pin_hash: await bcrypt.hash('123456', 10),
+        is_pin_enabled: true,
+        custom_permissions: [],
+      });
+
+      for (let i = 0; i < 5; i++) {
+        await expect(attempt('123456')).rejects.toThrow(ForbiddenException);
+      }
+
+      const blocked = await attemptFailure('123456');
+      expect(blocked.getStatus()).toBe(429);
+    });
+
+    it('resets the attempt window after a successful authorization', async () => {
+      await stubActiveManagerSupervisor();
+
+      for (let i = 0; i < 4; i++) {
+        await expect(attempt('wrong-pin')).rejects.toThrow(
+          UnauthorizedException,
+        );
+      }
+      await expect(attempt('123456')).resolves.toMatchObject({
+        authorized: true,
+      });
+
+      // The success cleared the counter: a full window of 5 new failures is
+      // required before the user is locked out again.
+      for (let i = 0; i < 5; i++) {
+        await expect(attempt('wrong-pin')).rejects.toThrow(
+          UnauthorizedException,
+        );
+      }
+      const blocked = await attemptFailure('wrong-pin');
+      expect(blocked.getStatus()).toBe(429);
     });
   });
 

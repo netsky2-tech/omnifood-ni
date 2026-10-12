@@ -2,7 +2,7 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { Request } from 'express';
 import { DeviceSyncPrincipal } from '../../modules/identity/security/device-sync-principal';
 
-interface RequestWithPrincipalOrUser extends Request {
+export interface RequestWithPrincipalOrUser extends Request {
   user?: {
     tenant_id: string;
     sub?: string;

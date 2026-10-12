@@ -1,6 +1,7 @@
 import {
-  Injectable,
+  BadRequestException,
   ConflictException,
+  Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,6 +23,8 @@ import {
   UserEffectivePermissionsDto,
 } from '../dto/permission-matrix.dto';
 import { AuthService } from './auth.service';
+import { PASSWORD_BCRYPT_COST } from '../security/password.config';
+import { isCommonPassword } from '../security/common-passwords.matcher';
 import { bindRlsTenantContext } from '../human-authorization/rls/tenant-context';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { markTenantPublicationDirty } from '../human-authorization/services/tenant-publication-marker';
@@ -83,9 +86,16 @@ export class UserService {
     tenantId: string,
     adminId: string,
   ): Promise<User> {
+    // S2 (security-hardening-batch2): breached-credential rejection runs
+    // before any hashing work. The message never echoes the candidate.
+    if (dto.password && isCommonPassword(dto.password)) {
+      throw new BadRequestException(
+        'La contraseña es demasiado común: elegí una distinta',
+      );
+    }
     // Hashing is pure CPU work over secrets: keep it outside the transaction.
     const passwordHash = dto.password
-      ? await bcrypt.hash(dto.password, 10)
+      ? await bcrypt.hash(dto.password, PASSWORD_BCRYPT_COST)
       : undefined;
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : undefined;
 
@@ -140,8 +150,15 @@ export class UserService {
     tenantId: string,
     adminId: string,
   ): Promise<User> {
+    // S2 (security-hardening-batch2): same breached-credential rejection on
+    // password change, before hashing or revocation work.
+    if (dto.password && isCommonPassword(dto.password)) {
+      throw new BadRequestException(
+        'La contraseña es demasiado común: elegí una distinta',
+      );
+    }
     const passwordHash = dto.password
-      ? await bcrypt.hash(dto.password, 10)
+      ? await bcrypt.hash(dto.password, PASSWORD_BCRYPT_COST)
       : undefined;
     const pinHash = dto.pin ? await bcrypt.hash(dto.pin, 10) : undefined;
     const requiresSecurityRevocation =

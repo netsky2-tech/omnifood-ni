@@ -55,7 +55,7 @@ describe("isTechnicalErrorMessage (single home of the display rule)", () => {
     "El turno de caja no está abierto.",
     "El email ya está registrado",
     "Credenciales inválidas",
-    "Supervisor no encontrado o inactivo",
+    "No se pudo autorizar la anulación",
     "El RUC ingresado no cumple con el formato DGI",
     "Ya existe una compra registrada con la factura 'F-500' para el proveedor 'Café Supplier'.",
     "Tasa oficial no disponible para la fecha",
@@ -218,7 +218,7 @@ const businessResponses: Array<{ status: number; message: string }> = [
   { status: 400, message: "El turno de caja no está abierto." },
   { status: 409, message: "El email ya está registrado" },
   { status: 401, message: "Credenciales inválidas" },
-  { status: 404, message: "Supervisor no encontrado o inactivo" },
+  { status: 401, message: "No se pudo autorizar la anulación" },
   { status: 400, message: "Tasa oficial no disponible para la fecha" },
   {
     status: 409,
