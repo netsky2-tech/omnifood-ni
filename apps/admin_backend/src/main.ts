@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 import { resolveCorsOrigins } from './core/config/http-security.config';
+import { resolveTrustProxyHops } from './core/config/trust-proxy.config';
 import { AllExceptionsFilter } from './core/http/all-exceptions.filter';
 
 async function bootstrap() {
@@ -20,6 +21,14 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug'],
   });
+
+  // Resolve the real client address behind the reverse-proxy chain so per-IP
+  // rate limiting and access-log forensics are not keyed on the proxy IP.
+  // A malformed hop count aborts startup (fail closed).
+  const trustProxyHops = resolveTrustProxyHops({
+    raw: process.env.TRUST_PROXY_HOPS,
+  });
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
 
   // Global prefix
   app.setGlobalPrefix('api');
