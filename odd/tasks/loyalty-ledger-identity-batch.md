@@ -1,6 +1,6 @@
 # Loyalty ledger identity batch — salvage from feat/loyalty-v1-production-readiness
 
-- **Status:** EN CURSO.
+- **Status:** CERRADO — T1–T3 implementadas en `feat/loyalty-ledger-identity`; PR abierto para revisión del dueño.
 - **Branch:** `feat/loyalty-ledger-identity`, from `main` = `fbcf0f6d`.
 - **Origin:** owner-approved salvage (2026-10-13) of the three integrity blocks from the
   2026-09-20 branch `feat/loyalty-v1-production-readiness` (24 commits, never merged). The
@@ -52,3 +52,6 @@
 
 | Task | Commit | Evidence |
 |---|---|---|
+| T1+T2+T3 (POS) | `git log` (feat(pos): enforce the loyalty ledger identities...) | House-style tests written first (RED by compile: migrations undefined; DAO conflict RED behavioral under REPLACE) → GREEN: `loyalty_ledger_identity_migration_test` 14 (indexes+triggers, earn/redeem/reversal/idempotency duplicates incl. case-insensitive types, NULL-type legacy namespace, shape-trigger aborts on insert AND update, fail-closed upgrade with sample row ids, both drift guards, fresh/migrated parity), `loyalty_customer_code_migration_test` 5 (guarded add, idempotent re-run, duplicate rejection incl. NOCASE variants, NULL codes, parity), `loyalty_customer_dao_conflict_test` 3 (id conflict, NOCASE code conflict, original row survives). Floor 69→71; build_runner regen; analyze clean. Regression: migrations_test + loyalty_v1/v2 + customer_dao_test 33/33, customer-selection + loyalty-flow presentation 8/8. |
+| T1 (backend) | `git log` (feat(backend): enforce the loyalty ledger identity constraints...) | Migration renumbered 1809220000000→1809650000000 (taken by EnforceOnboardingSessionRls). Unit spec 14/14; db spec 8/8 on real Postgres (incl. drift/duplicate fail-closed cases). |
+| Ripple | — | loyalty backfill db spec 12/12, ledger.service db 14/14, legacy-classification 7/7, loyalty e2e 19/19 — the identities do not break ingestion, backfill, or classification paths. The only production caller of `saveCustomer` is `createExpressCustomer` (fresh UUID, NULL code) — no ripple from the abort change. |
