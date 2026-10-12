@@ -327,6 +327,17 @@ void main() {
         );
         viewModel.addToCart(
           const Product(
+            id: 'prod-b1-burger',
+            name: 'Hamburguesa B1',
+            uom: 'UND',
+            stock: 100,
+            averageCost: 50,
+            sellPrice: 150,
+            category: 'Comida',
+          ),
+        );
+        viewModel.addToCart(
+          const Product(
             id: 'prod-b1-fries',
             name: 'Papas B1',
             uom: 'UND',

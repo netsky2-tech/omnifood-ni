@@ -32,18 +32,20 @@ const codesOf = (r) => r.errors.map((e) => e.code);
 
 describe("contract constants", () => {
   it("declares exactly the required blocker tags", () => {
-    assert.deepEqual([...REQUIRED_BLOCKER_IDS].sort(), [
-      "B1", "B2", "B3", "B5",
-      "B7-cross-tenant-read", "B7-rls-enforcement",
-    ]);
+    // Re-triaged 2026-10-12 against main b394df32: B1 and both B7 probes were
+    // closed on main (device-tenant evaluation fix, #286/#512 RLS work, the
+    // v71 ledger identity batch) and moved to the regression set. The
+    // remaining blockers are the loyalty transport backlog.
+    assert.deepEqual([...REQUIRED_BLOCKER_IDS].sort(), ["B2", "B3", "B5"]);
   });
 
   it("declares exactly the required regression tags", () => {
-    // B4-pg and B4-sqlite were repaired by T2b (commits 5709931, 4153511) and
-    // joined B9-customer-code: a repaired blocker becomes a regression that
-    // must PASS in every mode.
+    // Repaired blockers become regressions that must PASS in every mode:
+    // B4-pg/B4-sqlite (T2b, commits 5709931, 4153511), B9-customer-code
+    // (T2a), and B1 + both B7 probes (re-triaged 2026-10-12, see above).
     assert.deepEqual([...REQUIRED_REGRESSION_IDS].sort(), [
-      "B4-pg", "B4-sqlite", "B9-customer-code",
+      "B1", "B4-pg", "B4-sqlite", "B7-cross-tenant-read",
+      "B7-rls-enforcement", "B9-customer-code",
     ]);
   });
 
@@ -63,7 +65,7 @@ describe("baseline mode", () => {
   });
 
   it("reports gate_failed (not input_invalid) when an expected blocker passes", () => {
-    const probes = baselineProbes().map((p) => (p.id === "B1" ? blocker("B1", "PASS") : p));
+    const probes = baselineProbes().map((p) => (p.id === "B2" ? blocker("B2", "PASS") : p));
     const result = gate(probes);
     assert.equal(result.ok, false);
     assert.equal(result.status, "gate_failed");
@@ -193,10 +195,9 @@ describe("final mode", () => {
 describe("provenance attribution", () => {
   it("records per-probe source in observed output", () => {
     const docs = [
-      doc([blocker("B1"), blocker("B2")], "jest-backend"),
-      doc([blocker("B3")], "flutter-pos"),
+      doc([blocker("B2")], "jest-backend"),
+      doc([blocker("B3"), blocker("B5")], "flutter-pos"),
       doc([
-        ...REQUIRED.filter((id) => !["B1", "B2", "B3"].includes(id)).map((id) => blocker(id)),
         ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
         control("ctl"),
       ], "jest-backend"),
@@ -205,8 +206,10 @@ describe("provenance attribution", () => {
     assert.equal(result.ok, true);
     const b3 = result.observed.find((p) => p.id === "B3");
     assert.equal(b3.source, "flutter-pos");
-    const b1 = result.observed.find((p) => p.id === "B1");
-    assert.equal(b1.source, "jest-backend");
+    const b5 = result.observed.find((p) => p.id === "B5");
+    assert.equal(b5.source, "flutter-pos");
+    const b2 = result.observed.find((p) => p.id === "B2");
+    assert.equal(b2.source, "jest-backend");
     assert.equal(result.observed.length, REQUIRED.length + REQUIRED_REGRESSION_IDS.length + 1);
   });
 

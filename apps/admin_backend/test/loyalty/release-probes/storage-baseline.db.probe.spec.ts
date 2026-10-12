@@ -89,8 +89,8 @@ describe('T1 storage baseline: migrated PostgreSQL Loyalty surface (release prob
     // Two distinct tenants, each owning one loyalty ledger movement.
     const tenants = admin.getRepository(Tenant);
     await tenants.save([
-      tenants.create({ id: tenantAId, name: `Probe A ${tenantAId}`, ruc: 'J0310000000001', is_active: true }),
-      tenants.create({ id: tenantBId, name: `Probe B ${tenantBId}`, ruc: 'J0310000000002', is_active: true }),
+      tenants.create({ id: tenantAId, name: `Probe A ${tenantAId}`, slug: `probe-a-${tenantAId.slice(0,8)}`, ruc: 'J0310000000001', is_active: true }),
+      tenants.create({ id: tenantBId, name: `Probe B ${tenantBId}`, slug: `probe-b-${tenantBId.slice(0,8)}`, ruc: 'J0310000000002', is_active: true }),
     ]);
     const ledger = admin.getRepository(CustomerPointTransaction);
     for (const [tenantId, ticket] of [

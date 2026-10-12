@@ -38,7 +38,7 @@ class LoyaltyReleaseHarness {
   final Directory directory;
 
   /// Schema version of [AppDatabase] today.
-  static const int currentSchemaVersion = 53;
+  static const int currentSchemaVersion = 71;
   static const int legacySchemaVersion = 10;
 
   late final String dbPath = p.join(directory.path, 'pos_release_probe.db');

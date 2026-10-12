@@ -189,6 +189,7 @@ describe('T1 sync-boundary baseline: real Nest HTTP sync surface (release probes
       tenants.create({
         id: tenantId,
         name: `Sync Probe ${tenantId}`,
+        slug: `sync-probe-${tenantId.slice(0, 8)}`,
         ruc: 'J0310000000003',
         is_active: true,
       }),

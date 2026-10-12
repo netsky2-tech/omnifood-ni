@@ -62,7 +62,7 @@ describe("CLI", () => {
   });
 
   it("exits 1 with gate_failed JSON on valid evidence against the mode", () => {
-    const probes = baselineProbes().map((p) => (p.id === "B1" ? blocker("B1", "PASS") : p));
+    const probes = baselineProbes().map((p) => (p.id === "B2" ? blocker("B2", "PASS") : p));
     const res = run(["--mode", "baseline", fixture("red.json", doc(probes))]);
     assert.equal(res.status, 1);
     assert.equal(JSON.parse(res.stdout).status, "gate_failed");
@@ -114,7 +114,7 @@ describe("CLI", () => {
   });
 
   it("executes from parent directories containing %, #, ?, and spaces without silent success", () => {
-    const red = fixture("red-special.json", doc(baselineProbes().map((p) => (p.id === "B1" ? blocker("B1", "PASS") : p))));
+    const red = fixture("red-special.json", doc(baselineProbes().map((p) => (p.id === "B2" ? blocker("B2", "PASS") : p))));
     for (const name of ["dir%20enc", "dir#enc", "dir?enc", "dir with space"]) {
       const dir = path.join(tmpDir(), name);
       mkdirSync(path.join(dir, "lib"), { recursive: true });

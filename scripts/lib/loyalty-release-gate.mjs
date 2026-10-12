@@ -25,13 +25,18 @@ export const RELEASE_GATE_SCHEMA = "loyalty-release-gate/v1";
 // Versioned with the T1 probe-producer contract (docs/loyalty T1 batch, M0
 // baseline-red gate). This closed set MUST be expanded for T10 (final-green
 // gate) when new blockers land; unknown tags always fail closed so stale
-// producers can never silently widen the gate. Repaired blockers (B4-pg and
-// B4-sqlite, T2b commits 5709931 and 4153511) move OUT of this set and into
-// REQUIRED_REGRESSION_IDS so baseline keeps meaning "the remaining known
-// blockers are still red"; the remaining blockers after T2b are exactly
-// B1, B2, B3, B5, B7-rls-enforcement, B7-cross-tenant-read.
+// producers can never silently widen the gate. Repaired blockers move OUT of
+// this set and into REQUIRED_REGRESSION_IDS so baseline keeps meaning "the
+// remaining known blockers are still red". Repair history: B4-pg/B4-sqlite
+// (T2b, commits 5709931/4153511), B1 + B7-rls-enforcement +
+// B7-cross-tenant-read (closed on main by the device-tenant evaluation fix,
+// the #286/#512 RLS work and the v71 ledger identity batch — re-triaged
+// 2026-10-12 against main b394df32). The remaining blockers are exactly the
+// loyalty transport backlog: B2 (config stream via inbound sync), B3
+// (LOYALTY_LEDGER flow dispatch), B5 (reversal contract: arch §4.3
+// per-movement reversals vs the D-15 net-adjust — needs the T5 design call).
 export const REQUIRED_BLOCKER_IDS = Object.freeze([
-  "B1", "B2", "B3", "B5", "B7-rls-enforcement", "B7-cross-tenant-read",
+  "B2", "B3", "B5",
 ]);
 
 // Regression probes: fixed behaviors that must PASS in every mode (a FAIL is
@@ -42,6 +47,7 @@ export const REQUIRED_BLOCKER_IDS = Object.freeze([
 // this classifier-level set fails closed on unknown regression KINDS/tags.
 export const REQUIRED_REGRESSION_IDS = Object.freeze([
   "B4-pg", "B4-sqlite", "B9-customer-code",
+  "B1", "B7-rls-enforcement", "B7-cross-tenant-read",
 ]);
 
 // Declared control probes guard the harness environment. The classifier
