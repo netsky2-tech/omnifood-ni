@@ -38,7 +38,7 @@ class LoyaltyReleaseHarness {
   final Directory directory;
 
   /// Schema version of [AppDatabase] today.
-  static const int currentSchemaVersion = 71;
+  static const int currentSchemaVersion = 72;
   static const int legacySchemaVersion = 10;
 
   late final String dbPath = p.join(directory.path, 'pos_release_probe.db');
@@ -58,7 +58,7 @@ class LoyaltyReleaseHarness {
     'customer_point_transactions': {
       'id', 'customer_id', 'transaction_type', 'units', 'ticket_id',
       'loyalty_program_id', 'reward_id', 'reversal_of_transaction_id',
-      'idempotency_key', 'origin',
+      'idempotency_key', 'origin', 'source_sequence',
     },
   };
 

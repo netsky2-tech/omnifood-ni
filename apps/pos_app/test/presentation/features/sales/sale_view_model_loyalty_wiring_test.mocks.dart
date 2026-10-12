@@ -2660,6 +2660,43 @@ class MockCustomerPointTransactionDao extends _i1.Mock
       ) as _i56.Future<_i85.CustomerPointTransactionEntity?>);
 
   @override
+  _i56.Future<int?> findMaxSourceSequence() => (super.noSuchMethod(
+        Invocation.method(
+          #findMaxSourceSequence,
+          [],
+        ),
+        returnValue: _i56.Future<int?>.value(),
+      ) as _i56.Future<int?>);
+
+  @override
+  _i56.Future<void> assignSourceSequence(
+    String? id,
+    int? sequence,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #assignSourceSequence,
+          [
+            id,
+            sequence,
+          ],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
+  _i56.Future<_i85.CustomerPointTransactionEntity?> findTransactionById(
+          String? id) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findTransactionById,
+          [id],
+        ),
+        returnValue: _i56.Future<_i85.CustomerPointTransactionEntity?>.value(),
+      ) as _i56.Future<_i85.CustomerPointTransactionEntity?>);
+
+  @override
   _i56.Future<void> insertTransaction(
           _i85.CustomerPointTransactionEntity? entity) =>
       (super.noSuchMethod(

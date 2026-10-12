@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 71,
+      version: 72,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -304,7 +304,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `customer_code` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `loyalty_program_id` TEXT, `ticket_id` TEXT, `reward_id` TEXT, `transaction_type` TEXT, `units` INTEGER, `reversal_of_transaction_id` TEXT, `idempotency_key` TEXT, `source_event_id` TEXT, `actor_user_id` TEXT, `branch_id` TEXT, `terminal_id` TEXT, `program_version` INTEGER, `reward_version` INTEGER, `commercial_snapshot` TEXT, `origin` TEXT, `occurred_at` INTEGER, `recorded_at` INTEGER, `legacy_imported` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `loyalty_program_id` TEXT, `ticket_id` TEXT, `reward_id` TEXT, `transaction_type` TEXT, `units` INTEGER, `reversal_of_transaction_id` TEXT, `idempotency_key` TEXT, `source_event_id` TEXT, `actor_user_id` TEXT, `branch_id` TEXT, `terminal_id` TEXT, `program_version` INTEGER, `reward_version` INTEGER, `commercial_snapshot` TEXT, `origin` TEXT, `occurred_at` INTEGER, `recorded_at` INTEGER, `legacy_imported` INTEGER NOT NULL, `source_sequence` INTEGER, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `loyalty_programs` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `name` TEXT NOT NULL, `program_type` TEXT NOT NULL, `status` TEXT NOT NULL, `starts_at` INTEGER, `ends_at` INTEGER, `earning_rule_json` TEXT NOT NULL, `eligibility_rule_json` TEXT NOT NULL, `config_version` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -4292,7 +4292,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'origin': item.origin,
                   'occurred_at': item.occurredAt,
                   'recorded_at': item.recordedAt,
-                  'legacy_imported': item.legacyImported
+                  'legacy_imported': item.legacyImported,
+                  'source_sequence': item.sourceSequence
                 }),
         _fulfillmentRecordEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -6504,7 +6505,8 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
                   'origin': item.origin,
                   'occurred_at': item.occurredAt,
                   'recorded_at': item.recordedAt,
-                  'legacy_imported': item.legacyImported
+                  'legacy_imported': item.legacyImported,
+                  'source_sequence': item.sourceSequence
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -6521,7 +6523,7 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
       String customerId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM customer_point_transactions WHERE customer_id = ?1 ORDER BY created_at DESC',
-        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int),
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int, sourceSequence: row['source_sequence'] as int?),
         arguments: [customerId]);
   }
 
@@ -6559,7 +6561,8 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
             origin: row['origin'] as String?,
             occurredAt: row['occurred_at'] as int?,
             recordedAt: row['recorded_at'] as int?,
-            legacyImported: row['legacy_imported'] as int),
+            legacyImported: row['legacy_imported'] as int,
+            sourceSequence: row['source_sequence'] as int?),
         arguments: [invoiceId]);
   }
 
@@ -6597,7 +6600,8 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
             origin: row['origin'] as String?,
             occurredAt: row['occurred_at'] as int?,
             recordedAt: row['recorded_at'] as int?,
-            legacyImported: row['legacy_imported'] as int),
+            legacyImported: row['legacy_imported'] as int,
+            sourceSequence: row['source_sequence'] as int?),
         arguments: [status]);
   }
 
@@ -6613,8 +6617,63 @@ class _$CustomerPointTransactionDao extends CustomerPointTransactionDao {
       String key) async {
     return _queryAdapter.query(
         'SELECT * FROM customer_point_transactions WHERE idempotency_key = ?1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int),
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(id: row['id'] as String, customerId: row['customer_id'] as String, invoiceId: row['invoice_id'] as String?, type: row['type'] as String, points: row['points'] as double, balanceAfter: row['balance_after'] as double, conversionRate: row['conversion_rate'] as double, reason: row['reason'] as String?, createdAt: row['created_at'] as int, syncStatus: row['sync_status'] as String, loyaltyProgramId: row['loyalty_program_id'] as String?, ticketId: row['ticket_id'] as String?, rewardId: row['reward_id'] as String?, transactionType: row['transaction_type'] as String?, units: row['units'] as int?, reversalOfTransactionId: row['reversal_of_transaction_id'] as String?, idempotencyKey: row['idempotency_key'] as String?, sourceEventId: row['source_event_id'] as String?, actorUserId: row['actor_user_id'] as String?, branchId: row['branch_id'] as String?, terminalId: row['terminal_id'] as String?, programVersion: row['program_version'] as int?, rewardVersion: row['reward_version'] as int?, commercialSnapshot: row['commercial_snapshot'] as String?, origin: row['origin'] as String?, occurredAt: row['occurred_at'] as int?, recordedAt: row['recorded_at'] as int?, legacyImported: row['legacy_imported'] as int, sourceSequence: row['source_sequence'] as int?),
         arguments: [key]);
+  }
+
+  @override
+  Future<int?> findMaxSourceSequence() async {
+    return _queryAdapter.query(
+        'SELECT COALESCE(MAX(source_sequence), 0) FROM customer_point_transactions',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> assignSourceSequence(
+    String id,
+    int sequence,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE customer_point_transactions SET source_sequence = ?2 WHERE id = ?1 AND source_sequence IS NULL',
+        arguments: [id, sequence]);
+  }
+
+  @override
+  Future<CustomerPointTransactionEntity?> findTransactionById(String id) async {
+    return _queryAdapter.query(
+        'SELECT * FROM customer_point_transactions WHERE id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => CustomerPointTransactionEntity(
+            id: row['id'] as String,
+            customerId: row['customer_id'] as String,
+            invoiceId: row['invoice_id'] as String?,
+            type: row['type'] as String,
+            points: row['points'] as double,
+            balanceAfter: row['balance_after'] as double,
+            conversionRate: row['conversion_rate'] as double,
+            reason: row['reason'] as String?,
+            createdAt: row['created_at'] as int,
+            syncStatus: row['sync_status'] as String,
+            loyaltyProgramId: row['loyalty_program_id'] as String?,
+            ticketId: row['ticket_id'] as String?,
+            rewardId: row['reward_id'] as String?,
+            transactionType: row['transaction_type'] as String?,
+            units: row['units'] as int?,
+            reversalOfTransactionId:
+                row['reversal_of_transaction_id'] as String?,
+            idempotencyKey: row['idempotency_key'] as String?,
+            sourceEventId: row['source_event_id'] as String?,
+            actorUserId: row['actor_user_id'] as String?,
+            branchId: row['branch_id'] as String?,
+            terminalId: row['terminal_id'] as String?,
+            programVersion: row['program_version'] as int?,
+            rewardVersion: row['reward_version'] as int?,
+            commercialSnapshot: row['commercial_snapshot'] as String?,
+            origin: row['origin'] as String?,
+            occurredAt: row['occurred_at'] as int?,
+            recordedAt: row['recorded_at'] as int?,
+            legacyImported: row['legacy_imported'] as int,
+            sourceSequence: row['source_sequence'] as int?),
+        arguments: [id]);
   }
 
   @override

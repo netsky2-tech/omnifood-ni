@@ -92,6 +92,14 @@ class CustomerPointTransactionEntity {
   @ColumnInfo(name: 'legacy_imported')
   final int legacyImported;
 
+  /// Durable per-row outbound sync sequence for the §13.4 LOYALTY_LEDGER
+  /// flow (device-global, allocated once BEFORE the first send and persisted
+  /// on the row). A crash between allocation and send replays the identical
+  /// record — the backend answers DUPLICATE — and no gap can be minted.
+  /// Null = not yet allocated (row never offered for sync).
+  @ColumnInfo(name: 'source_sequence')
+  final int? sourceSequence;
+
   CustomerPointTransactionEntity({
     required this.id,
     required this.customerId,
@@ -121,5 +129,6 @@ class CustomerPointTransactionEntity {
     this.occurredAt,
     this.recordedAt,
     this.legacyImported = 0,
+    this.sourceSequence,
   });
 }
