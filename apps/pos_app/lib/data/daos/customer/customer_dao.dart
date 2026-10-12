@@ -31,7 +31,15 @@ abstract class CustomerDao {
   ''')
   Future<List<CustomerEntity>> searchCustomers(String query, int limit);
 
-  @Insert(onConflict: OnConflictStrategy.replace)
+  /// Non-replacing insert (tracker T2a): any conflict — a duplicate id, or
+  /// since schema v71 a duplicate device-global case-insensitive
+  /// `customer_code` from a different customer — raises a database constraint
+  /// error instead of silently deleting the existing customer row and its
+  /// points balance (`OnConflictStrategy.replace` compiles to INSERT OR
+  /// REPLACE, which deletes colliding rows). Production callers only insert
+  /// freshly generated customers, so no upsert-by-id semantics are needed
+  /// here; `saveCustomers` (bulk import) keeps replace intentionally.
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> saveCustomer(CustomerEntity customer);
 
   @Insert(onConflict: OnConflictStrategy.replace)

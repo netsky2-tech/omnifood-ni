@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 69,
+      version: 71,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -6452,7 +6452,7 @@ class _$CustomerDao extends CustomerDao {
   @override
   Future<void> saveCustomer(CustomerEntity customer) async {
     await _customerEntityInsertionAdapter.insert(
-        customer, OnConflictStrategy.replace);
+        customer, OnConflictStrategy.abort);
   }
 
   @override
