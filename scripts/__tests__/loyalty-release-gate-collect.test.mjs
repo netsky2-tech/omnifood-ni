@@ -59,8 +59,10 @@ const conformingJestText = () => jestDoc([
   ["T1 storage baseline (release probes) [B7-rls-enforcement] every Loyalty tenant table is RLS ENABLE+FORCEd", "passed"],
   ["T1 storage baseline (release probes) [B7-cross-tenant-read] a restricted tenant-scoped session cannot read another tenant's loyalty rows", "passed"],
   ["T1 sync-boundary baseline (release probes) [CONTROL-http] the app/auth harness reaches the existing POST /api/v1/sync/batch", "passed"],
-  ["T1 sync-boundary baseline (release probes) [B2] the generic inbound sync endpoint carries the tenant-scoped Loyalty configuration stream", "failed"],
-  ["T1 sync-boundary baseline (release probes) [B3] the POST /api/v1/sync/batch envelope accepts and dispatches the LOYALTY_LEDGER flow", "failed"],
+  // B2/B3 closed by PR #876 (T6/T7): repaired blockers are regressions that
+  // must PASS in every mode.
+  ["T1 sync-boundary baseline (release probes) [B2] the generic inbound sync endpoint carries the tenant-scoped Loyalty configuration stream", "passed"],
+  ["T1 sync-boundary baseline (release probes) [B3] the POST /api/v1/sync/batch envelope accepts and dispatches the LOYALTY_LEDGER flow", "passed"],
 ]);
 
 const conformingFlutterText = () => flutterStream([
@@ -71,7 +73,7 @@ const conformingFlutterText = () => flutterStream([
   ...flutterTestStartDone(5, "Loyalty release harness — migrated file-backed SQLite baseline [B9-customer-code] migrated customers table supports real CustomerDao save/read by customer_code", "success"),
   ...flutterTestStartDone(6, "Loyalty release harness — B1 device-tenant evaluation baseline [B1] production evaluation path finds the program seeded under the device tenant, never under the customer id", "success"),
   ["suite", { suite: { id: 7, platform: "vm", path: "/repo/apps/pos_app/test/e2e/loyalty_release_void_e2e_test.dart" } }],
-  ...flutterTestStartDone(8, "[B5] real void appends exact append-only Loyalty reversals and keeps the invoice canceled, never deleted", "failure"),
+  ...flutterTestStartDone(8, "[B5] real void appends exact append-only Loyalty reversals and keeps the invoice canceled, never deleted", "success"),
 ]);
 
 const expectedJestProbes = [
@@ -80,8 +82,8 @@ const expectedJestProbes = [
   { id: "B7-rls-enforcement", kind: "regression", result: "PASS" },
   { id: "B7-cross-tenant-read", kind: "regression", result: "PASS" },
   { id: "CONTROL-http", kind: "control", result: "PASS" },
-  { id: "B2", kind: "blocker", result: "FAIL" },
-  { id: "B3", kind: "blocker", result: "FAIL" },
+  { id: "B2", kind: "regression", result: "PASS" },
+  { id: "B3", kind: "regression", result: "PASS" },
 ];
 
 const expectedFlutterProbes = [
@@ -89,7 +91,7 @@ const expectedFlutterProbes = [
   { id: "B4-sqlite", kind: "regression", result: "PASS" },
   { id: "B9-customer-code", kind: "regression", result: "PASS" },
   { id: "B1", kind: "regression", result: "PASS" },
-  { id: "B5", kind: "blocker", result: "FAIL" },
+  { id: "B5", kind: "regression", result: "PASS" },
 ];
 
 describe("runner source contract", () => {
@@ -106,9 +108,11 @@ describe("kindForProbeId", () => {
     // Re-triaged 2026-10-12: B1 and both B7 probes closed on main.
     assert.equal(kindForProbeId("B1"), "regression");
     assert.equal(kindForProbeId("B7-cross-tenant-read"), "regression");
-    assert.equal(kindForProbeId("B2"), "blocker");
-    assert.equal(kindForProbeId("B3"), "blocker");
-    // Repaired blockers moved to the regression set (T2b).
+    // B2/B3/B5 closed by PR #876 (T6/T7/T5) — repaired blockers moved to the
+    // regression set, same lifecycle as T2b's B4-pg/B4-sqlite.
+    assert.equal(kindForProbeId("B2"), "regression");
+    assert.equal(kindForProbeId("B3"), "regression");
+    assert.equal(kindForProbeId("B5"), "regression");
     assert.equal(kindForProbeId("B4-pg"), "regression");
     assert.equal(kindForProbeId("B4-sqlite"), "regression");
     assert.equal(kindForProbeId("B9-customer-code"), "regression");

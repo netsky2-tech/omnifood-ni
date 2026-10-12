@@ -31,13 +31,14 @@ export const RELEASE_GATE_SCHEMA = "loyalty-release-gate/v1";
 // (T2b, commits 5709931/4153511), B1 + B7-rls-enforcement +
 // B7-cross-tenant-read (closed on main by the device-tenant evaluation fix,
 // the #286/#512 RLS work and the v71 ledger identity batch — re-triaged
-// 2026-10-12 against main b394df32). The remaining blockers are exactly the
-// loyalty transport backlog: B2 (config stream via inbound sync), B3
-// (LOYALTY_LEDGER flow dispatch), B5 (reversal contract: arch §4.3
-// per-movement reversals vs the D-15 net-adjust — needs the T5 design call).
-export const REQUIRED_BLOCKER_IDS = Object.freeze([
-  "B2", "B3", "B5",
-]);
+// 2026-10-12 against main b394df32), and B2 + B3 + B5 (the loyalty transport
+// backlog, closed by PR #876 — merged 2026-10-12, squash 0494056: T6
+// LOYALTY_LEDGER dispatch, T7 tagged §13.5 config stream, T5 per-movement
+// reversal contract). The blocker set is currently EMPTY: with no declared
+// blockers, baseline and final both mean "every regression and control
+// PASS" — the T10 terminal semantics. Future blockers re-populate this set
+// and restore the red-blocker baseline semantics.
+export const REQUIRED_BLOCKER_IDS = Object.freeze([]);
 
 // Regression probes: fixed behaviors that must PASS in every mode (a FAIL is
 // gate_failed evidence, never accepted). Repaired blockers move here (same
@@ -48,6 +49,7 @@ export const REQUIRED_BLOCKER_IDS = Object.freeze([
 export const REQUIRED_REGRESSION_IDS = Object.freeze([
   "B4-pg", "B4-sqlite", "B9-customer-code",
   "B1", "B7-rls-enforcement", "B7-cross-tenant-read",
+  "B2", "B3", "B5",
 ]);
 
 // Declared control probes guard the harness environment. The classifier

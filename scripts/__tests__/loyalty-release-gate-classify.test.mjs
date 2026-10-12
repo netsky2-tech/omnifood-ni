@@ -15,9 +15,10 @@ const regression = (id, result = "PASS") => ({ id, kind: "regression", result })
 const control = (id, result = "PASS") => ({ id, kind: "control", result });
 const doc = (probes, source = "jest-backend") => ({ schema: RELEASE_GATE_SCHEMA, source, probes });
 const gate = (probes, mode = "baseline") => classifyReleaseGate(doc(probes), mode);
-// Baseline shape after T2b (roadmap v0.4): every declared blocker observed
-// FAIL (B4-pg/B4-sqlite are repaired and moved to the regression set), every
-// declared regression and every control observed PASS.
+// Post-#876 shape: the blocker set is EMPTY (the transport backlog closed).
+// Baseline means: every declared regression and every control observed PASS
+// — the same all-PASS evidence final requires, so baseline stays meaningful
+// as the standing main-branch scoreboard.
 const baselineProbes = () => [
   ...REQUIRED.map((id) => blocker(id)),
   ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
@@ -31,21 +32,22 @@ const finalProbes = () => [
 const codesOf = (r) => r.errors.map((e) => e.code);
 
 describe("contract constants", () => {
-  it("declares exactly the required blocker tags", () => {
-    // Re-triaged 2026-10-12 against main b394df32: B1 and both B7 probes were
-    // closed on main (device-tenant evaluation fix, #286/#512 RLS work, the
-    // v71 ledger identity batch) and moved to the regression set. The
-    // remaining blockers are the loyalty transport backlog.
-    assert.deepEqual([...REQUIRED_BLOCKER_IDS].sort(), ["B2", "B3", "B5"]);
+  it("declares no remaining blocker tags (transport backlog closed)", () => {
+    // Repair lifecycle terminal state: B2/B3/B5 were closed by PR #876
+    // (merged 2026-10-12, squash 0494056: T6 ledger transport, T7 tagged
+    // config stream, T5 per-movement reversals) and moved to the regression
+    // set. The blocker set stays open for future blockers (T10+).
+    assert.deepEqual([...REQUIRED_BLOCKER_IDS], []);
   });
 
   it("declares exactly the required regression tags", () => {
     // Repaired blockers become regressions that must PASS in every mode:
     // B4-pg/B4-sqlite (T2b, commits 5709931, 4153511), B9-customer-code
-    // (T2a), and B1 + both B7 probes (re-triaged 2026-10-12, see above).
+    // (T2a), B1 + both B7 probes (re-triaged 2026-10-12 against b394df32),
+    // and B2 + B3 + B5 (closed by PR #876, squash 0494056).
     assert.deepEqual([...REQUIRED_REGRESSION_IDS].sort(), [
-      "B1", "B4-pg", "B4-sqlite", "B7-cross-tenant-read",
-      "B7-rls-enforcement", "B9-customer-code",
+      "B1", "B2", "B3", "B4-pg", "B4-sqlite", "B5",
+      "B7-cross-tenant-read", "B7-rls-enforcement", "B9-customer-code",
     ]);
   });
 
@@ -64,12 +66,14 @@ describe("baseline mode", () => {
     assert.equal(result.observed.length, REQUIRED.length + REQUIRED_REGRESSION_IDS.length + 1);
   });
 
-  it("reports gate_failed (not input_invalid) when an expected blocker passes", () => {
-    const probes = baselineProbes().map((p) => (p.id === "B2" ? blocker("B2", "PASS") : p));
+  it("reports gate_failed when a repaired blocker (B2) regresses", () => {
+    // B2 moved to the regression set (PR #876): a FAIL is real evidence the
+    // fixed transport broke again — gate_failed, never accepted.
+    const probes = baselineProbes().map((p) => (p.id === "B2" ? regression("B2", "FAIL") : p));
     const result = gate(probes);
     assert.equal(result.ok, false);
     assert.equal(result.status, "gate_failed");
-    assert.ok(codesOf(result).includes("blocker_unexpected_pass"));
+    assert.ok(codesOf(result).includes("regression_fail"));
   });
 
   it("reports gate_failed (not input_invalid) when a regression probe fails", () => {
@@ -84,15 +88,10 @@ describe("baseline mode", () => {
     assert.ok(codesOf(result).includes("regression_fail"));
   });
 
-  it("reports input_invalid when a required blocker is missing", () => {
-    const result = gate(baselineProbes().filter((p) => p.id !== "B5"));
-    assert.equal(result.ok, false);
-    assert.equal(result.status, "input_invalid");
-    assert.ok(codesOf(result).includes("missing_blocker"));
-  });
-
   it("reports input_invalid when a required regression is missing (baseline)", () => {
-    const result = gate(baselineProbes().filter((p) => p.id !== "B9-customer-code"));
+    // With the blocker set empty, a missing declared probe is always a
+    // regression absence (there are no declared blockers left to miss).
+    const result = gate(baselineProbes().filter((p) => p.id !== "B5"));
     assert.equal(result.ok, false);
     assert.equal(result.status, "input_invalid");
     assert.ok(codesOf(result).includes("missing_regression"));
@@ -143,16 +142,8 @@ describe("final mode", () => {
     assert.equal(result.status, "gate_held");
   });
 
-  it("fails closed with gate_failed on a blocker FAIL", () => {
-    const probes = finalProbes().map((p) => (p.id === "B3" ? blocker("B3", "FAIL") : p));
-    const result = classifyReleaseGate(doc(probes), "final");
-    assert.equal(result.ok, false);
-    assert.equal(result.status, "gate_failed");
-    assert.ok(codesOf(result).includes("blocker_fail"));
-  });
-
-  it("fails closed with gate_failed on a regression FAIL", () => {
-    const probes = finalProbes().map((p) => (p.id === "B9-customer-code" ? regression("B9-customer-code", "FAIL") : p));
+  it("fails closed with gate_failed on a regression FAIL (repaired B3)", () => {
+    const probes = finalProbes().map((p) => (p.id === "B3" ? regression("B3", "FAIL") : p));
     const result = classifyReleaseGate(doc(probes), "final");
     assert.equal(result.ok, false);
     assert.equal(result.status, "gate_failed");
@@ -195,10 +186,10 @@ describe("final mode", () => {
 describe("provenance attribution", () => {
   it("records per-probe source in observed output", () => {
     const docs = [
-      doc([blocker("B2")], "jest-backend"),
-      doc([blocker("B3"), blocker("B5")], "flutter-pos"),
+      doc([regression("B2")], "jest-backend"),
+      doc([regression("B3"), regression("B5")], "flutter-pos"),
       doc([
-        ...REQUIRED_REGRESSION_IDS.map((id) => regression(id)),
+        ...REQUIRED_REGRESSION_IDS.filter((id) => id !== "B2" && id !== "B3" && id !== "B5").map((id) => regression(id)),
         control("ctl"),
       ], "jest-backend"),
     ];
@@ -210,7 +201,7 @@ describe("provenance attribution", () => {
     assert.equal(b5.source, "flutter-pos");
     const b2 = result.observed.find((p) => p.id === "B2");
     assert.equal(b2.source, "jest-backend");
-    assert.equal(result.observed.length, REQUIRED.length + REQUIRED_REGRESSION_IDS.length + 1);
+    assert.equal(result.observed.length, REQUIRED_REGRESSION_IDS.length + 1);
   });
 
   it("attributes errors to the declaring source and file", () => {

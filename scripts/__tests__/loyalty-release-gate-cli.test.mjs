@@ -62,7 +62,9 @@ describe("CLI", () => {
   });
 
   it("exits 1 with gate_failed JSON on valid evidence against the mode", () => {
-    const probes = baselineProbes().map((p) => (p.id === "B2" ? blocker("B2", "PASS") : p));
+    // Post-#876 there are no declared blockers: contradicting evidence is a
+    // repaired blocker regressing (B2 is a regression now).
+    const probes = baselineProbes().map((p) => (p.id === "B2" ? { id: "B2", kind: "regression", result: "FAIL" } : p));
     const res = run(["--mode", "baseline", fixture("red.json", doc(probes))]);
     assert.equal(res.status, 1);
     assert.equal(JSON.parse(res.stdout).status, "gate_failed");
@@ -114,7 +116,7 @@ describe("CLI", () => {
   });
 
   it("executes from parent directories containing %, #, ?, and spaces without silent success", () => {
-    const red = fixture("red-special.json", doc(baselineProbes().map((p) => (p.id === "B2" ? blocker("B2", "PASS") : p))));
+    const red = fixture("red-special.json", doc(baselineProbes().map((p) => (p.id === "B2" ? { id: "B2", kind: "regression", result: "FAIL" } : p))));
     for (const name of ["dir%20enc", "dir#enc", "dir?enc", "dir with space"]) {
       const dir = path.join(tmpDir(), name);
       mkdirSync(path.join(dir, "lib"), { recursive: true });
@@ -130,9 +132,11 @@ describe("CLI", () => {
 describe("collector CLI emitted messages", () => {
   /** Conforming jest-backend input: every expected backend tag observed. */
   function conformingJestFixture() {
+    // Post-#876 every declared backend tag must PASS: the repaired blockers
+    // (B2/B3) are regressions, and regressions must PASS in every mode.
     const results = [...collector.RUNNER_SOURCES["jest-backend"]].map((id) => ({
       id,
-      status: id.startsWith("CONTROL") ? "passed" : "failed",
+      status: "passed",
     }));
     return JSON.stringify({
       testResults: [{ assertionResults: results.map(({ id, status }) => ({
