@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../../domain/security/cloud_auth_unavailable_exception.dart';
 import '../../domain/security/cloud_credential_coordinator.dart';
 import '../../domain/security/cloud_credential_record.dart';
+import 'unconfigured_backend_interceptor.dart';
+import '../services/api_base_url_service.dart';
 import '../../domain/security/cloud_credentials.dart';
 
 class CloudAuthInterceptor extends Interceptor {
@@ -55,6 +57,17 @@ class CloudAuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    if (options.baseUrl.isEmpty) {
+      // Unconfigured transport (release build, no persisted api_base_url and
+      // no API_URL define): the client carries an empty baseUrl, so mutating
+      // it below would produce '/' and crash the request pipeline with an
+      // invalid-URL assertion. Reject locally and typed — before any socket —
+      // so "never configured" never reads as a network failure.
+      handler.reject(
+        UnconfiguredBackendException(options, ApiBaseUrlSource.unconfigured),
+      );
+      return;
+    }
     if (!options.baseUrl.endsWith('/')) {
       options.baseUrl = '${options.baseUrl}/';
     }
