@@ -281,6 +281,48 @@ void main() {
         expect(high!.reason, ApiBaseUrlValidationReason.cleartextNotAllowed);
       });
 
+      test('rejects non-quad hostnames that merely start with a private prefix', () async {
+        // Mirrors the bash rule: only exact dotted quads may match the
+        // private ranges (verification finding 6 divergence).
+        expect(
+          (await validate('http://10.corp.example/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+        expect(
+          (await validate('http://127.0.0.1.evil.com/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+        expect(
+          (await validate('http://192.168.foo/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+        expect(
+          (await validate('http://172.16/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+      });
+
+      test('rejects IPv6 literals and userinfo (not part of the LAN rule)', () async {
+        // Verification finding 6 divergence: both implementations must
+        // refuse these instead of disagreeing.
+        expect(
+          (await validate('http://::1/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+        expect(
+          (await validate('http://2001:db8::1/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+        expect(
+          (await validate('http://user:pass@evil.com/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+        expect(
+          (await validate('http://user@evil.com/api'))!.reason,
+          ApiBaseUrlValidationReason.cleartextNotAllowed,
+        );
+      });
+
       test('a rejected public cleartext URL persists nothing', () async {
         final configDao = _InMemoryLocalConfigDao();
         final service = ApiBaseUrlService(configDao, isReleaseMode: false);

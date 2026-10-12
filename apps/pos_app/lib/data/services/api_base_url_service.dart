@@ -73,16 +73,24 @@ enum ApiBaseUrlValidationReason {
 /// - mDNS-style LAN names: `.local`, `.lan`, `.internal`.
 bool isLanHost(String host) {
   final normalized = host.trim().toLowerCase();
-  if (normalized.isEmpty) {
+  if (normalized.isEmpty || normalized.contains('@')) {
+    // Userinfo is never a LAN host: `user@evil.com` names evil.com.
     return false;
   }
 
-  final withoutPort = normalized.contains(':')
-      ? normalized.split(':').first
-      : normalized;
-
-  if (withoutPort == 'localhost') {
-    return true;
+  // Exactly one ':' separates host and port. Two or more colons is an IPv6
+  // literal, which the LAN rule does not cover (use https instead).
+  final colonCount = ':'.allMatches(normalized).length;
+  final String withoutPort;
+  if (colonCount == 0) {
+    withoutPort = normalized;
+  } else if (colonCount == 1) {
+    withoutPort = normalized.split(':').first;
+  } else {
+    return false;
+  }
+  if (withoutPort.isEmpty) {
+    return false;
   }
 
   final ipv4 = RegExp(r'^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$')
