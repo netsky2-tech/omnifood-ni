@@ -1,6 +1,6 @@
 # Loyalty ledger cloud sender (POS → cloud via LOYALTY_LEDGER flow)
 
-- **Status:** EN CURSO — follow-up #1 of the loyalty gate arc (owner, 2026-10-12: work the follow-up table in order).
+- **Status:** CERRADO — merged como PR #878 (squash `413b899`, 2026-10-12); issue #877 cerrado. Native RDD review `review-dcdea3c86e0d2340`: APPROVED (risk+reliability), acknowledged; 4 hallazgos advisory no-bloqueantes anotados para work posterior.
 - **Branch:** `feat/loyalty-ledger-cloud-sender`, from `main` @ `8e2c67f9`.
 - **Origin:** PR #876 landed the backend acceptance (B3/T6) and the per-movement REVERSAL contract (B5/T5); the POS still pushes ledger rows through the transitional parallel route `POST /loyalty/point-transactions/sync`. Arch §13.4: extend the existing batch envelope, no parallel transport.
 
@@ -22,3 +22,5 @@
 ## Log
 
 - L1 (2026-10-12, owner): "Arranquemos en el orden de la tabla" — work the follow-up table in order; #1 = ledger cloud sender.
+- L2 (2026-10-12): T1 commit `ecffaeae`, T2 commit `4e49cfcb`; gate final 12/12; native review APPROVED; PR #878 merged (`413b899`).
+- Advisory findings del reviewer (no-bloqueantes, work posterior): sync-batch.dto.ts:342-385 (W), invoices.service.ts:1023 (S), sync_service.dart:1232-1241 (W), sync_service.dart:1367-1369 (S).
