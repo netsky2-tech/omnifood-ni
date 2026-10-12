@@ -1,0 +1,10 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "..",
+  "setupFiles": ["<rootDir>/test/setup-test-env.ts"],
+  "testEnvironment": "node",
+  "testMatch": ["<rootDir>/test/loyalty/release-probes/**/*.probe.spec.ts"],
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  }
+}
