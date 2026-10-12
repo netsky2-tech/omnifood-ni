@@ -110,7 +110,7 @@ fi
 FLUTTER_RC=0
 (
   cd "$ROOT/apps/pos_app" &&
-    timeout "$FLUTTER_TIMEOUT_SECS" "$FLUTTER_BIN" test \
+    LOYALTY_RELEASE_GATE=1 timeout "$FLUTTER_TIMEOUT_SECS" "$FLUTTER_BIN" test \
       test/e2e/loyalty_release_isolation_e2e_test.dart \
       test/e2e/loyalty_release_void_e2e_test.dart \
       --reporter json --no-pub
