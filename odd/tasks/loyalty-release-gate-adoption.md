@@ -1,6 +1,6 @@
 # Loyalty release gate — adoption (re-triage against main)
 
-- **Status:** EN CURSO.
+- **Status:** CERRADO — gate adoptado (PR #874): cherry-picks + re-triage + gate_held en baseline; CI verde; esperando merge del dueño.
 - **Branch:** `feat/loyalty-release-gate`, from `main` = `1b12fb42`.
 - **Origin:** owner decision (2026-10-12): adopt the T1b gate runner + probes now.
   Cherry-picked 11 commits from `feat/loyalty-v1-production-readiness` (clean), then
@@ -34,3 +34,8 @@ every closed gap guarded as a regression, controls PASS.
 `bash scripts/loyalty-release-gate.sh baseline` (backend Jest probes + POS Flutter
 probes via the harness; machine docs converted and classified; exit code propagates).
 Final mode (`final`) is the T10 target: everything PASS once B2/B3/B5 close.
+
+Additional CI-integration fixes (commit 595e1fdc): the Flutter probes run ONLY
+through the gate (LOYALTY_RELEASE_GATE marker exported by the runner; default CI
+run registers a passing placeholder — an empty probe main exits 79 and fails CI).
+Gate contract tests updated to the new classification: 64/64.
