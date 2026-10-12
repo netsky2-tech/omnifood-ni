@@ -106,7 +106,7 @@ class CustomerMapper {
       loyaltyProgramId: domain.loyaltyProgramId,
       ticketId: domain.ticketId,
       rewardId: domain.rewardId,
-      transactionType: domain.transactionType,
+      transactionType: canonicalLoyaltyLedgerType(domain.transactionType),
       units: domain.units,
       reversalOfTransactionId: domain.reversalOfTransactionId,
       idempotencyKey: domain.idempotencyKey,

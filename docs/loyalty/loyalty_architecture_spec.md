@@ -972,6 +972,20 @@ CREATE INDEX idx_loyalty_tx_ticket
   ON customer_point_transactions (tenant_id, ticket_id);
 ```
 
+**Convención de forma textual de `transaction_type` (follow-up #5).** Las
+formas canónicas de escritura son las del DDL de arriba: `EARN`, `REDEEM`,
+`ADJUST`, `REVERSAL`. En SQLite (POS) las filas persisten exactamente esas
+formas mayúsculas; en PostgreSQL el tipo es el enum
+`customer_point_transactions_transaction_type_enum` cuyos miembros son las
+formas minúsculas (`earn`, `redeem`, `adjust`, `reversal`) — la conversión
+ocurre en el límite del escritor (`toLegacyPointTransactionType`), no en los
+guards. Los guards de SQLite (identidades parciales y triggers §9.3) son
+deliberadamente case-insensitive (`LOWER(transaction_type)`): son defensa en
+profundidad contra filas de la nube con forma minúscula, nunca el contrato
+primario. Toda escritura POS pasa por `canonicalLoyaltyLedgerType`, que
+normaliza la forma y degrada un tipo no clasificable al namespace legacy NULL
+en vez de escribir un tipo que evade las reglas de forma.
+
 ## 8.4 Rebuildable projection
 
 ```sql
