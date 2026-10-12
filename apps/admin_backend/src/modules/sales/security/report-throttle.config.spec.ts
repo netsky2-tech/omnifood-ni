@@ -6,6 +6,7 @@ import {
   ThrottlerModule,
 } from '@nestjs/throttler';
 import { ReportsController } from '../controllers/reports.controller';
+import type { RequestWithPrincipalOrUser } from '../../../core/decorators/tenant.decorator';
 import {
   REPORTS_PER_TENANT_LIMIT,
   REPORT_THROTTLE_TTL_MS,
@@ -21,6 +22,9 @@ interface TrackerRequest {
   user?: { tenant_id?: string };
   devicePrincipal?: { tenantId?: string };
 }
+
+const asRequest = (partial: TrackerRequest): RequestWithPrincipalOrUser =>
+  partial as unknown as RequestWithPrincipalOrUser;
 
 function reportContext(
   request: TrackerRequest,
@@ -39,29 +43,31 @@ function reportContext(
 describe('tenantReportTracker', () => {
   it('keys on the device principal tenant id (same source as @GetTenantId)', () => {
     expect(
-      tenantReportTracker({
-        devicePrincipal: { tenantId: 'tenant-device' },
-        user: { tenant_id: 'tenant-user' },
-      } as TrackerRequest),
+      tenantReportTracker(
+        asRequest({
+          devicePrincipal: { tenantId: 'tenant-device' },
+          user: { tenant_id: 'tenant-user' },
+        } as TrackerRequest),
+      ),
     ).toBe('tenant-device');
   });
 
   it('falls back to the authenticated user tenant id (same source as @GetTenantId)', () => {
     expect(
-      tenantReportTracker({
-        user: { tenant_id: 'tenant-user' },
-      } as TrackerRequest),
+      tenantReportTracker(
+        asRequest({
+          user: { tenant_id: 'tenant-user' },
+        } as TrackerRequest),
+      ),
     ).toBe('tenant-user');
   });
 
   it('falls back to the client IP when no tenant context exists', () => {
-    expect(tenantReportTracker({ ip: '10.0.0.7' } as TrackerRequest)).toBe(
-      '10.0.0.7',
-    );
+    expect(tenantReportTracker(asRequest({ ip: '10.0.0.7' }))).toBe('10.0.0.7');
   });
 
   it('never returns an undefined tracker', () => {
-    expect(tenantReportTracker({} as TrackerRequest)).toBe('unknown');
+    expect(tenantReportTracker(asRequest({}))).toBe('unknown');
   });
 });
 

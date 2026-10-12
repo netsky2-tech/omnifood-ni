@@ -18,6 +18,7 @@
  */
 
 import type { ThrottlerOptions } from '@nestjs/throttler';
+import type { RequestWithPrincipalOrUser } from '../../../core/decorators/tenant.decorator';
 
 export const TENANT_REPORT_THROTTLER_NAME = 'tenant-report';
 
@@ -34,7 +35,7 @@ export const REPORTS_PER_TENANT_LIMIT = 30;
  * device-sync principal wins over the JWT user, same resolution order. The
  * client IP is only a fallback for requests without tenant context.
  */
-export function tenantReportTracker(req: Record<string, any>): string {
+export function tenantReportTracker(req: RequestWithPrincipalOrUser): string {
   const deviceTenantId = req?.devicePrincipal?.tenantId;
   if (typeof deviceTenantId === 'string' && deviceTenantId.trim() !== '') {
     return deviceTenantId;
@@ -54,7 +55,8 @@ export function reportThrottlers(): ThrottlerOptions[] {
       name: TENANT_REPORT_THROTTLER_NAME,
       ttl: REPORT_THROTTLE_TTL_MS,
       limit: REPORTS_PER_TENANT_LIMIT,
-      getTracker: (req: Record<string, any>) => tenantReportTracker(req),
+      getTracker: (req: RequestWithPrincipalOrUser) =>
+        tenantReportTracker(req),
     },
   ];
 }
