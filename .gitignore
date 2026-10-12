@@ -59,3 +59,11 @@ key.properties
 
 # TypeScript incremental build artifacts
 *.tsbuildinfo
+
+# Derived media: regenerated from the tracked .png sources by
+# scripts/optimize_media_assets.mjs — never commit the derived forms.
+docs/nhilos/manuals/images/*.webp
+docs/nhilos/manuals/images/*.avif
+
+# Registered git worktrees (session coordination) are not project files.
+.worktrees/
