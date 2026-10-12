@@ -886,6 +886,34 @@ describe('UserService', () => {
     });
   });
 
+  it('rejects top common passwords before hashing on create and update (S2)', async () => {
+    const hash = jest.spyOn(bcrypt, 'hash');
+
+    await expect(
+      service.update(
+        'user-1',
+        { password: 'password123' },
+        'tenant-1',
+        'admin-1',
+      ),
+    ).rejects.toThrow('demasiado com');
+    await expect(
+      service.create(
+        {
+          email: 'cashier@omnifood.ni',
+          name: 'Cashier',
+          role: UserRole.CASHIER,
+          password: 'password123',
+        },
+        'tenant-1',
+        'admin-1',
+      ),
+    ).rejects.toThrow('demasiado com');
+
+    expect(hash).not.toHaveBeenCalled();
+    hash.mockRestore();
+  });
+
   it('hashes new passwords at the hardened bcrypt cost (S1)', async () => {
     const hash = jest.spyOn(bcrypt, 'hash');
     // The existing hashing-failure test proves the update path reaches the
@@ -897,5 +925,4 @@ describe('UserService', () => {
     expect(hash).toHaveBeenCalledWith('Str0ngPassw0rd!', 12);
     hash.mockRestore();
   });
-
 });
