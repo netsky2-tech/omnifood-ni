@@ -5,6 +5,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 import { resolveCorsOrigins } from './core/config/http-security.config';
 import { resolveTrustProxyHops } from './core/config/trust-proxy.config';
+import { helmetOptions } from './core/config/helmet.config';
 import { AllExceptionsFilter } from './core/http/all-exceptions.filter';
 
 async function bootstrap() {
@@ -42,14 +43,9 @@ async function bootstrap() {
     next();
   });
 
-  // Security - relaxed for local dev
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-      hsts: false,
-    }),
-  );
+  // Security: relaxed locally, hardened in production (HSTS + deny-by-default
+  // CSP - the API serves JSON, not HTML). See core/config/helmet.config.ts.
+  app.use(helmet(helmetOptions(process.env.NODE_ENV)));
   app.enableCors({ origin: corsOrigins, credentials: true });
   console.log(`CORS allowed origins: ${corsOrigins.join(', ')}`);
 
