@@ -21,6 +21,15 @@ abstract class CustomerPointTransactionDao {
   @Query('SELECT * FROM customer_point_transactions WHERE idempotency_key = :key LIMIT 1')
   Future<CustomerPointTransactionEntity?> findByIdempotencyKey(String key);
 
+  @Query('SELECT COALESCE(MAX(source_sequence), 0) FROM customer_point_transactions')
+  Future<int?> findMaxSourceSequence();
+
+  @Query('UPDATE customer_point_transactions SET source_sequence = :sequence WHERE id = :id AND source_sequence IS NULL')
+  Future<void> assignSourceSequence(String id, int sequence);
+
+  @Query('SELECT * FROM customer_point_transactions WHERE id = :id LIMIT 1')
+  Future<CustomerPointTransactionEntity?> findTransactionById(String id);
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertTransaction(CustomerPointTransactionEntity entity);
 

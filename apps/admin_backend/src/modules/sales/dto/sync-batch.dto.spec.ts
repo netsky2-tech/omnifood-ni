@@ -373,12 +373,64 @@ describe('SyncBatchEnvelopeDto', () => {
             ...loyaltyRecord.events[0].transaction,
             transactionType: 'REVERSAL',
             units: -10,
+            // S2 (§2.3/§4.3): a REVERSAL is defined by its original-movement
+            // link; without the canonical passthrough fields a REVERSAL row
+            // could never reach the ledger (uq_loyalty_reversal_original +
+            // ck_loyalty_tx_type_semantics require reversal_of_transaction_id).
+            reversalOfTransactionId: '00000000-0000-4000-8000-00000000000c',
+            rewardId: null,
+            reason: 'Reversal by void',
+            sourceEventId: 'evt-orig-1',
+            actorUserId: null,
+            branchId: null,
+            terminalId: 'terminal-loyalty-1',
+            programVersion: null,
+            rewardVersion: null,
+            commercialSnapshot: null,
           },
         },
       ],
     };
-    const { errors } = validate([reversal]);
+    const { errors, dto } = validate([reversal]);
     expect(errors).toHaveLength(0);
+    expect(dto.records[0].events?.[0].transaction).toMatchObject({
+      transactionType: 'REVERSAL',
+      reversalOfTransactionId: '00000000-0000-4000-8000-00000000000c',
+      reason: 'Reversal by void',
+      sourceEventId: 'evt-orig-1',
+      terminalId: 'terminal-loyalty-1',
+    });
+  });
+
+  it('accepts the optional canonical §2.3 context fields on any ledger movement', () => {
+    const enriched = {
+      ...loyaltyRecord,
+      events: [
+        {
+          ...loyaltyRecord.events[0],
+          transaction: {
+            ...loyaltyRecord.events[0].transaction,
+            rewardId: 'rw-00000001',
+            reason: 'Acumulación por compra',
+            actorUserId: 'user-1',
+            branchId: 'branch-1',
+            programVersion: 3,
+            rewardVersion: 2,
+            commercialSnapshot: { programName: 'Spend Points' },
+          },
+        },
+      ],
+    };
+    const { errors, dto } = validate([enriched]);
+    expect(errors).toHaveLength(0);
+    expect(dto.records[0].events?.[0].transaction).toMatchObject({
+      rewardId: 'rw-00000001',
+      reason: 'Acumulación por compra',
+      actorUserId: 'user-1',
+      programVersion: 3,
+      rewardVersion: 2,
+      commercialSnapshot: { programName: 'Spend Points' },
+    });
   });
 
   it('rejects LOYALTY_LEDGER without events (the flow carries no invoice/movements/fulfillment)', () => {
@@ -462,6 +514,7 @@ describe('SyncBatchEnvelopeDto', () => {
           transaction: {
             ...loyaltyRecord.events[0].transaction,
             notInContract: true,
+            reversal_of_transaction_id: 'snake-case-not-whitelisted',
           },
         },
       ],

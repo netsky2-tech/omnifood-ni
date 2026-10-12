@@ -3209,6 +3209,17 @@ final migration70_71 = Migration(70, 71, (database) async {
   await ensureLoyaltyLedgerIdentitySchema(database);
 });
 
+/// Ledger cloud sender (arch §13.4): the durable per-row outbound sequence
+/// the LOYALTY_LEDGER flow requires. Allocated once before the first send
+/// and persisted on the append-only row, so a crash between allocation and
+/// send replays the identical record (backend DUPLICATE) and no gap can be
+/// minted. NULL = the row was never offered for sync.
+final migration71_72 = Migration(71, 72, (database) async {
+  await database.execute(
+    'ALTER TABLE customer_point_transactions ADD COLUMN source_sequence INTEGER',
+  );
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3271,6 +3282,7 @@ final allMigrations = [
   migration68_69,
   migration69_70,
   migration70_71,
+  migration71_72,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

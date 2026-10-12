@@ -1221,40 +1221,76 @@ class SyncService {
       'tenant_id',
     );
     final tenantId = tenantConfig?.value ?? 'tenant-1';
+    final deviceId = _auditRepository.deviceId;
+
+    // S3 — durable per-row sequence (arch §13.4): allocated ONCE, persisted
+    // on the append-only row BEFORE the send. A crash between allocation and
+    // send replays the identical record (the backend answers DUPLICATE), and
+    // no crash sequence can mint a stream gap (which would stage the batch
+    // or, worse, hard-fail a payload mismatch). The guarded UPDATE makes the
+    // allocation idempotent under a concurrent double-pass.
+    var nextSequence = (await dao.findMaxSourceSequence() ?? 0) + 1;
+    final sequenced = <CustomerPointTransactionEntity>[];
+    for (final tx in batch) {
+      if (tx.sourceSequence == null) {
+        await dao.assignSourceSequence(tx.id, nextSequence);
+        nextSequence++;
+      }
+      final persisted =
+          await dao.findTransactionById(tx.id) ?? tx;
+      sequenced.add(persisted);
+    }
 
     developer.log(
-      'Loyalty sync: posting ${batch.length} point transactions',
+      'Loyalty sync: posting ${sequenced.length} ledger records via the '
+      'LOYALTY_LEDGER flow',
       name: 'SyncService',
     );
+
+    // Arch §13.4: the ledger rides the EXISTING batch envelope — one record
+    // per event, the record idempotency key equal to the event's so the ACK
+    // maps 1:1 back onto the local row. No parallel transport.
+    final records = sequenced
+        .map(
+          (tx) => _buildLoyaltyLedgerRecord(tx, tenantId, deviceId),
+        )
+        .toList(growable: false);
+
     final response = await _dio.post(
-      '/loyalty/point-transactions/sync',
-      data: {
-        'transactions': batch
-            .map((tx) => _buildLoyaltyPointTransactionPayload(tx, tenantId))
-            .toList(growable: false),
-      },
+      '/v1/sync/batch',
+      data: {'records': records},
+      options: Options(
+        headers: {HttpHeaders.contentTypeHeader: 'application/json'},
+      ),
     );
 
     if (response.statusCode == 200 || response.statusCode == 201) {
       final failedKeys = _failedLoyaltySyncKeys(response.data);
-      for (final tx in batch) {
-        final idempotencyKey =
-            tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}';
+      for (final tx in sequenced) {
+        final idempotencyKey = _loyaltyRecordIdempotencyKey(tx, tenantId);
         if (failedKeys.contains(idempotencyKey)) continue;
         await dao.markSyncedById(tx.id);
       }
     }
   }
 
-  /// Maps a local point-transaction row onto the cloud ingestion contract
-  /// (LoyaltyPointTransactionSyncItemDto). Legacy rows without program
-  /// attribution or units are sent with best-effort equivalents: units fall
-  /// back to the rounded points delta and a stable idempotency key is
-  /// derived from the immutable local row id so retries dedupe server-side.
-  Map<String, Object?> _buildLoyaltyPointTransactionPayload(
+  String _loyaltyRecordIdempotencyKey(
     CustomerPointTransactionEntity tx,
     String tenantId,
+  ) =>
+      tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}';
+
+  /// Maps a local point-transaction row onto ONE §13.4 batch record
+  /// (flowType LOYALTY_LEDGER) carrying a single event with the canonical
+  /// §2.3 transaction state — including the §4.3 reversal link the ledger
+  /// identities require. The event id prefers the row's own source event
+  /// identity and falls back to the immutable local row id.
+  Map<String, Object?> _buildLoyaltyLedgerRecord(
+    CustomerPointTransactionEntity tx,
+    String tenantId,
+    String deviceId,
   ) {
+    final idempotencyKey = _loyaltyRecordIdempotencyKey(tx, tenantId);
     Object? commercialSnapshot;
     if (tx.commercialSnapshot != null) {
       try {
@@ -1265,36 +1301,59 @@ class SyncService {
     }
 
     return {
-      'idempotencyKey':
-          tx.idempotencyKey ?? 'loyalty:sync:$tenantId:${tx.id}',
-      'customerId': tx.customerId,
-      if (tx.loyaltyProgramId != null) 'loyaltyProgramId': tx.loyaltyProgramId,
-      'transactionType': tx.transactionType ?? tx.type,
-      'units': tx.units ?? tx.points.round(),
-      if (tx.ticketId != null) 'ticketId': tx.ticketId,
-      if (tx.invoiceId != null && tx.ticketId == null)
-        'ticketId': tx.invoiceId,
-      if (tx.rewardId != null) 'rewardId': tx.rewardId,
-      if (tx.reason != null) 'reason': tx.reason,
-      if (tx.reversalOfTransactionId != null)
-        'reversalOfTransactionId': tx.reversalOfTransactionId,
-      if (tx.sourceEventId != null) 'sourceEventId': tx.sourceEventId,
-      if (tx.actorUserId != null) 'actorUserId': tx.actorUserId,
-      if (tx.branchId != null) 'branchId': tx.branchId,
-      if (tx.terminalId != null) 'terminalId': tx.terminalId,
-      if (tx.programVersion != null) 'programVersion': tx.programVersion,
-      if (tx.rewardVersion != null) 'rewardVersion': tx.rewardVersion,
-      // Floor's pinned analyzer (6.4.1) cannot parse null-aware map elements
-      // (`?x`) during build_runner codegen, so keep the collection-if form
-      // and silence the newer lint that prefers `?`.
-      // ignore: use_null_aware_elements
-      if (commercialSnapshot != null)
-        'commercialSnapshot': commercialSnapshot,
-      'origin': tx.origin ?? 'POS',
-      'occurredAt': DateTime.fromMillisecondsSinceEpoch(
-        tx.occurredAt ?? tx.createdAt,
-        isUtc: true,
-      ).toIso8601String(),
+      'idempotencyKey': idempotencyKey,
+      'sourceDeviceId': deviceId,
+      'sourceSequence': tx.sourceSequence,
+      'terminalId': tx.terminalId ?? deviceId,
+      'flowType': _loyaltyLedgerFlowType,
+      'documentType': _loyaltyLedgerFlowType,
+      'events': [
+        {
+          'event_id': tx.sourceEventId ?? tx.id,
+          'idempotency_key': idempotencyKey,
+          'transaction': {
+            'tenantId': tenantId,
+            'customerId': tx.customerId,
+            // ignore: use_null_aware_elements
+            if (tx.loyaltyProgramId != null)
+              'loyaltyProgramId': tx.loyaltyProgramId,
+            'transactionType': tx.transactionType ?? tx.type,
+            'units': tx.units ?? tx.points.round(),
+            'origin': tx.origin ?? 'POS',
+            'occurredAt': DateTime.fromMillisecondsSinceEpoch(
+              tx.occurredAt ?? tx.createdAt,
+              isUtc: true,
+            ).toIso8601String(),
+            // ignore: use_null_aware_elements
+            if ((tx.ticketId ?? tx.invoiceId) != null)
+              'ticketId': tx.ticketId ?? tx.invoiceId,
+            // ignore: use_null_aware_elements
+            if (tx.rewardId != null) 'rewardId': tx.rewardId,
+            // ignore: use_null_aware_elements
+            if (tx.reason != null) 'reason': tx.reason,
+            // ignore: use_null_aware_elements
+            if (tx.reversalOfTransactionId != null)
+              'reversalOfTransactionId': tx.reversalOfTransactionId,
+            // ignore: use_null_aware_elements
+            if (tx.sourceEventId != null) 'sourceEventId': tx.sourceEventId,
+            // ignore: use_null_aware_elements
+            if (tx.actorUserId != null) 'actorUserId': tx.actorUserId,
+            // ignore: use_null_aware_elements
+            if (tx.branchId != null) 'branchId': tx.branchId,
+            // ignore: use_null_aware_elements
+            if (tx.terminalId != null) 'terminalId': tx.terminalId,
+            // ignore: use_null_aware_elements
+            if (tx.programVersion != null)
+              'programVersion': tx.programVersion,
+            // ignore: use_null_aware_elements
+            if (tx.rewardVersion != null)
+              'rewardVersion': tx.rewardVersion,
+            // ignore: use_null_aware_elements
+            if (commercialSnapshot != null)
+              'commercialSnapshot': commercialSnapshot,
+          },
+        },
+      ],
     };
   }
 
@@ -1305,8 +1364,9 @@ class SyncService {
     return {
       for (final item in results)
         if (item is Map &&
-            item['status'] == 'FAILED' &&
-            item['idempotencyKey'] is String)
+            item['idempotencyKey'] is String &&
+            item['status'] != 'ACCEPTED' &&
+            item['status'] != 'DUPLICATE')
           item['idempotencyKey'] as String,
     };
   }
@@ -2435,6 +2495,7 @@ class SyncService {
   }
 
   static const String _inventoryFlowType = 'inventory';
+  static const String _loyaltyLedgerFlowType = 'LOYALTY_LEDGER';
 
   Map<String, Object> _buildBatchEnvelope(
     List<dynamic> unsynced, [

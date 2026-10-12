@@ -323,8 +323,9 @@ export class SyncLoyaltyLedgerTransactionDto {
   @IsString()
   customerId: string;
 
+  @IsOptional()
   @IsString()
-  ticketId: string;
+  ticketId?: string | null;
 
   @IsString()
   @IsIn(LOYALTY_TRANSACTION_TYPES)
@@ -338,6 +339,50 @@ export class SyncLoyaltyLedgerTransactionDto {
 
   @IsString()
   occurredAt: string;
+
+  /** Canonical §2.3 context (T6 sender contract): every optional field the
+   * ledger row carries and the §9.3 identities and audit trail consume.
+   * `reversalOfTransactionId` is what makes a REVERSAL a REVERSAL (§4.3
+   * per-movement reversals + uq_loyalty_reversal_original). */
+  @IsOptional()
+  @IsString()
+  rewardId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  reason?: string | null;
+
+  @IsOptional()
+  @IsString()
+  reversalOfTransactionId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  sourceEventId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  actorUserId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  branchId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  terminalId?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  programVersion?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  rewardVersion?: number | null;
+
+  @IsOptional()
+  @IsObject()
+  commercialSnapshot?: Record<string, unknown> | null;
 }
 
 export class SyncLoyaltyLedgerEventDto {
