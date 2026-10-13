@@ -11,7 +11,7 @@ function Badge({ className, variant = 'default', ...props }: BadgeProps) {
     secondary: 'border-transparent bg-muted text-muted-foreground hover:bg-muted/80',
     destructive: 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-300',
     outline: 'border-border text-foreground',
-    success: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/50 dark:text-emerald-300',
+    success: 'border-emerald-700 bg-emerald-700 text-white shadow-sm',
     warning: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/50 dark:text-amber-300',
     info: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/50 dark:text-blue-300',
   };

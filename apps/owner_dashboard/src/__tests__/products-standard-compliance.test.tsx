@@ -82,20 +82,20 @@ function renderPage() {
 }
 
 describe("S1 — ProductStatusBadge (NHILoS §26, §46)", () => {
-  it("renders active badge with the strong lifecycle palette and dot indicator", () => {
+  it("renders active badge with the solid dark-green palette like the success toast", () => {
     const { container } = render(<ProductStatusBadge isActive={true} />);
     const badge = screen.getByTestId("product-status-badge");
 
     expect(badge).toHaveTextContent("Activo");
-    // Strong tint per user feedback: bg-emerald-50 read as gray on white.
-    expect(badge.className).toContain("text-emerald-800");
-    expect(badge.className).toContain("bg-emerald-100");
-    expect(badge.className).toContain("border-emerald-300");
+    // Owner decision: solid dark green + white, mirroring the success toast (#917).
+    expect(badge.className).toContain("bg-emerald-700");
+    expect(badge.className).toContain("text-white");
+    expect(badge.className).not.toContain("bg-emerald-100");
 
     // Accessible dot indicator
     const dot = container.querySelector('[aria-hidden="true"]');
     expect(dot).toBeInTheDocument();
-    expect(dot?.className).toContain("bg-emerald-600");
+    expect(dot?.className).toContain("bg-emerald-300");
   });
 
   it("renders inactive badge with muted neutral palette and dot indicator", () => {

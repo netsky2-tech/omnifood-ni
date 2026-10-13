@@ -178,7 +178,9 @@ describe("SuppliersTab (SOHO office master data - BXW-001)", () => {
     const activeBadges = screen.getAllByText("Activo");
     expect(activeBadges).toHaveLength(2);
     for (const badge of activeBadges) {
-      expect(badge.className).toContain("bg-emerald-50");
+      // Solid dark-green success (design-system update, mirrors the toast).
+      expect(badge.className).toContain("bg-emerald-700");
+      expect(badge.className).toContain("text-white");
     }
 
     const inactiveBadge = screen.getByText("Inactivo");
