@@ -93,6 +93,18 @@ export interface InboundSyncProductDto {
   updatedAt: Date;
   tenantId?: string;
   imageUrl?: string | null;
+  /**
+   * Pull origin metadata (issue #899, BOH read-only catalog). Origin contract
+   * (review R3-001): the backend stamps 'DASHBOARD' on web-originated rows —
+   * which today is every storable catalog row, since terminal catalog writes
+   * are rejected upstream (#899 gate) and the sync/batch ingestion carries no
+   * catalog rows. The type is a plain string so a future backend that stores
+   * terminal-originated rows can stamp the originating device id truthfully;
+   * POS terminals skip any non-DASHBOARD source (dashboard-only persistence).
+   * Absence means the row applies unconditionally (legacy consumers /
+   * non-stamped row types).
+   */
+  source?: string;
 }
 
 export interface InboundSyncCatalogValueDto {
@@ -105,6 +117,8 @@ export interface InboundSyncCatalogValueDto {
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Pull origin metadata; see InboundSyncProductDto.source (issue #899). */
+  source?: string;
 }
 
 export interface InboundSyncInsumoDto {
@@ -136,6 +150,8 @@ export interface InboundSyncRecipeDto {
   quantity: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Pull origin metadata; see InboundSyncProductDto.source (issue #899). */
+  source?: string;
 }
 
 export interface InboundSyncRecipeVersionComponentDto {

@@ -923,7 +923,7 @@ void main() {
 
     expect(find.byType(AppDrawer), findsOneWidget);
     expect(find.text('INVENTARIO'), findsOneWidget);
-    expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Inventario'), findsOneWidget);
   });
 
   testWidgets('allows cashier to open session from box opening screen', (tester) async {

@@ -67,7 +67,7 @@ class PhysicalCountViewModel extends ChangeNotifier {
         ..addAll(sessions);
       _selectedSessionId ??= _sessions.isEmpty ? null : _sessions.first.id;
       _statusMessage ??=
-          'Modo local: cada sesión congela su baseline en SQLite y sincroniza el documento BOH después.';
+          'Modo local: cada sesión congela su baseline en SQLite y sincroniza el documento con la nube después.';
     } catch (error) {
       _errorMessage = 'No se pudo cargar el workspace local de conteos: $error';
     } finally {
@@ -230,7 +230,7 @@ class PhysicalCountViewModel extends ChangeNotifier {
     }
 
     _statusMessage =
-        'Sesión posteada a las ${DateFormat('HH:mm').format(_clock())}. Pendiente de replay BOH.';
+        'Sesión posteada a las ${DateFormat('HH:mm').format(_clock())}. Pendiente de sincronización.';
     await _repository.saveCountSessionDocument(
       session.copyWith(
         status: CountSessionStatus.posted,

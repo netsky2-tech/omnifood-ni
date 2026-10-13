@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../domain/models/inventory/insumo.dart';
-import '../../../../domain/models/catalog/catalog_value.dart';
 import 'insumo_view_model.dart';
 import '../../../../domain/models/inventory/product.dart';
 import '../../../../domain/models/fulfillment/fulfillment_contracts.dart';
@@ -104,13 +103,21 @@ class _InsumoViewState extends State<InsumoView> {
           return const Center(child: CircularProgressIndicator());
         }
         if (vm.products.isEmpty) {
-          return DsEmptyState(
-            icon: Icons.local_mall_outlined,
-            title: 'Sin productos registrados',
-            description:
-                'Los productos son los ítems que vendés en el POS. Podés crear productos preparados (llevan receta) o de reventa directa.',
-            actionLabel: 'REGISTRAR PRIMER PRODUCTO',
-            onAction: () => _showProductForm(context),
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildCatalogReadOnlyBanner(context),
+              ),
+              const Expanded(
+                child: DsEmptyState(
+                  icon: Icons.local_mall_outlined,
+                  title: 'Sin productos registrados',
+                  description:
+                      'Todavía no hay productos sincronizados en esta terminal.',
+                ),
+              ),
+            ],
           );
         }
 
@@ -118,15 +125,7 @@ class _InsumoViewState extends State<InsumoView> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: DsPrimaryButton(
-                  label: 'REGISTRAR PRODUCTO',
-                  icon: Icons.add,
-                  expand: true,
-                  onPressed: () => _showProductForm(context),
-                ),
-              ),
+              child: _buildCatalogReadOnlyBanner(context),
             ),
             Expanded(
               child: ListView.separated(
@@ -241,6 +240,34 @@ class _InsumoViewState extends State<InsumoView> {
           ),
         );
       },
+    );
+  }
+
+  /// Strict read-only catalog notice (issue #899 S4): products, prices and
+  /// recipes are administered from the Dashboard web; this terminal never
+  /// edits them. Rendered where the catalog editor CTA used to be.
+  Widget _buildCatalogReadOnlyBanner(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 20, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'El catálogo se administra desde el Dashboard web. '
+              'Esta terminal no edita productos, precios ni recetas.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -424,272 +451,6 @@ class _InsumoViewState extends State<InsumoView> {
     );
   }
 
-  void _showProductForm(BuildContext context, {Product? product}) {
-    final vm = context.read<InsumoViewModel>();
-    final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController(text: product?.name ?? '');
-    final skuController = TextEditingController(text: product?.sku ?? '');
-    final barcodeController = TextEditingController(
-      text: product?.barcode ?? '',
-    );
-    final categoryController = TextEditingController(
-      text: product?.category ?? '',
-    );
-    final stockController = TextEditingController(
-      text: product?.stock.toString() ?? '0',
-    );
-    final costController = TextEditingController(
-      text: product?.averageCost.toString() ?? '0',
-    );
-    final priceController = TextEditingController(
-      text: product?.sellPrice.toString() ?? '0',
-    );
-    final uomOptions = _buildUomOptions(vm.uomOptions, product?.uom);
-    String selectedUom =
-        (product?.uom != null && product!.uom.trim().isNotEmpty)
-            ? product.uom.trim()
-            : (uomOptions.isNotEmpty ? uomOptions.first : 'UND');
-    bool isPrepared = product?.isPrepared ?? true;
-    // Sales product type comes from the administrable SALES_PRODUCT_TYPE
-    // catalog (e.g. PREPARADO / REVENTA). It maps back to the persisted
-    // isPrepared flag until the Product schema migrates to a type-code column.
-    final typeOptions = _buildProductTypeOptions(
-      vm,
-      product?.isPrepared ?? isPrepared,
-    );
-    String selectedProductType = typeOptions.isNotEmpty
-        ? typeOptions.first.code
-        : '';
-    final categoryNameOptions = _buildCategoryOptions(vm, product?.category);
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-          title: Text(product == null ? 'Nuevo Producto' : 'Editar Producto'),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    TextFormField(
-                      controller: nameController,
-                      decoration: const InputDecoration(labelText: 'Nombre'),
-                      validator: (v) =>
-                          v == null || v.isEmpty ? 'Requerido' : null,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: skuController,
-                            decoration: const InputDecoration(labelText: 'SKU'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: barcodeController,
-                            decoration: const InputDecoration(
-                              labelText: 'Código de barras',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: categoryController.text.isEmpty
-                          ? null
-                          : (categoryNameOptions.contains(
-                                  categoryController.text,
-                                )
-                                ? categoryController.text
-                                : null),
-                      decoration: const InputDecoration(
-                        labelText: 'Categoría',
-                        helperText:
-                            'Categorías administrables. Gestionalas desde el Admin.',
-                      ),
-                      items: categoryNameOptions
-                          .map(
-                            (c) => DropdownMenuItem<String>(
-                              value: c,
-                              child: Text(c),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => categoryController.text = val);
-                        }
-                      },
-                    ),
-                    if (categoryController.text.isNotEmpty &&
-                        !categoryNameOptions.contains(
-                          categoryController.text,
-                        )) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Categoría actual "${categoryController.text}" no está en el catálogo.',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedUom,
-                      decoration: const InputDecoration(
-                        labelText: 'Unidad de venta',
-                        helperText: 'Unidad con la que se vende en el POS.',
-                      ),
-                      items: uomOptions
-                          .map(
-                            (u) => DropdownMenuItem(value: u, child: Text(u)),
-                          )
-                          .toList(growable: false),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => selectedUom = val);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: stockController,
-                      decoration: const InputDecoration(
-                        labelText: 'Stock inicial',
-                        helperText:
-                            'Para reventa, suele ser la cantidad física actual.',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: costController,
-                      decoration: const InputDecoration(
-                        labelText: 'Costo promedio (NIO)',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: priceController,
-                      decoration: const InputDecoration(
-                        labelText: 'Precio de venta (NIO)',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      validator: (v) {
-                        final n = double.tryParse(v ?? '');
-                        if (n == null || n < 0) return 'Precio inválido';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: const Color(0xFF767777),
-                          width: 1,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'TIPO DE PRODUCTO',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          DropdownButtonFormField<String>(
-                            initialValue: typeOptions.isNotEmpty
-                                ? selectedProductType
-                                : null,
-                            decoration: const InputDecoration(
-                              labelText: 'Tipo',
-                              helperText:
-                                  'PREPARADO descuenta insumos vía BOM; REVENTA es directa.',
-                            ),
-                            items: typeOptions
-                                .map(
-                                  (t) => DropdownMenuItem<String>(
-                                    value: t.code,
-                                    child: Text(t.name),
-                                  ),
-                                )
-                                .toList(growable: false),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  selectedProductType = val;
-                                  isPrepared = vm.isPreparedForTypeCode(val);
-                                });
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('CANCELAR'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  vm.saveProduct(
-                    id: product?.id,
-                    name: nameController.text,
-                    sku: skuController.text.isEmpty ? null : skuController.text,
-                    barcode: barcodeController.text.isEmpty
-                        ? null
-                        : barcodeController.text,
-                    category: categoryController.text.isEmpty
-                        ? null
-                        : categoryController.text,
-                    isPrepared: vm.isPreparedForTypeCode(selectedProductType),
-                    uom: selectedUom,
-                    stock: double.tryParse(stockController.text) ?? 0,
-                    averageCost: double.tryParse(costController.text) ?? 0,
-                    sellPrice: double.tryParse(priceController.text) ?? 0,
-                  );
-                  Navigator.pop(context);
-                }
-              },
-              child: const Text('GUARDAR'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   static const _defaultUomOptions = <String>[
     'UND',
     'kg',
@@ -714,37 +475,6 @@ class _InsumoViewState extends State<InsumoView> {
       options.insert(0, current.trim());
     }
     return options.isEmpty ? _defaultUomOptions : options;
-  }
-
-  /// Sales product type options from the administrable catalog, ordered so the
-  /// product's current type appears first (so the dropdown opens on it).
-  List<CatalogValue> _buildProductTypeOptions(
-    InsumoViewModel vm,
-    bool currentIsPrepared,
-  ) {
-    final catalog = vm.productTypeCatalog.isNotEmpty
-        ? vm.productTypeCatalog
-        : InsumoViewModel.defaultProductTypeCatalog;
-    final currentCode = vm.defaultProductTypeCode(currentIsPrepared);
-    final sorted = <CatalogValue>[...catalog]
-      ..sort((a, b) {
-        if (a.code == currentCode) return -1;
-        if (b.code == currentCode) return 1;
-        return a.sortOrder.compareTo(b.sortOrder);
-      });
-    return sorted;
-  }
-
-  /// Sales product category display names from the administrable catalog. If
-  /// the product already holds a legacy category not in the catalog, it is
-  /// injected first so it still renders (and is flagged in the UI).
-  List<String> _buildCategoryOptions(InsumoViewModel vm, String? current) {
-    final names = vm.productCategoryNames.isNotEmpty
-        ? vm.productCategoryNames
-        : InsumoViewModel.defaultProductCategoryCatalog.map((c) => c.name).toList();
-    if (current == null || current.isEmpty) return names;
-    if (names.contains(current)) return names;
-    return <String>[current, ...names];
   }
 }
 

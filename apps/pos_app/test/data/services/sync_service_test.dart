@@ -14,6 +14,9 @@ import 'package:pos_app/data/models/human_authorization/ohac_acknowledgement_req
 import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.dart';
 import 'package:pos_app/data/models/human_authorization/staff_policy_epoch_v1.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/models/inventory/product_entity.dart';
+import 'package:pos_app/data/models/inventory/recipe_entity.dart';
+import 'package:pos_app/data/models/catalog/catalog_value_entity.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
@@ -1671,6 +1674,80 @@ void main() {
   );
 
   test(
+    'drains a recipe version document rejected by the read-only catalog gate (#899)',
+    () async {
+      // Backend gates CATALOG_READ_ONLY_TERMINAL on never-ingested documents.
+      // The terminal must drain the queue entry instead of rethrowing and
+      // poisoning sync for every other document.
+      mockInventoryRepository.unsyncedRecipeVersions = [
+        RecipeVersionDocument(
+          id: 'rv-readonly-1',
+          productId: 'prod-1',
+          productName: 'Vanilla Latte',
+          versionNumber: 9,
+          yieldQuantity: 10,
+          technicalShrinkPct: 6,
+          createdAt: DateTime(2026, 6, 3, 10),
+          components: const [
+            RecipeVersionComponentDocument(
+              ingredientId: 'ins-1',
+              ingredientName: 'Leche',
+              ingredientType: 'INSUMO',
+              grossQuantity: 1,
+              netQuantity: 0.94,
+              technicalShrinkPct: 6,
+              componentUom: 'lt',
+            ),
+          ],
+        ),
+      ];
+
+      dio.interceptors.clear();
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) {
+            if (options.method.toUpperCase() == 'POST' &&
+                options.path == '/inventory/recipes/versions') {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.badResponse,
+                  response: Response<dynamic>(
+                    statusCode: 403,
+                    requestOptions: options,
+                    data: {
+                      'message':
+                          'CATALOG_READ_ONLY_TERMINAL: Recipe versions are '
+                          'managed from the Dashboard.',
+                    },
+                  ),
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<dynamic>(
+                data: {'ok': true},
+                statusCode: 200,
+                requestOptions: options,
+              ),
+            );
+          },
+        ),
+      );
+
+      await syncService.triggerManualSync();
+
+      // The rejected document is drained (no longer pending sync), not retried
+      // forever, and triggerManualSync completed without throwing.
+      expect(
+        mockInventoryRepository.syncedRecipeVersionIds,
+        contains('rv-readonly-1'),
+      );
+    },
+  );
+
+  test(
     'does not generically replay production-linked movements when the production document fails',
     () async {
       forcedError = DioException(
@@ -2798,6 +2875,217 @@ void main() {
               .getConfigByKey('last_inbound_sync_version');
           expect(savedVersionConfig, isNotNull);
           expect(savedVersionConfig!.value, '1787745600000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    // Issue #899 S5/T3: defense in depth — the terminal never persists
+    // catalog deltas it generated itself. The Dashboard is the only catalog
+    // writer; a row echoed back from the terminal's own BOH edit must not
+    // overwrite local state nor race the Dashboard.
+    test(
+      'pullInboundDeltas skips self-originated catalog rows and applies dashboard/legacy rows',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          // Local state the terminal already holds: a product, a catalog
+          // value, and a recipe — all seeded before the pull.
+          await database.productDao.insertProducts([
+            ProductEntity(
+              id: 'prod-101',
+              name: 'Producto Local',
+              uom: 'UND',
+              stock: 5.0,
+              averageCost: 10.0,
+              sellPrice: 55.0,
+              isActive: true,
+              createdAt: '2026-10-01T10:00:00.000Z',
+            ),
+          ]);
+          await database.catalogValueDao.insertCatalogValues([
+            CatalogValueEntity(
+              id: 'cat-101',
+              catalogType: 'CATEGORY',
+              code: 'LOCAL_CAT',
+              name: 'Categoría Local',
+              isActive: true,
+              sortOrder: 1,
+            ),
+          ]);
+          await database.recipeDao.insertRecipes([
+            RecipeEntity(
+              id: 'rec-101',
+              productId: 'prod-101',
+              ingredientId: 'ins-101',
+              ingredientType: 'INSUMO',
+              quantity: 18.0,
+            ),
+          ]);
+
+          final ownDeviceId = mockAuditRepository.deviceId;
+          expect(ownDeviceId, 'dev-1');
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-10-13T18:00:00.000Z',
+            'currentVersion': 1787745600100,
+            'deltas': {
+              'products': [
+                {
+                  // Self-echo (origin == this terminal's deviceId): must be
+                  // skipped, never persisted over local state.
+                  'id': 'prod-101',
+                  'name': 'Eco BOH Edit',
+                  'uom': 'UND',
+                  'stock': 25.0,
+                  'averageCost': 12.0,
+                  'sellPrice': 99.0,
+                  'isActive': true,
+                  'source': ownDeviceId,
+                },
+                {
+                  // Dashboard-originated: must be applied.
+                  'id': 'prod-202',
+                  'name': 'Producto Dashboard',
+                  'uom': 'UND',
+                  'stock': 30.0,
+                  'averageCost': 8.0,
+                  'sellPrice': 20.0,
+                  'isActive': true,
+                  'source': 'DASHBOARD',
+                },
+                {
+                  // Foreign-terminal-originated row (R3-001): the terminal
+                  // only persists Dashboard-originated catalog rows, so this
+                  // must be skipped too — never persisted.
+                  'id': 'prod-404',
+                  'name': 'Producto Otra Terminal',
+                  'uom': 'UND',
+                  'stock': 11.0,
+                  'averageCost': 3.0,
+                  'sellPrice': 44.0,
+                  'isActive': true,
+                  'source': 'pos-other-terminal-9',
+                },
+                {
+                  // No source field (older backend): backward compatible,
+                  // must be applied exactly as today.
+                  'id': 'prod-303',
+                  'name': 'Producto Legacy',
+                  'uom': 'UND',
+                  'stock': 40.0,
+                  'averageCost': 6.0,
+                  'sellPrice': 30.0,
+                  'isActive': true,
+                },
+              ],
+              'catalogValues': [
+                {
+                  'id': 'cat-101',
+                  'catalogType': 'CATEGORY',
+                  'code': 'LOCAL_CAT',
+                  'name': 'Eco BOH Cat',
+                  'isActive': true,
+                  'sortOrder': 9,
+                  'source': ownDeviceId,
+                },
+                {
+                  'id': 'cat-202',
+                  'catalogType': 'CATEGORY',
+                  'code': 'DASHBOARD_CAT',
+                  'name': 'Cat Dashboard',
+                  'isActive': true,
+                  'sortOrder': 2,
+                  'source': 'DASHBOARD',
+                },
+              ],
+              'recipes': [
+                {
+                  'id': 'rec-101',
+                  'productId': 'prod-101',
+                  'ingredientId': 'ins-101',
+                  'ingredientType': 'INSUMO',
+                  'quantity': 99.0,
+                  'source': ownDeviceId,
+                },
+                {
+                  'id': 'rec-202',
+                  'productId': 'prod-202',
+                  'ingredientId': 'ins-101',
+                  'ingredientType': 'INSUMO',
+                  'quantity': 2.0,
+                  'source': 'DASHBOARD',
+                },
+              ],
+            },
+          };
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          // Self-echoed rows: local state is unchanged, still the pre-seed.
+          final untouchedProduct = await database.productDao.findProductById(
+            'prod-101',
+          );
+          expect(untouchedProduct, isNotNull);
+          expect(untouchedProduct!.name, 'Producto Local');
+          expect(untouchedProduct.sellPrice, 55.0);
+          expect(untouchedProduct.stock, 5.0);
+
+          final untouchedCategory = await database.catalogValueDao
+              .findByTypeAndCode('CATEGORY', 'LOCAL_CAT');
+          expect(untouchedCategory, isNotNull);
+          expect(untouchedCategory!.name, 'Categoría Local');
+          expect(untouchedCategory.sortOrder, 1);
+
+          final untouchedRecipe = await database.recipeDao
+              .findRecipeByProductId('prod-101');
+          expect(untouchedRecipe, hasLength(1));
+          expect(untouchedRecipe.first.quantity, 18.0);
+
+          // Foreign-terminal-originated rows: never persisted (R3-001).
+          final foreignProduct = await database.productDao.findProductById(
+            'prod-404',
+          );
+          expect(foreignProduct, isNull);
+
+          // Dashboard-originated rows: applied.
+          final dashboardProduct = await database.productDao.findProductById(
+            'prod-202',
+          );
+          expect(dashboardProduct, isNotNull);
+          expect(dashboardProduct!.name, 'Producto Dashboard');
+          expect(dashboardProduct.sellPrice, 20.0);
+
+          final dashboardCategory = await database.catalogValueDao
+              .findByTypeAndCode('CATEGORY', 'DASHBOARD_CAT');
+          expect(dashboardCategory, isNotNull);
+          expect(dashboardCategory!.name, 'Cat Dashboard');
+
+          final dashboardRecipe = await database.recipeDao
+              .findRecipeByProductId('prod-202');
+          expect(dashboardRecipe, hasLength(1));
+          expect(dashboardRecipe.first.quantity, 2.0);
+
+          // Legacy rows without the optional source field: applied as today.
+          final legacyProduct = await database.productDao.findProductById(
+            'prod-303',
+          );
+          expect(legacyProduct, isNotNull);
+          expect(legacyProduct!.name, 'Producto Legacy');
+          expect(legacyProduct.sellPrice, 30.0);
         } finally {
           await database.close();
         }

@@ -108,7 +108,7 @@ class ProductionOrderViewModel extends ChangeNotifier {
       _orders = await _repository.getProductionOrderDocuments();
       _statusMessage = _orders.isEmpty
           ? 'Cerrá producción localmente con plan vs real y sync posterior.'
-          : 'Las órdenes cerradas quedan persistidas y listas para replay BOH.';
+          : 'Las órdenes cerradas quedan persistidas y listas para sincronizar.';
     } catch (error) {
       _errorMessage = 'Error al cargar producción: $error';
     } finally {

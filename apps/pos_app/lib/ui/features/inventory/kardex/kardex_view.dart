@@ -38,7 +38,7 @@ class _KardexViewState extends State<KardexView> {
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Kardex BOH')),
+      appBar: AppBar(title: const Text('Kardex')),
       body: Consumer<KardexViewModel>(
         builder: (context, viewModel, child) {
           return Padding(
@@ -69,7 +69,7 @@ class _KardexViewState extends State<KardexView> {
                       childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                       children: [
                         const Text(
-                          'Fuente operativa: SQLite local como verdad de esta terminal POS, enriquecida con documentos BOH y estados de sincronización cuando existen.',
+                          'Fuente operativa: SQLite local como verdad de esta terminal POS, enriquecida con documentos de la nube y estados de sincronización cuando existen.',
                           style: TextStyle(fontSize: 12),
                         ),
                         const SizedBox(height: 6),

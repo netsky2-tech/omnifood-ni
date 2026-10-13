@@ -22,13 +22,13 @@ class BohNavigationShellView extends StatelessWidget {
         final role = snapshot.data?.role;
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Inventario BOH')),
+          appBar: AppBar(title: const Text('Inventario')),
           drawer: const AppDrawer(),
           body: ListView(
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                'Espacio BOH para compras, trazabilidad y control operativo.',
+                'Espacio de operación para compras, trazabilidad y control operativo.',
                 style: Theme.of(context).textTheme.headlineMedium,
               ),
               const SizedBox(height: 8),
@@ -45,7 +45,7 @@ class BohNavigationShellView extends StatelessWidget {
               ),
               _BohDestinationCard(
                 title: 'Proveedores',
-                description: 'Directorio BOH y condiciones operativas de compra.',
+                description: 'Directorio de insumos y condiciones operativas de compra.',
                 routeName: '/inventory/suppliers',
                 enabled: hasBohPermission(role, BohPermission.shell),
               ),
@@ -74,7 +74,7 @@ class BohNavigationShellView extends StatelessWidget {
                 enabled: hasBohPermission(role, BohPermission.countsView),
               ),
               _BohDestinationCard(
-                title: 'Alertas BOH',
+                title: 'Alertas',
                 description: 'Incidencias y señales de atención prioritaria.',
                 routeName: '/inventory/alerts',
                 enabled: hasBohPermission(role, BohPermission.alertsView),
@@ -86,7 +86,7 @@ class BohNavigationShellView extends StatelessWidget {
                 enabled: hasBohPermission(role, BohPermission.alertsView),
               ),
               _BohDestinationCard(
-                title: 'Kardex BOH',
+                title: 'Kardex',
                 description: 'Movimientos y trazabilidad auditable.',
                 routeName: '/inventory/kardex',
                 enabled: hasBohPermission(role, BohPermission.kardexView),
@@ -147,7 +147,7 @@ class BohAccessDeniedView extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               const Text(
-                'Esta superficie BOH está reservada para administración y gerencia.',
+                'Esta superficie está reservada para administración y gerencia.',
                 textAlign: TextAlign.center,
               ),
             ],

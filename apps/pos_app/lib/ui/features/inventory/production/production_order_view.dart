@@ -24,7 +24,7 @@ class _ProductionOrderViewState extends State<ProductionOrderView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Producción BOH')),
+      appBar: AppBar(title: const Text('Producción')),
       body: Consumer<ProductionOrderViewModel>(
         builder: (context, viewModel, child) {
           if (viewModel.isLoading &&

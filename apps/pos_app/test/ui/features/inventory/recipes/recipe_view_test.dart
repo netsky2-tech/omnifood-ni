@@ -78,25 +78,44 @@ class _FakeInventoryRepository implements InventoryRepository {
   get database => throw UnimplementedError();
 }
 
-void main() {
-  testWidgets('renders version compare workspace with publish CTA', (tester) async {
-    final repository = _FakeInventoryRepository();
-    final viewModel = RecipeViewModel(repository);
+Future<RecipeViewModel> _pumpRecipeView(WidgetTester tester) async {
+  final repository = _FakeInventoryRepository();
+  final viewModel = RecipeViewModel(repository);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<RecipeViewModel>.value(
-        value: viewModel,
-        child: const MaterialApp(home: RecipeView()),
-      ),
-    );
-    await tester.pumpAndSettle();
+  await tester.pumpWidget(
+    ChangeNotifierProvider<RecipeViewModel>.value(
+      value: viewModel,
+      child: const MaterialApp(home: RecipeView()),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return viewModel;
+}
+
+void main() {
+  testWidgets('recipe workspace is read-only: Dashboard banner, no authoring or publish affordances', (tester) async {
+    await _pumpRecipeView(tester);
 
     await tester.tap(find.text('Vanilla Latte'));
     await tester.pumpAndSettle();
 
+    // Read access stays: version timeline and comparison workspace.
     expect(find.text('Comparar versiones'), findsOneWidget);
-    expect(find.text('PUBLICAR VERSIÓN'), findsOneWidget);
+    expect(find.textContaining('V7'), findsWidgets);
     expect(find.textContaining('Merma'), findsWidgets);
+
+    // STRICT read-only (issue #899 S4): no catalog write affordance remains.
+    expect(find.text('PUBLICAR VERSIÓN'), findsNothing);
+    expect(find.text('AGREGAR COMPONENTE'), findsNothing);
+    expect(find.text('PUBLICAR'), findsNothing);
+    expect(find.text('Yield objetivo'), findsNothing);
+    expect(find.text('Nota de versión'), findsNothing);
+
+    // Honest message pointing to the Dashboard.
+    expect(
+      find.textContaining('El catálogo se administra desde el Dashboard'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('renders adaptive master-detail navigation on Sunmi V2s handheld (360x720dp)', (tester) async {
@@ -104,7 +123,37 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
-    final repository = _FakeInventoryRepository();
+    await _pumpRecipeView(tester);
+
+    // 1. Initial product list view: operator naming, no internal jargon (S6/S7).
+    expect(find.text('Recetas'), findsOneWidget);
+    expect(find.text('Recetas BOH'), findsNothing);
+    expect(find.text('Vanilla Latte'), findsOneWidget);
+    expect(find.text('Comparar versiones'), findsNothing);
+
+    // 2. Tap product to navigate to the read-only version workspace.
+    await tester.tap(find.text('Vanilla Latte'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vanilla Latte'), findsOneWidget);
+    expect(find.text('Comparar versiones'), findsOneWidget);
+    expect(find.text('PUBLICAR VERSIÓN'), findsNothing);
+    expect(find.text('AGREGAR COMPONENTE'), findsNothing);
+    expect(
+      find.textContaining('El catálogo se administra desde el Dashboard'),
+      findsOneWidget,
+    );
+
+    // 3. Tap back button to return to product list.
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recetas'), findsOneWidget);
+    expect(find.text('Vanilla Latte'), findsOneWidget);
+  });
+
+  testWidgets('empty product list points to the Dashboard instead of telling the operator to create products', (tester) async {
+    final repository = _EmptyProductsRepository();
     final viewModel = RecipeViewModel(repository);
 
     await tester.pumpWidget(
@@ -115,24 +164,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 1. Initial product list view
-    expect(find.text('Recetas BOH'), findsOneWidget);
-    expect(find.text('Vanilla Latte'), findsOneWidget);
-    expect(find.text('Comparar versiones'), findsNothing);
-
-    // 2. Tap product to navigate to full editor
-    await tester.tap(find.text('Vanilla Latte'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Vanilla Latte'), findsOneWidget);
-    expect(find.text('Comparar versiones'), findsOneWidget);
-    expect(find.text('PUBLICAR VERSIÓN'), findsOneWidget);
-
-    // 3. Tap back button to return to product list
-    await tester.tap(find.byIcon(Icons.arrow_back));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Recetas BOH'), findsOneWidget);
-    expect(find.text('Vanilla Latte'), findsOneWidget);
+    expect(find.textContaining('Creá un producto preparado'), findsNothing);
+    expect(
+      find.textContaining('El catálogo se administra desde el Dashboard'),
+      findsOneWidget,
+    );
   });
+}
+
+class _EmptyProductsRepository extends _FakeInventoryRepository {
+  @override
+  Future<List<Product>> getActiveProducts() async => const [];
 }
