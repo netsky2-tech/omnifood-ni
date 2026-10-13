@@ -87,3 +87,7 @@ exceptions (e.g. operational stock min/max) deferred to a future issue.
   correction_required with nothing consumed; the R3-001 fix is applied and pushed to
   PR #910 regardless. Native review completion pending on the facade/native-CLI
   side — maintainer may inspect the authority or the slot may be retried later.
+- L6 (owner decision, 2026-10-13): "Avanzamos sin cierra nativo y merge cuando todo
+  pase" — native review closure for this candidate is DECLINED-UNAVAILABLE (facade
+  correction-plan slot defect, L5); the R3-001 fix is applied regardless. Merge of
+  PR #910 authorized once CI is green.
