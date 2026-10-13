@@ -1,4 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from '../../src/modules/identity/security/auth-throttle.config';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
@@ -78,7 +80,12 @@ describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
        ($1, 'Tenant A', $3, now(), now()),
        ($2, 'Tenant B', $4, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
+      [
+        tenantAId,
+        tenantBId,
+        normalizeTenantSlug('Tenant A'),
+        normalizeTenantSlug('Tenant B'),
+      ],
     );
 
     await runner.query(
@@ -95,6 +102,9 @@ describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
     // Bootstrap Nest testing module with real DB
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        // Harnesses compiling real modules with throttled routes must
+        // register the named throttlers those routes resolve (issue #896).
+        ThrottlerModule.forRoot(authThrottlers()),
         ConfigModule.forRoot({
           isGlobal: true,
           ignoreEnvFile: true,
