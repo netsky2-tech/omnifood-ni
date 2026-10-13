@@ -21,6 +21,7 @@ import {
   SystemParametersConfigActiveView,
 } from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
@@ -179,6 +180,7 @@ async function withAcquisitionIsolatedSchema(
         InvoiceItem,
         InvoiceItemModifier,
         Payment,
+        CatalogValue,
       ],
       synchronize: true,
     });

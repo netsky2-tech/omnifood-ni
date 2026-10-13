@@ -20,6 +20,7 @@ import {
   ProductType,
 } from '../../src/modules/inventory/entities/product.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
@@ -135,6 +136,7 @@ async function withOnboardingIsolatedSchema(
         LegacyOnboardingMigrationReceipt,
         OnboardingSession,
         OnboardingIdempotencyRecord,
+        CatalogValue,
       ],
       synchronize: true,
     });

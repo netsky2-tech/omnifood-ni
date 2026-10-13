@@ -74,6 +74,7 @@ import {
 import { OnboardingTelemetryEvent } from '../../src/modules/onboarding/entities/onboarding-telemetry-event.entity';
 import { OnboardingTelemetryEventName } from '../../src/modules/onboarding/telemetry/onboarding-telemetry.types';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 
 import { OnboardingSessionController } from '../../src/modules/onboarding/controllers/onboarding-session.controller';
@@ -236,6 +237,7 @@ async function with74ScenariosIsolatedSchema(
         ActivationFollowUp,
         OnboardingTelemetryEvent,
         ChangeLog,
+        CatalogValue,
       ],
       synchronize: true,
     });

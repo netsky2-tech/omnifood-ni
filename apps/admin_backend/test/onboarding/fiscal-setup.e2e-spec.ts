@@ -450,6 +450,9 @@ describe('FiscalSetup (Integration & E2E)', () => {
       taxRateIva: 0.0,
       pricesIncludeTax: true,
       commercialFxSpread: 36.5,
+      // T4/S7: absence of the raw param is surfaced honestly — the 36.5
+      // fallback never satisfies the activation gate.
+      commercialFxSpreadConfigured: false,
       // BXW-007 U1 rev 2: unconfigured params read as null (never rebased
       // to a default).
       operationMode: null,

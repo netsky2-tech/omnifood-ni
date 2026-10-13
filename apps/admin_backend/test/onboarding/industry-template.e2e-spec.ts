@@ -13,6 +13,7 @@ import { DataSource, FindManyOptions, FindOneOptions } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { IndustryTemplateController } from '../../src/modules/onboarding/controllers/industry-template.controller';
 import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
+import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
 import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template-seed-link.entity';
 import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
@@ -348,6 +349,19 @@ describe('IndustryTemplate (Integration & E2E)', () => {
       providers: [
         IndustryTemplateService,
         TemplatePreviewService,
+        {
+          // F1/S11: template apply reads the tenant's regime tax rate from
+          // FiscalSetupService; this integration spec stubs it (the fiscal
+          // write path has its own dedicated e2e coverage).
+          provide: FiscalSetupService,
+          useValue: {
+            getFiscalSetup: async () => ({
+              taxRateIva: 0.15,
+              pricesIncludeTax: true,
+            }),
+          },
+        },
+
         LegacyTemplateRecipeScanService,
         OnboardingIdempotencyCoordinator,
         createIdentityJwtConfigProvider(),
