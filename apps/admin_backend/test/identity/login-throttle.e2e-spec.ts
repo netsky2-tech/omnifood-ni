@@ -49,11 +49,15 @@ describe('login throttle over the full app (issue #896)', () => {
         });
       statuses.push(res.status);
     }
-    expect(statuses.slice(0, 5), throttlerDiagnostics()).toEqual([
-      401, 401, 401, 401, 401,
-    ]);
-    expect(statuses[5], throttlerDiagnostics()).toBe(429);
-    expect(statuses[6], throttlerDiagnostics()).toBe(429);
+    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    if (statuses[5] !== 429 || statuses[6] !== 429) {
+      // The assertion message carries the guard's resolved throttler
+      // options: the CI environment fails here while local passes, and
+      // this is the only evidence channel that survives the runner.
+      throw new Error(
+        `login throttle budget violated (issue #896): statuses=${statuses.join(',')} diagnostics=${throttlerDiagnostics()}`,
+      );
+    }
   });
 
   it('throttles repeated failures for one account (per-account budget)', async () => {
@@ -68,11 +72,15 @@ describe('login throttle over the full app (issue #896)', () => {
         });
       statuses.push(res.status);
     }
-    expect(statuses.slice(0, 5), throttlerDiagnostics()).toEqual([
-      401, 401, 401, 401, 401,
-    ]);
-    expect(statuses[5], throttlerDiagnostics()).toBe(429);
-    expect(statuses[6], throttlerDiagnostics()).toBe(429);
+    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
+    if (statuses[5] !== 429 || statuses[6] !== 429) {
+      // The assertion message carries the guard's resolved throttler
+      // options: the CI environment fails here while local passes, and
+      // this is the only evidence channel that survives the runner.
+      throw new Error(
+        `login throttle budget violated (issue #896): statuses=${statuses.join(',')} diagnostics=${throttlerDiagnostics()}`,
+      );
+    }
   });
 
   afterEach(async () => {
