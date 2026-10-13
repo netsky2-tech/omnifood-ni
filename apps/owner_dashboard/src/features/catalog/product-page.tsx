@@ -20,6 +20,7 @@ import {
 } from "./product-types";
 import { useCatalogValues } from "./use-catalog";
 import type { CatalogType } from "./types";
+import { ProductImageField } from "./product-image-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -260,7 +261,28 @@ function ProductTable({
                   key={p.id}
                   className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
                 >
-                  <td className="px-4 py-3 font-medium text-foreground">{p.name}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 shrink-0 rounded-md border border-border/60 bg-muted/30 overflow-hidden flex items-center justify-center shadow-2xs">
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            data-testid="product-table-thumbnail"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span
+                            data-testid="product-table-monogram"
+                            className="font-semibold text-xs text-muted-foreground uppercase"
+                          >
+                            {p.name.trim().slice(0, 2).toUpperCase() || "—"}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-medium text-foreground">{p.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{p.uom}</td>
                   <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
                     C${toFiniteNumber(p.sellPrice).toFixed(2)}
@@ -386,6 +408,9 @@ function ProductDialog({
   const [categoryCode, setCategoryCode] = useState(
     product?.category_code ?? "",
   );
+  const [imageUrl, setImageUrl] = useState<string | null>(
+    product?.image_url ?? null,
+  );
   const [isPerishable, setIsPerishable] = useState(
     product?.is_perishable ?? false,
   );
@@ -410,13 +435,15 @@ function ProductDialog({
       categoryCode !== (product?.category_code ?? "") ||
       sellPrice !== (product ? toFiniteNumber(product.sellPrice) : 0) ||
       isPerishable !== (product?.is_perishable ?? false) ||
-      editType !== (product?.product_type ?? productType)
+      editType !== (product?.product_type ?? productType) ||
+      imageUrl !== (product?.image_url ?? null)
     : name.trim() !== "" ||
       uom.trim() !== "" ||
       categoryCode.trim() !== "" ||
       sellPrice !== 0 ||
       isPerishable !== false ||
-      createTypeAnswer !== null;
+      createTypeAnswer !== null ||
+      imageUrl !== null;
 
   const handleAttemptClose = () => {
     if (isPending) return;
@@ -460,6 +487,7 @@ function ProductDialog({
             category_code: categoryCode || undefined,
             sellPrice: toFiniteNumber(values.sellPrice),
             is_perishable: isPerishable,
+            ...(imageUrl ? { image_url: imageUrl } : (product.image_url ? { image_url: null } : {})),
           },
         });
         toast({
@@ -479,6 +507,7 @@ function ProductDialog({
           category_code: categoryCode || undefined,
           sellPrice: toFiniteNumber(values.sellPrice),
           is_perishable: isPerishable,
+          ...(imageUrl ? { image_url: imageUrl } : {}),
         };
         await createMutation.mutateAsync(input);
         onCreated?.(createTypeAnswer);
@@ -600,6 +629,12 @@ function ProductDialog({
               ))}
             </fieldset>
           )}
+
+          <ProductImageField
+            value={imageUrl}
+            onChange={setImageUrl}
+            disabled={isPending}
+          />
 
           <div>
             <label

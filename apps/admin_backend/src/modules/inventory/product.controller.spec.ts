@@ -177,6 +177,18 @@ describe('ProductController', () => {
     expect(service.create.mock.calls[0]).toEqual(['tenant-A', dto]);
   });
 
+  it('POST /products accepts and delegates image_url in create dto', async () => {
+    const dto = {
+      name: 'Taza de Capuccino',
+      uom: 'un',
+      product_type: ProductType.COMPOUND,
+      image_url: 'data:image/webp;base64,mockValidImage',
+    };
+    service.create.mockResolvedValue({ id: 'p1', ...dto } as never);
+    await controller.create(dto, 'tenant-A');
+    expect(service.create.mock.calls[0]).toEqual(['tenant-A', dto]);
+  });
+
   it('PATCH /products/:id delegates to service.update', async () => {
     service.update.mockResolvedValue({ id: 'p1' } as never);
     await controller.update('p1', { name: 'Updated' }, 'tenant-A');

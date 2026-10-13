@@ -368,6 +368,7 @@ describe('InboundSyncService', () => {
       mappingVersionId: null,
       insumoId: null,
       tenantId: 'tenant-abc',
+      imageUrl: null,
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
     });

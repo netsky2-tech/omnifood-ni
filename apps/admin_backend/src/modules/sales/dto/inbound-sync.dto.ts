@@ -92,6 +92,7 @@ export interface InboundSyncProductDto {
   createdAt: Date;
   updatedAt: Date;
   tenantId?: string;
+  imageUrl?: string | null;
 }
 
 export interface InboundSyncCatalogValueDto {

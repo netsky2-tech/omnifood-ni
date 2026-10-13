@@ -208,6 +208,7 @@ export class ProductService {
         averageCost: dto.averageCost ?? 0,
         sellPrice: dto.sellPrice ?? 0,
         is_active: dto.is_active ?? true,
+        image_url: dto.image_url ?? null,
       });
       return repo.save(row);
     });
@@ -220,7 +221,11 @@ export class ProductService {
         action: 'CREATE',
         targetType: 'product',
         targetId: result.id,
-        changes: { name: result.name, product_type: result.product_type },
+        changes: {
+          name: result.name,
+          product_type: result.product_type,
+          ...(result.image_url ? { image_url: '[IMAGE]' } : {}),
+        },
       });
     }
 
@@ -285,6 +290,10 @@ export class ProductService {
       if (dto.is_active !== undefined) {
         changes.is_active = { from: row.is_active, to: dto.is_active };
         row.is_active = dto.is_active;
+      }
+      if (dto.image_url !== undefined) {
+        changes.image_url = { from: row.image_url, to: dto.image_url };
+        row.image_url = dto.image_url;
       }
 
       return { saved: await repo.save(row), changes };

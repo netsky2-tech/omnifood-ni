@@ -69,6 +69,9 @@ export class Product {
   @Column({ default: false })
   is_tax_exempt: boolean;
 
+  @Column({ type: 'text', nullable: true, name: 'image_url' })
+  image_url?: string | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;
 
