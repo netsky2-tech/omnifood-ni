@@ -32,7 +32,7 @@ const toastVariants = cva(
         destructive:
           'destructive group border-destructive/40 bg-destructive text-destructive-foreground shadow-sm',
         success:
-          'border-emerald-500/30 bg-emerald-50 text-emerald-950 dark:bg-emerald-950/80 dark:text-emerald-50 dark:border-emerald-700 shadow-sm',
+          'border-emerald-600/40 bg-emerald-50 text-emerald-950 dark:border-emerald-600 dark:bg-emerald-900 dark:text-white shadow-sm',
       },
     },
     defaultVariants: {
@@ -112,6 +112,7 @@ type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>;
 type ToastActionElement = React.ReactElement<typeof ToastAction>;
 
 export {
+  toastVariants,
   type ToastProps,
   type ToastActionElement,
   ToastProvider,
