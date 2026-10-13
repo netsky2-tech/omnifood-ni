@@ -2199,6 +2199,23 @@ class SyncService {
           );
         }
       } on DioException catch (e) {
+        final status = e.response?.statusCode;
+        final body = e.response?.data?.toString() ?? '';
+        if (status == 403 && body.contains('CATALOG_READ_ONLY_TERMINAL')) {
+          // #899: the backend refuses terminal-originated catalog writes —
+          // this document can never sync. Drain the queue entry (log it, keep
+          // the local record) instead of rethrowing and poisoning sync for
+          // every other document.
+          developer.log(
+            'Recipe version ${document.id} rejected by backend '
+            '(CATALOG_READ_ONLY_TERMINAL); draining read-only queue entry.',
+            name: 'SyncService',
+          );
+          await _inventoryRepository.markRecipeVersionDocumentAsSynced(
+            document.id,
+          );
+          continue;
+        }
         developer.log(
           'Failed to sync recipe version ${document.id}: ${e.message}',
           name: 'SyncService',
@@ -3851,6 +3868,16 @@ class SyncService {
         final productEntities = <ProductEntity>[];
         for (final p in rawProducts) {
           final map = Map<String, dynamic>.from(p as Map);
+          // Issue #899 (S5, T3): the terminal never persists catalog deltas
+          // it generated itself — the Dashboard is the only catalog writer.
+          if (_isSelfOriginatedCatalogRow(map)) {
+            developer.log(
+              '[SYNC_PULL] skipped self-originated catalog delta '
+              '(products id=${map['id']})',
+              name: 'SyncService',
+            );
+            continue;
+          }
           final id = map['id'] as String;
           final existing = await _database!.productDao.findProductById(id);
           final rawType = map['productType'] as String?;
@@ -3895,19 +3922,28 @@ class SyncService {
         // 2. Catalog Values
         final rawCatalogValues =
             rawDeltas['catalogValues'] as List<dynamic>? ?? const [];
-        final catalogEntities = rawCatalogValues
-            .map((c) {
-              final map = Map<String, dynamic>.from(c as Map);
-              return CatalogValueEntity(
-                id: map['id'] as String,
-                catalogType: map['catalogType'] as String,
-                code: map['code'] as String,
-                name: map['name'] as String,
-                isActive: map['isActive'] as bool? ?? true,
-                sortOrder: asInt(map['sortOrder']) ?? 0,
-              );
-            })
-            .toList(growable: false);
+        final catalogEntities = <CatalogValueEntity>[];
+        for (final c in rawCatalogValues) {
+          final map = Map<String, dynamic>.from(c as Map);
+          if (_isSelfOriginatedCatalogRow(map)) {
+            developer.log(
+              '[SYNC_PULL] skipped self-originated catalog delta '
+              '(catalogValues id=${map['id']})',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          catalogEntities.add(
+            CatalogValueEntity(
+              id: map['id'] as String,
+              catalogType: map['catalogType'] as String,
+              code: map['code'] as String,
+              name: map['name'] as String,
+              isActive: map['isActive'] as bool? ?? true,
+              sortOrder: asInt(map['sortOrder']) ?? 0,
+            ),
+          );
+        }
 
         if (catalogEntities.isNotEmpty) {
           await _database!.catalogValueDao.insertCatalogValues(catalogEntities);
@@ -3995,18 +4031,27 @@ class SyncService {
 
         // 4. Recipes
         final rawRecipes = rawDeltas['recipes'] as List<dynamic>? ?? const [];
-        final recipeEntities = rawRecipes
-            .map((r) {
-              final map = Map<String, dynamic>.from(r as Map);
-              return RecipeEntity(
-                id: map['id'] as String,
-                productId: map['productId'] as String,
-                ingredientId: map['ingredientId'] as String,
-                ingredientType: map['ingredientType'] as String? ?? 'INSUMO',
-                quantity: asDouble(map['quantity']) ?? 0.0,
-              );
-            })
-            .toList(growable: false);
+        final recipeEntities = <RecipeEntity>[];
+        for (final r in rawRecipes) {
+          final map = Map<String, dynamic>.from(r as Map);
+          if (_isSelfOriginatedCatalogRow(map)) {
+            developer.log(
+              '[SYNC_PULL] skipped self-originated catalog delta '
+              '(recipes id=${map['id']})',
+              name: 'SyncService',
+            );
+            continue;
+          }
+          recipeEntities.add(
+            RecipeEntity(
+              id: map['id'] as String,
+              productId: map['productId'] as String,
+              ingredientId: map['ingredientId'] as String,
+              ingredientType: map['ingredientType'] as String? ?? 'INSUMO',
+              quantity: asDouble(map['quantity']) ?? 0.0,
+            ),
+          );
+        }
 
         if (recipeEntities.isNotEmpty) {
           await _database!.recipeDao.insertRecipes(recipeEntities);
@@ -4994,6 +5039,28 @@ class SyncService {
       rethrow;
     }
     return null;
+  }
+
+  /// Issue #899 (S5, T3): defense in depth — the terminal never persists
+  /// catalog deltas it generated itself. The Dashboard is the only catalog
+  /// writer; a row echoed back from the terminal's own BOH edit must not
+  /// overwrite local state nor race the Dashboard.
+  ///
+  /// Origin-field contract (additive, optional per row):
+  /// - `source` absent, null, or empty (older backend): apply as today —
+  ///   fully backward compatible.
+  /// - `source` equal to this terminal's deviceId (`_auditRepository.deviceId`):
+  ///   skip the row without error (self-echo, never a persistence).
+  /// - `source` with any other value ('DASHBOARD', another terminal's id):
+  ///   apply.
+  ///
+  /// Only catalog rows consult this guard (products, catalogValues,
+  /// recipes); inventory/insumo and authority-hydration paths are
+  /// intentionally untouched — terminals legitimately own those writes.
+  bool _isSelfOriginatedCatalogRow(Map<String, dynamic> map) {
+    final source = (map['source'] as String?)?.trim();
+    if (source == null || source.isEmpty) return false;
+    return source == _auditRepository.deviceId.trim();
   }
 
   Future<void> _sendFiscalAck({
