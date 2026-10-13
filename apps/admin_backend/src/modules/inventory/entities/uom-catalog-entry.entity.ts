@@ -41,9 +41,9 @@ export class UomCatalogEntry {
   @Column({ default: true })
   is_active: boolean;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updated_at: Date;
 }
