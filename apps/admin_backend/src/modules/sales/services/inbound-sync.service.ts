@@ -625,6 +625,11 @@ export class InboundSyncService {
         createdAt: p.created_at,
         updatedAt: p.updated_at,
         tenantId: p.tenant_id,
+        // Issue #899: pull catalog deltas are Dashboard-originated by
+        // definition (the Dashboard writes via REST, never via sync); the
+        // explicit stamp lets a terminal skip re-persisting what it cannot
+        // have authored.
+        source: 'DASHBOARD',
       };
     });
   }
@@ -655,6 +660,8 @@ export class InboundSyncService {
       sortOrder: c.sort_order,
       createdAt: c.created_at,
       updatedAt: c.updated_at,
+      // Issue #899: Dashboard-originated pull stamp (see fetchProductDeltas).
+      source: 'DASHBOARD' as const,
     }));
   }
 
@@ -736,6 +743,8 @@ export class InboundSyncService {
       tenantId: r.tenant_id,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      // Issue #899: Dashboard-originated pull stamp (see fetchProductDeltas).
+      source: 'DASHBOARD' as const,
     }));
   }
 

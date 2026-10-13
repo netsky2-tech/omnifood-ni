@@ -370,6 +370,7 @@ describe('InboundSyncService', () => {
       tenantId: 'tenant-abc',
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
+      source: 'DASHBOARD',
     });
 
     expect(response.deltas.catalogValues).toHaveLength(1);
@@ -383,6 +384,7 @@ describe('InboundSyncService', () => {
       sortOrder: 1,
       createdAt: expect.any(Date) as Date,
       updatedAt: expect.any(Date) as Date,
+      source: 'DASHBOARD',
     });
 
     expect(response.deltas.users).toHaveLength(1);
@@ -509,6 +511,70 @@ describe('InboundSyncService', () => {
     expect(atDefaults?.isTaxExempt).toBeDefined();
     expect(atDefaults?.taxRate).toBe(0.15);
     expect(atDefaults?.isTaxExempt).toBe(false);
+  });
+
+  // Issue #899 T2 (BOH read-only catalog): pull catalog deltas carry explicit
+  // per-row origin metadata so a terminal can recognize rows the Dashboard
+  // emitted and skip re-persisting deltas it cannot author. Exactly three row
+  // types are part of the stamping contract: products, catalogValues, recipes.
+  // insumos/recipeVersions are deliberately NOT stamped (not catalog-write
+  // surfaces); absence of `source` means the row applies unconditionally.
+  it('stamps pull catalog deltas with DASHBOARD origin metadata (issue #899)', async () => {
+    productQb.getMany.mockResolvedValue([
+      {
+        id: 'prod-1',
+        name: 'Café Americano',
+        uom: 'CUP',
+        stock: 10.5,
+        averageCost: 15.0,
+        sellPrice: 45.0,
+        is_active: true,
+        is_perishable: true,
+        tenant_id: 'tenant-abc',
+        tax_rate: 0.15,
+        is_tax_exempt: false,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Product,
+    ]);
+    catalogQb.getMany.mockResolvedValue([
+      {
+        id: 'cat-1',
+        catalog_type: 'CATEGORY' as CatalogType,
+        code: 'BEVERAGE',
+        name: 'Bebidas Calientes',
+        is_active: true,
+        sort_order: 1,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as CatalogValue,
+    ]);
+    recipeQb.getMany.mockResolvedValue([
+      {
+        id: 'rec-1',
+        productId: 'prod-1',
+        ingredientId: 'ins-1',
+        ingredientType: 'INSUMO',
+        quantity: 0.5,
+        tenant_id: 'tenant-abc',
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Recipe,
+    ]);
+
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      {},
+      undefined,
+      buildDefaultBoundManager(),
+    );
+
+    expect(response.status).toBe('success');
+    expect(response.deltas.products[0].source).toBe('DASHBOARD');
+    expect(response.deltas.catalogValues[0].source).toBe('DASHBOARD');
+    expect(response.deltas.recipes[0].source).toBe('DASHBOARD');
+    // insumos are operational stock rows, not catalog rows: never stamped.
+    expect('source' in (response.deltas.insumos[0] ?? {})).toBe(false);
   });
 
   it('includes par level and stock thresholds in the insumo delta (issue #521 S1)', async () => {

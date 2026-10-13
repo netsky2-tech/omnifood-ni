@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { DataSource, QueryFailedError } from 'typeorm';
 import { RecipeService } from './recipe.service';
 import { RecipeVersion } from './entities/recipe-version.entity';
@@ -35,6 +35,26 @@ const buildDto = (
     },
   ],
   ...overrides,
+});
+
+/**
+ * Issue #899: the only documents that still drain through
+ * `ingestPosVersion` are replays of already-stored drafts. Specs exercise
+ * the surviving replace path through this tenant-draft fixture.
+ */
+const buildExistingDraft = (): Record<string, unknown> => ({
+  id: 'v-existing',
+  tenant_id: 'tenant-A',
+  pos_document_id: buildDto().id,
+  product_id: buildDto().productId,
+  product_name: 'Gallopinto',
+  version_number: 1,
+  yield_quantity: 10,
+  technical_shrink_pct: 0,
+  publication_state: 'DRAFT',
+  published_at: null,
+  is_active: false,
+  fecha_inicio_vigencia: new Date('2026-06-26T12:00:00.000Z'),
 });
 
 describe('RecipeService', () => {
@@ -290,7 +310,11 @@ describe('RecipeService', () => {
   });
 
   describe('ingestPosVersion', () => {
-    it('persists a new tenant-scoped version + details with per-sold-unit quantity', async () => {
+    // Issue #899 (BOH read-only catalog): the terminal is never a catalog
+    // writer. A pos_document_id that was never ingested for the tenant is by
+    // definition a terminal-originated catalog write and must be rejected;
+    // only replays of already-stored documents drain (idempotent replace).
+    it('rejects a NEW recipe version ingestion with CATALOG_READ_ONLY_TERMINAL and creates zero rows', async () => {
       mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
       mgrInsumoRepo.findOne.mockResolvedValue({
         id: '00000000-0000-4000-8000-000000000ins',
@@ -298,7 +322,38 @@ describe('RecipeService', () => {
         name: 'Arroz',
         consumptionUom: 'kg',
       });
-      manager.findOne.mockResolvedValue(null); // no existing, no prior active
+      manager.findOne.mockResolvedValue(null); // document never ingested
+
+      await expect(
+        service.ingestPosVersion({
+          tenantId: 'tenant-A',
+          dto: buildDto(),
+        }),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.ingestPosVersion({
+          tenantId: 'tenant-A',
+          dto: buildDto(),
+        }),
+      ).rejects.toThrow('CATALOG_READ_ONLY_TERMINAL');
+
+      expect(createdVersions).toHaveLength(0);
+      expect(manager.delete).not.toHaveBeenCalled();
+    });
+
+    // Issue #899: a previously ingested document drains through the replace
+    // path — the only surviving ingestion behavior — with the same
+    // per-sold-unit quantity normalization the creation path used to apply.
+    it('replaces an existing draft document with per-sold-unit quantity details (drain path)', async () => {
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000ins',
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue(buildExistingDraft());
 
       const result = await service.ingestPosVersion({
         tenantId: 'tenant-A',
@@ -306,19 +361,11 @@ describe('RecipeService', () => {
       });
 
       expect(result).toEqual({
-        recipeVersionId: 'v-new',
-        replaced: false,
+        recipeVersionId: 'v-existing',
+        replaced: true,
       });
 
-      expect(createdVersions).toHaveLength(1);
-      expect(createdVersions[0]).toMatchObject({
-        tenant_id: 'tenant-A',
-        pos_document_id: buildDto().id,
-        yield_quantity: 10,
-        is_active: true,
-        product_name: 'Gallopinto',
-      });
-
+      expect(createdVersions).toHaveLength(0);
       expect(createdDetails).toHaveLength(1);
       expect(createdDetails[0]).toMatchObject({
         tenant_id: 'tenant-A',
@@ -329,30 +376,6 @@ describe('RecipeService', () => {
         ingredient_type: 'INSUMO',
         component_uom: 'kg',
       });
-      expect(manager.delete).not.toHaveBeenCalled();
-    });
-
-    it('deactivates the prior active version when ingesting a fresh document', async () => {
-      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
-      mgrInsumoRepo.findOne.mockResolvedValue({
-        tenant_id: 'tenant-A',
-        name: 'Arroz',
-        consumptionUom: 'kg',
-      });
-      manager.findOne.mockResolvedValueOnce(null); // idempotency miss
-      manager.findOne.mockResolvedValueOnce({
-        id: 'v-old',
-        version_number: 1,
-        is_active: true,
-      }); // prior active
-
-      await service.ingestPosVersion({
-        tenantId: 'tenant-A',
-        dto: buildDto({ versionNumber: 2 }),
-      });
-
-      const savedPrior = savedVersions.find((value) => value.id === 'v-old');
-      expect(savedPrior).toMatchObject({ is_active: false });
     });
 
     it('rejects a repost that would mutate a published effective version', async () => {
@@ -430,7 +453,7 @@ describe('RecipeService', () => {
         name: 'Arroz',
         consumptionUom: 'kg',
       });
-      manager.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(buildExistingDraft());
 
       await service.ingestPosVersion({
         tenantId: 'tenant-A',
@@ -553,13 +576,58 @@ describe('RecipeService', () => {
       ).rejects.toThrow('grossQuantity');
     });
 
+    it('replays an already-stored document for the same product without a second row (issue #899 drain)', async () => {
+      // Contract test for the gated endpoint: the drain path returns the
+      // existing result; no additional RecipeVersion row is created.
+      const existing = buildExistingDraft();
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000ins',
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue(existing);
+
+      const result = await service.ingestPosVersion({
+        tenantId: 'tenant-A',
+        dto: buildDto(),
+      });
+
+      expect(result).toEqual({ recipeVersionId: 'v-existing', replaced: true });
+      expect(createdVersions).toHaveLength(0);
+    });
+
+    it('rejects a replay pointing at a different product with BadRequest (issue #899 drain)', async () => {
+      mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
+      mgrInsumoRepo.findOne.mockResolvedValue({
+        id: '00000000-0000-4000-8000-000000000ins',
+        tenant_id: 'tenant-A',
+        name: 'Arroz',
+        consumptionUom: 'kg',
+      });
+      manager.findOne.mockResolvedValue({
+        ...buildExistingDraft(),
+        product_id: 'prod-other',
+      });
+
+      await expect(
+        service.ingestPosVersion({
+          tenantId: 'tenant-A',
+          dto: buildDto(),
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(manager.delete).not.toHaveBeenCalled();
+      expect(createdVersions).toHaveLength(0);
+    });
+
     it('stores per-sold-unit quantity that BomExplosionService consumes correctly', async () => {
       mgrProductRepo.findOne.mockResolvedValue({ id: buildDto().productId });
       mgrInsumoRepo.findOne.mockResolvedValue({
         tenant_id: 'tenant-A',
         consumptionUom: 'kg',
       });
-      manager.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(buildExistingDraft());
 
       await service.ingestPosVersion({
         tenantId: 'tenant-A',
@@ -582,7 +650,11 @@ describe('RecipeService', () => {
           return { id: where.id, tenant_id: 'tenant-A' };
         },
       );
-      manager.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(buildExistingDraft());
+      // The circular-dependency walk reads the SUB_RECIPE's published active
+      // version details; the replay fixture resolves that lookup, so the
+      // detail read must resolve to a closure with no further components.
+      manager.find.mockResolvedValue([]);
 
       await service.ingestPosVersion({
         tenantId: 'tenant-A',
@@ -716,7 +788,7 @@ describe('RecipeService', () => {
         consumptionUom: 'kg',
       });
       mgrUomConversionRepo.findOne.mockResolvedValue({ factor: 0.453592 });
-      manager.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(buildExistingDraft());
 
       const result = await service.ingestPosVersion({
         tenantId: 'tenant-A',
@@ -734,7 +806,7 @@ describe('RecipeService', () => {
         }),
       });
 
-      expect(result.replaced).toBe(false);
+      expect(result.replaced).toBe(true);
       const detail = createdDetails[0] as unknown as RecipeDetail;
       expect(detail.component_uom).toBe('lb');
       expect(detail.quantity).toBe(0.2268);
@@ -748,7 +820,7 @@ describe('RecipeService', () => {
         tenant_id: 'tenant-A',
         consumptionUom: 'kg',
       });
-      manager.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(buildExistingDraft());
 
       await service.ingestPosVersion({
         tenantId: 'tenant-A',
@@ -779,7 +851,7 @@ describe('RecipeService', () => {
         name: 'Arroz',
         consumptionUom: 'kg',
       });
-      manager.findOne.mockResolvedValue(null);
+      manager.findOne.mockResolvedValue(buildExistingDraft());
 
       await service.ingestPosVersion({
         tenantId: 'tenant-A',
