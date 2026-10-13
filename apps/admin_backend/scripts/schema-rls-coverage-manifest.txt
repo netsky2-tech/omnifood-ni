@@ -149,7 +149,7 @@ security_profiles|parent-owned
 shrinkage_details|parent-owned
 
 # ---------------------------------------------------------------------------
-# global — reviewed platform / pre-tenant / infrastructure exceptions. (8)
+# global — reviewed platform / pre-tenant / infrastructure exceptions. (9)
 # ---------------------------------------------------------------------------
 # TypeORM migration ledger; the bootstrap record of the schema itself.
 migrations|global
@@ -160,6 +160,7 @@ app_releases|global
 # Platform template catalog shared by every tenant; the template_* family
 # hangs off it and carries no tenant data.
 industry_templates|global
+uom_catalog|global
 template_insumos|global
 template_products|global
 template_recipe_items|global

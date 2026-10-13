@@ -14,6 +14,7 @@ import {
   parseTenantIdArg,
   seedSohoCatalog,
 } from './seed-soho-catalog';
+import { validateInsumoConversion } from '../modules/inventory/uom-catalog';
 
 jest.mock('@nestjs/core', () => ({
   NestFactory: { createApplicationContext: jest.fn() },
@@ -22,7 +23,10 @@ jest.mock('@nestjs/core', () => ({
 const TENANT_ID = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
 
 type EntityClass =
-  typeof Insumo | typeof Product | typeof RecipeVersion | typeof RecipeDetail;
+  | typeof Insumo
+  | typeof Product
+  | typeof RecipeVersion
+  | typeof RecipeDetail;
 
 interface FakeManager {
   find: jest.Mock;
@@ -347,5 +351,54 @@ describe('seedSohoCatalog', () => {
     expect(warningText).toMatch(/I-30 Pastel de Chocolate/);
     // Matcha Fresa ice line has no quantity in the plan.
     expect(warningText).toMatch(/Matcha Fresa/);
+  });
+});
+
+describe('SohoCatalogPlan vs the platform UOM catalog (Zona A S4/S5)', () => {
+  const plan = buildSohoCatalogPlan();
+
+  it('marks exactly the seven unmeasured container/serving insumos as pending', () => {
+    const pending = plan.insumos
+      .filter((insumo) => insumo.pendingMeasurement)
+      .map((insumo) => insumo.code)
+      .sort();
+
+    expect(pending).toEqual([
+      'I-05',
+      'I-13',
+      'I-14',
+      'I-15',
+      'I-22',
+      'I-23',
+      'I-29',
+    ]);
+  });
+
+  it('every non-pending insumo passes the platform conversion invariant', () => {
+    for (const insumo of plan.insumos) {
+      if (insumo.pendingMeasurement) continue;
+      expect(() =>
+        validateInsumoConversion(
+          insumo.purchaseUom,
+          insumo.consumptionUom,
+          insumo.conversionFactor,
+        ),
+      ).not.toThrow(`${insumo.code} ${insumo.name}`);
+    }
+  });
+
+  it('uses the exact platform anchor instead of the 454 approximation', () => {
+    for (const code of ['I-10', 'I-17', 'I-18']) {
+      const insumo = plan.insumos.find((row) => row.code === code);
+      expect(insumo?.conversionFactor).toBe(453.59237);
+    }
+  });
+
+  it('normalizes the prepared-serving identity to the count catalog unit', () => {
+    // I-06 pancakes are bought/prepared per piece: porción → unidad was a
+    // serving→count factor-1 pair the invariant cannot bless; the plan's own
+    // semantics (1 porción = 1 unidad) normalize the purchase UOM.
+    const pancakes = plan.insumos.find((row) => row.code === 'I-06');
+    expect(pancakes?.purchaseUom).toBe('unidad');
   });
 });
