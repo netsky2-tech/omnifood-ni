@@ -143,6 +143,7 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
       is_active boolean DEFAULT true,
       tax_rate numeric(5,4) NOT NULL DEFAULT 0.15,
       is_tax_exempt boolean NOT NULL DEFAULT false,
+      image_url text,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
 

@@ -96,6 +96,7 @@ describe('LoyaltyProfitAwareService (Real PostgreSQL DB)', () => {
       is_perishable boolean DEFAULT false, is_active boolean DEFAULT true,
       tax_rate numeric(5,4) NOT NULL DEFAULT 0.15,
       is_tax_exempt boolean NOT NULL DEFAULT false,
+      image_url text,
       warehouse_id text,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
