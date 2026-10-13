@@ -3870,9 +3870,9 @@ class SyncService {
           final map = Map<String, dynamic>.from(p as Map);
           // Issue #899 (S5, T3): the terminal never persists catalog deltas
           // it generated itself — the Dashboard is the only catalog writer.
-          if (_isSelfOriginatedCatalogRow(map)) {
+          if (_isNonDashboardCatalogRow(map)) {
             developer.log(
-              '[SYNC_PULL] skipped self-originated catalog delta '
+              '[SYNC_PULL] skipped non-dashboard catalog delta '
               '(products id=${map['id']})',
               name: 'SyncService',
             );
@@ -3925,9 +3925,9 @@ class SyncService {
         final catalogEntities = <CatalogValueEntity>[];
         for (final c in rawCatalogValues) {
           final map = Map<String, dynamic>.from(c as Map);
-          if (_isSelfOriginatedCatalogRow(map)) {
+          if (_isNonDashboardCatalogRow(map)) {
             developer.log(
-              '[SYNC_PULL] skipped self-originated catalog delta '
+              '[SYNC_PULL] skipped non-dashboard catalog delta '
               '(catalogValues id=${map['id']})',
               name: 'SyncService',
             );
@@ -4034,9 +4034,9 @@ class SyncService {
         final recipeEntities = <RecipeEntity>[];
         for (final r in rawRecipes) {
           final map = Map<String, dynamic>.from(r as Map);
-          if (_isSelfOriginatedCatalogRow(map)) {
+          if (_isNonDashboardCatalogRow(map)) {
             developer.log(
-              '[SYNC_PULL] skipped self-originated catalog delta '
+              '[SYNC_PULL] skipped non-dashboard catalog delta '
               '(recipes id=${map['id']})',
               name: 'SyncService',
             );
@@ -5041,26 +5041,28 @@ class SyncService {
     return null;
   }
 
-  /// Issue #899 (S5, T3): defense in depth — the terminal never persists
-  /// catalog deltas it generated itself. The Dashboard is the only catalog
-  /// writer; a row echoed back from the terminal's own BOH edit must not
-  /// overwrite local state nor race the Dashboard.
+  /// Issue #899 (S5, T3 — review R3-001 correction): defense in depth — the
+  /// terminal only persists catalog deltas the Dashboard originated. The
+  /// Dashboard is the only catalog writer, so any catalog row carrying a
+  /// non-DASHBOARD origin (this terminal's own echo, another terminal's id,
+  /// or any future terminal-origin marker) must never overwrite local state
+  /// nor race the Dashboard.
   ///
   /// Origin-field contract (additive, optional per row):
   /// - `source` absent, null, or empty (older backend): apply as today —
   ///   fully backward compatible.
-  /// - `source` equal to this terminal's deviceId (`_auditRepository.deviceId`):
-  ///   skip the row without error (self-echo, never a persistence).
-  /// - `source` with any other value ('DASHBOARD', another terminal's id):
-  ///   apply.
+  /// - `source` == 'DASHBOARD': apply (web-originated, authoritative).
+  /// - `source` with any other non-empty value (a terminal id or marker):
+  ///   skip the row without error — the terminal never persists catalog
+  ///   data a terminal authored.
   ///
   /// Only catalog rows consult this guard (products, catalogValues,
   /// recipes); inventory/insumo and authority-hydration paths are
   /// intentionally untouched — terminals legitimately own those writes.
-  bool _isSelfOriginatedCatalogRow(Map<String, dynamic> map) {
+  bool _isNonDashboardCatalogRow(Map<String, dynamic> map) {
     final source = (map['source'] as String?)?.trim();
     if (source == null || source.isEmpty) return false;
-    return source == _auditRepository.deviceId.trim();
+    return source != 'DASHBOARD';
   }
 
   Future<void> _sendFiscalAck({
