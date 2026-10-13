@@ -195,6 +195,25 @@ export class IndustryTemplateService {
               recipesSkipped: stored.recipesSkipped ?? [],
             };
           }
+          // T7/S9: a template row without a positive suggested_price used to
+          // become a sellPrice-0 product — not sellable, a silent activation
+          // blocker, yet it looked valid in the catalog. That converts partial
+          // template data into a valid-looking value, so the defect is
+          // rejected here, before anything is created. The apply already runs
+          // inside a single bound transaction (runInTenantTransaction), so
+          // this throw keeps the operation strictly all-or-nothing.
+          const unpricedProducts = (template.templateProducts ?? []).filter(
+            (product) =>
+              isSelected(product.id) &&
+              !(Number(product.suggested_price) > 0),
+          );
+          if (unpricedProducts.length > 0) {
+            throw new BadRequestException(
+              `No se puede aplicar la plantilla '${template.name}': los siguientes productos de la plantilla no tienen precio de venta definido: ${unpricedProducts
+                .map((product) => `'${product.name}'`)
+                .join(', ')}. Los productos sin precio de venta no se pueden vender ni permitirían activar el negocio. Asigne un precio de venta mayor que cero a cada producto y vuelva a intentar: esto es un defecto de datos de la plantilla, no un error de su catálogo.`,
+            );
+          }
           if (options?.sessionId) {
             const session = await manager.findOne(OnboardingSession, {
               where: { id: options.sessionId, tenantId: trimmedTenant },
@@ -367,6 +386,15 @@ export class IndustryTemplateService {
                 manager.create(Product, {
                   tenant_id: trimmedTenant,
                   name: source.name.trim(),
+                  // T7/S9 fill audit: `uom ?? 'UN'` is a documented fallback,
+                  // not a silent gap. There is no category_code or tax data on
+                  // the template source to pass through: TemplateProduct only
+                  // carries a display `category` label (default 'General'),
+                  // and Product.category_code is a canonical code resolved
+                  // from the tenant's catalog — mapping the label here would
+                  // invent a business value. Tax fields are likewise absent
+                  // from the source, so the Product entity's documented
+                  // defaults (tax_rate 0.15, is_tax_exempt false) apply.
                   uom: source.uom ?? 'UN',
                   sellPrice: source.suggested_price
                     ? Number(source.suggested_price)

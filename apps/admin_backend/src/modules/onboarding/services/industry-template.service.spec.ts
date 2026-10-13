@@ -768,6 +768,116 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
     // SUGGESTIONS requiring review (not a bare count), and a re-apply must
     // report what it skipped and why instead of being a silent no-op. The
     // skip guard itself keeps its exact behaviour.
+    // T7/S9 — every product created from a template must be sellable: a
+    // template row without a positive suggested_price used to become a
+    // sellPrice-0 product that looked valid in the catalog and silently
+    // blocked activation. The apply must reject that template data defect
+    // up front, all-or-nothing, with the offending items named.
+    describe('T7/S9 — template seed fills produce sellable products', () => {
+      const healthyTemplate = (): IndustryTemplate => ({
+        id: 'RETAIL_MINIMARKET',
+        code: 'RETAIL_MINIMARKET',
+        name: 'Retail & Minimarket',
+        description: 'Plantilla minimarket',
+        icon: 'shopping-cart',
+        is_active: true,
+        version: 1,
+        source_fingerprint: 'fp-retail',
+        created_at: new Date(),
+        updated_at: new Date(),
+        templateInsumos: [],
+        templateProducts: [
+          {
+            id: 'tp-coca',
+            template_id: 'RETAIL_MINIMARKET',
+            template: null,
+            name: 'Gaseosa Coca Cola 500ml',
+            category: 'Bebidas',
+            uom: 'UN',
+            suggested_price: 35.0,
+            is_perishable: false,
+            product_type: ProductType.SIMPLE,
+            created_at: new Date(),
+            updated_at: new Date(),
+            recipeItems: [],
+          },
+          {
+            id: 'tp-agua',
+            template_id: 'RETAIL_MINIMARKET',
+            template: null,
+            name: 'Agua Embotellada 600ml',
+            category: 'Bebidas',
+            uom: 'UN',
+            suggested_price: 20.0,
+            is_perishable: false,
+            product_type: ProductType.SIMPLE,
+            created_at: new Date(),
+            updated_at: new Date(),
+            recipeItems: [],
+          },
+        ],
+      });
+
+      const savedProducts = (): Product[] =>
+        (mockManager.save as jest.Mock).mock.calls
+          .filter(([entityClass]) => entityClass === Product)
+          .map(([, entity]) => entity as Product);
+
+      it('rejects the apply with 400 naming every unpriced template item and creates zero products (RED)', async () => {
+        const fixture = healthyTemplate();
+        (fixture.templateProducts[1] as { suggested_price?: number }).
+          suggested_price = 0;
+        templateRepo.findOne.mockResolvedValue(fixture);
+        mockManager.find.mockResolvedValue([]);
+
+        await expect(
+          service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
+        ).rejects.toThrow(/Agua Embotellada 600ml/);
+        await expect(
+          service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
+        ).rejects.toThrow(BadRequestException);
+
+        // All-or-nothing: nothing created, not even the priced sibling.
+        expect(savedProducts()).toHaveLength(0);
+        expect(
+          (mockManager.save as jest.Mock).mock.calls.filter(
+            ([entityClass]) => entityClass === Insumo,
+          ),
+        ).toHaveLength(0);
+      });
+
+      it('creates every product of a healthy template with sellPrice > 0 (GREEN triangulation)', async () => {
+        templateRepo.findOne.mockResolvedValueOnce(healthyTemplate());
+        mockManager.find.mockResolvedValue([]);
+
+        const result = await service.applyTemplate(
+          tenantId,
+          'RETAIL_MINIMARKET',
+        );
+
+        expect(result.productsCreated).toBe(2);
+        const products = savedProducts();
+        expect(products).toHaveLength(2);
+        for (const product of products) {
+          expect(product.sellPrice).toBeGreaterThan(0);
+        }
+      });
+
+      it('names every unpriced item, not just the first (triangulation)', async () => {
+        const fixture = healthyTemplate();
+        fixture.templateProducts[0].suggested_price = -5;
+        fixture.templateProducts[1].suggested_price = undefined as never;
+        templateRepo.findOne.mockResolvedValueOnce(fixture);
+        mockManager.find.mockResolvedValue([]);
+
+        await expect(
+          service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
+        ).rejects.toThrow(
+          /Gaseosa Coca Cola 500ml.*Agua Embotellada 600ml/s,
+        );
+      });
+    });
+
     describe('#523 T5/T7 — honest apply result', () => {
       const existingInsumo: Insumo = {
         id: 'existing-ins-1',
