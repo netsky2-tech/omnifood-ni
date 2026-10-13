@@ -2968,6 +2968,19 @@ void main() {
                   'source': 'DASHBOARD',
                 },
                 {
+                  // Foreign-terminal-originated row (R3-001): the terminal
+                  // only persists Dashboard-originated catalog rows, so this
+                  // must be skipped too — never persisted.
+                  'id': 'prod-404',
+                  'name': 'Producto Otra Terminal',
+                  'uom': 'UND',
+                  'stock': 11.0,
+                  'averageCost': 3.0,
+                  'sellPrice': 44.0,
+                  'isActive': true,
+                  'source': 'pos-other-terminal-9',
+                },
+                {
                   // No source field (older backend): backward compatible,
                   // must be applied exactly as today.
                   'id': 'prod-303',
@@ -3041,6 +3054,12 @@ void main() {
               .findRecipeByProductId('prod-101');
           expect(untouchedRecipe, hasLength(1));
           expect(untouchedRecipe.first.quantity, 18.0);
+
+          // Foreign-terminal-originated rows: never persisted (R3-001).
+          final foreignProduct = await database.productDao.findProductById(
+            'prod-404',
+          );
+          expect(foreignProduct, isNull);
 
           // Dashboard-originated rows: applied.
           final dashboardProduct = await database.productDao.findProductById(
