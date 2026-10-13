@@ -1,6 +1,6 @@
 # Zona A — Catálogo general de UOMs + conversiones (provisionamiento de plataforma)
 
-**Estado:** EN PROGRESO
+**Estado:** CERRADO
 **Fecha:** 2026-02-14
 **Origen:** Gaps operativos inmediatos de SOHO (Catálogo & Recetas), Zona A. Encuadre del owner: el seeder es provisionamiento inicial de un negocio real — no insertar productos por defecto en tenants; solo UOMs, conversiones, categorías base, roles. Plantillas (cafetería/retail) son Fase 2.
 **Review nativa:** pendiente
@@ -31,6 +31,17 @@
 - Los 7 pendientes de medición (I-05/13/14/15/22/23/29) se crean marcados: el guard S3 bloquea compras contra ellos hasta que el negocio declare el contenido real.
 
 ## Log
+
+- L3 2026-02-14 — Review nativa `review-e9d30f397f268bf8` APPROVED (risk+
+  reliability, 5 hallazgos no bloqueantes R3-001..005) y acknowledged; issue
+  #900; PR #901.
+- L4 2026-02-14 — CI: primera pasada falló en el gate de esquema (uom_catalog
+  sin clasificación RLS + timestamps timestamp vs timestamptz); fijado
+  (`b7f0abc8`, verify-schema-build PASS local). Segunda pasada verde.
+  Squash merge `50015f84`; issue #900 CLOSED (auto por PR). Owner WIP
+  restaurado del stash.
+- L5 — Pendiente: T5 implementación BOH read-only (issue #899). Después: APK
+  del demo (demo.nhilospos.com, tenant en blanco sin seeder).
 
 - L1 2026-02-14 — Owner: "Valores ahora, vamos a implementar el catalogo general de unidades de medidas y sus respectivas conversiones, investiguemos cuales son para tener un catalogo completo y válido" + "estamos ejecutando seeders generales para provisionamiento inicial, no podes insertar productos by default en los tenants" (gaps 2a/2b: productos/recetas son datos del tenant, fuera del seeder general) + Gap 3: "Issue + BOH read-only".
 - L2 2026-02-14 — Diseño aprobado: catálogo de plataforma con dos clases de UOM (universales con ancla física exacta; container/serving sin factor universal — la conversión es dato del insumo). Invariante: factor=1 con UOMs distintas (por catálogo) = no configurado → rechaza.
