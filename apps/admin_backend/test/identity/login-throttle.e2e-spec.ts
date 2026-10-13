@@ -18,12 +18,20 @@ describe('login throttle over the full app (issue #896)', () => {
 
   /** Diagnostic payload for CI failures: what the guard actually resolved. */
   const throttlerDiagnostics = (): string => {
-    const guard = app.get(ThrottlerGuard, { strict: false }) as unknown as {
-      throttlers?: Array<{ name?: string; limit?: number; ttl?: number }>;
-    };
-    return JSON.stringify({
-      resolved: guard.throttlers ?? 'none',
-    });
+    // Bracket access through Record: the throttlers member is protected on
+    // the class, and TS2445 fires on dot access in CI's TS version even
+    // through a cast (issue #896).
+    const guard = app.get(ThrottlerGuard, {
+      strict: false,
+    }) as unknown as Record<string, unknown>;
+    const resolved = Array.isArray(guard['throttlers'])
+      ? (guard['throttlers'] as Array<Record<string, unknown>>).map((t) => ({
+          name: t['name'],
+          limit: t['limit'],
+          ttl: t['ttl'],
+        }))
+      : 'none';
+    return JSON.stringify({ resolved });
   };
 
   beforeEach(async () => {
