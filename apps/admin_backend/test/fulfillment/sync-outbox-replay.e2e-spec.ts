@@ -135,13 +135,29 @@ describe('SyncOutboxReplay (e2e - Real PostgreSQL, No Mocks)', () => {
 
     await ensurePublicDeviceSyncTables(runner);
 
-    // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard
+    // Seed tenants and users in public tables for auth & AuthoritativeCurrentUserGuard.
+    // Names and slugs are UNIQUE per run: a crashed previous run leaves its
+    // tenant rows behind (public.tenants is append-only — invoices depend on
+    // them), and ON CONFLICT (id) only covers the random id, never the fixed
+    // name/slug uniques. A run-unique suffix makes the fixture immune to
+    // that pollution instead of colliding with it.
+    const tenantASuffix = randomUUID().slice(0, 8);
+    const tenantBSuffix = randomUUID().slice(0, 8);
+    const tenantAName = `Tenant A ${tenantASuffix}`;
+    const tenantBName = `Tenant B ${tenantBSuffix}`;
     await runner.query(
       `INSERT INTO tenants (id, name, slug, created_at, updated_at) VALUES
-       ($1, 'Tenant A', $3, now(), now()),
-       ($2, 'Tenant B', $4, now(), now())
+       ($1, $3, $5, now(), now()),
+       ($2, $4, $6, now(), now())
        ON CONFLICT (id) DO NOTHING`,
-      [tenantAId, tenantBId, normalizeTenantSlug('Tenant A'), normalizeTenantSlug('Tenant B')],
+      [
+        tenantAId,
+        tenantBId,
+        tenantAName,
+        tenantBName,
+        normalizeTenantSlug(tenantAName),
+        normalizeTenantSlug(tenantBName),
+      ],
     );
 
     const cashierAEmail = `cashier.a.${randomUUID()}@test.com`;
