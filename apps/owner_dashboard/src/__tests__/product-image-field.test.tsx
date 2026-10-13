@@ -5,8 +5,14 @@ import {
   ProductImageField,
   validateAndCompressProductImage,
   resolveImageMime,
+  sniffImageFormat,
   MAX_IMAGE_FILE_SIZE_BYTES,
 } from "@/features/catalog/product-image-field";
+
+/** Builds a File from raw magic bytes, bypassing any MIME declaration. */
+function fileFromBytes(bytes: number[], name: string): File {
+  return new File([new Uint8Array(bytes)], name, { type: "" });
+}
 
 describe("ProductImageField — security & format validation (S3)", () => {
   it("rejects non-allowlisted MIME types (SVG, PDF, text)", async () => {
@@ -104,5 +110,70 @@ describe("ProductImageField — security & format validation (S3)", () => {
         new File(["x"], "vector.svg", { type: "image/svg+xml" }),
       ),
     ).rejects.toThrow(/Formato no permitido/i);
+  });
+
+  // Magic-byte diagnosis (reported defect): a downloaded "images (9).jpeg"
+  // failed with the opaque "No se pudo leer el archivo de imagen" because the
+  // browser could not DECODE it — the classic cause is an iPhone HEIC/HEIF
+  // payload carrying a .jpeg extension. The gates (MIME, size) passed; the
+  // failure surfaced only at Image.onerror with no actionable message.
+  it("sniffs the real format from magic bytes regardless of declared MIME", async () => {
+    const jpeg = fileFromBytes(
+      [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46],
+      "photo.jpeg",
+    );
+    await expect(sniffImageFormat(jpeg)).resolves.toBe("jpeg");
+
+    const png = fileFromBytes(
+      [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+      "photo.png",
+    );
+    await expect(sniffImageFormat(png)).resolves.toBe("png");
+
+    const webp = fileFromBytes(
+      [
+        0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+        0x57, 0x45, 0x42, 0x50,
+      ],
+      "photo.webp",
+    );
+    await expect(sniffImageFormat(webp)).resolves.toBe("webp");
+  });
+
+  it("identifies HEIC/HEIF payloads disguised with a .jpeg extension", async () => {
+    // ISO-BMFF: size + 'ftyp' + brand 'heic' — the iPhone camera format.
+    const heic = fileFromBytes(
+      [
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+        0x68, 0x65, 0x69, 0x63,
+      ],
+      "images (9).jpeg",
+    );
+    await expect(sniffImageFormat(heic)).resolves.toBe("heic");
+  });
+
+  it("rejects a HEIC payload named .jpeg with an actionable Spanish message", async () => {
+    const heic = fileFromBytes(
+      [
+        0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70,
+        0x68, 0x65, 0x69, 0x63,
+      ],
+      "images (9).jpeg",
+    );
+
+    await expect(validateAndCompressProductImage(heic)).rejects.toThrow(
+      /HEIC/i,
+    );
+  });
+
+  it("rejects payloads whose magic bytes match no allowed image format", async () => {
+    const garbage = fileFromBytes(
+      [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34],
+      "image.jpeg",
+    );
+
+    await expect(validateAndCompressProductImage(garbage)).rejects.toThrow(
+      /no es una imagen JPG, PNG o WebP v\u00e1lida/i,
+    );
   });
 });
