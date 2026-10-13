@@ -5,6 +5,8 @@ import {
   Module,
   ValidationPipe,
 } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from '../../src/modules/identity/security/auth-throttle.config';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -42,9 +44,8 @@ const boundTransactionManager = {
       useValue: {
         entityMetadatas: [],
         getRepository: jest.fn().mockReturnValue({}),
-        transaction: jest.fn(
-          async (work: (manager: unknown) => unknown) =>
-            work(boundTransactionManager),
+        transaction: jest.fn(async (work: (manager: unknown) => unknown) =>
+          work(boundTransactionManager),
         ),
       },
     },
@@ -137,6 +138,9 @@ describe('Forensic Audit Queries & Drawer Logs (e2e) (Slice 10.3)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        // These harnesses compile IdentityModule directly; its throttled
+        // routes resolve the auth throttler options from this registration.
+        ThrottlerModule.forRoot(authThrottlers()),
         EventEmitterModule.forRoot(),
         TestDatabaseModule,
         IdentityModule,

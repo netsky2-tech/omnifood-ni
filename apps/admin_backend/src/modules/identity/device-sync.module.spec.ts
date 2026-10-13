@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from './security/auth-throttle.config';
 import { DeviceSyncModule } from './device-sync.module';
 import { DeviceSyncCredentialService } from './services/device-sync-credential.service';
 import { DeviceSyncTokenController } from './controllers/device-sync-token.controller';
@@ -26,6 +28,9 @@ describe('DeviceSyncModule', () => {
   beforeAll(async () => {
     module = await Test.createTestingModule({
       imports: [
+        // The device-sync token route carries a method-level ThrottlerGuard;
+        // this module-only harness registers the auth throttlers it resolves.
+        ThrottlerModule.forRoot(authThrottlers()),
         ConfigModule.forRoot({
           isGlobal: true,
           ignoreEnvFile: true,

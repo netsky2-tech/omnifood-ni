@@ -4,7 +4,8 @@ import { DeviceSyncTokenController } from './device-sync-token.controller';
 import { DeviceSyncCredentialService } from '../services/device-sync-credential.service';
 import { RenewDeviceTokenDto } from '../dto/renew-device-token.dto';
 import { DeviceCredentialRevokedException } from '../exceptions/device-credential-revoked.exception';
-import { AuthThrottleModule } from '../security/auth-throttle.module';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from '../security/auth-throttle.config';
 
 describe('DeviceSyncTokenController', () => {
   let controller: DeviceSyncTokenController;
@@ -16,7 +17,7 @@ describe('DeviceSyncTokenController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [DeviceSyncTokenController],
-      imports: [AuthThrottleModule],
+      imports: [ThrottlerModule.forRoot(authThrottlers())],
       providers: [
         {
           provide: DeviceSyncCredentialService,
