@@ -1,7 +1,6 @@
 import { DataSource, EntityManager, Repository } from 'typeorm';
-import {
-  IndustryTemplateService,
-} from './industry-template.service';
+import { IndustryTemplateService } from './industry-template.service';
+import { FiscalSetupService } from './fiscal-setup.service';
 import { TenantContextRequiredError } from '../../../core/database/tenant-transaction';
 import { IndustryTemplate } from '../entities/industry-template.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
@@ -27,6 +26,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
   let uomConversionRepo: jest.Mocked<Partial<Repository<UomConversion>>>;
   let dataSource: jest.Mocked<Partial<DataSource>>;
   let mockManager: jest.Mocked<Partial<EntityManager>>;
+  let fiscalSetupService: { getFiscalSetup: jest.Mock };
 
   const sampleTemplate: IndustryTemplate = {
     id: 'CAFETERIA',
@@ -151,6 +151,15 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       transaction: jest.fn((cb: any) => cb(mockManager)) as any,
     };
 
+    // T10/F1: fiscal setup stub mirrors the default in
+    // industry-template.service.spec.ts (Régimen General tenant).
+    fiscalSetupService = {
+      getFiscalSetup: jest.fn().mockResolvedValue({
+        taxRateIva: 0.15,
+        pricesIncludeTax: true,
+      }),
+    };
+
     service = new IndustryTemplateService(
       templateRepo as any,
       {} as any,
@@ -163,6 +172,7 @@ describe('IndustryTemplateService Safe Cutover (TDD / ONB1.3D-F)', () => {
       recipeRepo as any,
       uomConversionRepo as any,
       dataSource as any,
+      fiscalSetupService as unknown as FiscalSetupService,
     );
   });
 

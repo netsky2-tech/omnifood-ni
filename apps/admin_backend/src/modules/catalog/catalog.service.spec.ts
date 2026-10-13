@@ -225,6 +225,51 @@ describe('CatalogService', () => {
       repo.find.mockResolvedValue(allCodes);
       expect(await service.seedDefaults('tenant-A')).toBe(0);
     });
+
+    // T11/F4 — the owner-approved industry menu classifies alcoholic drinks
+    // and desserts, so the platform SALES_PRODUCT_CATEGORY seed must carry
+    // those codes. Existing tenants receive them through the idempotent
+    // seed-defaults path (no per-tenant migration): seedDefaults skips codes
+    // that already exist, so re-running never clobbers tenant edits.
+    it('seeds BEBIDA_ALCOHOLICA and POSTRES in SALES_PRODUCT_CATEGORY (T11/F4)', async () => {
+      const salesCategories = DEFAULT_CATALOG_SEED.SALES_PRODUCT_CATEGORY;
+      expect(salesCategories).toEqual(
+        expect.arrayContaining([
+          { code: 'BEBIDA_ALCOHOLICA', name: 'Bebida alcohólica' },
+          { code: 'POSTRES', name: 'Postres' },
+        ]),
+      );
+
+      // And the idempotent seed path actually inserts them for a tenant that
+      // lacks them (and only them, when everything else already exists).
+      const existingExceptNew: CatalogValue[] = salesCategories
+        .filter((d) => d.code !== 'BEBIDA_ALCOHOLICA' && d.code !== 'POSTRES')
+        .map((d) =>
+          makeRow({
+            catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+            code: d.code,
+            name: d.name,
+          }),
+        );
+      repo.find.mockResolvedValue(existingExceptNew);
+
+      await service.seedDefaults('tenant-A');
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+          code: 'BEBIDA_ALCOHOLICA',
+          name: 'Bebida alcohólica',
+        }),
+      );
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+          code: 'POSTRES',
+          name: 'Postres',
+        }),
+      );
+    });
   });
 
   describe('resolveType', () => {

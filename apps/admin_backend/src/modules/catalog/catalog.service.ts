@@ -52,6 +52,14 @@ export const DEFAULT_CATALOG_SEED: Readonly<
     { code: 'RETAIL', name: 'Retail' },
     { code: 'LIMPIEZA', name: 'Limpieza' },
     { code: 'OTROS', name: 'Otros' },
+    // T11/F4 — owner-approved menu: alcoholic drinks and desserts are
+    // real sales categories on the industry templates (migration
+    // 1809620000000-ExpandIndustryTemplateMenu). Existing tenants receive
+    // them through the idempotent seed-defaults path — no per-tenant
+    // migration — and a tenant that deactivates/renames them simply stops
+    // resolving template labels onto them (honest absence).
+    { code: 'BEBIDA_ALCOHOLICA', name: 'Bebida alcohólica' },
+    { code: 'POSTRES', name: 'Postres' },
   ],
   SALES_PRODUCT_TYPE: [
     { code: 'PREPARADO', name: 'Preparado (lleva receta/BOM)' },
