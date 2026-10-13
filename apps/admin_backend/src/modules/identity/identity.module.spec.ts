@@ -20,6 +20,8 @@ import { SecurityProfile } from './entities/security-profile.entity';
 import { AuthGuard } from './guards/auth.guard';
 import { IdentityModule } from './identity.module';
 import { AuthService } from './services/auth.service';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from './security/auth-throttle.config';
 import { AuthController } from './controllers/auth.controller';
 import { AuditMetricsService } from './services/audit-metrics.service';
 
@@ -105,6 +107,9 @@ describe('IdentityModule strict typed access-token ownership', () => {
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
         EventEmitterModule.forRoot(),
+        // The login routes carry a method-level ThrottlerGuard; this
+        // module-only harness must register the auth throttlers it resolves.
+        ThrottlerModule.forRoot(authThrottlers()),
         TestDatabaseModule,
         IdentityModule,
       ],

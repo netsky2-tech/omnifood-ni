@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { resolveDatabaseConnection } from '../config/database-connection.config';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from '../../modules/identity/security/auth-throttle.config';
+import { reportThrottlers } from '../../modules/sales/security/report-throttle.config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IdentityModule } from '../../modules/identity/identity.module';
@@ -215,6 +218,12 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     }),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
+    // Issue #896: exactly ONE global ThrottlerModule registration. The
+    // throttler is @Global and its option tokens are shared, so per-host
+    // forRoot calls shadow each other nondeterministically (the login
+    // routes resolved the sales report budget and never throttled). Every
+    // named throttler (ip, account, tenant-report) registers here once.
+    ThrottlerModule.forRoot([...authThrottlers(), ...reportThrottlers()]),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

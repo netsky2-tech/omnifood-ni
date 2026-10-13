@@ -5,6 +5,8 @@ import {
   Module,
   ValidationPipe,
 } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from '../../src/modules/identity/security/auth-throttle.config';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { getRepositoryToken } from '@nestjs/typeorm';
@@ -53,6 +55,9 @@ describe('AuthController (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
+        // These harnesses compile IdentityModule directly; its throttled
+        // routes resolve the auth throttler options from this registration.
+        ThrottlerModule.forRoot(authThrottlers()),
         EventEmitterModule.forRoot(),
         TestDatabaseModule,
         IdentityModule,

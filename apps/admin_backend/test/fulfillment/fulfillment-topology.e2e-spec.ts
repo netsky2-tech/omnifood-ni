@@ -1,4 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { authThrottlers } from '../../src/modules/identity/security/auth-throttle.config';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
@@ -109,6 +111,9 @@ describe('FulfillmentTopology (e2e - Real PostgreSQL)', () => {
     // Bootstrap Nest testing module with real DB
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [
+        // Harnesses compiling real modules with throttled routes must
+        // register the named throttlers those routes resolve (issue #896).
+        ThrottlerModule.forRoot(authThrottlers()),
         ConfigModule.forRoot({
           isGlobal: true,
           ignoreEnvFile: true,

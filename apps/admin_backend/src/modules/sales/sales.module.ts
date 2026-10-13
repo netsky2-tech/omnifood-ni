@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Invoice } from './entities/invoice.entity';
 import { InvoiceItem } from './entities/invoice-item.entity';
@@ -47,17 +46,10 @@ import { HumanAuthorizationModule } from '../identity/human-authorization/human-
 import { DeviceSyncModule } from '../identity/device-sync.module';
 import { OnboardingModule } from '../onboarding/onboarding.module';
 import { forwardRef } from '@nestjs/common';
-import { reportThrottlers } from './security/report-throttle.config';
 
 @Module({
   imports: [
     IdentityModule,
-    // T5 (S5, OWASP API6:2023): registers the named `tenant-report`
-    // throttler for the heavy report/export routes of ReportsController,
-    // keyed per tenant (see security/report-throttle.config.ts). Wired here
-    // following the identity module's AuthThrottleModule pattern: each host
-    // module registers its own named throttlers with per-instance storage.
-    ThrottlerModule.forRoot(reportThrottlers()),
     // The device pull delegates its OHAC epoch negotiation here instead of
     // reading epochs itself, so the tenant-bound epoch read stays owned by
     // the human-authorization module (design §11.4 decision 24).

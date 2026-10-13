@@ -18,11 +18,9 @@ import {
   DeviceSyncJwtConfigModule,
 } from './config/device-sync-jwt.config';
 import { IdentityJwtConfigModule } from './config/identity-jwt.config';
-import { AuthThrottleModule } from './security/auth-throttle.module';
 
 @Module({
   imports: [
-    AuthThrottleModule,
     TypeOrmModule.forFeature([
       DeviceSyncCredential,
       DeviceSyncCredentialEvent,
