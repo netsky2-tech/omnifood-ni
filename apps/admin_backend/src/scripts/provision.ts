@@ -7,6 +7,7 @@ import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
+import { CatalogService } from '../modules/catalog/catalog.service';
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 
@@ -75,6 +76,17 @@ async function provision() {
       await manager.save(profile);
       console.log(`✅ Usuario OWNER creado: ${savedUser.id}`);
     });
+
+    // Issue #903: a provisioned tenant must be born OPERATIONAL — seed the
+    // default master catalogs (UOM, inventory/sales categories and types)
+    // right after the owner exists, inside the tenant context. Idempotent:
+    // seedDefaults skips codes that already exist and never clobbers tenant
+    // edits. Without this, a blank tenant cannot create its first insumo
+    // (no UOM in the catalog) and the only seed entry point is a hidden
+    // button in the insumo form.
+    const catalogService = app.get(CatalogService);
+    const seeded = await catalogService.seedDefaults(tenantId);
+    console.log(`✅ Catálogos por defecto sembrados: ${seeded} valores`);
 
     console.log('--- Provisión completada exitosamente ---');
   } catch (error) {
