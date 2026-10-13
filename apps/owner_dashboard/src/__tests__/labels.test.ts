@@ -18,6 +18,8 @@ import {
   menuImportSkipReasonLabels,
   publicationStateLabels,
   normalizeMenuImportIssueMessage,
+  onboardingBlockerLabels,
+  onboardingWarningLabels,
 } from "@/lib/labels";
 import * as labelsLib from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
@@ -54,6 +56,8 @@ const families: Record<string, Record<string, string>> = {
   auditLedgerTargetTypeLabels,
   menuImportSkipReasonLabels,
   publicationStateLabels,
+  onboardingBlockerLabels,
+  onboardingWarningLabels,
 };
 
 describe("label families — guard coverage", () => {

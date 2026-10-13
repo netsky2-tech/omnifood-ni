@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import {
   useOnboardingSession,
-  useOnboardingCatalogSummary,
   useActiveActivationAttempt,
   useStartActivationAttempt,
   useCancelActivationAttempt,
@@ -20,8 +19,9 @@ import {
 } from "./types";
 import { isApiError } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
-import { localize, backendActivationErrorLabels, lifecycleStateLabels } from "@/lib/labels";
+import { localize, backendActivationErrorLabels, lifecycleStateLabels, onboardingBlockerLabels, onboardingWarningLabels } from "@/lib/labels";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
+import { useSeedCatalogDefaults } from "@/features/catalog/use-catalog";
 import { useHasPermission } from "@/features/users/use-has-permission";
 import { AppPermission } from "@/features/users/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,7 +147,7 @@ function selectClaimableLinkingCodes(
 export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
   const { session, readiness, progress, isLoading, isError, error, refetch, isFetching } =
     useOnboardingSession();
-  const { data: catalogSummary } = useOnboardingCatalogSummary();
+  const seedCatalogDefaults = useSeedCatalogDefaults();
   const hasActivationPermission = useHasPermission(AppPermission.ONBOARDING_ACTIVATION_MANAGE);
 
   const isActivated = progress.currentLifecycle === OnboardingLifecycleState.ACTIVATED;
@@ -210,7 +210,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
         className="flex flex-col items-center justify-center p-12 space-y-4 text-muted-foreground"
       >
         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm font-medium">Cargando estado del Setup Center...</p>
+        <p className="text-sm font-medium">Cargando tu configuración...</p>
       </div>
     );
   }
@@ -303,6 +303,57 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
     }
   };
 
+  /**
+   * #903 follow-up (S1): visible seeding action for tenants provisioned
+   * before auto-seeding existed. Seeds master catalogs (units of measure,
+   * categories, types) only — it never creates sellable products, so the
+   * copy must not promise it clears the no-products activation blocker.
+   * Onboarding queries are invalidated by the hook so every card that
+   * reflects catalog state refreshes together (S4).
+   */
+  const handleSeedCatalogDefaults = () => {
+    seedCatalogDefaults.mutate(undefined, {
+      onSuccess: (data) => {
+        toast({
+          title: "Catálogos base listos",
+          description: `Se cargaron ${data.inserted} valores predefinidos: unidades de medida, categorías y tipos.`,
+        });
+      },
+      onError: () => {
+        toast({
+          title: "No se pudo preparar los catálogos base",
+          description: "Intentá de nuevo en unos minutos.",
+          variant: "destructive",
+        });
+      },
+    });
+  };
+
+  /** Shared render for the seeding action: outline-secondary next to the
+   *  catalog acquisition primary CTA, with the side-effect spelled out. */
+  const renderSeedCatalogDefaultsButton = () => (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        data-testid="seed-catalog-defaults-btn"
+        onClick={handleSeedCatalogDefaults}
+        disabled={seedCatalogDefaults.isPending}
+        className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+      >
+        <Boxes className="h-4 w-4" />
+        {seedCatalogDefaults.isPending
+          ? "Preparando catálogos..."
+          : "Preparar catálogos base"}
+      </Button>
+      <span className="w-full text-[11px] text-muted-foreground">
+        Carga unidades de medida, categorías y tipos predefinidos para tus
+        formularios. No crea productos: el catálogo vendible se arma con
+        plantilla, CSV o alta manual.
+      </span>
+    </>
+  );
+
   return (
     <div className="space-y-6" data-testid="setup-center-view">
       {/* Header & Lifecycle State */}
@@ -322,9 +373,6 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             >
               {getLifecycleDisplayLabel(progress.currentLifecycle)}
             </Badge>
-            <Badge variant="secondary" data-testid="optimistic-version-badge" className="font-mono text-xs">
-              v{progress.optimisticVersion}
-            </Badge>
             {progress.isLegacyBaseline && (
               <Badge
                 data-testid="legacy-baseline-badge"
@@ -332,12 +380,12 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1 text-xs"
               >
                 <History className="h-3 w-3" />
-                Tenant Histórico (Sin métrica TTFSS)
+                Negocio existente
               </Badge>
             )}
           </div>
           <p className="text-sm text-muted-foreground">
-            Control de preparación operativa de tu negocio para operar en caja registradora POS.
+            Todo lo que necesitás configurar para abrir caja y vender.
           </p>
         </div>
 
@@ -371,14 +419,12 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
           <div className="flex items-center gap-3">
             <History className="h-5 w-5 text-amber-700 shrink-0" />
             <div>
-              <div className="font-semibold text-sm flex items-center gap-2">
-                <span>Tenant Histórico — Métrica TTFSS no aplicable</span>
-                <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-[11px] font-mono">
-                  measurementEligible: false
-                </Badge>
+              <div className="font-semibold text-sm">
+                Negocio existente
               </div>
               <p className="text-xs text-amber-800/90 mt-0.5">
-                Comercio provisionado previamente sin ancla temporal de inicio confiable. El setup y activación continúan normalmente sin registrar tiempos TTFSS ficticios para proteger la integridad del benchmark.
+                Tu comercio se registró antes de que midiéramos los tiempos de puesta en marcha, así que no te
+                mostramos ese indicador. Tu configuración y la activación de la terminal funcionan con normalidad.
               </p>
             </div>
           </div>
@@ -430,8 +476,13 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               El negocio estuvo listo para venta previamente, pero actualmente existen requisitos pendientes antes de activar la terminal. El registro histórico se conserva intacto.
             </p>
             {progress.blockers.length > 0 && (
-              <div className="font-mono text-[11px] bg-amber-100/80 p-2 rounded mt-1">
-                Bloqueadores actuales: {progress.blockers.join(", ")}
+              <div className="text-[11px] p-2 rounded mt-1 bg-amber-100/80">
+                <span className="font-semibold">Lo que falta ahora:</span>
+                <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                  {progress.blockers.map((blocker) => (
+                    <li key={blocker}>{localize(blocker, onboardingBlockerLabels)}</li>
+                  ))}
+                </ul>
               </div>
             )}
           </AlertDescription>
@@ -472,7 +523,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               </Button>
             )}
             {progress.nextRecommendedAction.actionKey === "catalog" && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   size="sm"
                   onClick={() => setCatalogModalOpen(true)}
@@ -483,6 +534,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   Adquirir Catálogo (Plantilla / CSV / Manual)
                   <ArrowRight className="h-4 w-4" />
                 </Button>
+                {renderSeedCatalogDefaultsButton()}
               </div>
             )}
             {progress.nextRecommendedAction.actionKey === "activation" && (
@@ -866,7 +918,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                         className="text-xs font-mono text-amber-700 bg-amber-50 p-1.5 rounded flex items-center gap-1.5"
                       >
                         <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                        <span>{b}</span>
+                        <span>{localize(b, onboardingBlockerLabels)}</span>
                       </div>
                     ))}
                   </div>
@@ -876,9 +928,9 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   <div className="flex items-center justify-between">
                     {step.key === "catalog" && (
                       <span className="text-[11px] text-muted-foreground">
-                        {catalogSummary?.sellableProductCount
-                          ? `${catalogSummary.sellableProductCount} producto(s) vendible(s)`
-                          : "Sin productos aún"}
+                        {(readiness.catalog.sellableProductCount ?? 0) > 0
+                          ? `${readiness.catalog.sellableProductCount} producto(s) con precio de venta`
+                          : "Sin productos para vender todavía"}
                       </span>
                     )}
                     <div className="flex justify-end gap-2 ml-auto">
@@ -892,6 +944,21 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                         >
                           <Landmark className="h-3.5 w-3.5" />
                           Configurar Fiscal
+                        </Button>
+                      )}
+                      {step.key === "catalog" && !isDone && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleSeedCatalogDefaults}
+                          disabled={seedCatalogDefaults.isPending}
+                          className="text-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+                          data-testid="seed-catalog-defaults-step-btn"
+                        >
+                          <Boxes className="h-3.5 w-3.5" />
+                          {seedCatalogDefaults.isPending
+                            ? "Preparando..."
+                            : "Preparar catálogos base"}
                         </Button>
                       )}
                       {step.key === "catalog" && (
@@ -949,13 +1016,13 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   : "bg-amber-600 text-white text-[10px]"
               }
             >
-              {progress.isSaleReady ? "Criterios Mínimos Cumplidos" : "Preparación Incompleta"}
+              {progress.isSaleReady ? "Todo listo" : "Falta completar"}
             </Badge>
           </div>
           <CardDescription className="text-xs text-muted-foreground mt-1">
             {progress.isSaleReady
               ? "Tu comercio cumple todos los requisitos normativos para abrir caja y emitir facturas en el terminal POS."
-              : "Revisión técnica de requisitos indispensables para habilitar el terminal POS vs configuraciones operativas postergables."}
+              : "Revisá qué falta para habilitar la caja y qué podés completar después."}
           </CardDescription>
         </CardHeader>
         <CardContent className="py-2 space-y-4 text-xs">
@@ -963,19 +1030,19 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="p-2 rounded bg-background border flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span>Identidad de Propietario (usuario administrador activo)</span>
+                <span>Propietario con acceso activo</span>
               </div>
               <div className="p-2 rounded bg-background border flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span>Configuración Fiscal DGI Mínima (RUC y régimen tributario)</span>
+                <span>Datos fiscales completos (RUC, régimen, tipo de operación y tipo de cambio)</span>
               </div>
               <div className="p-2 rounded bg-background border flex items-center gap-2">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                <span>Catálogo Vendible Activo con Precio</span>
+                <span>Al menos un producto activo con precio de venta</span>
               </div>
               <div className="p-2 rounded bg-background border flex items-center gap-2 text-muted-foreground">
                 <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                <span>Inventario inicial (Stock y Costos): Opcional no bloqueante</span>
+                <span>Inventario inicial (existencias y costos): opcional, no bloquea la venta</span>
               </div>
             </div>
           ) : (
@@ -984,22 +1051,22 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               <div data-testid="review-blockers-section" className="space-y-1.5">
                 <div className="font-semibold text-destructive flex items-center gap-1.5 text-xs">
                   <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-                  <span>Bloqueadores Obligatorios (Impiden Venta):</span>
+                  <span>Falta para poder vender:</span>
                 </div>
                 <div className="space-y-1">
                   {progress.blockers.length > 0 ? (
                     progress.blockers.map((blocker) => (
                       <div
                         key={blocker}
-                        className="text-[11px] font-mono p-2 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-2"
+                        className="text-[11px] p-2 rounded bg-destructive/10 text-destructive border border-destructive/20 flex items-start gap-2"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0" />
-                        <span>{blocker}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-destructive shrink-0 mt-1.5" />
+                        <span>{localize(blocker, onboardingBlockerLabels)}</span>
                       </div>
                     ))
                   ) : (
                     <div className="text-[11px] text-muted-foreground italic">
-                      Sin bloqueadores identificados
+                      Sin pendientes identificados
                     </div>
                   )}
                 </div>
@@ -1010,16 +1077,16 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 <div data-testid="review-warnings-section" className="space-y-1.5">
                   <div className="font-semibold text-amber-800 flex items-center gap-1.5 text-xs">
                     <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-                    <span>Advertencias Normativas (No Bloqueantes):</span>
+                    <span>Avisos (no bloquean la venta):</span>
                   </div>
                   <div className="space-y-1">
                     {progress.warnings.map((warning) => (
                       <div
                         key={warning}
-                        className="text-[11px] p-2 rounded bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-2"
+                        className="text-[11px] p-2 rounded bg-amber-50 text-amber-900 border border-amber-200 flex items-start gap-2"
                       >
-                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                        <span>{warning}</span>
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span>{localize(warning, onboardingWarningLabels)}</span>
                       </div>
                     ))}
                   </div>
@@ -1033,21 +1100,21 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               >
                 <div className="font-semibold text-muted-foreground flex items-center gap-1.5 text-xs">
                   <Info className="h-4 w-4 text-blue-500 shrink-0" />
-                  <span>Enriquecimiento BOH (Opcional / Postergable — No Bloquea Venta):</span>
+                  <span>Complementos opcionales (no bloquean la venta):</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-muted-foreground">
                   <div className="p-2 rounded bg-muted/30 border flex items-start gap-2">
                     <Package className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-medium text-foreground">Stock inicial & Kardex:</span>{" "}
-                      Puede comenzar a vender con stock en 0; los costos se calcularán cuando ingrese compras.
+                      <span className="font-medium text-foreground">Existencias y costos iniciales:</span>{" "}
+                      Podés empezar a vender con stock en cero; los costos se completan cuando registres compras.
                     </div>
                   </div>
                   <div className="p-2 rounded bg-muted/30 border flex items-start gap-2">
                     <Layers className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-medium text-foreground">Recetas & Escandallos:</span>{" "}
-                      La deducción de insumos puede configurarse con posterioridad sin impedir la emisión de facturas.
+                      <span className="font-medium text-foreground">Recetas y costo por platillo:</span>{" "}
+                      La deducción de insumos puede configurarse después sin impedir la facturación.
                     </div>
                   </div>
                 </div>
@@ -1065,10 +1132,10 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               <div>
                 <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
                   <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-                  Métricas de Activación & Primera Venta Comercial
+                  Activación y primeras ventas
                 </CardTitle>
                 <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                  Observabilidad desacoplada entre el hito técnico de activación (TTFSS) y la primera venta comercial a cliente final.
+                  Dos registros independientes: la venta de prueba de la activación y la primera venta real a un cliente.
                 </CardDescription>
               </div>
               <Badge variant="outline" className="text-[11px] shrink-0">
@@ -1083,7 +1150,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 className="p-3 rounded-md border bg-card/60 flex flex-col justify-between"
               >
                 <span className="text-xs font-semibold text-muted-foreground">
-                  TTFSS Consolidado (Venta Técnica M6)
+                  Primera venta técnica (activación)
                 </span>
                 <div className="mt-1 text-sm font-medium text-foreground">
                   {session.firstSuccessfulSaleAt ? (
@@ -1093,7 +1160,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   )}
                 </div>
                 <span className="text-[10px] text-muted-foreground/80 mt-1">
-                  Inmutable: Base histórica de Time to First Successful Sale.
+                  Queda guardada como referencia histórica.
                 </span>
               </div>
               <div
@@ -1101,7 +1168,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 className="p-3 rounded-md border bg-card/60 flex flex-col justify-between"
               >
                 <span className="text-xs font-semibold text-muted-foreground">
-                  Primer Ticket Comercial Cliente Final
+                  Primera venta real (cliente final)
                 </span>
                 <div className="mt-1 text-sm font-medium text-foreground">
                   {session.firstCustomerSaleAt ? (
@@ -1113,7 +1180,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                   )}
                 </div>
                 <span className="text-[10px] text-muted-foreground/80 mt-1">
-                  Observado de forma desacoplada; no altera el TTFSS histórico.
+                  Se registra aparte; no cambia la primera venta técnica guardada.
                 </span>
               </div>
             </div>
@@ -1128,10 +1195,10 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
             <div>
               <CardTitle className="text-base font-semibold flex items-center gap-2 text-foreground">
                 <Boxes className="h-5 w-5 text-primary shrink-0" />
-                Checklist Progresivo BOH (Backoffice Readiness)
+                Configuración operativa
               </CardTitle>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                Carga posterior de almacenes, costeo y recetas. Opcional para habilitar ventas en el punto de venta.
+                Almacenes, costos y recetas: completalos cuando quieras, no bloquean la venta.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -1178,7 +1245,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     Almacenes: <span className="font-medium text-foreground">{readiness.inventory?.warehouseCount ?? 0}</span> | Ítems rastreados: <span className="font-medium text-foreground">{readiness.inventory?.trackedProductCount ?? 0}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground/90 font-medium">
-                    Permite operar con inventario en cero temporalmente
+                    Podés vender con existencias en cero y regularizar después
                   </div>
                 </div>
               </div>
@@ -1189,7 +1256,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 onClick={() => window.open("/inventory", "_blank")}
                 className="w-full text-xs h-8 flex items-center justify-center gap-1.5"
               >
-                <span>Ir a Inventario BOH</span>
+                <span>Ir a Inventario</span>
                 <ExternalLink className="h-3 w-3" />
               </Button>
             </div>
@@ -1213,7 +1280,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                         : "bg-amber-50 text-amber-800 border-amber-300"
                     }`}
                   >
-                    {readiness.costingReady ? "Costeo Completo" : "Costeo Inicial Pendiente"}
+                    {readiness.costingReady ? "Costos completos" : "Costos pendientes"}
                   </Badge>
                 </div>
                 <div className="text-[11px] text-muted-foreground space-y-1">
@@ -1221,7 +1288,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     Estado: <span className="font-medium text-foreground">{readiness.costing?.knownCostCount ?? 0} conocido(s)</span>, <span className="font-medium text-foreground">{readiness.costing?.pendingCostCount ?? 0} pendiente(s)</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground/90 font-medium">
-                    Costeo pendiente no bloquea ventas
+                    Los costos pendientes no bloquean la venta
                   </div>
                 </div>
               </div>
@@ -1232,7 +1299,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 onClick={() => window.open("/inventory/kardex", "_blank")}
                 className="w-full text-xs h-8 flex items-center justify-center gap-1.5"
               >
-                <span>Ir a Costeo & Kardex</span>
+                <span>Ir a Costos y Kardex</span>
                 <ExternalLink className="h-3 w-3" />
               </Button>
             </div>
@@ -1246,7 +1313,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-xs flex items-center gap-1.5 text-foreground">
                     <Users className="h-4 w-4 text-primary shrink-0" />
-                    Operaciones & Enriquecimiento
+                    Equipo, proveedores y recetas
                   </span>
                   <Badge
                     variant="outline"
@@ -1256,7 +1323,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                         : "bg-slate-100 text-slate-800 border-slate-300"
                     }`}
                   >
-                    {readiness.operationsReady ? "ENRIQUECIDO" : "BÁSICO"}
+                    {readiness.operationsReady ? "Completo" : "Básico"}
                   </Badge>
                 </div>
                 <div className="text-[11px] text-muted-foreground space-y-1">
@@ -1267,7 +1334,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                     Proveedores: {readiness.operations?.supplierCount ?? 0} | Categorías: {readiness.operations?.categoryCount ?? 0}
                   </div>
                   <div className="text-[10px] text-muted-foreground/90 font-medium">
-                    Registro opcional; no altera el estado de activación
+                    Opcional; no afecta la activación de tu terminal
                   </div>
                 </div>
               </div>
@@ -1278,7 +1345,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                 onClick={() => window.open("/users", "_blank")}
                 className="w-full text-xs h-8 flex items-center justify-center gap-1.5"
               >
-                <span>Ir a Gestión de Usuarios</span>
+                <span>Ir a Usuarios</span>
                 <ExternalLink className="h-3 w-3" />
               </Button>
             </div>

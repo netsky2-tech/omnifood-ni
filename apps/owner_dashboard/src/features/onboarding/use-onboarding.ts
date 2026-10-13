@@ -68,8 +68,9 @@ export function calculateSetupCenterProgress(
     },
     {
       key: "fiscal",
-      title: "2. Régimen Fiscal DGI",
-      description: "Régimen tributario (Cuota Fija / Régimen General), RUC y razón social.",
+      title: "2. Datos Fiscales",
+      description:
+        "Razón social, RUC, régimen tributario (Cuota Fija / Régimen General), tipo de operación y tipo de cambio comercial.",
       status: fiscalReady ? "COMPLETED" : "IN_PROGRESS",
       isRequired: true,
       blockers: fiscalReady ? [] : (readiness?.blockers.filter((b) => b.startsWith("FISCAL")) ?? []),
@@ -135,8 +136,9 @@ export function calculateSetupCenterProgress(
   } else {
     nextRecommendedAction = {
       actionKey: "activation",
-      label: "Onboarding Completado",
-      description: "Operación activa. Podés continuar enriqueciendo recetas e inventario BOH.",
+      label: "Configuración Completada",
+      description:
+        "Tu negocio ya está vendiendo. Podés seguir cargando recetas, costos e inventario cuando quieras.",
     };
   }
 

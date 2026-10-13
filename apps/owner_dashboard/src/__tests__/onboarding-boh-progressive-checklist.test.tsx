@@ -163,18 +163,18 @@ describe("ONB1.9A–D — BOH Progressive Readiness & Checklist in Setup Center"
     // Verify Inventory Readiness Card (ONB1.9A)
     expect(screen.getByTestId("boh-inventory-card")).toBeDefined();
     expect(screen.getByText("Inventario & Almacenes")).toBeDefined();
-    expect(screen.getByText("Permite operar con inventario en cero temporalmente")).toBeDefined();
+    expect(screen.getByText("Podés vender con existencias en cero y regularizar después")).toBeDefined();
 
     // Verify Costing Readiness Card (ONB1.9B)
     expect(screen.getByTestId("boh-costing-card")).toBeDefined();
     expect(screen.getByText("Costeo & Valorización")).toBeDefined();
-    expect(screen.getByText("Costeo pendiente no bloquea ventas")).toBeDefined();
+    expect(screen.getByText("Los costos pendientes no bloquean la venta")).toBeDefined();
     expect(screen.getByText("2 pendiente(s)")).toBeDefined();
     expect(screen.getByText("1 conocido(s)")).toBeDefined();
 
     // Verify Operations Readiness Card (ONB1.9C)
     expect(screen.getByTestId("boh-operations-card")).toBeDefined();
-    expect(screen.getByText("Operaciones & Enriquecimiento")).toBeDefined();
+    expect(screen.getByText("Equipo, proveedores y recetas")).toBeDefined();
     expect(screen.getByText(/Staff adicional:\s*0/)).toBeDefined();
 
     // Verify Direct BOH Navigation Links without artificial imports (ONB1.9D)
