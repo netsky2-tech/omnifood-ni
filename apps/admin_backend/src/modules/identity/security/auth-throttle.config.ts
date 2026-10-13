@@ -16,6 +16,7 @@
  */
 
 import type { ThrottlerOptions } from '@nestjs/throttler';
+import { Logger } from '@nestjs/common';
 
 export const IP_THROTTLER_NAME = 'ip';
 export const ACCOUNT_THROTTLER_NAME = 'account';
@@ -40,6 +41,11 @@ export const DEVICE_SYNC_TOKEN_PER_IP_LIMIT = 15;
  * tracker is always defined.
  */
 export function accountTracker(req: Record<string, any>): string {
+  // TEMPORARY diagnostic (issue #896): logs each account-tracker evaluation
+  // so the production investigation can see whether ThrottlerGuard invokes
+  // the tracker at all, and with which key. Remove once #896 closes.
+  new Logger('AuthThrottleProbe').log(`accountTracker evaluated`);
+
   const body = (req?.body ?? {}) as Record<string, unknown>;
   const email =
     typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
