@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 72,
+      version: 73,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -228,7 +228,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `fulfillment_outbox_events` (`event_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `source_sequence` INTEGER NOT NULL, `aggregate_type` TEXT NOT NULL, `aggregate_id` TEXT NOT NULL, `idempotency_key` TEXT NOT NULL, `payload_hash` TEXT NOT NULL, `topology_revision` INTEGER NOT NULL, `state` TEXT NOT NULL, `attempts` INTEGER NOT NULL, PRIMARY KEY (`event_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `category_id` TEXT, `is_prepared` INTEGER NOT NULL, `product_type` TEXT NOT NULL, `mapping_version_id` TEXT, `insumo_id` TEXT, `created_at` TEXT, `inventory_policy` TEXT, `direct_stock_insumo_id` TEXT, `tax_rate` REAL NOT NULL, `is_tax_exempt` INTEGER NOT NULL, `tenant_id` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `products` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `sell_price` REAL NOT NULL, `is_active` INTEGER NOT NULL, `sku` TEXT, `barcode` TEXT, `category` TEXT, `category_id` TEXT, `is_prepared` INTEGER NOT NULL, `product_type` TEXT NOT NULL, `mapping_version_id` TEXT, `insumo_id` TEXT, `created_at` TEXT, `inventory_policy` TEXT, `direct_stock_insumo_id` TEXT, `tax_rate` REAL NOT NULL, `is_tax_exempt` INTEGER NOT NULL, `tenant_id` TEXT, `image_url` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `product_variants` (`id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_adjustment` REAL NOT NULL, FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1279,7 +1279,8 @@ class _$ProductDao extends ProductDao {
                   'direct_stock_insumo_id': item.directStockInsumoId,
                   'tax_rate': item.taxRate,
                   'is_tax_exempt': item.isTaxExempt ? 1 : 0,
-                  'tenant_id': item.tenantId
+                  'tenant_id': item.tenantId,
+                  'image_url': item.imageUrl
                 }),
         _productVariantEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -1338,7 +1339,8 @@ class _$ProductDao extends ProductDao {
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
             taxRate: row['tax_rate'] as double,
             isTaxExempt: (row['is_tax_exempt'] as int) != 0,
-            tenantId: row['tenant_id'] as String?));
+            tenantId: row['tenant_id'] as String?,
+            imageUrl: row['image_url'] as String?));
   }
 
   @override
@@ -1365,7 +1367,8 @@ class _$ProductDao extends ProductDao {
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
             taxRate: row['tax_rate'] as double,
             isTaxExempt: (row['is_tax_exempt'] as int) != 0,
-            tenantId: row['tenant_id'] as String?),
+            tenantId: row['tenant_id'] as String?,
+            imageUrl: row['image_url'] as String?),
         arguments: [id]);
   }
 
@@ -1376,7 +1379,7 @@ class _$ProductDao extends ProductDao {
   ) async {
     return _queryAdapter.query(
         'SELECT * FROM products WHERE id = ?1 AND (tenant_id = ?2 OR tenant_id IS NULL)',
-        mapper: (Map<String, Object?> row) => ProductEntity(id: row['id'] as String, name: row['name'] as String, uom: row['uom'] as String, stock: row['stock'] as double, averageCost: row['average_cost'] as double, sellPrice: row['sell_price'] as double, isActive: (row['is_active'] as int) != 0, sku: row['sku'] as String?, barcode: row['barcode'] as String?, category: row['category'] as String?, categoryId: row['category_id'] as String?, isPrepared: (row['is_prepared'] as int) != 0, productType: row['product_type'] as String, mappingVersionId: row['mapping_version_id'] as String?, insumoId: row['insumo_id'] as String?, createdAt: row['created_at'] as String?, inventoryPolicy: row['inventory_policy'] as String?, directStockInsumoId: row['direct_stock_insumo_id'] as String?, taxRate: row['tax_rate'] as double, isTaxExempt: (row['is_tax_exempt'] as int) != 0, tenantId: row['tenant_id'] as String?),
+        mapper: (Map<String, Object?> row) => ProductEntity(id: row['id'] as String, name: row['name'] as String, uom: row['uom'] as String, stock: row['stock'] as double, averageCost: row['average_cost'] as double, sellPrice: row['sell_price'] as double, isActive: (row['is_active'] as int) != 0, sku: row['sku'] as String?, barcode: row['barcode'] as String?, category: row['category'] as String?, categoryId: row['category_id'] as String?, isPrepared: (row['is_prepared'] as int) != 0, productType: row['product_type'] as String, mappingVersionId: row['mapping_version_id'] as String?, insumoId: row['insumo_id'] as String?, createdAt: row['created_at'] as String?, inventoryPolicy: row['inventory_policy'] as String?, directStockInsumoId: row['direct_stock_insumo_id'] as String?, taxRate: row['tax_rate'] as double, isTaxExempt: (row['is_tax_exempt'] as int) != 0, tenantId: row['tenant_id'] as String?, imageUrl: row['image_url'] as String?),
         arguments: [id, tenantId]);
   }
 
@@ -1406,7 +1409,8 @@ class _$ProductDao extends ProductDao {
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
             taxRate: row['tax_rate'] as double,
             isTaxExempt: (row['is_tax_exempt'] as int) != 0,
-            tenantId: row['tenant_id'] as String?),
+            tenantId: row['tenant_id'] as String?,
+            imageUrl: row['image_url'] as String?),
         arguments: [tenantId]);
   }
 
@@ -1464,7 +1468,8 @@ class _$ProductDao extends ProductDao {
             directStockInsumoId: row['direct_stock_insumo_id'] as String?,
             taxRate: row['tax_rate'] as double,
             isTaxExempt: (row['is_tax_exempt'] as int) != 0,
-            tenantId: row['tenant_id'] as String?),
+            tenantId: row['tenant_id'] as String?,
+            imageUrl: row['image_url'] as String?),
         arguments: [sku, barcode]);
   }
 

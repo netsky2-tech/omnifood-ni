@@ -3884,6 +3884,7 @@ class SyncService {
               isTaxExempt: map['isTaxExempt'] as bool? ?? false,
               inventoryPolicy: map['inventoryPolicy'] as String? ?? existing?.inventoryPolicy,
               directStockInsumoId: map['directStockInsumoId'] as String? ?? existing?.directStockInsumoId,
+              imageUrl: map['imageUrl'] as String? ?? existing?.imageUrl,
             ),
           );
         }

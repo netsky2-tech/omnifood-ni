@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../../design_system/nhilos_tokens.dart';
 
@@ -129,6 +131,7 @@ class ProductVisualResolver {
 }
 
 class ProductCardThumbnail extends StatelessWidget {
+  final String? imageUrl;
   final String? category;
   final String productName;
   final double size;
@@ -137,6 +140,7 @@ class ProductCardThumbnail extends StatelessWidget {
 
   const ProductCardThumbnail({
     super.key,
+    this.imageUrl,
     this.category,
     required this.productName,
     this.size = 40,
@@ -144,15 +148,19 @@ class ProductCardThumbnail extends StatelessWidget {
     this.backgroundColor,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final visual = ProductVisualResolver.resolve(
-      category: category,
-      productName: productName,
-    );
+  Uint8List? _tryDecodeBase64DataUrl(String raw) {
+    if (!raw.startsWith('data:image/')) return null;
+    final commaIndex = raw.indexOf(',');
+    if (commaIndex == -1) return null;
+    try {
+      final base64String = raw.substring(commaIndex + 1).trim();
+      return base64Decode(base64String);
+    } catch (_) {
+      return null;
+    }
+  }
 
-    final resolvedColor = color ?? NhilosColors.brandPrimary;
-
+  Widget _buildFallback(ProductVisualResult visual, Color resolvedColor) {
     if (visual.icon != null) {
       return Icon(
         visual.icon,
@@ -161,7 +169,6 @@ class ProductCardThumbnail extends StatelessWidget {
       );
     }
 
-    // Monogram presentation (§12.6 Level 2)
     final bg = backgroundColor ?? NhilosColors.brandTealLight;
     final monogramSize = size * 0.42;
 
@@ -185,5 +192,79 @@ class ProductCardThumbnail extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final visual = ProductVisualResolver.resolve(
+      category: category,
+      productName: productName,
+    );
+
+    final resolvedColor = color ?? NhilosColors.brandPrimary;
+
+    if (imageUrl != null && imageUrl!.trim().isNotEmpty) {
+      final cleanUrl = imageUrl!.trim();
+      final borderRadius = BorderRadius.circular(size * 0.22);
+
+      // 1. Data URL (client-compressed WebP/JPEG, 100% offline-first)
+      if (cleanUrl.startsWith('data:image/')) {
+        final bytes = _tryDecodeBase64DataUrl(cleanUrl);
+        if (bytes != null && bytes.isNotEmpty) {
+          return Center(
+            child: Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.6),
+                  width: 0.8,
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: borderRadius,
+                child: Image.memory(
+                  bytes,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      _buildFallback(visual, resolvedColor),
+                ),
+              ),
+            ),
+          );
+        }
+      } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
+        // 2. HTTP network URL
+        return Center(
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              borderRadius: borderRadius,
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.6),
+                width: 0.8,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: borderRadius,
+              child: Image.network(
+                cleanUrl,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _buildFallback(visual, resolvedColor),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
+    return _buildFallback(visual, resolvedColor);
   }
 }

@@ -551,4 +551,31 @@ void main() {
     await db.close();
     await databaseFactory.deleteDatabase(legacyPath);
   });
+
+  test('migration72_73 adds the nullable image_url column to products',
+      () async {
+    final db = await openV60Database();
+
+    await migration72_73.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(products)');
+    final column = columns.firstWhere((c) => c['name'] == 'image_url');
+    expect(column['notnull'], 0);
+    expect(column['dflt_value'], isNull);
+
+    await db.close();
+  });
+
+  test('migration72_73 is safe to re-run (idempotent)', () async {
+    final db = await openV60Database();
+
+    await migration72_73.migrate(db);
+    await migration72_73.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(products)');
+    final matches = columns.where((c) => c['name'] == 'image_url').toList();
+    expect(matches, hasLength(1));
+
+    await db.close();
+  });
 }
