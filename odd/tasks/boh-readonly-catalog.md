@@ -74,3 +74,16 @@ exceptions (e.g. operational stock min/max) deferred to a future issue.
   después") — no terminal-writable catalog fields; exceptions deferred to a
   future issue.
 - L3: branch feat/boh-readonly-catalog created from main (c68e64c9).
+- L4 (native review, lineage review-fdeee5ed336359af, tier high): refuter admitted
+  R3-001 CRITICAL introduced — the pull emitter hardcoded source 'DASHBOARD' while
+  the POS guard only skipped own-deviceId echoes, making the S5 terminal-side layer
+  inert. Correction applied and committed (522e09ba): the terminal now persists
+  dashboard-originated catalog rows ONLY (any non-DASHBOARD source is skipped) and
+  the DTO source type widened to string with the truthful origin contract. POS
+  138/138 (foreign-terminal RED first), backend 105/105, tsc clean.
+- L5 (review machinery blocker): the provider correction-plan capture slot rejects
+  every submission as "collectBinding is missing or stale" (5 attempts, byte-exact
+  bindings from fresh STATUS, with and without workspaceRoot). The lineage stays in
+  correction_required with nothing consumed; the R3-001 fix is applied and pushed to
+  PR #910 regardless. Native review completion pending on the facade/native-CLI
+  side — maintainer may inspect the authority or the slot may be retried later.
