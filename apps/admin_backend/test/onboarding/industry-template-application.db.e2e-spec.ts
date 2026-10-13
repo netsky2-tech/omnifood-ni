@@ -15,6 +15,8 @@ import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template
 import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
+import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
@@ -206,6 +208,7 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
         OnboardingSession,
         Insumo,
         Product,
+        CatalogValue,
         RecipeVersion,
         RecipeDetail,
         Recipe,
@@ -230,6 +233,15 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
       runtime.getRepository(Recipe),
       runtime.getRepository(UomConversion),
       runtime,
+    // F1/S11: production injects FiscalSetupService; this e2e targets the
+    // template application pipeline, so a minimal stub supplies the
+    // regime-derived rate the apply path reads (Régimen General default).
+    {
+      getFiscalSetup: async () => ({
+        taxRateIva: 0.15,
+        pricesIncludeTax: true,
+      }),
+    } as unknown as FiscalSetupService,
     );
     previewService = new TemplatePreviewService(
       runtime.getRepository(IndustryTemplate),
@@ -306,11 +318,11 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
       tenantId: tenantApplyId,
       templateCode: 'CAFETERIA',
       templateVersion: 1,
-      insumosCreated: 7,
+      insumosCreated: 13,
       insumosSkipped: 0,
-      productsCreated: 5,
+      productsCreated: 12,
       productsSkipped: 0,
-      recipesCreated: 5,
+      recipesCreated: 8,
     });
 
     // Application row: exactly one, tenant-local, APPLIED, with a summary.
@@ -332,9 +344,9 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
       status: 'APPLIED',
     });
     expect(applications[0].summary_json).toMatchObject({
-      insumosCreated: 7,
-      productsCreated: 5,
-      recipesCreated: 5,
+      insumosCreated: 13,
+      productsCreated: 12,
+      recipesCreated: 8,
     });
     expect(applications[0].applied_at).not.toBeNull();
 
@@ -346,24 +358,24 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
       [tenantApplyId],
     )) as Array<{ target_entity_type: string; count: number }>;
     expect(links).toEqual([
-      { target_entity_type: 'INSUMO', count: 7 },
-      { target_entity_type: 'PRODUCT', count: 5 },
-      { target_entity_type: 'RECIPE_VERSION', count: 5 },
+      { target_entity_type: 'INSUMO', count: 13 },
+      { target_entity_type: 'PRODUCT', count: 12 },
+      { target_entity_type: 'RECIPE_VERSION', count: 8 },
     ]);
 
     // Catalog writes are tenant-local too.
     expect(
       await countAdmin('insumos', 'tenant_id = $1', [tenantApplyId]),
-    ).toBe(7);
+    ).toBe(13);
     expect(
       await countAdmin('products', 'tenant_id = $1', [tenantApplyId]),
-    ).toBe(5);
+    ).toBe(12);
     expect(
       await countAdmin('recipe_versions', 'tenant_id = $1', [tenantApplyId]),
-    ).toBe(5);
+    ).toBe(8);
     expect(
       await countAdmin('uom_conversions', 'tenant_id = $1', [tenantApplyId]),
-    ).toBe(4);
+    ).toBe(9);
   });
 
   it('replays the same idempotency key idempotently with zero duplicate writes', async () => {
@@ -389,9 +401,9 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
       await countAdmin('onboarding_template_seed_links', 'tenant_id = $1', [
         tenantApplyId,
       ]),
-    ).toBe(17);
+    ).toBe(33);
     expect(await countAdmin('insumos', 'tenant_id = $1', [tenantApplyId])).toBe(
-      7,
+      13,
     );
   });
 

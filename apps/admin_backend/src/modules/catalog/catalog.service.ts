@@ -10,6 +10,7 @@ import { CatalogType, isCatalogType } from './catalog-type';
 import { CreateCatalogValueDto } from './dto/create-catalog-value.dto';
 import { UpdateCatalogValueDto } from './dto/update-catalog-value.dto';
 import { ChangeLogService } from '../audit/change-log.service';
+import { UOM_CATALOG } from '../inventory/uom-catalog';
 import type { AuditUser } from '../inventory/product.service';
 
 /**
@@ -21,22 +22,11 @@ import type { AuditUser } from '../inventory/product.service';
 export const DEFAULT_CATALOG_SEED: Readonly<
   Record<CatalogType, ReadonlyArray<{ code: string; name: string }>>
 > = {
-  UOM: [
-    { code: 'kg', name: 'Kilogramo' },
-    { code: 'g', name: 'Gramo' },
-    { code: 'lb', name: 'Libra' },
-    { code: 'oz', name: 'Onza' },
-    { code: 'l', name: 'Litro' },
-    { code: 'ml', name: 'Mililitro' },
-    { code: 'gal', name: 'Galón' },
-    { code: 'un', name: 'Unidad' },
-    { code: 'doc', name: 'Docena' },
-    { code: 'caja', name: 'Caja' },
-    { code: 'paquete', name: 'Paquete' },
-    { code: 'saco', name: 'Saco' },
-    { code: 'servicio', name: 'Servicio' },
-    { code: 'hora', name: 'Hora' },
-  ],
+  // Zona A / #903: derived from the PLATFORM UOM catalog constant (single
+  // source of truth — same codes, names and semantics as uom_catalog /
+  // migration 1809850000000), so a tenant's UOM master data can never drift
+  // from the units the S3 conversion invariant resolves against.
+  UOM: UOM_CATALOG.map((entry) => ({ code: entry.code, name: entry.name })),
   INVENTORY_CATEGORY: [
     { code: 'ABARROTOS', name: 'Abarrotes' },
     { code: 'LACTEOS', name: 'Lácteos' },
@@ -62,6 +52,14 @@ export const DEFAULT_CATALOG_SEED: Readonly<
     { code: 'RETAIL', name: 'Retail' },
     { code: 'LIMPIEZA', name: 'Limpieza' },
     { code: 'OTROS', name: 'Otros' },
+    // T11/F4 — owner-approved menu: alcoholic drinks and desserts are
+    // real sales categories on the industry templates (migration
+    // 1809620000000-ExpandIndustryTemplateMenu). Existing tenants receive
+    // them through the idempotent seed-defaults path — no per-tenant
+    // migration — and a tenant that deactivates/renames them simply stops
+    // resolving template labels onto them (honest absence).
+    { code: 'BEBIDA_ALCOHOLICA', name: 'Bebida alcohólica' },
+    { code: 'POSTRES', name: 'Postres' },
   ],
   SALES_PRODUCT_TYPE: [
     { code: 'PREPARADO', name: 'Preparado (lleva receta/BOM)' },

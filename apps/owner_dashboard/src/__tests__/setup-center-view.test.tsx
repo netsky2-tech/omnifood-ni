@@ -107,9 +107,8 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
 
-    // Lifecycle badge and version
+    // Lifecycle badge (the internal optimistic version is no longer shown)
     expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("En Configuración");
-    expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v3");
 
     // Steps rendered according to readiness
     expect(screen.getByTestId("step-identity")).toHaveTextContent(/Verificado/i);
@@ -118,7 +117,7 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
     expect(screen.getByTestId("step-activation")).toHaveTextContent(/Bloqueado/i);
 
     // Blockers listed
-    expect(screen.getAllByText(/CATALOG_NO_SELLABLE_PRODUCTS/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Todavía no tenés productos para vender/i).length).toBeGreaterThan(0);
 
     // Next recommended action points to Catalog
     expect(screen.getByTestId("next-recommended-action")).toHaveTextContent(/Cargar Primer Producto/i);
@@ -195,7 +194,7 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
     });
 
     expect(screen.getByTestId("legacy-baseline-badge")).toBeInTheDocument();
-    expect(screen.getByTestId("legacy-baseline-badge")).toHaveTextContent(/Tenant Histórico/i);
+    expect(screen.getByTestId("legacy-baseline-badge")).toHaveTextContent(/Negocio existente/i);
   });
 
   it("renders concurrency conflict banner on VERSION_CONFLICT error with reconcile button", async () => {
@@ -240,7 +239,6 @@ describe("ONB1.2 — SetupCenterView Component (State-based Authority & Concurre
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/v3/i)).toBeInTheDocument();
   });
 
   it("triangulates: triggers onNavigateToTab when clicking step action buttons", async () => {
@@ -598,5 +596,130 @@ describe("L1-04b — SetupCenterView Activation Attempt Creation Surface", () =>
       /onboarding:activation:manage/i,
     );
     expect(sentActivationPosts()).toHaveLength(0);
+  });
+});
+
+describe("SetupCenterView — visible base-catalog seeding action (#903 follow-up, S1)", () => {
+  /**
+   * Tenants provisioned before auto-seeding (#903) start with empty master
+   * catalogs (units, categories, types), which blocks the insumo/product
+   * forms. The Setup Center must offer the same seed action the insumos
+   * empty state offers — visibly, with honest copy (it prepares master
+   * catalogs; it does NOT create sellable products, so it must not promise
+   * to clear the no-products activation blocker by itself).
+   */
+  function routeSetupCenterFetch(options: { session?: unknown } = {}) {
+    const sessionResponse = options.session ?? {
+      session: {
+        id: "session-uuid-seed",
+        tenantId: "tenant-sc-1",
+        lifecycleState: OnboardingLifecycleState.SETUP_IN_PROGRESS,
+        onboardingStartedAt: "2026-09-03T18:00:00.000Z",
+        saleReadyFirstAt: null,
+        activationStartedAt: null,
+        activatedAt: null,
+        firstSuccessfulSaleAt: null,
+        firstCustomerSaleAt: null,
+        lastActivityAt: "2026-09-03T18:05:00.000Z",
+        currentActivationAttemptId: null,
+        measurementEligible: true,
+        legacyBaseline: false,
+        optimisticVersion: 3,
+        createdAt: "2026-09-03T18:00:00.000Z",
+        updatedAt: "2026-09-03T18:05:00.000Z",
+      },
+      readiness: {
+        identity: {
+          tenantExists: true,
+          initialOwnerExists: true,
+          ownerCanAuthenticate: true,
+          tenantContextValid: true,
+        },
+        fiscal: {
+          minimumConfigurationValid: true,
+          businessName: "Taquería El Pastor",
+          fiscalRegime: "CUOTA_FIJA",
+          taxRate: 0.0,
+          pricesIncludeTax: true,
+        },
+        catalog: { sellableProductCount: 0, hasSellableProduct: false },
+        saleReady: false,
+        inventoryReady: false,
+        costingReady: false,
+        operationsReady: false,
+        blockers: ["CATALOG_NO_SELLABLE_PRODUCTS"],
+        warnings: [],
+        evaluatedAt: "2026-09-03T18:05:00.000Z",
+      },
+    };
+    fetchSpy.mockImplementation(async (input: string | URL | Request) => {
+      const url = String(input);
+      const okJson = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (url.includes("/onboarding/session")) {
+        return okJson(sessionResponse);
+      }
+      if (url.includes("/onboarding/catalog/summary")) {
+        return okJson({
+          sellableProductCount: 0,
+          hasSellableProduct: false,
+          sampleProducts: [],
+        });
+      }
+      if (url.includes("/onboarding/activation/attempts/active")) {
+        return okJson(null);
+      }
+      if (url.includes("/onboarding/activation/linking-codes")) {
+        return okJson([]);
+      }
+      if (url.includes("/catalogs/seed-defaults")) {
+        return okJson({ inserted: 32 });
+      }
+      return okJson({});
+    });
+  }
+
+  it("offers a visible seed action for a tenant with an empty catalog and POSTs /catalogs/seed-defaults", async () => {
+    routeSetupCenterFetch();
+    const user = userEvent.setup();
+
+    render(
+      <TestWrapper>
+        <SetupCenterView />
+      </TestWrapper>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
+    });
+
+    const seedButton = screen.getByTestId("seed-catalog-defaults-btn");
+    expect(seedButton).toBeInTheDocument();
+    // Honest copy (AP-19 hidden side effect): states plainly that no
+    // sellable products are created by this action.
+    expect(screen.getAllByText(/No crea productos/i).length).toBeGreaterThan(0);
+
+    await user.click(seedButton);
+
+    await waitFor(() => {
+      const seedCalls = fetchSpy.mock.calls.filter((call) =>
+        String(call[0]).includes("/catalogs/seed-defaults"),
+      );
+      expect(seedCalls).toHaveLength(1);
+    });
+
+    // After seeding, onboarding state is invalidated so every card that
+    // reflects catalog readiness refreshes together (S4).
+    await waitFor(() => {
+      const sessionGets = fetchSpy.mock.calls.filter(
+        (call) =>
+          String(call[0]).includes("/onboarding/session") &&
+          (call[1]?.method ?? "GET") === "GET",
+      ).length;
+      expect(sessionGets).toBeGreaterThanOrEqual(2);
+    });
   });
 });

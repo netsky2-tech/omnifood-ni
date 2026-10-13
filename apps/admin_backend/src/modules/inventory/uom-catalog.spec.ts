@@ -53,6 +53,12 @@ describe('uom-catalog (platform)', () => {
       expect(resolveUom('GALON')?.code).toBe('gal_us');
       expect(resolveUom('mililitros')?.code).toBe('ml');
       expect(resolveUom('unidades')?.code).toBe('unidad');
+      // T10/F2b heal: the industry template seed carries uppercase 'UN'
+      // (template_products.uom, template_insumos purchase/consumption uoms).
+      // resolveUom normalizes to lowercase, so the alias 'un' makes every
+      // already-applied tenant row resolve to the unidad entry.
+      expect(resolveUom('UN')?.code).toBe('unidad');
+      expect(resolveUom('UN')?.dimension).toBe('count');
       expect(resolveUom('porciones')?.code).toBe('porcion');
       expect(resolveUom('frasco')?.dimension).toBe('container');
     });

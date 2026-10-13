@@ -225,6 +225,6 @@ describe("ONB1.5F — Accessibility, Stale States & Version Conflict UX Preservi
 
     // Verify blockers section has semantic alert icon and text
     const blockers = screen.getByTestId("review-blockers-section");
-    expect(within(blockers).getByText(/Bloqueadores Obligatorios/i)).toBeInTheDocument();
+    expect(within(blockers).getByText(/Falta para poder vender/i)).toBeInTheDocument();
   });
 });

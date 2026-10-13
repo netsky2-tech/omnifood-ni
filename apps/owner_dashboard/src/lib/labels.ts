@@ -275,3 +275,41 @@ export const backendActivationErrorLabels: Record<string, string> = {
   FISCAL_REVISION_NOT_AVAILABLE:
     "No se pudo registrar la revisión de tu configuración fiscal. Revisá la Configuración Fiscal DGI en el Setup Center e intentá de nuevo.",
 };
+
+/**
+ * Onboarding readiness blockers (setup-center-view.tsx, sale-ready review and
+ * step cards). Keys are the exact codes emitted by
+ * apps/admin_backend/src/modules/onboarding/services/onboarding-readiness.evaluator.ts
+ * plus the frontend-only PREREQUISITES_NOT_MET. Owner-facing sentences, never
+ * raw codes; unknown codes pass through untouched via `localize`.
+ */
+export const onboardingBlockerLabels: Record<string, string> = {
+  IDENTITY_TENANT_INVALID:
+    "Hay un problema con la identidad de tu negocio. Contactá a soporte para revisar tu cuenta.",
+  IDENTITY_OWNER_NOT_READY:
+    "Tu cuenta de propietario no está activa. Iniciá sesión como propietario o pedile ayuda a soporte.",
+  FISCAL_CONFIGURATION_INCOMPLETE:
+    "Faltan tus datos fiscales: razón social, RUC y régimen tributario (Cuota Fija o Régimen General).",
+  FISCAL_FX_RATE_NOT_CONFIGURED:
+    "Falta definir tu tipo de cambio comercial: cuántos córdobas vale un dólar para tus ventas.",
+  FISCAL_OPERATION_MODE_NOT_CONFIGURED:
+    "Falta definir cómo opera tu negocio: restaurante, food park o mixto.",
+  CATALOG_NO_SELLABLE_PRODUCTS:
+    "Todavía no tenés productos para vender. Agregá al menos un producto con precio de venta.",
+  PREREQUISITES_NOT_MET:
+    "Completá los pasos anteriores para poder activar la terminal.",
+};
+
+/**
+ * Onboarding readiness warnings — non-blocking notices shown in the
+ * sale-ready review. Keys are the codes emitted by the readiness evaluator;
+ * unknown codes pass through untouched via `localize`.
+ */
+export const onboardingWarningLabels: Record<string, string> = {
+  COSTING_PENDING_PROVENANCE:
+    "Algunos productos todavía no tienen costo registrado. Podés vender igual: el costo se completa cuando registres tus compras.",
+  INVENTORY_NOT_INITIALIZED_OPTIONAL:
+    "No configuraste existencias iniciales. Podés vender con stock en cero y completar el inventario después.",
+  INVENTORY_ENRICHMENT_PENDING:
+    "Hay detalles de inventario que podés completar más adelante (mínimos, almacenes). No afectan la venta.",
+};

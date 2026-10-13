@@ -83,6 +83,8 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
       businessName: 'Comedor Central',
       fiscalRegime: 'GENERAL',
       taxRate: 15,
+      operationMode: 'RESTAURANT',
+      commercialFxSpreadConfigured: true,
     });
     catalogPort.evaluateCatalogReadiness.mockResolvedValue({
       sellableProductCount: 2,
@@ -155,6 +157,8 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
       businessName: 'Comedor Central',
       fiscalRegime: 'GENERAL',
       taxRate: 15,
+      operationMode: 'RESTAURANT',
+      commercialFxSpreadConfigured: true,
     });
     catalogPort.evaluateCatalogReadiness.mockResolvedValue({
       sellableProductCount: 2,
@@ -211,6 +215,8 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     });
     fiscalPort.evaluateFiscalReadiness.mockResolvedValue({
       minimumConfigurationValid: true,
+      operationMode: 'RESTAURANT',
+      commercialFxSpreadConfigured: true,
     });
     catalogPort.evaluateCatalogReadiness.mockResolvedValue({
       sellableProductCount: 0,
@@ -265,6 +271,8 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     });
     fiscalPort.evaluateFiscalReadiness.mockResolvedValue({
       minimumConfigurationValid: false,
+      operationMode: null,
+      commercialFxSpreadConfigured: true,
     });
     catalogPort.evaluateCatalogReadiness.mockResolvedValue({
       sellableProductCount: 5,
@@ -308,5 +316,137 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
 
     expect(snapshot.saleReady).toBe(false);
     expect(snapshot.blockers).toContain('FISCAL_CONFIGURATION_INCOMPLETE');
+  });
+
+  it('blocks saleReady with FISCAL_FX_RATE_NOT_CONFIGURED and FISCAL_OPERATION_MODE_NOT_CONFIGURED when the tenant never configured its FX rate or operation mode (hard activation gate)', async () => {
+    // Fiscal minimum (name + regime + RUC) is valid, but the tenant never
+    // configured COMMERCIAL_FX_SPREAD nor OPERATION_MODE — the read model
+    // reports absence explicitly instead of silently rebasing to defaults.
+    identityPort.evaluateIdentityReadiness.mockResolvedValue({
+      tenantExists: true,
+      initialOwnerExists: true,
+      ownerCanAuthenticate: true,
+      tenantContextValid: true,
+    });
+    fiscalPort.evaluateFiscalReadiness.mockResolvedValue({
+      minimumConfigurationValid: true,
+      operationMode: null,
+      commercialFxSpreadConfigured: false,
+    });
+    catalogPort.evaluateCatalogReadiness.mockResolvedValue({
+      sellableProductCount: 2,
+      hasSellableProduct: true,
+    });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: true,
+      scope: 'BASIC',
+      warehouseCount: 1,
+      trackedProductCount: 2,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 0,
+      hasDefaultWarehouse: true,
+      notes: [],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: true,
+      totalProducts: 2,
+      knownCostCount: 2,
+      pendingCostCount: 0,
+      notApplicableCount: 0,
+      items: [],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: true,
+      staffCount: 2,
+      additionalStaffCount: 1,
+      publishedRecipeCount: 1,
+      supplierCount: 1,
+      categoryCount: 2,
+      details: {
+        hasAdditionalStaff: true,
+        hasPublishedRecipes: true,
+        hasSuppliers: true,
+        hasCategories: true,
+      },
+      notes: [],
+    });
+
+    const snapshot = await evaluator.evaluate('tenant-unconfigured');
+
+    // BLOCKERS, not warnings (owner decision): they must gate saleReady.
+    expect(snapshot.saleReady).toBe(false);
+    expect(snapshot.blockers).toContain('FISCAL_FX_RATE_NOT_CONFIGURED');
+    expect(snapshot.blockers).toContain(
+      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
+    );
+    // The pre-existing fiscal minimum stays intact — these are new, additive
+    // blockers, not a warning-only downgrade of the existing signal.
+    expect(snapshot.blockers).not.toContain('FISCAL_CONFIGURATION_INCOMPLETE');
+    expect(snapshot.warnings).not.toContain('FISCAL_FX_RATE_NOT_CONFIGURED');
+    expect(snapshot.warnings).not.toContain(
+      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
+    );
+  });
+
+  it('blocks saleReady with only FISCAL_OPERATION_MODE_NOT_CONFIGURED when the FX rate is configured but the operation mode is not', async () => {
+    identityPort.evaluateIdentityReadiness.mockResolvedValue({
+      tenantExists: true,
+      initialOwnerExists: true,
+      ownerCanAuthenticate: true,
+      tenantContextValid: true,
+    });
+    fiscalPort.evaluateFiscalReadiness.mockResolvedValue({
+      minimumConfigurationValid: true,
+      operationMode: null,
+      commercialFxSpreadConfigured: true,
+    });
+    catalogPort.evaluateCatalogReadiness.mockResolvedValue({
+      sellableProductCount: 2,
+      hasSellableProduct: true,
+    });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: true,
+      scope: 'BASIC',
+      warehouseCount: 1,
+      trackedProductCount: 2,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 0,
+      hasDefaultWarehouse: true,
+      notes: [],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: true,
+      totalProducts: 2,
+      knownCostCount: 2,
+      pendingCostCount: 0,
+      notApplicableCount: 0,
+      items: [],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: true,
+      staffCount: 2,
+      additionalStaffCount: 1,
+      publishedRecipeCount: 1,
+      supplierCount: 1,
+      categoryCount: 2,
+      details: {
+        hasAdditionalStaff: true,
+        hasPublishedRecipes: true,
+        hasSuppliers: true,
+        hasCategories: true,
+      },
+      notes: [],
+    });
+
+    const snapshot = await evaluator.evaluate('tenant-missing-mode');
+
+    expect(snapshot.saleReady).toBe(false);
+    expect(snapshot.blockers).toContain(
+      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
+    );
+    expect(snapshot.blockers).not.toContain('FISCAL_FX_RATE_NOT_CONFIGURED');
+    expect(snapshot.warnings).not.toContain(
+      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
+    );
   });
 });

@@ -25,6 +25,9 @@ import {
 } from '../../inventory/entities/recipe-version.entity';
 import { TemplateApplication } from '../entities/template-application.entity';
 import { ApplyTemplateResult } from '../dto/apply-template.dto';
+import { FiscalSetupService } from './fiscal-setup.service';
+import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { CATALOG_TYPE } from '../../catalog/catalog-type';
 
 describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let service: IndustryTemplateService;
@@ -40,6 +43,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
   let uomConversionRepo: jest.Mocked<Repository<UomConversion>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
+  let fiscalSetupService: { getFiscalSetup: jest.Mock };
 
   const mockTemplates: IndustryTemplate[] = [
     {
@@ -240,6 +244,15 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       ),
     } as unknown as jest.Mocked<DataSource>;
 
+    // T10/F1: the fiscal setup is stubbed; the default mirrors a Régimen
+    // General tenant so legacy tests keep their historical expectations.
+    fiscalSetupService = {
+      getFiscalSetup: jest.fn().mockResolvedValue({
+        taxRateIva: 0.15,
+        pricesIncludeTax: true,
+      }),
+    };
+
     service = new IndustryTemplateService(
       templateRepo,
       templateInsumoRepo,
@@ -252,6 +265,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       recipeRepo,
       uomConversionRepo,
       dataSource,
+      fiscalSetupService as unknown as FiscalSetupService,
     );
   });
 
@@ -768,6 +782,116 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
     // SUGGESTIONS requiring review (not a bare count), and a re-apply must
     // report what it skipped and why instead of being a silent no-op. The
     // skip guard itself keeps its exact behaviour.
+    // T7/S9 — every product created from a template must be sellable: a
+    // template row without a positive suggested_price used to become a
+    // sellPrice-0 product that looked valid in the catalog and silently
+    // blocked activation. The apply must reject that template data defect
+    // up front, all-or-nothing, with the offending items named.
+    describe('T7/S9 — template seed fills produce sellable products', () => {
+      const healthyTemplate = (): IndustryTemplate => ({
+        id: 'RETAIL_MINIMARKET',
+        code: 'RETAIL_MINIMARKET',
+        name: 'Retail & Minimarket',
+        description: 'Plantilla minimarket',
+        icon: 'shopping-cart',
+        is_active: true,
+        version: 1,
+        source_fingerprint: 'fp-retail',
+        created_at: new Date(),
+        updated_at: new Date(),
+        templateInsumos: [],
+        templateProducts: [
+          {
+            id: 'tp-coca',
+            template_id: 'RETAIL_MINIMARKET',
+            template: null,
+            name: 'Gaseosa Coca Cola 500ml',
+            category: 'Bebidas',
+            uom: 'UN',
+            suggested_price: 35.0,
+            is_perishable: false,
+            product_type: ProductType.SIMPLE,
+            created_at: new Date(),
+            updated_at: new Date(),
+            recipeItems: [],
+          },
+          {
+            id: 'tp-agua',
+            template_id: 'RETAIL_MINIMARKET',
+            template: null,
+            name: 'Agua Embotellada 600ml',
+            category: 'Bebidas',
+            uom: 'UN',
+            suggested_price: 20.0,
+            is_perishable: false,
+            product_type: ProductType.SIMPLE,
+            created_at: new Date(),
+            updated_at: new Date(),
+            recipeItems: [],
+          },
+        ],
+      });
+
+      const savedProducts = (): Product[] =>
+        (mockManager.save as jest.Mock).mock.calls
+          .filter(([entityClass]) => entityClass === Product)
+          .map(([, entity]) => entity as Product);
+
+      it('rejects the apply with 400 naming every unpriced template item and creates zero products (RED)', async () => {
+        const fixture = healthyTemplate();
+        (fixture.templateProducts[1] as { suggested_price?: number }).
+          suggested_price = 0;
+        templateRepo.findOne.mockResolvedValue(fixture);
+        mockManager.find.mockResolvedValue([]);
+
+        await expect(
+          service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
+        ).rejects.toThrow(/Agua Embotellada 600ml/);
+        await expect(
+          service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
+        ).rejects.toThrow(BadRequestException);
+
+        // All-or-nothing: nothing created, not even the priced sibling.
+        expect(savedProducts()).toHaveLength(0);
+        expect(
+          (mockManager.save as jest.Mock).mock.calls.filter(
+            ([entityClass]) => entityClass === Insumo,
+          ),
+        ).toHaveLength(0);
+      });
+
+      it('creates every product of a healthy template with sellPrice > 0 (GREEN triangulation)', async () => {
+        templateRepo.findOne.mockResolvedValueOnce(healthyTemplate());
+        mockManager.find.mockResolvedValue([]);
+
+        const result = await service.applyTemplate(
+          tenantId,
+          'RETAIL_MINIMARKET',
+        );
+
+        expect(result.productsCreated).toBe(2);
+        const products = savedProducts();
+        expect(products).toHaveLength(2);
+        for (const product of products) {
+          expect(product.sellPrice).toBeGreaterThan(0);
+        }
+      });
+
+      it('names every unpriced item, not just the first (triangulation)', async () => {
+        const fixture = healthyTemplate();
+        fixture.templateProducts[0].suggested_price = -5;
+        fixture.templateProducts[1].suggested_price = undefined as never;
+        templateRepo.findOne.mockResolvedValueOnce(fixture);
+        mockManager.find.mockResolvedValue([]);
+
+        await expect(
+          service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
+        ).rejects.toThrow(
+          /Gaseosa Coca Cola 500ml.*Agua Embotellada 600ml/s,
+        );
+      });
+    });
+
     describe('#523 T5/T7 — honest apply result', () => {
       const existingInsumo: Insumo = {
         id: 'existing-ins-1',
@@ -948,6 +1072,204 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
           '1 receta creada como sugerencia pendiente de revisión',
         );
         expect(replay.recipesSkipped).toEqual([]);
+      });
+    });
+
+    // T10/F1 + T10/F3 — the template apply must inherit the tenant's fiscal
+    // tax rate and resolve template display categories to the tenant's
+    // canonical SALES_PRODUCT_CATEGORY codes.
+    describe('T10 F1/F3 — fiscal tax rate inheritance and canonical category mapping', () => {
+      const seededSalesCategories: CatalogValue[] = (
+        [
+          ['COMIDA', 'Comida'],
+          ['BEBIDA_CALIENTE', 'Bebida caliente'],
+          ['BEBIDA_FRIA', 'Bebida fría'],
+          ['PANADERIA', 'Panadería'],
+          ['SNACK', 'Snack'],
+          ['RETAIL', 'Retail'],
+          ['LIMPIEZA', 'Limpieza'],
+          ['OTROS', 'Otros'],
+          // T11/F4 — codes the platform seed now carries for the
+          // owner-approved industry menu.
+          ['BEBIDA_ALCOHOLICA', 'Bebida alcohólica'],
+          ['POSTRES', 'Postres'],
+        ] as const
+      ).map(([code, name], idx) => ({
+        id: `cat-${idx}`,
+        tenant_id: tenantId,
+        catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+        code,
+        name,
+        is_active: true,
+      })) as CatalogValue[];
+
+      const savedProducts = (): Product[] =>
+        (mockManager.save as jest.Mock).mock.calls
+          .filter(([entityClass]) => entityClass === Product)
+          .map(([, entity]) => entity as Product);
+
+      const stubTenantCatalog = (): void => {
+        mockManager.find.mockImplementation((entityClass: unknown) => {
+          if (entityClass === CatalogValue)
+            return Promise.resolve(seededSalesCategories);
+          return Promise.resolve([] as unknown as never[]);
+        });
+      };
+
+      beforeEach(() => {
+        templateRepo.findOne.mockResolvedValue(mockTemplates[0]);
+        stubTenantCatalog();
+      });
+
+      describe('T10/F1 — created products inherit the tenant fiscal tax rate', () => {
+        it('creates products with tax_rate 0 under a Cuota Fija fiscal setup (taxRateIva 0)', async () => {
+          fiscalSetupService.getFiscalSetup.mockResolvedValue({
+            taxRateIva: 0,
+            pricesIncludeTax: true,
+          });
+
+          await service.applyTemplate(tenantId, 'CAFETERIA');
+
+          const products = savedProducts();
+          expect(products).toHaveLength(1);
+          // The POS invoices with the product's own taxRate (inbound product
+          // contract): a Cuota Fija tenant must never get template products
+          // silently invoiced at the entity default 0.15.
+          expect(products[0].tax_rate).toBe(0);
+        });
+
+        it('creates products with tax_rate 0.15 under Régimen General', async () => {
+          fiscalSetupService.getFiscalSetup.mockResolvedValue({
+            taxRateIva: 0.15,
+            pricesIncludeTax: true,
+          });
+
+          await service.applyTemplate(tenantId, 'CAFETERIA');
+
+          expect(savedProducts()[0].tax_rate).toBe(0.15);
+        });
+      });
+
+      describe('T10/F3 — template display labels resolve to canonical category codes', () => {
+        it("maps 'Bebidas Calientes' to the tenant's BEBIDA_CALIENTE catalog code", async () => {
+          await service.applyTemplate(tenantId, 'CAFETERIA');
+
+          const products = savedProducts();
+          expect(products).toHaveLength(1);
+          expect(products[0].name).toBe('Capuchino 8oz');
+          expect(products[0].category_code).toBe('BEBIDA_CALIENTE');
+        });
+
+        it('leaves labels with no honest canonical target as category_code null', async () => {
+          const unmappedTemplate: IndustryTemplate = {
+            ...mockTemplates[2],
+            templateProducts: [
+              {
+                id: 'tp-general',
+                template_id: 'RETAIL_MINIMARKET',
+                template: null,
+                name: 'Producto General',
+                // 'General' is a placeholder, not a classification — it has
+                // no honest canonical target and stays category_code null.
+                category: 'General',
+                uom: 'UN',
+                suggested_price: 10.0,
+                is_perishable: false,
+                product_type: ProductType.SIMPLE,
+                created_at: new Date(),
+                updated_at: new Date(),
+                recipeItems: [],
+              },
+            ],
+          };
+          templateRepo.findOne.mockResolvedValue(unmappedTemplate);
+
+          await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
+
+          const products = savedProducts();
+          expect(products).toHaveLength(1);
+          expect(products[0].category_code).toBeNull();
+        });
+
+        // T11/F4 — owner-approved menu: the platform seed gained
+        // BEBIDA_ALCOHOLICA and POSTRES, and the menu's own labels
+        // ('Bebidas frías', 'Bebidas' on RETAIL bottled cold drinks,
+        // 'Panadería', 'Retail') must resolve to honest canonical codes.
+        describe('T11/F4 — owner-approved menu category labels', () => {
+          const normalizeForId = (raw: string): string =>
+            raw
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-zA-Z0-9]/g, '');
+
+          const buildLabelTemplate = (
+            category: string,
+          ): IndustryTemplate => ({
+            ...mockTemplates[2],
+            templateProducts: [
+              {
+                id: `tp-label-${normalizeForId(category)}`,
+                template_id: 'RETAIL_MINIMARKET',
+                template: null,
+                name: `Producto ${category}`,
+                category,
+                uom: 'UN',
+                suggested_price: 10.0,
+                is_perishable: false,
+                product_type: ProductType.SIMPLE,
+                created_at: new Date(),
+                updated_at: new Date(),
+                recipeItems: [],
+              },
+            ],
+          });
+
+          it.each([
+            ['Bebidas Alcohólicas', 'BEBIDA_ALCOHOLICA'],
+            ['Bebidas frías', 'BEBIDA_FRIA'],
+            ['Bebidas', 'BEBIDA_FRIA'],
+            ['Panadería', 'PANADERIA'],
+            ['Retail', 'RETAIL'],
+            ['Postres', 'POSTRES'],
+          ])(
+            'maps %s to the tenant catalog code %s (via map or normalized name)',
+            async (label: string, expectedCode: string) => {
+              templateRepo.findOne.mockResolvedValue(
+                buildLabelTemplate(label),
+              );
+
+              await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
+
+              expect(savedProducts()[0].category_code).toBe(expectedCode);
+            },
+          );
+
+          it('keeps the honest-null fallback for labels outside the map and tenant catalog', async () => {
+            templateRepo.findOne.mockResolvedValue(
+              buildLabelTemplate('Cigarrería'),
+            );
+
+            await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
+
+            expect(savedProducts()[0].category_code).toBeNull();
+          });
+        });
+
+        it('never invents a code the tenant catalog does not carry', async () => {
+          // Same label that maps to BEBIDA_CALIENTE above, but a tenant whose
+          // catalog lacks the code must get null, not an invented value.
+          mockManager.find.mockImplementation((entityClass: unknown) => {
+            if (entityClass === CatalogValue)
+              return Promise.resolve([
+                seededSalesCategories.find((v) => v.code === 'COMIDA'),
+              ]);
+            return Promise.resolve([] as unknown as never[]);
+          });
+
+          await service.applyTemplate(tenantId, 'CAFETERIA');
+
+          expect(savedProducts()[0].category_code).toBeNull();
+        });
       });
     });
   });

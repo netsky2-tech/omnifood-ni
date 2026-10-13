@@ -41,6 +41,12 @@ export interface FiscalReadinessResult {
   fiscalRegime?: string;
   taxRate?: number;
   pricesIncludeTax?: boolean;
+  /** Business operation mode (restaurante/foodpark/mixto); null when never
+   * configured (mirrors backend FiscalReadinessResult, T4/S7 hard gate). */
+  operationMode?: string | null;
+  /** True only when the tenant explicitly stored a commercial FX rate — the
+   * 36.5 default must never silently satisfy the activation gate. */
+  commercialFxSpreadConfigured?: boolean;
 }
 
 export interface CatalogReadinessResult {

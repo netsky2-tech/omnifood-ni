@@ -154,14 +154,16 @@ describe("ONB1.5D/E — Legacy Baseline & Visible Scope Guardrails", () => {
     // Explicit legacy badge in header
     const badge = screen.getByTestId("legacy-baseline-badge");
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveTextContent(/Tenant Histórico/i);
-    expect(badge).toHaveTextContent(/Sin métrica TTFSS/i);
+    expect(badge).toHaveTextContent(/Negocio existente/i);
+    
 
     // Legacy baseline notice banner
     const legacyBanner = screen.getByTestId("legacy-baseline-banner");
     expect(legacyBanner).toBeInTheDocument();
-    expect(within(legacyBanner).getByText(/Métrica TTFSS no aplicable/i)).toBeInTheDocument();
-    expect(within(legacyBanner).getByText(/measurementEligible: false/i)).toBeInTheDocument();
+    expect(within(legacyBanner).getByText(/Negocio existente/i)).toBeInTheDocument();
+    expect(
+      within(legacyBanner).getByText(/no te mostramos ese indicador/i),
+    ).toBeInTheDocument();
 
     // Activation button is NOT blocked by legacy state
     const activationBtn = screen.getByTestId("start-pos-terminal-btn");

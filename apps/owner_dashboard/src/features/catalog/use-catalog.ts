@@ -68,6 +68,10 @@ export function useSeedCatalogDefaults() {
     mutationFn: () => seedCatalogDefaults(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["catalog", tenantId] });
+      // The Setup Center renders readiness from onboarding queries (catalog
+      // summary + session). Invalidate the whole prefix so every card that
+      // reflects catalog state refreshes together after seeding.
+      queryClient.invalidateQueries({ queryKey: ["onboarding"] });
     },
   });
 }

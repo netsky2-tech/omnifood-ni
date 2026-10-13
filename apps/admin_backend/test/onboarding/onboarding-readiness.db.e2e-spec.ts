@@ -194,6 +194,26 @@ async function withReadinessIsolatedSchema(
       }),
     ]);
 
+    // Issue #903 hard gate (S7): fiscal readiness now also requires an
+    // explicitly configured commercial FX rate and business operation mode.
+    // Seed them for both tenants so the legacy lifecycle scenarios exercise
+    // the lifecycle itself (the gate has dedicated unit coverage).
+    const sysParamRepo = dataSource.getRepository(SystemParametersConfig);
+    await sysParamRepo.save(
+      [tenantAId, tenantBId].flatMap((tenantId) => [
+        sysParamRepo.create({
+          tenant_id: tenantId,
+          paramKey: 'COMMERCIAL_FX_SPREAD',
+          paramValue: 36.5,
+        }),
+        sysParamRepo.create({
+          tenant_id: tenantId,
+          paramKey: 'OPERATION_MODE',
+          paramValue: 'RESTAURANT',
+        }),
+      ]),
+    );
+
     const ownerAId = randomUUID();
     const ownerBId = randomUUID();
 

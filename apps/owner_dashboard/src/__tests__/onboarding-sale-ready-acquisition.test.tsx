@@ -255,6 +255,24 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
         );
       }
 
+      if (urlStr.includes("/catalogs/UOM")) {
+        return new Response(
+          JSON.stringify([
+            { id: "u1", tenant_id: "tenant-alpha", catalog_type: "UOM", code: "UN", name: "Unidad", is_active: true, sort_order: 1, created_at: "", updated_at: "" },
+            { id: "u2", tenant_id: "tenant-alpha", catalog_type: "UOM", code: "DOCENA", name: "Docena", is_active: true, sort_order: 2, created_at: "", updated_at: "" },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (urlStr.includes("/catalogs/SALES_PRODUCT_CATEGORY")) {
+        return new Response(
+          JSON.stringify([
+            { id: "c1", tenant_id: "tenant-alpha", catalog_type: "SALES_PRODUCT_CATEGORY", code: "COMIDA", name: "Comida", is_active: true, sort_order: 1, created_at: "", updated_at: "" },
+            { id: "c2", tenant_id: "tenant-alpha", catalog_type: "SALES_PRODUCT_CATEGORY", code: "BEBIDAS", name: "Bebidas", is_active: true, sort_order: 2, created_at: "", updated_at: "" },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
       return new Response(
         JSON.stringify({}),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -335,8 +353,8 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
       expect(screen.getByText("¡Listo para Venta!")).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/Catálogo Vendible Activo con Precio/i)).toBeInTheDocument();
-    expect(screen.getByText(/Inventario inicial \(Stock y Costos\): Opcional no bloqueante/i)).toBeInTheDocument();
+    expect(screen.getByText(/Al menos un producto activo con precio de venta/i)).toBeInTheDocument();
+    expect(screen.getByText(/Inventario inicial \(existencias y costos\): opcional, no bloquea la venta/i)).toBeInTheDocument();
   });
 
   it("Setup Center allows acquiring catalog via Industry Template (M3 safe writer, AC-11, AC-12, AC-50)", async () => {
@@ -365,6 +383,69 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
 
     await waitFor(() => {
       expect(screen.getByTestId("sale-ready-review-card")).toBeInTheDocument();
+    });
+  });
+
+  it("manual product form is aligned with the products form: catalog-backed selects, 2-decimal price, name cap (T8/S10)", async () => {
+    serverReadiness.fiscal.minimumConfigurationValid = true;
+    serverReadiness.blockers = ["CATALOG_NO_SELLABLE_PRODUCTS"];
+
+    const user = userEvent.setup();
+    render(<SetupCenterView />, { wrapper: TestWrapper });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("catalog-step-action-btn")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("catalog-step-action-btn"));
+    await user.click(screen.getByTestId("choose-manual-btn"));
+    expect(screen.getByTestId("manual-product-view")).toBeInTheDocument();
+
+    // UOM is a catalog-backed select (same contract as the products form) —
+    // free-text units break the canonical UOM conversion invariant.
+    const uomSelect = screen.getByTestId("manual-product-uom-input") as HTMLSelectElement;
+    expect(uomSelect.tagName).toBe("SELECT");
+    const uomOptions = Array.from(uomSelect.options).map((o) => o.value);
+    expect(uomOptions).toContain("UN");
+    expect(uomOptions).toContain("DOCENA");
+    expect(uomSelect.value).toBe("UN");
+
+    // Category is a catalog-backed select with an explicit "no category"
+    // option — no free-text codes that may not exist in the tenant catalog.
+    const categorySelect = screen.getByTestId("manual-product-category-input") as HTMLSelectElement;
+    expect(categorySelect.tagName).toBe("SELECT");
+    const categoryOptions = Array.from(categorySelect.options).map((o) => o.value);
+    expect(categoryOptions).toContain("");
+    expect(categoryOptions).toContain("COMIDA");
+    expect(categoryOptions).not.toContain("GENERAL");
+
+    // Price accepts two decimals (no 0.50 step lock like the products form)
+    const priceInput = screen.getByTestId("manual-product-price-input");
+    expect(priceInput.getAttribute("step")).toBe("0.01");
+
+    // Filling name + a 2-decimal price with catalog-backed selects submits
+    // the exact canonical payload.
+    fireEvent.change(screen.getByTestId("manual-product-name-input"), {
+      target: { value: "Café Americano 8oz" },
+    });
+    fireEvent.change(priceInput, { target: { value: "45.99" } });
+    fireEvent.change(categorySelect, { target: { value: "COMIDA" } });
+    fireEvent.submit(screen.getByTestId("manual-product-form"));
+
+    await waitFor(() => {
+      const posts = fetchSpy.mock.calls.filter(
+        (call) =>
+          String(call[0]).includes("/onboarding/catalog/manual-product") &&
+          (call[1]?.method ?? "GET") === "POST",
+      );
+      expect(posts).toHaveLength(1);
+      const firstPost = posts[0];
+      expect(firstPost).toBeDefined();
+      expect(JSON.parse(String(firstPost?.[1]?.body))).toEqual({
+        name: "Café Americano 8oz",
+        sellPrice: 45.99,
+        uom: "UN",
+        category_code: "COMIDA",
+      });
     });
   });
 });

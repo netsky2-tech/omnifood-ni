@@ -27,6 +27,8 @@ import {
   useUploadImportBatch,
 } from "../settings/use-settings";
 import { useCreateManualProduct } from "./use-onboarding";
+import { useCatalogValues } from "../catalog/use-catalog";
+import type { CatalogType } from "../catalog/types";
 import { isVersionConflictError } from "./onboarding-api";
 import { toast } from "@/hooks/use-toast";
 import { getApiErrorMessage } from "@/lib/api-error";
@@ -90,6 +92,25 @@ export function CatalogAcquisitionModal({
   // Manual product mutation
   const createManualMutation = useCreateManualProduct();
 
+  // T8/S10: master catalog options back the UOM and category selects — the
+  // same contract as the products management form. Free-text units or
+  // category codes break the canonical UOM/conversion invariant (#901).
+  const { data: uomValues } = useCatalogValues("UOM" as CatalogType);
+  const { data: categoryValues } = useCatalogValues("SALES_PRODUCT_CATEGORY" as CatalogType);
+  // First-use fallback: before the tenant seeds its catalogs (Setup Center
+  // "Preparar catálogos base" action), the canonical platform unit UN stays
+  // selectable so the form is never a dead end.
+  const uomOptions = (() => {
+    // Defensive Array.isArray (module precedent): a malformed catalog
+    // response degrades to the UN fallback instead of crashing the modal.
+    const list = (Array.isArray(uomValues) ? uomValues : []).map((v) => ({
+      code: v.code,
+      name: v.name,
+    }));
+    if (!list.some((o) => o.code === "UN")) list.unshift({ code: "UN", name: "Unidad" });
+    return list;
+  })();
+
   // CSV Import quick form
   const uploadBatchMutation = useUploadImportBatch();
   const commitImportMutation = useCommitImport();
@@ -106,7 +127,9 @@ export function CatalogAcquisitionModal({
       name: "",
       sellPrice: 35.0,
       uom: "UN",
-      category_code: "GENERAL",
+      // No category by default: an invented "GENERAL" code may not exist in
+      // the tenant's category catalog (never silently satisfy a field).
+      category_code: "",
     },
   });
 
@@ -448,7 +471,10 @@ export function CatalogAcquisitionModal({
                     placeholder="Ej. Café Americano 8oz"
                     className="text-xs"
                     data-testid="manual-product-name-input"
-                    {...register("name", { required: "El nombre es obligatorio" })}
+                    {...register("name", {
+                      required: "El nombre es obligatorio",
+                      maxLength: { value: 200, message: "El nombre no puede superar 200 caracteres" },
+                    })}
                   />
                   {manualErrors.name && (
                     <p className="text-[11px] text-destructive">{manualErrors.name.message}</p>
@@ -460,7 +486,7 @@ export function CatalogAcquisitionModal({
                   <Input
                     id="manual-price"
                     type="number"
-                    step="0.50"
+                    step="0.01"
                     min="0.01"
                     placeholder="40.00"
                     className="text-xs"
@@ -468,6 +494,10 @@ export function CatalogAcquisitionModal({
                     {...register("sellPrice", {
                       required: "El precio debe ser mayor a cero",
                       min: { value: 0.01, message: "El precio debe ser mayor a cero" },
+                      validate: {
+                        twoDecimals: (v) =>
+                          !/\.\d{3,}$/.test(String(v)) || "Usá hasta dos decimales",
+                      },
                       valueAsNumber: true,
                     })}
                   />
@@ -477,25 +507,41 @@ export function CatalogAcquisitionModal({
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="manual-uom" className="text-xs">Unidad de Medida</Label>
-                  <Input
+                  <Label htmlFor="manual-uom" className="text-xs">Unidad de Medida *</Label>
+                  <select
                     id="manual-uom"
-                    placeholder="UN"
-                    className="text-xs"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid="manual-product-uom-input"
-                    {...register("uom")}
-                  />
+                    aria-label="Unidad de medida"
+                    {...register("uom", { required: "Elegí la unidad de medida" })}
+                  >
+                    {uomOptions.map((o) => (
+                      <option key={o.code} value={o.code}>
+                        {o.name} ({o.code})
+                      </option>
+                    ))}
+                  </select>
+                  {manualErrors.uom && (
+                    <p className="text-[11px] text-destructive">{manualErrors.uom.message}</p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5 md:col-span-2">
                   <Label htmlFor="manual-category" className="text-xs">Categoría (Opcional)</Label>
-                  <Input
+                  <select
                     id="manual-category"
-                    placeholder="Ej. BEBIDAS"
-                    className="text-xs"
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     data-testid="manual-product-category-input"
+                    aria-label="Categoría"
                     {...register("category_code")}
-                  />
+                  >
+                    <option value="">Sin categoría</option>
+                    {(Array.isArray(categoryValues) ? categoryValues : []).map((v) => (
+                      <option key={v.code} value={v.code}>
+                        {v.name} ({v.code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -511,7 +557,7 @@ export function CatalogAcquisitionModal({
                   className="bg-emerald-600 hover:bg-emerald-700 text-white focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
                 >
                   {createManualMutation.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />}
-                  Guardar y Habilitar Venta
+                  Guardar producto
                 </Button>
               </div>
             </form>

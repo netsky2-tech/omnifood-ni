@@ -260,6 +260,13 @@ export interface FiscalSetupResponse {
   taxRateIva: number;
   pricesIncludeTax: boolean;
   commercialFxSpread: number;
+  /**
+   * Hard activation gate (T4/S7): true only when the raw COMMERCIAL_FX_SPREAD
+   * param is a number — the spread VALUE still falls back to the canonical
+   * 36.5, but absence must stay distinguishable from "configured with the POS
+   * default" (D-16 spirit), because onboarding activation blocks on this flag.
+   */
+  commercialFxSpreadConfigured: boolean;
   /** BXW-007 U1 rev 2: null = the tenant never configured it (required key, nullable value). */
   operationMode: TenantOperationMode | null;
   /** BXW-007 U1 rev 2: null = the tenant never configured it (required key, nullable value). */

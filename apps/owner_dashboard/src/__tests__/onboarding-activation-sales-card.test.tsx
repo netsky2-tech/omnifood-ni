@@ -138,11 +138,11 @@ describe("SetupCenterView — ONB1.9G Activation & First Customer Sale Observati
     // 2. Consolidated TTFSS claim is displayed
     const ttfssCard = screen.getByTestId("onboarding-ttfss-claim");
     expect(ttfssCard).toBeInTheDocument();
-    expect(ttfssCard).toHaveTextContent("TTFSS Consolidado (Venta Técnica M6)");
+    expect(ttfssCard).toHaveTextContent("Primera venta técnica (activación)");
 
     // 3. First Customer Sale is displayed
     const customerSaleCard = screen.getByTestId("onboarding-first-customer-sale");
     expect(customerSaleCard).toBeInTheDocument();
-    expect(customerSaleCard).toHaveTextContent("Primer Ticket Comercial Cliente Final");
+    expect(customerSaleCard).toHaveTextContent("Primera venta real (cliente final)");
   });
 });

@@ -13,6 +13,9 @@ import { TemplateProduct } from '../entities/template-product.entity';
 import { TemplateRecipeItem } from '../entities/template-recipe-item.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
+import { FiscalSetupService } from './fiscal-setup.service';
+import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import {
   RecipeOrigin,
   RecipePublicationState,
@@ -49,6 +52,64 @@ const round4 = (val: number | string): number => {
   return Number(num.toFixed(SCALE_4));
 };
 
+/** Canonical SALES_PRODUCT_CATEGORY codes the seeded catalog actually carries. */
+const CATALOG_TYPE_CODE = {
+  BEBIDA_CALIENTE: 'BEBIDA_CALIENTE',
+  BEBIDA_FRIA: 'BEBIDA_FRIA',
+  BEBIDA_ALCOHOLICA: 'BEBIDA_ALCOHOLICA',
+  COMIDA: 'COMIDA',
+  PANADERIA: 'PANADERIA',
+  POSTRES: 'POSTRES',
+  RETAIL: 'RETAIL',
+  SNACK: 'SNACK',
+} as const;
+
+/**
+ * T10/F3 + T11/F4 — explicit map from the display category labels the
+ * industry template SOURCE rows carry (1787000000000 seed plus the
+ * owner-approved menu added by 1809620000000-ExpandIndustryTemplateMenu) to
+ * canonical SALES_PRODUCT_CATEGORY codes.
+ *
+ * ONLY labels with an honest 1:1 target in the seeded catalog are mapped
+ * (DEFAULT_CATALOG_SEED in catalog.service.ts: COMIDA, BEBIDA_CALIENTE,
+ * BEBIDA_FRIA, PANADERIA, SNACK, RETAIL, LIMPIEZA, OTROS, and the T11/F4
+ * additions BEBIDA_ALCOHOLICA and POSTRES):
+ * - 'Bebidas Alcohólicas' → BEBIDA_ALCOHOLICA (T11/F4 added the code).
+ * - 'Bebidas frías' → BEBIDA_FRIA: the owner-approved menu labels its cold
+ *   prepared drinks 'Bebidas frías' while the seed NAME is singular 'Bebida
+ *   fría', so this plural label needs the explicit entry (mirrors the
+ *   existing 'Bebidas Calientes' → BEBIDA_CALIENTE mapping).
+ * - 'Bebidas' → BEBIDA_FRIA: this label appears only on RETAIL bottled
+ *   cold drinks (gaseosa/agua) — the owner-approved menu assigns them
+ *   BEBIDA_FRIA (no invented generic BEBIDAS classification).
+ * - 'Postres' would also resolve via normalized name match now that
+ *   POSTRES exists; the explicit entry keeps the mapping inspectable.
+ * - 'General' is a placeholder, not a classification — stays null.
+ * Even a mapped code is only written when the TENANT's own catalog actually
+ * carries it (resolved through CatalogValue inside the apply transaction),
+ * so a tenant that renamed/removed the value never gets an invented code.
+ * Anything else keeps the honest-null fallback.
+ */
+const TEMPLATE_CATEGORY_LABEL_TO_CODE: Readonly<Record<string, string>> = {
+  'bebidas calientes': CATALOG_TYPE_CODE.BEBIDA_CALIENTE,
+  'bebidas frias': CATALOG_TYPE_CODE.BEBIDA_FRIA,
+  bebidas: CATALOG_TYPE_CODE.BEBIDA_FRIA,
+  'bebidas alcoholicas': CATALOG_TYPE_CODE.BEBIDA_ALCOHOLICA,
+  comida: CATALOG_TYPE_CODE.COMIDA,
+  panaderia: CATALOG_TYPE_CODE.PANADERIA,
+  postres: CATALOG_TYPE_CODE.POSTRES,
+  retail: CATALOG_TYPE_CODE.RETAIL,
+  snacks: CATALOG_TYPE_CODE.SNACK,
+};
+
+/** Accent-stripped lowercase key so 'Bebidas Calientes' matches 'bebidas calientes'. */
+const normalizeCategoryKey = (raw: string | null | undefined): string =>
+  (raw ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
 @Injectable()
 export class IndustryTemplateService {
   constructor(
@@ -73,6 +134,7 @@ export class IndustryTemplateService {
     @InjectRepository(UomConversion)
     private readonly uomConversionRepo: Repository<UomConversion>,
     private readonly dataSource: DataSource,
+    private readonly fiscalSetupService: FiscalSetupService,
   ) {}
 
   async listTemplates(): Promise<TemplateSummaryResponse[]> {
@@ -128,6 +190,21 @@ export class IndustryTemplateService {
     const trimmedTenant = resolveTenantContextId(tenantId);
 
     const template = await this.getTemplateByCode(templateCode);
+    // T10/F1: the POS invoices with the product's own taxRate (inbound
+    // product contract — inbound-sync.service.spec) — so every product
+    // created from a template must carry the tenant's EFFECTIVE fiscal rate,
+    // not the Product entity's business default 0.15 (a Cuota Fija tenant
+    // would have been silently invoiced at 15% — a DGI defect).
+    // getFiscalSetup itself resolves the regime-derived rate (TAX_RATE_IVA
+    // when configured, otherwise the DGI constant for the configured-or-
+    // defaulted regime) — that resolved value is used verbatim here; no
+    // local fallback is invented on top of it.
+    // T10/F3 note: pricesIncludeTax is honoured at invoicing time from the
+    // fiscal config; the Product entity carries no such column, so there is
+    // nothing to persist on the product row.
+    const fiscalSetup = await this.fiscalSetupService.getFiscalSetup(
+      trimmedTenant,
+    );
     const selectedSet = options?.selectedItemIds
       ? new Set(options.selectedItemIds)
       : null;
@@ -194,6 +271,25 @@ export class IndustryTemplateService {
               ),
               recipesSkipped: stored.recipesSkipped ?? [],
             };
+          }
+          // T7/S9: a template row without a positive suggested_price used to
+          // become a sellPrice-0 product — not sellable, a silent activation
+          // blocker, yet it looked valid in the catalog. That converts partial
+          // template data into a valid-looking value, so the defect is
+          // rejected here, before anything is created. The apply already runs
+          // inside a single bound transaction (runInTenantTransaction), so
+          // this throw keeps the operation strictly all-or-nothing.
+          const unpricedProducts = (template.templateProducts ?? []).filter(
+            (product) =>
+              isSelected(product.id) &&
+              !(Number(product.suggested_price) > 0),
+          );
+          if (unpricedProducts.length > 0) {
+            throw new BadRequestException(
+              `No se puede aplicar la plantilla '${template.name}': los siguientes productos de la plantilla no tienen precio de venta definido: ${unpricedProducts
+                .map((product) => `'${product.name}'`)
+                .join(', ')}. Los productos sin precio de venta no se pueden vender ni permitirían activar el negocio. Asigne un precio de venta mayor que cero a cada producto y vuelva a intentar: esto es un defecto de datos de la plantilla, no un error de su catálogo.`,
+            );
           }
           if (options?.sessionId) {
             const session = await manager.findOne(OnboardingSession, {
@@ -354,6 +450,34 @@ export class IndustryTemplateService {
           }))
             productMap.set(product.name.trim().toLowerCase(), product);
 
+          // T10/F3: template products carry DISPLAY category labels; the
+          // Product carries a canonical code. Resolve the label against the
+          // TENANT's own SALES_PRODUCT_CATEGORY catalog values (fetched in
+          // this same transaction so RLS and transactionality hold) by
+          // normalized code OR normalized name. A label with no honest
+          // target — or whose target code this tenant does not carry — stays
+          // category_code null. Nothing is invented.
+          const salesCategoryByNormalizedKey = new Map<
+            string,
+            CatalogValue
+          >();
+          for (const value of await manager.find(CatalogValue, {
+            where: {
+              tenant_id: trimmedTenant,
+              catalog_type: CATALOG_TYPE.SALES_PRODUCT_CATEGORY,
+              is_active: true,
+            },
+          })) {
+            salesCategoryByNormalizedKey.set(
+              normalizeCategoryKey(value.code),
+              value,
+            );
+            salesCategoryByNormalizedKey.set(
+              normalizeCategoryKey(value.name),
+              value,
+            );
+          }
+
           for (const source of template.templateProducts ?? []) {
             // A template product owns its pre-BOM; selecting it selects that recipe.
             if (!isSelected(source.id)) continue;
@@ -367,7 +491,22 @@ export class IndustryTemplateService {
                 manager.create(Product, {
                   tenant_id: trimmedTenant,
                   name: source.name.trim(),
+                  // T7/S9 fill audit: `uom ?? 'UN'` is a documented fallback,
+                  // not a silent gap. The 'UN' spelling resolves through the
+                  // uom-catalog 'un' alias heal (T10/F2b).
                   uom: source.uom ?? 'UN',
+                  // T10/F1: inherit the tenant's effective fiscal rate
+                  // (regime-derived by getFiscalSetup) — never the entity's
+                  // 0.15 business default, or a Cuota Fija tenant's products
+                  // would be silently invoiced at 15%.
+                  tax_rate: fiscalSetup.taxRateIva,
+                  // T10/F3: resolve the template's display label against the
+                  // tenant's own SALES_PRODUCT_CATEGORY catalog inside this
+                  // transaction. Unmapped labels stay null (honest absence).
+                  category_code: this.resolveTemplateCategoryCode(
+                    source.category,
+                    salesCategoryByNormalizedKey,
+                  ),
                   sellPrice: source.suggested_price
                     ? Number(source.suggested_price)
                     : 0,
@@ -507,6 +646,31 @@ export class IndustryTemplateService {
     return createdCount === 1
       ? '1 receta creada como sugerencia pendiente de revisión'
       : `${createdCount} recetas creadas como sugerencias pendientes de revisión`;
+  }
+
+  /**
+   * T10/F3: resolve a template display category label to a canonical
+   * SALES_PRODUCT_CATEGORY code the tenant actually carries.
+   *
+   * Order: (1) the explicit label→code map (only labels with an honest
+   * seeded target), then (2) a direct normalized match of the label against
+   * the tenant's catalog codes/names (so a tenant that legitimately added a
+   * 'BEBIDAS' value still resolves). Anything else stays null.
+   */
+  private resolveTemplateCategoryCode(
+    label: string | null | undefined,
+    salesCategoryByNormalizedKey: ReadonlyMap<string, CatalogValue>,
+  ): string | null {
+    if (!label?.trim()) return null;
+    const normalized = normalizeCategoryKey(label);
+    const targetCode = TEMPLATE_CATEGORY_LABEL_TO_CODE[normalized];
+    const matched =
+      (targetCode
+        ? salesCategoryByNormalizedKey.get(normalizeCategoryKey(targetCode))
+        : undefined) ??
+      salesCategoryByNormalizedKey.get(normalized) ??
+      null;
+    return matched?.code ?? null;
   }
 
   private isUniqueViolation(error: unknown): boolean {

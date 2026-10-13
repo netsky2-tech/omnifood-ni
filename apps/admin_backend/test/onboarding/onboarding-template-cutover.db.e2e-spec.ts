@@ -12,6 +12,7 @@ import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { SystemParametersConfig } from '../../src/modules/inventory/entities/system-parameters-config.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Recipe } from '../../src/modules/inventory/entities/recipe.entity';
 import {
@@ -41,6 +42,7 @@ import { InvoiceItemModifier } from '../../src/modules/sales/entities/invoice-it
 import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { IndustryTemplateController } from '../../src/modules/onboarding/controllers/industry-template.controller';
 import { IndustryTemplateService } from '../../src/modules/onboarding/services/industry-template.service';
+import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { TemplatePreviewService } from '../../src/modules/onboarding/services/template-preview.service';
 import { LegacyTemplateRecipeScanService } from '../../src/modules/onboarding/services/legacy-template-recipe-scan.service';
 import { OnboardingIdempotencyCoordinator } from '../../src/modules/onboarding/services/onboarding-idempotency.coordinator';
@@ -129,6 +131,7 @@ async function withTemplateCutoverIsolatedSchema(
         InvoiceItem,
         InvoiceItemModifier,
         Payment,
+        CatalogValue,
       ],
       synchronize: true,
     });
@@ -211,6 +214,19 @@ async function withTemplateCutoverIsolatedSchema(
         JwtService,
         IndustryTemplateService,
         TemplatePreviewService,
+        {
+          // F1/S11: template apply reads the tenant's regime tax rate from
+          // FiscalSetupService; this integration spec stubs it (the fiscal
+          // write path has its own dedicated e2e coverage).
+          provide: FiscalSetupService,
+          useValue: {
+            getFiscalSetup: async () => ({
+              taxRateIva: 0.15,
+              pricesIncludeTax: true,
+            }),
+          },
+        },
+
         LegacyTemplateRecipeScanService,
         OnboardingIdempotencyCoordinator,
         RecipeService,

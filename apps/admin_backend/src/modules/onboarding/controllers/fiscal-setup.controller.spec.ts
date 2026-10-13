@@ -51,6 +51,7 @@ describe('FiscalSetupController (Unit)', () => {
         // value) — the controller is a passthrough of the service contract.
         operationMode: null,
         checkoutFxMode: null,
+        commercialFxSpreadConfigured: false,
       };
 
       service.getFiscalSetup.mockResolvedValueOnce(mockResponse);
@@ -107,6 +108,7 @@ describe('FiscalSetupController (Unit)', () => {
         dgiAuthorizationExpiresAt: null,
         operationMode: null,
         checkoutFxMode: null,
+        commercialFxSpreadConfigured: false,
       };
 
       service.configureFiscalSetup.mockResolvedValueOnce(mockResponse);

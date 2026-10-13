@@ -145,7 +145,7 @@ export const UOM_CATALOG: readonly UomCatalogEntry[] = [
     name: 'unidad',
     dimension: 'count',
     factorToAnchor: 1,
-    aliases: ['unidad', 'unidades', 'pieza', 'piezas', 'pieza entera', 'u'],
+    aliases: ['unidad', 'unidades', 'pieza', 'piezas', 'pieza entera', 'u', 'un'],
   },
   {
     code: 'docena',

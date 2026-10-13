@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FiscalReadinessAdapter } from './fiscal-readiness.adapter';
 import { FiscalSetupService } from '../services/fiscal-setup.service';
+import { TenantOperationMode } from '../dto/fiscal-setup.dto';
 import type { FiscalSetupResponse } from '../dto/fiscal-setup.dto';
 
 describe('FiscalReadinessAdapter (Unit)', () => {
@@ -147,5 +148,47 @@ describe('FiscalReadinessAdapter (Unit)', () => {
     const result = await adapter.evaluateFiscalReadiness('tenant-1');
 
     expect(result.minimumConfigurationValid).toBe(false);
+  });
+
+  it('passes commercialFxSpreadConfigured = false through when the tenant never configured the FX param', async () => {
+    fiscalSetupService.getFiscalSetup.mockResolvedValue(
+      configWith({
+        commercialFxSpread: 36.5,
+        commercialFxSpreadConfigured: false,
+        operationMode: null,
+      }),
+    );
+
+    const result = await adapter.evaluateFiscalReadiness('tenant-1');
+
+    expect(result.commercialFxSpreadConfigured).toBe(false);
+    expect(result.operationMode).toBeNull();
+    // The spread value itself still carries the canonical fallback — only
+    // the configured flag distinguishes absence from the default.
+    expect(result.minimumConfigurationValid).toBe(true);
+  });
+
+  it('passes commercialFxSpreadConfigured = true through when the FX param is configured', async () => {
+    fiscalSetupService.getFiscalSetup.mockResolvedValue(
+      configWith({
+        commercialFxSpread: 36.75,
+        commercialFxSpreadConfigured: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+      }),
+    );
+
+    const result = await adapter.evaluateFiscalReadiness('tenant-1');
+
+    expect(result.commercialFxSpreadConfigured).toBe(true);
+    expect(result.operationMode).toBe('FOODPARK_QSR');
+  });
+
+  it('reads a missing config response as unconfigured FX and null operation mode (fail closed)', async () => {
+    fiscalSetupService.getFiscalSetup.mockResolvedValue(null);
+
+    const result = await adapter.evaluateFiscalReadiness('tenant-1');
+
+    expect(result.commercialFxSpreadConfigured).toBeUndefined();
+    expect(result.operationMode).toBeNull();
   });
 });

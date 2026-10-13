@@ -161,7 +161,9 @@ describe("ONB1.5C — Sale Ready Review Detallado & Activation Permission Gate",
     expect(screen.getByTestId("sale-ready-review-card")).toBeInTheDocument();
     const blockersSection = screen.getByTestId("review-blockers-section");
     expect(blockersSection).toBeInTheDocument();
-    expect(within(blockersSection).getByText(/CATALOG_NO_SELLABLE_PRODUCTS/i)).toBeInTheDocument();
+    expect(
+      within(blockersSection).getByText(/Todavía no tenés productos para vender/i),
+    ).toBeInTheDocument();
 
     // Warnings section
     const warningsSection = screen.getByTestId("review-warnings-section");
@@ -170,8 +172,8 @@ describe("ONB1.5C — Sale Ready Review Detallado & Activation Permission Gate",
 
     // Optional BOH section with explicit non-blocking note (AC-07, AC-08, AC-28)
     expect(screen.getByTestId("review-optional-boh-section")).toBeInTheDocument();
-    expect(screen.getByText(/Stock inicial /i)).toBeInTheDocument();
-    expect(screen.getByText(/Recetas & Escandallos/i)).toBeInTheDocument();
+    expect(screen.getByText(/Existencias y costos iniciales:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recetas y costo por platillo/i)).toBeInTheDocument();
   });
 
   it("displays historical milestone when saleReadyFirstAt is present", async () => {
@@ -212,7 +214,9 @@ describe("ONB1.5C — Sale Ready Review Detallado & Activation Permission Gate",
 
     const degradedAlert = screen.getByTestId("degraded-live-state-alert");
     expect(within(degradedAlert).getByText(/Preparación temporalmente degradada/i)).toBeInTheDocument();
-    expect(within(degradedAlert).getByText(/CATALOG_NO_SELLABLE_PRODUCTS/i)).toBeInTheDocument();
+    expect(
+      within(degradedAlert).getByText(/Todavía no tenés productos para vender/i),
+    ).toBeInTheDocument();
   });
 
   it("enables 'Iniciar Terminal POS' CTA only when current user has onboarding:activation:manage permission", async () => {

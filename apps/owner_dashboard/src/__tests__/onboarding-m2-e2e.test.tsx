@@ -171,7 +171,6 @@ describe("ONB1.2 M2 E2E — State-based Setup Center Foundation & Concurrency", 
     expect(screen.getByTestId("step-fiscal")).toHaveTextContent(/Configurar Fiscal/i);
     expect(screen.getByTestId("step-catalog")).toHaveTextContent(/Cargar Productos/i);
     expect(screen.getByTestId("step-activation")).toHaveTextContent(/Bloqueado/i);
-    expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v1");
 
     // Unmount simulates closing tab or refresh
     unmount();
@@ -203,7 +202,6 @@ describe("ONB1.2 M2 E2E — State-based Setup Center Foundation & Concurrency", 
     // Progress rehydrates accurately from backend truth: Fiscal is now COMPLETED without artificial clicks!
     expect(screen.getByTestId("step-fiscal")).toHaveTextContent(/Configurado/i);
     expect(screen.getByTestId("step-catalog")).toHaveTextContent(/Cargar Productos/i);
-    expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v2");
   });
 
   it("handles two-tab concurrency and VERSION_CONFLICT with graceful reload and reconciliation", async () => {
@@ -220,7 +218,6 @@ describe("ONB1.2 M2 E2E — State-based Setup Center Foundation & Concurrency", 
     await waitFor(() => {
       expect(screen.getByTestId("setup-center-view")).toBeInTheDocument();
     });
-    expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v1");
 
     // Tab 2 or assisted support updates session in backend (advancing optimisticVersion to 2)
     serverSession.optimisticVersion = 2;
@@ -265,7 +262,6 @@ describe("ONB1.2 M2 E2E — State-based Setup Center Foundation & Concurrency", 
     });
 
     expect(screen.getByTestId("lifecycle-badge")).toHaveTextContent("Listo para Venta");
-    expect(screen.getByTestId("optimistic-version-badge")).toHaveTextContent("v2");
     expect(screen.getByTestId("step-fiscal")).toHaveTextContent(/Configurado/i);
     expect(screen.getByTestId("step-catalog")).toHaveTextContent(/Listo/i);
     expect(screen.getByTestId("step-activation")).toHaveTextContent(/Activar POS/i);

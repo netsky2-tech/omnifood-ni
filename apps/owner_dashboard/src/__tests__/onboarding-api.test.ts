@@ -354,7 +354,7 @@ describe("ONB1.2 — Onboarding API & Concurrency Contract (TDD RED)", () => {
       expect(progress.percentage).toBe(100);
       expect(progress.completedStepsCount).toBe(4);
       expect(progress.steps.every((s) => s.status === "COMPLETED")).toBe(true);
-      expect(progress.nextRecommendedAction.label).toBe("Onboarding Completado");
+      expect(progress.nextRecommendedAction.label).toBe("Configuración Completada");
     });
   });
 
