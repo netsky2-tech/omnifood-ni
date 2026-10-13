@@ -22,8 +22,31 @@ export interface ProcessImageResult {
 }
 
 /**
+ * Resolves the effective image MIME type for a file, normalizing real-world
+ * browser/OS variance that the strict allowlist previously rejected:
+ * - Some platforms report .jpg files with the non-canonical alias
+ *   "image/jpg" instead of "image/jpeg".
+ * - Files picked from devices/registries without a MIME mapping arrive with
+ *   an EMPTY file.type; the extension is the only honest signal there.
+ * The canvas decode downstream remains the real security boundary: anything
+ * that survives it was genuinely an image the browser could parse.
+ */
+export function resolveImageMime(file: File): string | null {
+  const type = (file.type ?? "").trim().toLowerCase();
+  if (type === "image/jpg") return "image/jpeg";
+  if (type !== "") return type;
+
+  // Empty MIME: fall back to the file extension (case-insensitive).
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  return null;
+}
+
+/**
  * Validates and compresses an image in the browser canvas:
- * 1. Checks MIME type against ALLOWED_IMAGE_TYPES.
+ * 1. Checks the resolved MIME type against ALLOWED_IMAGE_TYPES.
  * 2. Checks raw byte size <= 2MB.
  * 3. Inspects natural dimensions (>= 100x100, <= 2048x2048).
  * 4. Center-crops to 1:1 square and resizes to 300x300 px WebP (82% quality)
@@ -32,7 +55,11 @@ export interface ProcessImageResult {
 export async function validateAndCompressProductImage(
   file: File,
 ): Promise<ProcessImageResult> {
-  if (!ALLOWED_IMAGE_TYPES.includes(file.type as any)) {
+  const resolvedMime = resolveImageMime(file);
+  if (
+    !resolvedMime ||
+    !ALLOWED_IMAGE_TYPES.includes(resolvedMime as (typeof ALLOWED_IMAGE_TYPES)[number])
+  ) {
     throw new Error(
       "Formato no permitido. Solo se aceptan imágenes JPG, PNG o WebP.",
     );
@@ -218,7 +245,7 @@ export function ProductImageField({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png,image/webp,image/jpg"
               onChange={handleFileChange}
               disabled={disabled || isProcessing}
               className="hidden"
