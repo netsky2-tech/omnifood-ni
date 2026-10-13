@@ -221,7 +221,11 @@ export class ProductService {
         action: 'CREATE',
         targetType: 'product',
         targetId: result.id,
-        changes: { name: result.name, product_type: result.product_type },
+        changes: {
+          name: result.name,
+          product_type: result.product_type,
+          ...(result.image_url ? { image_url: '[IMAGE]' } : {}),
+        },
       });
     }
 

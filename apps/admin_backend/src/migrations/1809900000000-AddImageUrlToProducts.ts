@@ -1,4 +1,4 @@
-import type { QueryRunner } from 'typeorm';
+import type { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Batch 2 (Product Images): adds nullable `image_url text` to `products` so the
@@ -8,7 +8,7 @@ import type { QueryRunner } from 'typeorm';
  * Safe nullable column addition; existing rows have NULL (no image, POS uses
  * typographic monogram fallback). Idempotent via IF NOT EXISTS / IF EXISTS.
  */
-export class AddImageUrlToProducts1809900000000 {
+export class AddImageUrlToProducts1809900000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       'ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url text NULL',
