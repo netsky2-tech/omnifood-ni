@@ -93,6 +93,13 @@ export interface InboundSyncProductDto {
   updatedAt: Date;
   tenantId?: string;
   imageUrl?: string | null;
+  /**
+   * Pull origin metadata (issue #899, BOH read-only catalog): rows emitted by
+   * the Dashboard pull always carry `source: 'DASHBOARD'` so a terminal can
+   * recognize a delta it cannot have authored. Absence means the row applies
+   * unconditionally (legacy consumers / non-stamped row types).
+   */
+  source?: 'DASHBOARD';
 }
 
 export interface InboundSyncCatalogValueDto {
@@ -105,6 +112,8 @@ export interface InboundSyncCatalogValueDto {
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Pull origin metadata; see InboundSyncProductDto.source (issue #899). */
+  source?: 'DASHBOARD';
 }
 
 export interface InboundSyncInsumoDto {
@@ -136,6 +145,8 @@ export interface InboundSyncRecipeDto {
   quantity: number;
   createdAt: Date;
   updatedAt: Date;
+  /** Pull origin metadata; see InboundSyncProductDto.source (issue #899). */
+  source?: 'DASHBOARD';
 }
 
 export interface InboundSyncRecipeVersionComponentDto {

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -434,6 +435,11 @@ export class RecipeService {
    *   consumption UOM or a registered positive conversion; incompatible or
    *   missing `componentUom` values are rejected to avoid silent stock-unit
    *   corruption.
+   * - Read-only catalog gate (issue #899): the terminal is never a catalog
+   *   writer. A pos_document_id never ingested for the tenant is rejected
+   *   with `ForbiddenException` (machine code `CATALOG_READ_ONLY_TERMINAL`);
+   *   only replays of already-stored documents drain through the idempotent
+   *   replace path below.
    * - Idempotent by (tenant_id, pos_document_id): reposting the same document
    *   transactionally replaces the version snapshot + details without
    *   duplicating rows and without deleting prior versions (DGI/audit).
@@ -548,16 +554,25 @@ export class RecipeService {
 
         const existing = await manager.findOne(RecipeVersion, { where });
 
-        if (existing) {
-          return this.replaceExistingVersion(
-            manager,
-            existing,
-            input,
-            resolvedComponents,
+        if (!existing) {
+          // Issue #899 (BOH read-only catalog): the terminal is never a
+          // catalog writer. This endpoint is only fed by the POS background
+          // sync pass, so a pos_document_id that was never ingested for the
+          // tenant is by definition a terminal-originated catalog write.
+          // Recipe versions are managed from the Dashboard; only replays of
+          // already-stored documents drain through the replace path below so
+          // already-queued terminal documents do not poison the sync loop.
+          throw new ForbiddenException(
+            'CATALOG_READ_ONLY_TERMINAL: Recipe versions are managed from the Dashboard; the POS terminal cannot create catalog data.',
           );
         }
 
-        return this.createFreshVersion(manager, input, resolvedComponents);
+        return this.replaceExistingVersion(
+          manager,
+          existing,
+          input,
+          resolvedComponents,
+        );
       },
     );
   }
@@ -631,50 +646,6 @@ export class RecipeService {
     return {
       recipeVersionId: existing.id,
       replaced: true,
-    };
-  }
-
-  private async createFreshVersion(
-    manager: EntityManager,
-    input: PreparedRecipeVersionIngestion,
-    resolvedComponents: ResolvedRecipeComponent[],
-  ): Promise<IngestPosVersionResult> {
-    const priorActive = await manager.findOne(RecipeVersion, {
-      where: {
-        tenant_id: input.tenantId,
-        product_id: input.dto.productId,
-        is_active: true,
-      },
-      order: { version_number: 'DESC' },
-    });
-
-    if (priorActive) {
-      priorActive.is_active = false;
-      priorActive.fecha_fin_vigencia = input.publishedAt ?? new Date();
-      await manager.save(RecipeVersion, priorActive);
-    }
-
-    const created = manager.create(RecipeVersion, {
-      tenant_id: input.tenantId,
-      product_id: input.dto.productId,
-      version_number: input.dto.versionNumber,
-      is_active: true,
-      fecha_inicio_vigencia: input.publishedAt ?? new Date(),
-      pos_document_id: input.dto.id,
-      product_name: input.dto.productName,
-      yield_quantity: input.yieldQuantity,
-      technical_shrink_pct: round4(input.dto.technicalShrinkPct),
-      version_note: input.dto.versionNote ?? null,
-      pos_created_at: input.posCreatedAt,
-      published_at: input.publishedAt,
-    });
-
-    const saved = await manager.save(RecipeVersion, created);
-    await this.saveRecipeDetails(manager, saved.id, input, resolvedComponents);
-
-    return {
-      recipeVersionId: saved.id,
-      replaced: false,
     };
   }
 

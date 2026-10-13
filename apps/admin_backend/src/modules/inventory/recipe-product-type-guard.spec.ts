@@ -20,8 +20,11 @@ import { UomConversionCalculator } from './uom-conversion-calculator';
  * without an explicit insumo mapping), so createNewVersion and
  * publishDraftVersion must reject any other product type.
  *
- * Path B (ingestPosVersion / createFreshVersion) is deliberately NOT guarded:
- * rejecting POS ingestion would fail the POS push (#551, #519 U4 lessons).
+ * Path B (ingestPosVersion) is deliberately NOT guarded: rejecting POS
+ * ingestion would fail the POS push (#551, #519 U4 lessons). Since #899 the
+ * endpoint only replays already-stored documents (new terminal ingestions
+ * are rejected with CATALOG_READ_ONLY_TERMINAL), so the guard surfaces
+ * remain createNewVersion / publishDraftVersion.
  */
 
 const TENANT_ID = 'tenant-1';
