@@ -625,6 +625,7 @@ export class InboundSyncService {
         createdAt: p.created_at,
         updatedAt: p.updated_at,
         tenantId: p.tenant_id,
+        imageUrl: p.image_url ?? null,
       };
     });
   }
