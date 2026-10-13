@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Trash2, X } from "lucide-react";
 import {
   usePaginatedProducts,
   useCreateProduct,
@@ -23,6 +23,7 @@ import type { CatalogType } from "./types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { toFiniteNumber } from "@/lib/numeric";
 import { toast } from "@/hooks/use-toast";
@@ -40,6 +41,74 @@ import { EmptyState } from "@/components/ui/empty-state";
 type TabId = ProductType;
 
 const TABS: { id: TabId; label: string }[] = PRODUCT_TYPES;
+
+interface StatusBadgeTone {
+  label: string;
+  className: string;
+  dotClassName: string;
+}
+
+/** §26, §46: Status badges carry dual-channel signaling (dot + label) with high contrast. */
+export const PRODUCT_STATUS_BADGES: Record<"active" | "inactive", StatusBadgeTone> = {
+  active: {
+    label: "Activo",
+    className:
+      "border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium",
+    dotClassName: "bg-emerald-500",
+  },
+  inactive: {
+    label: "Inactivo",
+    className:
+      "border-transparent bg-muted text-muted-foreground font-medium",
+    dotClassName: "bg-muted-foreground",
+  },
+};
+
+export function ProductStatusBadge({ isActive }: { isActive: boolean }) {
+  const tone = isActive
+    ? PRODUCT_STATUS_BADGES.active
+    : PRODUCT_STATUS_BADGES.inactive;
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-0.5 text-xs shadow-2xs transition-colors",
+        tone.className,
+      )}
+      data-testid="product-status-badge"
+    >
+      <span
+        aria-hidden="true"
+        className={cn("h-1.5 w-1.5 shrink-0 rounded-full", tone.dotClassName)}
+      />
+      {tone.label}
+    </Badge>
+  );
+}
+
+function SummaryCard({
+  label,
+  count,
+  toneClassName,
+}: {
+  label: string;
+  count: number | string;
+  toneClassName?: string;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3 shadow-xs">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-2xl font-semibold tabular-nums",
+          toneClassName ?? "text-foreground",
+        )}
+      >
+        {count}
+      </p>
+    </div>
+  );
+}
 
 /** Reuses PRODUCT_TYPES labels; only the legacy stored value needs its own honest label. */
 function storedTypeLabel(type: StoredProductType): string {
@@ -95,18 +164,58 @@ function ProductTable({
   const safePage = data.page ?? currentPage;
 
   return (
-    <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-3 border-b border-border bg-muted/20">
-        <Input
-          placeholder="Buscar por nombre o UOM..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="max-w-xs h-9 text-xs"
-          aria-label="Buscar productos"
+    <div className="space-y-4">
+      {/* §41 Summary -> Detail: executive metric counts before the table rows */}
+      <div
+        className="grid gap-3 grid-cols-2 sm:grid-cols-4"
+        data-testid="product-summary-cards"
+        aria-label="Resumen de productos"
+      >
+        <SummaryCard label="Total" count={total} />
+        <SummaryCard
+          label="Activos"
+          count={paginated.filter((p) => p.is_active).length}
+          toneClassName="text-emerald-700"
         />
+        <SummaryCard
+          label="Inactivos"
+          count={paginated.filter((p) => !p.is_active).length}
+          toneClassName="text-muted-foreground"
+        />
+        <SummaryCard
+          label="Con Receta"
+          count={paginated.filter((p) => isRecipeBearingType(p.product_type)).length}
+          toneClassName="text-primary"
+        />
+      </div>
+
+      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-3 border-b border-border bg-muted/20">
+        <div className="relative w-full max-w-xs">
+          <Input
+            placeholder="Buscar por nombre o UOM..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="max-w-xs h-9 text-xs pr-8"
+            aria-label="Buscar productos"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setCurrentPage(1);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Limpiar búsqueda"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         <span className="text-xs text-muted-foreground">
           {search.trim()
             ? `Encontrados: ${total} productos`
@@ -160,9 +269,7 @@ function ProductTable({
                     {toFiniteNumber(p.stock).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <Badge variant={p.is_active ? "success" : "secondary"}>
-                      {p.is_active ? "Activo" : "Inactivo"}
-                    </Badge>
+                    <ProductStatusBadge isActive={p.is_active} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-1.5">
@@ -222,6 +329,7 @@ function ProductTable({
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
@@ -350,7 +458,7 @@ function ProductDialog({
             uom: values.uom.trim(),
             product_type: editType,
             category_code: categoryCode || undefined,
-            sellPrice: values.sellPrice,
+            sellPrice: toFiniteNumber(values.sellPrice),
             is_perishable: isPerishable,
           },
         });
@@ -369,7 +477,7 @@ function ProductDialog({
           uom: values.uom.trim(),
           product_type: createTypeAnswer,
           category_code: categoryCode || undefined,
-          sellPrice: values.sellPrice,
+          sellPrice: toFiniteNumber(values.sellPrice),
           is_perishable: isPerishable,
         };
         await createMutation.mutateAsync(input);
@@ -494,30 +602,46 @@ function ProductDialog({
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <label
+              htmlFor="product-name-input"
+              className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
               Nombre *
             </label>
             <Input
+              id="product-name-input"
               type="text"
               {...register("name")}
               placeholder="Ej: Taza de Capuccino"
               disabled={isPending}
               aria-invalid={Boolean(errors.name)}
+              aria-describedby={errors.name ? "name-error" : undefined}
             />
             {errors.name && (
-              <p className="text-xs text-destructive">{errors.name.message}</p>
+              <p
+                id="name-error"
+                role="alert"
+                className="mt-1 text-xs font-medium text-destructive"
+              >
+                {errors.name.message}
+              </p>
             )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <label
+                htmlFor="product-uom-select"
+                className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
                 Unidad de Medida *
               </label>
               <select
+                id="product-uom-select"
                 {...register("uom")}
                 disabled={isPending}
                 aria-invalid={Boolean(errors.uom)}
+                aria-describedby={errors.uom ? "uom-error" : undefined}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <option value="">Seleccionar UOM</option>
@@ -528,17 +652,25 @@ function ProductDialog({
                 ))}
               </select>
               {errors.uom && (
-                <p className="text-xs text-destructive">
+                <p
+                  id="uom-error"
+                  role="alert"
+                  className="mt-1 text-xs font-medium text-destructive"
+                >
                   {errors.uom.message}
                 </p>
               )}
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <label
+                htmlFor="product-category-select"
+                className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+              >
                 Categoría
               </label>
               <select
+                id="product-category-select"
                 value={categoryCode}
                 onChange={(e) => setCategoryCode(e.target.value)}
                 disabled={isPending}
@@ -585,10 +717,14 @@ function ProductDialog({
           )}
 
           <div>
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <label
+              htmlFor="product-sell-price-input"
+              className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+            >
               Precio de Venta (C$)
             </label>
             <Input
+              id="product-sell-price-input"
               type="number"
               {...register("sellPrice", {
                 // Mirrors the old `parseFloat(...) || 0` state handling: an
@@ -598,9 +734,14 @@ function ProductDialog({
               placeholder="0.00"
               disabled={isPending}
               aria-invalid={Boolean(errors.sellPrice)}
+              aria-describedby={errors.sellPrice ? "sell-price-error" : undefined}
             />
             {errors.sellPrice && (
-              <p className="text-xs text-destructive">
+              <p
+                id="sell-price-error"
+                role="alert"
+                className="mt-1 text-xs font-medium text-destructive"
+              >
                 {errors.sellPrice.message}
               </p>
             )}
@@ -801,14 +942,14 @@ export function ProductPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Productos</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Gestión de catálogo de productos simples, compuestos e insumos
+            Catálogo maestro de productos vendibles, gestión de precios y control de inventario.
           </p>
         </div>
-        <Button onClick={handleCreate} className="shadow-xs">
+        <Button onClick={handleCreate} className="shadow-xs gap-1.5">
           + Nuevo Producto
         </Button>
       </div>
