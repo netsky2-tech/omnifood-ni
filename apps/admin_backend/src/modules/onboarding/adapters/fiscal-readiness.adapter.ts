@@ -30,6 +30,10 @@ export class FiscalReadinessAdapter implements FiscalReadinessPort {
         fiscalRegime: config?.regime,
         taxRate: config?.taxRateIva,
         pricesIncludeTax: config?.pricesIncludeTax,
+        // Hard activation gate (T4/S7): pass the never-configured signals
+        // through untouched so the readiness evaluator can block on them.
+        operationMode: config?.operationMode ?? null,
+        commercialFxSpreadConfigured: config?.commercialFxSpreadConfigured,
       };
     } catch (error) {
       // Fail closed, but never silently: swallowing this error is what made
@@ -40,6 +44,8 @@ export class FiscalReadinessAdapter implements FiscalReadinessPort {
       );
       return {
         minimumConfigurationValid: false,
+        // Fail closed: no evidence of configuration means never configured.
+        operationMode: null,
       };
     }
   }

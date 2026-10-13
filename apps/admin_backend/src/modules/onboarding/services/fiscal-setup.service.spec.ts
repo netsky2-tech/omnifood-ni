@@ -138,6 +138,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       taxRateIva: 0.15,
       pricesIncludeTax: true,
       commercialFxSpread: 36.5,
+      commercialFxSpreadConfigured: true,
         // BXW-007 U1 rev 2: unconfigured params read as null (absence must
         // look like absence, never rebased to a default).
         operationMode: null,
@@ -207,6 +208,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         taxRateIva: 0.0,
         pricesIncludeTax: true,
         commercialFxSpread: 36.5,
+        commercialFxSpreadConfigured: false,
         operationMode: null,
         checkoutFxMode: null,
         dgiAuthorizationCode: null,
@@ -215,6 +217,44 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
         maxDiscountAmount: null,
         maxDiscountPercent: null,
       });
+    });
+
+    it('reports commercialFxSpreadConfigured = false when the COMMERCIAL_FX_SPREAD param was never configured, while the spread still defaults to 36.5 (hard activation gate)', async () => {
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      // No params at all — absence of the raw param must stay distinguishable
+      // from "configured with the POS default" (D-16 spirit), because the
+      // onboarding activation gate blocks on the flag, not on the value.
+      mockManager.find.mockResolvedValueOnce([]);
+
+      const result = await service.getFiscalSetup(tenantId);
+
+      expect(result.commercialFxSpread).toBe(36.5);
+      expect(result.commercialFxSpreadConfigured).toBe(false);
+      expect(result.operationMode).toBeNull();
+    });
+
+    it('reports commercialFxSpreadConfigured = true when the COMMERCIAL_FX_SPREAD param is configured (even at the canonical default value)', async () => {
+      tenantRepo.findOne.mockResolvedValueOnce({ ...mockTenant });
+      mockManager.find.mockResolvedValueOnce([
+        {
+          id: '4',
+          tenant_id: tenantId,
+          tenant: mockTenant,
+          paramKey: 'COMMERCIAL_FX_SPREAD',
+          paramValue: 36.5,
+          version: 1,
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+          isActive: true,
+          createdBy: userId,
+          createdAt: new Date(),
+        } as SystemParametersConfig,
+      ]);
+
+      const result = await service.getFiscalSetup(tenantId);
+
+      expect(result.commercialFxSpread).toBe(36.5);
+      expect(result.commercialFxSpreadConfigured).toBe(true);
     });
 
     it('throws NotFoundException when tenant does not exist', async () => {

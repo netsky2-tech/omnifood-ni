@@ -86,6 +86,18 @@ export class OnboardingReadinessEvaluator {
     if (!fiscal.minimumConfigurationValid) {
       blockers.push('FISCAL_CONFIGURATION_INCOMPLETE');
     }
+    // Hard activation gate (T4/S7, owner decision): a tenant that never
+    // configured its commercial FX rate or operation mode (restaurante/
+    // foodpark) must NOT be able to start activation. These are BLOCKERS
+    // (they gate saleReady), not warnings — the read model distinguishes
+    // "never configured" from "configured with the POS default" so the
+    // canonical 36.5 fallback value alone cannot satisfy the gate.
+    if (fiscal.commercialFxSpreadConfigured === false) {
+      blockers.push('FISCAL_FX_RATE_NOT_CONFIGURED');
+    }
+    if (fiscal.operationMode == null) {
+      blockers.push('FISCAL_OPERATION_MODE_NOT_CONFIGURED');
+    }
     if (catalog.sellableProductCount < 1) {
       blockers.push('CATALOG_NO_SELLABLE_PRODUCTS');
     }

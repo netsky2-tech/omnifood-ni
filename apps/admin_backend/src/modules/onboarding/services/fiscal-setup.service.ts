@@ -166,6 +166,10 @@ export class FiscalSetupService {
       typeof rawFxSpread === 'number'
         ? rawFxSpread
         : DEFAULT_COMMERCIAL_FX_SPREAD;
+    // Hard activation gate (T4/S7): the value still falls back to the
+    // canonical 36.5, but the flag keeps "never configured" distinguishable
+    // from "configured with the POS default" (same spirit as
+    // readTenantOperationModeOrNull below).
 
     // BXW-007 U1 rev 2: absence must read as absence (D-16/D-21 spirit) — a
     // missing, non-string or non-member stored value reads as null, never as
@@ -200,6 +204,7 @@ export class FiscalSetupService {
       taxRateIva,
       pricesIncludeTax,
       commercialFxSpread,
+      commercialFxSpreadConfigured: typeof rawFxSpread === 'number',
       operationMode,
       checkoutFxMode,
       ...this.dgiAuthorizationFields(paramMap),
@@ -443,6 +448,12 @@ export class FiscalSetupService {
           taxRateIva: targetTaxRate,
           pricesIncludeTax: dto.pricesIncludeTax,
           commercialFxSpread: dto.commercialFxSpread,
+          // Hard activation gate (T4/S7): read back through the post-write
+          // view like the mode params — the DTO guard above guarantees the
+          // submitted spread is a number, so this reads true post-write.
+          commercialFxSpreadConfigured:
+            typeof postWriteMap.get(FISCAL_PARAM_KEYS.COMMERCIAL_FX_SPREAD) ===
+            'number',
           // BXW-007 U1 rev 2: read back through the post-write view so the
           // POST response reflects the effective persisted state — an omitted
           // key reads the prior governing value, or null if never configured.
