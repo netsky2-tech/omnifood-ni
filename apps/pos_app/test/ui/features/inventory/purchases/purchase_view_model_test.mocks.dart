@@ -854,8 +854,9 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
   _i5.Future<void> recordShrinkage(
     String? insumoId,
     double? quantity,
-    String? reason,
-  ) =>
+    String? reason, {
+    String? userId,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #recordShrinkage,
@@ -864,6 +865,9 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             quantity,
             reason,
           ],
+          {
+            #userId: userId,
+          },
         ),
         returnValue: _i5.Future<void>.value(),
         returnValueForMissingStub: _i5.Future<void>.value(),
@@ -874,6 +878,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
     required String? productId,
     required double? quantity,
     required String? reason,
+    String? userId,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -883,6 +888,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             #productId: productId,
             #quantity: quantity,
             #reason: reason,
+            #userId: userId,
           },
         ),
         returnValue: _i5.Future<void>.value(),

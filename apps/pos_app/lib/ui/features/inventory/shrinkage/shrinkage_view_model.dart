@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../../../../domain/models/inventory/batch.dart';
 import '../../../../domain/models/inventory/insumo.dart';
 import '../../../../domain/models/inventory/product.dart';
+import '../../../../domain/repositories/auth_repository.dart';
 import '../../../../domain/repositories/inventory/inventory_repository.dart';
 import '../../../../domain/services/inventory/movement_engine.dart';
 import 'merma_taxonomy.dart';
@@ -13,6 +14,7 @@ enum ShrinkageTargetType { insumo, product }
 class ShrinkageViewModel with ChangeNotifier {
   final InventoryRepository repository;
   final MovementEngine movementEngine;
+  final AuthRepository? authRepository;
 
   List<Insumo> _insumos = [];
   List<Insumo> get insumos => _insumos;
@@ -37,7 +39,11 @@ class ShrinkageViewModel with ChangeNotifier {
     orElse: () => null,
   );
 
-  ShrinkageViewModel(this.repository, this.movementEngine);
+  ShrinkageViewModel(
+    this.repository,
+    this.movementEngine, {
+    this.authRepository,
+  });
 
   Future<void> loadInsumos() async {
     _isLoading = true;
@@ -77,12 +83,15 @@ class ShrinkageViewModel with ChangeNotifier {
     required double quantity,
     required String shrinkageType,
     required String observation,
+    String? userId,
   }) async {
     final canonicalReason = normalizeMermaReason(shrinkageType);
     if (canonicalReason == null) {
       throw ArgumentError('Invalid shrinkage type');
     }
     final requiredObservation = requireMermaObservation(observation);
+    final effectiveUserId =
+        userId ?? (await authRepository?.getCurrentUser())?.id;
 
     _isLoading = true;
     notifyListeners();
@@ -107,7 +116,12 @@ class ShrinkageViewModel with ChangeNotifier {
       ];
       final reason = reasonParts.join(' | ');
 
-      await movementEngine.recordShrinkage(insumoId, quantity, reason);
+      await movementEngine.recordShrinkage(
+        insumoId,
+        quantity,
+        reason,
+        userId: effectiveUserId,
+      );
       await loadInsumos();
     } finally {
       _isLoading = false;
@@ -120,12 +134,15 @@ class ShrinkageViewModel with ChangeNotifier {
     required double quantity,
     required String shrinkageType,
     required String observation,
+    String? userId,
   }) async {
     final canonicalReason = normalizeMermaReason(shrinkageType);
     if (canonicalReason == null) {
       throw ArgumentError('Invalid shrinkage type');
     }
     final requiredObservation = requireMermaObservation(observation);
+    final effectiveUserId =
+        userId ?? (await authRepository?.getCurrentUser())?.id;
 
     _isLoading = true;
     notifyListeners();
@@ -135,6 +152,7 @@ class ShrinkageViewModel with ChangeNotifier {
         productId: productId,
         quantity: quantity,
         reason: reason,
+        userId: effectiveUserId,
       );
       await loadInsumos();
     } finally {

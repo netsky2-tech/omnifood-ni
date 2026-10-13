@@ -170,8 +170,9 @@ class MovementEngineImpl implements MovementEngine {
   Future<void> recordShrinkage(
     String insumoId,
     double quantity,
-    String reason,
-  ) async {
+    String reason, {
+    String? userId,
+  }) async {
     if (quantity <= 0) throw ArgumentError('Quantity must be positive');
 
     final insumo = await repository.getInsumoById(insumoId);
@@ -191,6 +192,7 @@ class MovementEngineImpl implements MovementEngine {
         newStock: newStock,
         timestamp: DateTime.now(),
         reason: reason,
+        userId: userId,
         unitCostNio: insumo.averageCost,
         sourceDocumentType: 'INSUMO_MERMA',
         sourceDocumentId: insumoId,
@@ -203,6 +205,7 @@ class MovementEngineImpl implements MovementEngine {
     required String productId,
     required double quantity,
     required String reason,
+    String? userId,
   }) async {
     if (quantity <= 0) throw ArgumentError('Quantity must be positive');
 
@@ -245,6 +248,7 @@ class MovementEngineImpl implements MovementEngine {
           newStock: newStock,
           timestamp: timestamp,
           reason: reason,
+          userId: userId,
           unitCostNio: insumo.averageCost,
           sourceDocumentType: 'PRODUCT_MERMA',
           sourceDocumentId: productId,

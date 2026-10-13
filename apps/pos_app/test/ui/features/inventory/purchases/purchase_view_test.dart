@@ -138,14 +138,16 @@ class _FakeMovementEngine implements MovementEngine {
   Future<void> recordShrinkage(
     String insumoId,
     double quantity,
-    String reason,
-  ) async {}
+    String reason, {
+    String? userId,
+  }) async {}
 
   @override
   Future<void> recordProductShrinkage({
     required String productId,
     required double quantity,
     required String reason,
+    String? userId,
   }) async {}
 
   @override
