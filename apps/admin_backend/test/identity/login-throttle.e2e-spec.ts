@@ -10,10 +10,21 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppModule } from '../../src/core/app/app.module';
 
 describe('login throttle over the full app (issue #896)', () => {
   let app: INestApplication<App>;
+
+  /** Diagnostic payload for CI failures: what the guard actually resolved. */
+  const throttlerDiagnostics = (): string => {
+    const guard = app.get(ThrottlerGuard, { strict: false }) as unknown as {
+      throttlers?: Array<{ name?: string; limit?: number; ttl?: number }>;
+    };
+    return JSON.stringify({
+      resolved: guard.throttlers ?? 'none',
+    });
+  };
 
   beforeEach(async () => {
     // A fresh app per test: the throttler storage is in-memory per instance,
@@ -38,9 +49,11 @@ describe('login throttle over the full app (issue #896)', () => {
         });
       statuses.push(res.status);
     }
-    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
-    expect(statuses[5]).toBe(429);
-    expect(statuses[6]).toBe(429);
+    expect(statuses.slice(0, 5), throttlerDiagnostics()).toEqual([
+      401, 401, 401, 401, 401,
+    ]);
+    expect(statuses[5], throttlerDiagnostics()).toBe(429);
+    expect(statuses[6], throttlerDiagnostics()).toBe(429);
   });
 
   it('throttles repeated failures for one account (per-account budget)', async () => {
@@ -55,9 +68,11 @@ describe('login throttle over the full app (issue #896)', () => {
         });
       statuses.push(res.status);
     }
-    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
-    expect(statuses[5]).toBe(429);
-    expect(statuses[6]).toBe(429);
+    expect(statuses.slice(0, 5), throttlerDiagnostics()).toEqual([
+      401, 401, 401, 401, 401,
+    ]);
+    expect(statuses[5], throttlerDiagnostics()).toBe(429);
+    expect(statuses[6], throttlerDiagnostics()).toBe(429);
   });
 
   afterEach(async () => {
