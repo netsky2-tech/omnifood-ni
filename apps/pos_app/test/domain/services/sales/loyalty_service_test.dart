@@ -238,7 +238,7 @@ void main() {
       expect(tx.ticketId, equals('inv-102'));
       expect(tx.units, equals(-50));
       expect(tx.origin, equals('POS'));
-      expect(tx.idempotencyKey, equals('loyalty:redeem:inv-102'));
+      expect(tx.idempotencyKey, equals('loyalty:redeem:inv-102:points'));
     });
 
     test('redeem with an attributed program carries it on the row', () {
@@ -252,6 +252,107 @@ void main() {
 
       expect(tx.transactionType, equals('REDEEM'));
       expect(tx.loyaltyProgramId, equals('prog-1'));
+    });
+
+    test('fractional earn quantizes the row to integer units (round) and '
+        'aligns points, units and balance', () {
+      // C\$55 at rate 0.1 earns 5.5 pts: the cloud customer balance sums
+      // the fractional points column while the V1 projection sums integer
+      // units — the row itself must be quantized so every balance path
+      // agrees (issue #891, owner option A).
+      final tx = loyaltyService.createEarnTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        netAmount: 55.0,
+        invoiceId: 'inv-103',
+        loyaltyProgramId: 'prog-1',
+      );
+
+      expect(tx.transactionType, equals('EARN'));
+      expect(tx.units, equals(6));
+      expect(tx.points, equals(6.0), reason: 'points mirrors the quantized units');
+      expect(tx.balanceAfter, equals(106.0));
+      expect(tx.idempotencyKey, equals('loyalty:earn:prog-1:inv-103'));
+    });
+
+    test('a sub-half-point earn still credits one unit (never an aborting '
+        'declared EARN with NULL units)', () {
+      // C\$4 at rate 0.1 earns 0.4 pts: round() would give 0 units, and a
+      // declared EARN with NULL/zero units violates the residual §9.3
+      // guard (the insert would ABORT). Minimum one credited unit.
+      final tx = loyaltyService.createEarnTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        netAmount: 4.0,
+        invoiceId: 'inv-104',
+        loyaltyProgramId: 'prog-1',
+      );
+
+      expect(tx.transactionType, equals('EARN'));
+      expect(tx.units, equals(1));
+      expect(tx.points, equals(1.0));
+      expect(tx.balanceAfter, equals(101.0));
+    });
+
+    test('a sub-half-point redeem debits one unit (never an aborting '
+        'declared REDEEM with NULL units)', () {
+      final tx = loyaltyService.createRedeemTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        pointsToRedeem: 0.4,
+        invoiceId: 'inv-105',
+      );
+
+      expect(tx.transactionType, equals('REDEEM'));
+      expect(tx.units, equals(-1));
+      expect(tx.points, equals(-1.0));
+      expect(tx.balanceAfter, equals(99.0));
+    });
+
+    test('redeem idempotency key discriminates the reward from legacy '
+        'points on the same ticket', () {
+      final byReward = loyaltyService.createRedeemTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        pointsToRedeem: 10.0,
+        invoiceId: 'inv-106',
+        loyaltyProgramId: 'prog-1',
+        rewardId: 'rw-1',
+      );
+      final byPoints = loyaltyService.createRedeemTransaction(
+        customerId: 'c-1',
+        currentBalance: 90.0,
+        pointsToRedeem: 10.0,
+        invoiceId: 'inv-106',
+      );
+
+      expect(byReward.idempotencyKey,
+          equals('loyalty:redeem:inv-106:rw-1'));
+      expect(byPoints.idempotencyKey,
+          equals('loyalty:redeem:inv-106:points'));
+    });
+
+    test('a fractional adjust quantizes to one signed unit (never an '
+        'aborting declared ADJUST with NULL/zero units)', () {
+      final up = loyaltyService.createAdjustmentTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        pointsDelta: 0.4,
+        reason: 'manual adjustment',
+        invoiceId: 'inv-107',
+      );
+      final down = loyaltyService.createAdjustmentTransaction(
+        customerId: 'c-1',
+        currentBalance: 100.0,
+        pointsDelta: -0.4,
+        reason: 'manual adjustment',
+        invoiceId: 'inv-108',
+      );
+
+      expect(up.units, equals(1));
+      expect(up.points, equals(1.0));
+      expect(down.units, equals(-1));
+      expect(down.points, equals(-1.0));
     });
 
     test('declared ADJUST: explicit type, signed units and origin', () {

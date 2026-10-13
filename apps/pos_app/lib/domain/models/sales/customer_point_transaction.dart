@@ -31,7 +31,22 @@ String? canonicalLoyaltyLedgerType(String? raw) {
     return null;
   }
   final upper = raw.trim().toUpperCase();
-  return loyaltyLedgerTypeForms.contains(upper) ? upper : null;
+  if (loyaltyLedgerTypeForms.contains(upper)) {
+    return upper;
+  }
+  // Issue #893 (R1-silent-null-downgrade): the downgrade to the NULL legacy
+  // namespace must be OBSERVABLE — a writer introducing an invalid type
+  // would otherwise silently strip its movements out of every V1 identity.
+  assert(() {
+    // ignore: avoid_print
+    print(
+      'LOYALTY_LEDGER_TYPE_DOWNGRADE: transaction_type "$raw" is outside '
+      'the §9.3 domain $loyaltyLedgerTypeForms — the row falls back to the '
+      'NULL legacy namespace (issue #893)',
+    );
+    return true;
+  }());
+  return null;
 }
 
 @freezed

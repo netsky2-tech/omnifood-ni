@@ -1,8 +1,16 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { Insumo } from './entities/insumo.entity';
+import {
+  UnconfiguredConversionError,
+  validateInsumoConversion,
+} from './uom-catalog';
 import { Supplier } from './entities/supplier.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
 import {
@@ -44,6 +52,25 @@ export class PurchaseService {
       });
       if (!supplier)
         throw new NotFoundException(`Supplier ${supplierId} not found`);
+
+      // Zona A S3 invariant (issue: SOHO operational gaps): the untouched
+      // factor-1 default across two DIFFERENT catalog units must never
+      // distort stock and CPP — reject the load with an actionable message
+      // instead of silently multiplying by 1.
+      try {
+        validateInsumoConversion(
+          insumo.purchaseUom,
+          insumo.consumptionUom,
+          Number(insumo.conversionFactor),
+        );
+      } catch (error) {
+        if (error instanceof UnconfiguredConversionError) {
+          throw new BadRequestException(
+            `Insumo ${insumo.name} (${insumo.id}): ${error.message}`,
+          );
+        }
+        throw error;
+      }
 
       const currentTotalCost =
         Number(insumo.stock) * Number(insumo.averageCost);

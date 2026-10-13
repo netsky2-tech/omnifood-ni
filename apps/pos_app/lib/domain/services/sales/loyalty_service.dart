@@ -94,14 +94,24 @@ class LoyaltyService {
   }) {
     final pointsEarned = calculatePointsEarned(netAmount);
     final declared = invoiceId != null && loyaltyProgramId != null;
-    final units = pointsEarned.round();
+    // Issue #891 (owner option A): units are the canonical ledger amount.
+    // The cloud customer balance sums the fractional points column while
+    // the V1 projection sums integer units — the ROW itself is quantized
+    // (points mirrors the rounded units) so every balance path agrees.
+    // A positive earn below half a point still credits one unit: a
+    // declared EARN with NULL/zero units violates the residual §9.3 guard
+    // (the insert would ABORT — issue #4 trap).
+    final units = pointsEarned.round() == 0 && pointsEarned > 0
+        ? 1
+        : pointsEarned.round();
+    final quantized = units.toDouble();
     return CustomerPointTransaction(
       id: const Uuid().v4(),
       customerId: customerId,
       invoiceId: invoiceId,
       type: PointTransactionType.earn,
-      points: pointsEarned,
-      balanceAfter: currentBalance + pointsEarned,
+      points: quantized,
+      balanceAfter: currentBalance + quantized,
       conversionRate: earnRate,
       reason: 'Acumulación por compra',
       createdAt: DateTime.now(),
@@ -119,23 +129,28 @@ class LoyaltyService {
 
   /// T4: REDEEM declares its type with the ticket alone (§9.3 requires a
   /// ticket but not a program); the attributed program rides along when the
-  /// caller knows it (reward-driven redemption).
+  /// caller knows it (reward-driven redemption). The idempotency key
+  /// discriminates the reward from a legacy-points redemption on the same
+  /// ticket (issue #891). Same quantization contract as EARN: a positive
+  /// redemption below half a point still debits one unit.
   CustomerPointTransaction createRedeemTransaction({
     required String customerId,
     required double currentBalance,
     required double pointsToRedeem,
     String? invoiceId,
     String? loyaltyProgramId,
+    String? rewardId,
   }) {
     final redeemed = pointsToRedeem.abs();
-    final units = redeemed.round();
+    final magnitude = redeemed.round() == 0 && redeemed > 0 ? 1 : redeemed.round();
+    final quantized = magnitude.toDouble();
     return CustomerPointTransaction(
       id: const Uuid().v4(),
       customerId: customerId,
       invoiceId: invoiceId,
       type: PointTransactionType.redeem,
-      points: -redeemed,
-      balanceAfter: currentBalance - redeemed,
+      points: -quantized,
+      balanceAfter: currentBalance - quantized,
       conversionRate: redeemRate,
       reason: 'Redención en checkout',
       createdAt: DateTime.now(),
@@ -143,10 +158,11 @@ class LoyaltyService {
       loyaltyProgramId: loyaltyProgramId,
       ticketId: invoiceId,
       transactionType: invoiceId != null ? 'REDEEM' : null,
-      units: units == 0 ? null : -units,
+      units: magnitude == 0 ? null : -magnitude,
       origin: 'POS',
-      idempotencyKey:
-          invoiceId != null ? 'loyalty:redeem:$invoiceId' : null,
+      idempotencyKey: invoiceId != null
+          ? 'loyalty:redeem:$invoiceId:${rewardId ?? 'points'}'
+          : null,
     );
   }
 
@@ -159,14 +175,20 @@ class LoyaltyService {
     required String reason,
     String? invoiceId,
   }) {
-    final units = pointsDelta.round();
+    // Issue #891: same quantization contract — a fractional delta still
+    // moves one signed unit (a declared ADJUST with NULL/zero units would
+    // abort against the residual §9.3 guard).
+    final units = pointsDelta.round() == 0 && pointsDelta != 0
+        ? (pointsDelta > 0 ? 1 : -1)
+        : pointsDelta.round();
+    final quantized = units.toDouble();
     return CustomerPointTransaction(
       id: const Uuid().v4(),
       customerId: customerId,
       invoiceId: invoiceId,
       type: PointTransactionType.adjust,
-      points: pointsDelta,
-      balanceAfter: currentBalance + pointsDelta,
+      points: quantized,
+      balanceAfter: currentBalance + quantized,
       conversionRate: earnRate,
       reason: reason,
       createdAt: DateTime.now(),
