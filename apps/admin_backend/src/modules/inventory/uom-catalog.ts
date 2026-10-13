@@ -145,7 +145,7 @@ export const UOM_CATALOG: readonly UomCatalogEntry[] = [
     name: 'unidad',
     dimension: 'count',
     factorToAnchor: 1,
-    aliases: ['unidad', 'unidades', 'pieza', 'piezas', 'u'],
+    aliases: ['unidad', 'unidades', 'pieza', 'piezas', 'pieza entera', 'u'],
   },
   {
     code: 'docena',
@@ -218,6 +218,20 @@ export const UOM_CATALOG: readonly UomCatalogEntry[] = [
     dimension: 'serving',
     factorToAnchor: null,
     aliases: ['porción', 'porcion', 'porciones'],
+  },
+  {
+    code: 'taza_serving',
+    name: 'taza (cocina)',
+    dimension: 'serving',
+    factorToAnchor: null,
+    aliases: ['taza', 'tazas'],
+  },
+  {
+    code: 'pastel',
+    name: 'pastel entero',
+    dimension: 'serving',
+    factorToAnchor: null,
+    aliases: ['pastel entero', 'pastel', 'pasteles'],
   },
   {
     code: 'rebanada',
