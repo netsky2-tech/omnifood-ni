@@ -20,6 +20,7 @@ const mockProducts: Product[] = [
     averageCost: 15.0,
     sellPrice: 45.0,
     is_active: true,
+    image_url: "data:image/webp;base64,mockEspressoImage",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
@@ -36,6 +37,7 @@ const mockProducts: Product[] = [
     averageCost: 25.0,
     sellPrice: 65.0,
     is_active: false,
+    image_url: null,
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
@@ -213,5 +215,17 @@ describe("S3 — NHILoS Backoffice Experience Layout & Luxury (NHILoS §7, §41)
 
     expect(screen.getByText("C$45.00")).toHaveClass("tabular-nums");
     expect(screen.getByText("120.00")).toHaveClass("tabular-nums");
+  });
+
+  it("renders product image thumbnail when present and monogram fallback when absent (S4)", () => {
+    renderPage();
+
+    const img = screen.getByTestId("product-table-thumbnail");
+    expect(img).toBeInTheDocument();
+    expect(img).toHaveAttribute("src", "data:image/webp;base64,mockEspressoImage");
+
+    const monogram = screen.getByTestId("product-table-monogram");
+    expect(monogram).toBeInTheDocument();
+    expect(monogram).toHaveTextContent("TA");
   });
 });

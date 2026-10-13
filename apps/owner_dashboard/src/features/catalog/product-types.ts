@@ -44,6 +44,7 @@ export interface Product {
   averageCost: number;
   sellPrice: number;
   is_active: boolean;
+  image_url?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -59,6 +60,7 @@ export interface CreateProductInput {
   averageCost?: number;
   sellPrice?: number;
   is_active?: boolean;
+  image_url?: string | null;
 }
 
 export interface UpdateProductInput {
@@ -70,6 +72,7 @@ export interface UpdateProductInput {
   is_perishable?: boolean;
   sellPrice?: number;
   is_active?: boolean;
+  image_url?: string | null;
 }
 
 // --- Product dialog form validation (Unit B, form sweep) ---
