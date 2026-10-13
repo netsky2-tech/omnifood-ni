@@ -279,6 +279,7 @@ class InventoryMapper {
       barcode: entity.barcode,
       category: entity.category,
       categoryId: entity.categoryId,
+      imageUrl: entity.imageUrl,
       isPrepared: entity.isPrepared,
       productType: entity.productType,
       mappingVersionId: entity.mappingVersionId,
@@ -316,6 +317,7 @@ class InventoryMapper {
       directStockInsumoId: domain.directStockInsumoId,
       taxRate: domain.effectiveTaxRate,
       isTaxExempt: domain.isGenuinelyExempt,
+      imageUrl: domain.imageUrl,
     );
   }
 

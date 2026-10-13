@@ -3282,6 +3282,19 @@ final migration71_72 = Migration(71, 72, (database) async {
   );
 });
 
+/// Batch 3: Product image support. Adds nullable `image_url TEXT` to the
+/// local SQLite `products` table so products can carry client-optimized WebP
+/// thumbnails offline.
+final migration72_73 = Migration(72, 73, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(products)');
+  final hasImageUrl = columns.any(
+    (column) => column['name'] == 'image_url',
+  );
+  if (!hasImageUrl) {
+    await database.execute('ALTER TABLE products ADD COLUMN image_url TEXT');
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3345,6 +3358,7 @@ final allMigrations = [
   migration69_70,
   migration70_71,
   migration71_72,
+  migration72_73,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

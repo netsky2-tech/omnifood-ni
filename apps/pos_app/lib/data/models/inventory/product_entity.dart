@@ -42,6 +42,8 @@ class ProductEntity {
   final bool isTaxExempt;
   @ColumnInfo(name: 'tenant_id')
   final String? tenantId;
+  @ColumnInfo(name: 'image_url')
+  final String? imageUrl;
 
   ProductEntity({
     required this.id,
@@ -66,6 +68,7 @@ class ProductEntity {
     this.taxRate = 0.0,
     this.isTaxExempt = false,
     this.tenantId,
+    this.imageUrl,
   });
 }
 

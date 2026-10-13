@@ -865,9 +865,7 @@ class MockMovementEngine extends _i1.Mock implements _i3.MovementEngine {
             quantity,
             reason,
           ],
-          {
-            #userId: userId,
-          },
+          {#userId: userId},
         ),
         returnValue: _i5.Future<void>.value(),
         returnValueForMissingStub: _i5.Future<void>.value(),

@@ -20,6 +20,7 @@ class Product with _$Product {
     /// T0.5c: resolved category identity (catalog_values.id). Promotions
     /// match strictly on this id, never on the free-text [category].
     String? categoryId,
+    String? imageUrl,
     @Default(false) bool isPrepared,
     @Default('SIMPLE') String productType,
     String? mappingVersionId,

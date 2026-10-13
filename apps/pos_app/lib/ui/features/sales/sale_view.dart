@@ -1110,9 +1110,10 @@ class ProductGrid extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       ProductCardThumbnail(
+                        imageUrl: product.imageUrl,
                         category: product.category,
                         productName: product.name,
-                        size: isHandheld ? 32 : 40,
+                        size: isHandheld ? 36 : 46,
                         color: promo != null ? Colors.deepOrange : colorScheme.primary,
                       ),
                       const SizedBox(height: 8),
