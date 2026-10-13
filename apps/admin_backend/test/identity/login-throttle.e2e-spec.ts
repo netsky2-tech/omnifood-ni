@@ -25,11 +25,7 @@ describe('login throttle over the full app (issue #896)', () => {
       strict: false,
     }) as unknown as Record<string, unknown>;
     const resolved = Array.isArray(guard['throttlers'])
-      ? (guard['throttlers'] as Array<Record<string, unknown>>).map((t) => ({
-          name: t['name'],
-          limit: t['limit'],
-          ttl: t['ttl'],
-        }))
+      ? guard['throttlers']
       : 'none';
     return JSON.stringify({ resolved });
   };
