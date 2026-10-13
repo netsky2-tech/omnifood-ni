@@ -15,6 +15,8 @@ import { TemplateSeedLink } from '../../src/modules/onboarding/entities/template
 import { OnboardingSession } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Product } from '../../src/modules/inventory/entities/product.entity';
+import { CatalogValue } from '../../src/modules/catalog/entities/catalog-value.entity';
+import { FiscalSetupService } from '../../src/modules/onboarding/services/fiscal-setup.service';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { RecipeVersion } from '../../src/modules/inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../src/modules/inventory/entities/recipe-detail.entity';
@@ -206,6 +208,7 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
         OnboardingSession,
         Insumo,
         Product,
+        CatalogValue,
         RecipeVersion,
         RecipeDetail,
         Recipe,
@@ -230,6 +233,15 @@ describe('industry template application paths under migrated RLS (Real PostgreSQ
       runtime.getRepository(Recipe),
       runtime.getRepository(UomConversion),
       runtime,
+    // F1/S11: production injects FiscalSetupService; this e2e targets the
+    // template application pipeline, so a minimal stub supplies the
+    // regime-derived rate the apply path reads (Régimen General default).
+    {
+      getFiscalSetup: async () => ({
+        taxRateIva: 0.15,
+        pricesIncludeTax: true,
+      }),
+    } as unknown as FiscalSetupService,
     );
     previewService = new TemplatePreviewService(
       runtime.getRepository(IndustryTemplate),
