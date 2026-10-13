@@ -54,8 +54,8 @@ export const PRODUCT_STATUS_BADGES: Record<"active" | "inactive", StatusBadgeTon
   active: {
     label: "Activo",
     className:
-      "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 font-medium",
-    dotClassName: "bg-emerald-600 dark:bg-emerald-400",
+      "border-emerald-700 bg-emerald-700 text-white font-medium",
+    dotClassName: "bg-emerald-300",
   },
   inactive: {
     label: "Inactivo",
