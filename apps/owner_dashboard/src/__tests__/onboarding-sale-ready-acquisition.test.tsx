@@ -438,7 +438,9 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
           (call[1]?.method ?? "GET") === "POST",
       );
       expect(posts).toHaveLength(1);
-      expect(JSON.parse(String(posts[0][1]?.body))).toEqual({
+      const firstPost = posts[0];
+      expect(firstPost).toBeDefined();
+      expect(JSON.parse(String(firstPost?.[1]?.body))).toEqual({
         name: "Café Americano 8oz",
         sellPrice: 45.99,
         uom: "UN",
