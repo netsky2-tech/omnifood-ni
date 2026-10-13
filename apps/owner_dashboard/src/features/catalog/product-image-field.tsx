@@ -44,6 +44,83 @@ export function resolveImageMime(file: File): string | null {
   return null;
 }
 
+export type SniffedImageFormat =
+  | "jpeg"
+  | "png"
+  | "webp"
+  | "heic"
+  | "avif"
+  | "unknown";
+
+/**
+ * Reads the file's magic bytes to identify the REAL payload format,
+ * independent of whatever MIME/extension the OS reported. Extensions and
+ * MIME types are claims; the first bytes of the payload are evidence.
+ *
+ * This is what makes the "No se pudo leer el archivo de imagen" failure
+ * diagnosable: an iPhone HEIC/HEIF photo saved as .jpeg passes every
+ * declared-type gate and only explodes at browser decode time.
+ */
+export async function sniffImageFormat(
+  file: File,
+): Promise<SniffedImageFormat> {
+  try {
+    const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+
+    // JPEG: FF D8 FF (SOI + marker)
+    if (header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) {
+      return "jpeg";
+    }
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (
+      header[0] === 0x89 &&
+      header[1] === 0x50 &&
+      header[2] === 0x4e &&
+      header[3] === 0x47
+    ) {
+      return "png";
+    }
+    // WebP: 'RIFF' .... 'WEBP'
+    if (
+      header[0] === 0x52 &&
+      header[1] === 0x49 &&
+      header[2] === 0x46 &&
+      header[3] === 0x46 &&
+      header[8] === 0x57 &&
+      header[9] === 0x45 &&
+      header[10] === 0x42 &&
+      header[11] === 0x50
+    ) {
+      return "webp";
+    }
+    // ISO-BMFF container (bytes 4..7 = 'ftyp'): HEIC/HEIF and AVIF brands.
+    if (
+      header[4] === 0x66 &&
+      header[5] === 0x74 &&
+      header[6] === 0x79 &&
+      header[7] === 0x70
+    ) {
+      const brand = String.fromCharCode(
+        header[8] ?? 0,
+        header[9] ?? 0,
+        header[10] ?? 0,
+        header[11] ?? 0,
+      );
+      if (
+        /^(hei|heim|heis|hevc|hevx|mif1|msf1)/.test(brand)
+      ) {
+        return "heic";
+      }
+      if (brand.startsWith("avi")) {
+        return "avif";
+      }
+    }
+    return "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 /**
  * Validates and compresses an image in the browser canvas:
  * 1. Checks the resolved MIME type against ALLOWED_IMAGE_TYPES.
@@ -68,6 +145,22 @@ export async function validateAndCompressProductImage(
   if (file.size > MAX_IMAGE_FILE_SIZE_BYTES) {
     throw new Error(
       "El archivo es muy pesado. El tamaño máximo permitido es 2 MB.",
+    );
+  }
+
+  // Payload-level diagnosis: the declared type/extension is a claim, the
+  // magic bytes are evidence. A HEIC photo saved as .jpeg passes every
+  // declared-type gate and can only fail later at browser decode time with
+  // an opaque error — catch it here with an actionable message instead.
+  const sniffed = await sniffImageFormat(file);
+  if (sniffed === "heic" || sniffed === "avif") {
+    throw new Error(
+      "El archivo está en formato HEIC/HEIF (típico de cámaras de iPhone). Convertilo a JPG o PNG antes de subirlo.",
+    );
+  }
+  if (sniffed !== "jpeg" && sniffed !== "png" && sniffed !== "webp") {
+    throw new Error(
+      "El archivo no es una imagen JPG, PNG o WebP válida. Si lo descargaste o vino por WhatsApp, verificá que esté completo e intentá de nuevo.",
     );
   }
 
@@ -151,7 +244,11 @@ export async function validateAndCompressProductImage(
 
     img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(new Error("No se pudo leer el archivo de imagen."));
+      reject(
+        new Error(
+          "No se pudo leer el archivo de imagen. Puede estar dañado o en un formato que el navegador no puede abrir (por ejemplo HEIC de iPhone). Probá abrirlo, guardarlo como JPG y volver a intentarlo.",
+        ),
+      );
     };
 
     img.src = objectUrl;
