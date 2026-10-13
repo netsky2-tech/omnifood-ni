@@ -100,3 +100,12 @@ tenants, and hard-gate activation on missing business configuration. POS BOH rea
   branch); activation blockers = hard gate in backend ("Gate duro en backend"); copy
   sweep covers ALL texts including the quoted ones, applying NHilos standards and
   backoffice guidelines keeping "luxury y +1".
+- L3 (execution): T1–T8 landed in 4 local commits on fix/catalog-seed-defaults —
+  c53dfac7 (backend gate, focused suites 65/65), 0769950a (template apply guard,
+  43/43), 42b0fb9f (feature doc), d4c82586 (dashboard overhaul: seeding card, label
+  maps onboardingBlocker/WarningLabels, copy sweep, gate surfacing, manual form
+  catalog-backed selects; dashboard suite 1707 passed + tsc clean). Owner WIP docs
+  left untouched (5 modified files under docs/). T9 (native review + PR) in flight.
+- L4 (S4 resolution): catalog step now reads readiness.catalog (single backend
+  source); useSeedCatalogDefaults invalidates the ["onboarding"] prefix so the seed
+  refreshes session + summary + steps together.
