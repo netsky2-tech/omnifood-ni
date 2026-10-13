@@ -15,6 +15,9 @@ import { AppModule } from '../../src/core/app/app.module';
 
 describe('login throttle over the full app (issue #896)', () => {
   let app: INestApplication<App>;
+  let throttlerSpy: jest.SpiedFunction<
+    typeof ThrottlerGuard.prototype.canActivate
+  >;
 
   /** Diagnostic payload for CI failures: what the guard actually resolved. */
   const throttlerDiagnostics = (): string => {
@@ -27,7 +30,23 @@ describe('login throttle over the full app (issue #896)', () => {
     const resolved = Array.isArray(guard['throttlers'])
       ? guard['throttlers']
       : 'none';
-    return JSON.stringify({ resolved });
+    // Which guard instances actually ran canActivate, and with which
+    // options — the failing environments show correct module options but
+    // no throttling, so the executing instance is the open question.
+    const calls = throttlerSpy?.mock.calls.length ?? -1;
+    const instances = (throttlerSpy?.mock.instances ?? []).map(
+      (instance) =>
+        (
+          instance as unknown as {
+            throttlers?: Array<{ name?: string }>;
+          }
+        ).throttlers?.map((t) => t.name) ?? 'unknown-instance',
+    );
+    return JSON.stringify({
+      appGuardOptions: resolved,
+      canActivateCalls: calls,
+      canActivateInstances: instances,
+    });
   };
 
   beforeEach(async () => {
@@ -39,6 +58,10 @@ describe('login throttle over the full app (issue #896)', () => {
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
     await app.init();
+    // Record every canActivate invocation with its executing `this`, so a
+    // failing run reveals whether the guard ran at all and with which
+    // module's options (issue #896).
+    throttlerSpy = jest.spyOn(ThrottlerGuard.prototype, 'canActivate');
   });
 
   it('allows five failed logins and throttles the sixth (per-IP budget)', async () => {
@@ -88,6 +111,7 @@ describe('login throttle over the full app (issue #896)', () => {
   });
 
   afterEach(async () => {
+    throttlerSpy?.mockRestore();
     await app?.close();
   });
 });
