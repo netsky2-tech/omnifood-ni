@@ -74,7 +74,7 @@ void main() {
 
   /// Pumps [InsumoView] with a view model backed by a mocked repository and
   /// stays on the INSUMOS tab (inventory flows live here).
-  Future<void> _pumpInsumoTab(WidgetTester tester) async {
+  Future<void> pumpInsumoTab(WidgetTester tester) async {
     final repository = _MockInventoryRepository();
     when(() => repository.getActiveInsumos()).thenAnswer((_) async => const []);
     when(() => repository.getActiveProducts()).thenAnswer((_) async => const []);
@@ -250,7 +250,7 @@ void main() {
     testWidgets(
       'insumo tab keeps its inventory registration flow (stock/PAR are not catalog)',
       (tester) async {
-        await _pumpInsumoTab(tester);
+        await pumpInsumoTab(tester);
 
         expect(find.text('REGISTRAR PRIMER INSUMO'), findsOneWidget);
       },
