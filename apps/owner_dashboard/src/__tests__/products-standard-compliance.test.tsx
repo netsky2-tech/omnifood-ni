@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProductPage, ProductStatusBadge } from "@/features/catalog/product-page";
-import { useProducts, usePaginatedProducts } from "@/features/catalog/use-product";
+import { usePaginatedProducts } from "@/features/catalog/use-product";
 import type { Product } from "@/features/catalog/product-types";
 
 const mockProducts: Product[] = [
