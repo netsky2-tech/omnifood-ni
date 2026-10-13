@@ -72,7 +72,32 @@ tenants, and hard-gate activation on missing business configuration. POS BOH rea
   valid-looking-but-unsellable rows (standard core-promise blocker); audit
   category/uom fills.
 - T8 (S10): manual product creation form fixed and aligned with products form.
-- T9 (S2): native review + PR of the branch.
+- T9 (S2): native review + PR of the branch. DONE — PR #907, native review approved
+  (lineage review-bce7503e24fbd08b, only non-blocking advisories).
+- T10 (S11, template audit follow-up, owner approved "Todo ahora" on PR #907):
+  - F1 fiscal: template apply inherits the tenant's regime tax rate from
+    FiscalSetupService (Product.tax_rate entity default 0.15 silently mis-invoices
+    Cuota Fija tenants — the POS reads taxRate from the product delta).
+  - F2 UOM: template source seeds 'UN'/'KG'/'G'/'L'/'ML'; 'un' is NOT a unidad alias
+    (uom-catalog.ts:130-137) so resolveUom('UN') is null and purchase.service.ts:61
+    blocks every purchase load for UN-denominated template insumos. Canonicalize
+    template source uom codes via a new migration + add 'un' alias to unidad to heal
+    already-applied tenants.
+  - F3 categories: map template display labels to canonical SALES_PRODUCT_CATEGORY
+    codes at apply time (normalized label/name match; honest NULL fallback).
+  - F4 coverage: enrich the 3 templates + add FOOD_PARK — menu content requires owner
+    approval before seeding (owner decision: "Proponés, yo apruebo").
+- L6 (owner F4 decision via questionnaire): enrich the 3 EXISTING templates only —
+  NO new FOOD_PARK template ("Sin FOOD_PARK"); DO add BEBIDA_ALCOHOLICA and POSTRES
+  to DEFAULT_CATALOG_SEED ("Sí, 2 códigos nuevos") — existing tenants receive them
+  through the idempotent seed-defaults action (S1), no extra per-tenant migration
+  needed. Approved menu = the agent proposal minus FOOD_PARK:
+  CAFETERIA +7 (frappé 145, jugo 85, sándwich 120, croissant 75, queque 65, agua 25,
+  gaseosa 35), BAR_RESTAURANTE +9 (pollo 285, tacos 140, quesillo 90, gallopinto 85,
+  desayuno 150, refresco 60, gaseosa 35, agua 20, flan 80), RETAIL +8 (arroz 120,
+  azúcar 45, aceite 95, leche polvo 145, café molido 110, frijoles 55, pan guaba 15,
+  hielo 40). All uom codes canonical (kg/g/l/unidad), BOMs only for prepared items,
+  reventa for packaged goods.
 
 ## Log
 
@@ -109,3 +134,11 @@ tenants, and hard-gate activation on missing business configuration. POS BOH rea
 - L4 (S4 resolution): catalog step now reads readiness.catalog (single backend
   source); useSeedCatalogDefaults invalidates the ["onboarding"] prefix so the seed
   refreshes session + summary + steps together.
+- L5 (owner, template audit): "el tema de las plantillas que se aplican, se adecuan
+  correctamente a la estructura de datos? Y, son plantillas aterrizadas al tipo de
+  negocio? Necesitamos que sea generales y realistas al rubro, a como lo suele manejar
+  el mercado". Findings F1 (tax regime ignored — fiscal defect), F2 ('UN' not in UOM
+  catalog — purchases blocked), F3 (category labels not mapped to canonical codes),
+  F4 (coverage too thin, no FOOD_PARK template; prices themselves are realistic).
+  Owner decision: fix everything now on PR #907; menu content proposed by agent,
+  approved by owner before seeding.
