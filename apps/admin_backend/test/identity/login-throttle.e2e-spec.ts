@@ -10,14 +10,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { AppModule } from '../../src/core/app/app.module';
 
 describe('login throttle over the full app (issue #896)', () => {
   let app: INestApplication<App>;
-  let throttlerSpy: jest.SpiedFunction<
-    typeof ThrottlerGuard.prototype.canActivate
-  >;
 
   beforeEach(async () => {
     // A fresh app per test: the throttler storage is in-memory per instance,
