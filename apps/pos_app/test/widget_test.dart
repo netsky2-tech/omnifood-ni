@@ -174,7 +174,7 @@ void main() {
 
     expect(find.text('Acceso restringido'), findsOneWidget);
     expect(
-      find.textContaining('No tenés permisos para acceder a Inventario BOH.'),
+      find.textContaining('No tenés permisos para acceder a Inventario.'),
       findsOneWidget,
     );
   });
@@ -193,7 +193,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Inventario'), findsOneWidget);
     expect(find.text('Ítems'), findsOneWidget);
     expect(find.text('Proveedores'), findsOneWidget);
     expect(find.text('Almacenes'), findsOneWidget);
@@ -216,7 +216,7 @@ void main() {
 
     expect(find.text('Acceso restringido'), findsOneWidget);
     expect(
-      find.textContaining('No tenés permisos para acceder a Mermas BOH.'),
+      find.textContaining('No tenés permisos para acceder a Mermas.'),
       findsOneWidget,
     );
     expect(find.byType(BohRouteGuard), findsOneWidget);
@@ -238,7 +238,7 @@ void main() {
 
     expect(find.text('Acceso restringido'), findsOneWidget);
     expect(
-      find.textContaining('No tenés permisos para acceder a Mermas BOH.'),
+      find.textContaining('No tenés permisos para acceder a Mermas.'),
       findsOneWidget,
     );
   });

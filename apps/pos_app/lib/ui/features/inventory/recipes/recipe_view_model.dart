@@ -291,7 +291,7 @@ class RecipeViewModel extends ChangeNotifier {
             )
             .toList(growable: false),
       );
-      _statusMessage = 'Versión V$nextVersion publicada localmente y pendiente de sync BOH.';
+      _statusMessage = 'Versión V$nextVersion publicada localmente y pendiente de sincronización.';
       await selectProduct(product);
     } catch (error) {
       _errorMessage = 'No se pudo publicar la versión: $error';

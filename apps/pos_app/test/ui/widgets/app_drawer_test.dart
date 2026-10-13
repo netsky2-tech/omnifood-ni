@@ -85,10 +85,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Reportes DGI'), findsNothing);
-    expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Inventario'), findsOneWidget);
     expect(find.text('Producción'), findsNothing);
     expect(
-      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Inventario BOH')).enabled,
+      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Inventario')).enabled,
       isFalse,
     );
   });
@@ -110,7 +110,7 @@ void main() {
     expect(find.text('Reportes DGI'), findsNothing);
     expect(find.byIcon(Icons.analytics), findsNothing);
     expect(
-      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Inventario BOH')).enabled,
+      tester.widget<ListTile>(find.widgetWithText(ListTile, 'Inventario')).enabled,
       isFalse,
     );
     expect(find.text('Identidad de la Terminal'), findsNothing);
@@ -132,7 +132,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Reportes DGI'), findsOneWidget);
-    expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Inventario'), findsOneWidget);
     expect(find.text('Identidad de la Terminal'), findsOneWidget);
     expect(find.text('Activar Terminal'), findsOneWidget);
   });
@@ -173,9 +173,9 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Inventario BOH'), findsOneWidget);
+    expect(find.text('Inventario'), findsOneWidget);
 
-    await tester.tap(find.text('Inventario BOH'));
+    await tester.tap(find.text('Inventario'));
     await tester.pumpAndSettle();
 
     expect(find.text('BOH Shell Screen'), findsOneWidget);
@@ -201,7 +201,7 @@ void main() {
       expect(find.text('Proveedores'), findsNothing);
       expect(find.text('Bodegas'), findsNothing);
       expect(find.text('Mermas'), findsNothing);
-      expect(find.text('Inventario BOH'), findsOneWidget);
+      expect(find.text('Inventario'), findsOneWidget);
     },
   );
 

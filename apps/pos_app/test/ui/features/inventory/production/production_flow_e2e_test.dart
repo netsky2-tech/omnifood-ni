@@ -159,7 +159,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Verify initial UI state
-    expect(find.text('Producción BOH'), findsOneWidget);
+    expect(find.text('Producción'), findsOneWidget);
     expect(find.text('CONFIRMAR Y CERRAR ORDEN'), findsOneWidget);
 
     // 2. Open production modal

@@ -12,7 +12,7 @@ class ForensicAlertView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Alertas BOH')),
+      appBar: AppBar(title: const Text('Alertas')),
       body: Consumer<ForensicAlertViewModel>(
         builder: (context, viewModel, child) {
           return Padding(
@@ -27,7 +27,7 @@ class ForensicAlertView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Bandeja persistente BOH.',
+                          'Bandeja persistente de alertas.',
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 8),
@@ -169,13 +169,13 @@ class _EmptyForensicAlertState extends StatelessWidget {
           Icon(Icons.notifications_none, size: 56, color: Theme.of(context).colorScheme.outline),
           const SizedBox(height: 12),
           Text(
-            'Todavía no hay alertas BOH activas para esta tienda.',
+            'Todavía no hay alertas activas para esta tienda.',
             style: Theme.of(context).textTheme.titleMedium,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           const Text(
-            'Cuando el flujo local o el backend detecten señales BOH, van a quedar visibles acá hasta que se reconozcan, resuelvan o sean reemplazadas.',
+            'Cuando el flujo local o el backend detecten señales, van a quedar visibles acá hasta que se reconozcan, resuelvan o sean reemplazadas.',
             textAlign: TextAlign.center,
           ),
         ],

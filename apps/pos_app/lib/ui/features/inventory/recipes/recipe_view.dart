@@ -14,24 +14,12 @@ class RecipeView extends StatefulWidget {
 }
 
 class _RecipeViewState extends State<RecipeView> {
-  final TextEditingController _yieldController = TextEditingController(text: '1');
-  final TextEditingController _shrinkController = TextEditingController(text: '0');
-  final TextEditingController _noteController = TextEditingController();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RecipeViewModel>().loadInitialData();
     });
-  }
-
-  @override
-  void dispose() {
-    _yieldController.dispose();
-    _shrinkController.dispose();
-    _noteController.dispose();
-    super.dispose();
   }
 
   @override
@@ -44,7 +32,7 @@ class _RecipeViewState extends State<RecipeView> {
       if (viewModel.selectedProduct == null) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Recetas BOH'),
+            title: const Text('Recetas'),
             backgroundColor: colorScheme.surface,
             elevation: 0,
             shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
@@ -66,14 +54,14 @@ class _RecipeViewState extends State<RecipeView> {
             elevation: 0,
             shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
           ),
-          body: _buildRecipeEditor(context, viewModel, colorScheme, isHandheld: true),
+          body: _buildRecipeVersionsWorkspace(context, viewModel),
         );
       }
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Recetas BOH'),
+        title: const Text('Recetas'),
         backgroundColor: colorScheme.surface,
         elevation: 0,
         shape: Border(bottom: BorderSide(color: colorScheme.outlineVariant)),
@@ -93,9 +81,9 @@ class _RecipeViewState extends State<RecipeView> {
                     icon: Icons.menu_book_outlined,
                     title: 'Seleccioná un producto',
                     description:
-                        'Elegí un producto del panel izquierdo para crear, versionar y comparar sus recetas.',
+                        'Elegí un producto del panel izquierdo para revisar sus recetas y comparar versiones.',
                   )
-                : _buildRecipeEditor(context, viewModel, colorScheme, isHandheld: false),
+                : _buildRecipeVersionsWorkspace(context, viewModel),
           ),
         ],
       ),
@@ -140,7 +128,7 @@ class _RecipeViewState extends State<RecipeView> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              'No hay productos. Creá un producto preparado en "Gestión de Inventario" y volvé acá para versionar su receta.',
+                              'No hay productos. El catálogo se administra desde el Dashboard web.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: colorScheme.onSurfaceVariant,
@@ -179,134 +167,64 @@ class _RecipeViewState extends State<RecipeView> {
     );
   }
 
-  Widget _buildRecipeEditor(
+  /// Strict read-only catalog notice (issue #899 S4): recipes are published
+  /// from the Dashboard web; this terminal never edits them.
+  Widget _buildCatalogReadOnlyBanner(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerLow,
+        border: Border.all(color: colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 20, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'El catálogo se administra desde el Dashboard web. '
+              'Esta terminal no edita productos, precios ni recetas.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Strict read-only versions workspace (issue #899 S4): the terminal never
+  /// authors or publishes recipes — that is done from the Dashboard web.
+  /// Operators keep read access to the version timeline and comparisons.
+  Widget _buildRecipeVersionsWorkspace(
     BuildContext context,
     RecipeViewModel viewModel,
-    ColorScheme colorScheme, {
-    required bool isHandheld,
-  }) {
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _buildCatalogReadOnlyBanner(context),
+          const SizedBox(height: 16),
           _SectionCard(
-            title: 'Autoría y publicación',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(viewModel.statusMessage ?? ''),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: viewModel.recipeVersions
-                      .map(
-                        (version) => Chip(
-                          label: Text(
-                            'V${version.versionNumber} • ${version.isSynced ? 'Synced' : 'Pending'}',
+            title: 'Versiones publicadas',
+            child: viewModel.recipeVersions.isEmpty
+                ? const Text('Sin versiones publicadas.')
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: viewModel.recipeVersions
+                        .map(
+                          (version) => Chip(
+                            label: Text(
+                              'V${version.versionNumber} • ${version.isSynced ? 'Synced' : 'Pending'}',
+                            ),
                           ),
-                        ),
-                      )
-                      .toList(growable: false),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _yieldController,
-                        decoration: const InputDecoration(labelText: 'Yield objetivo'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _shrinkController,
-                        decoration: const InputDecoration(labelText: 'Merma técnica %'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _noteController,
-                  decoration: const InputDecoration(labelText: 'Nota de versión'),
-                ),
-                const SizedBox(height: 16),
-                if (isHandheld)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () => _showAddComponentDialog(context, viewModel),
-                        icon: const Icon(Icons.add),
-                        label: const Text('AGREGAR COMPONENTE'),
-                      ),
-                      const SizedBox(height: 8),
-                      FilledButton(
-                        onPressed: viewModel.isLoading
-                            ? null
-                            : () => _confirmPublish(context, viewModel),
-                        child: const Text('PUBLICAR VERSIÓN'),
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddComponentDialog(context, viewModel),
-                        icon: const Icon(Icons.add),
-                        label: const Text('AGREGAR COMPONENTE'),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: viewModel.isLoading
-                              ? null
-                              : () => _confirmPublish(context, viewModel),
-                          child: const Text('PUBLICAR VERSIÓN'),
-                        ),
-                      ),
-                    ],
+                        )
+                        .toList(growable: false),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          _SectionCard(
-            title: 'Draft actual',
-            child: viewModel.draftComponents.isEmpty
-                ? const Text('No hay componentes en borrador.')
-                : ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: viewModel.draftComponents.length,
-                    separatorBuilder: (context, index) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final component = viewModel.draftComponents[index];
-                      return ListTile(
-                        title: Text(component.ingredientName),
-                        subtitle: Text(
-                          '${component.ingredientType == IngredientType.product ? 'Sub-receta' : 'Insumo'} • Bruto ${component.grossQuantity.toStringAsFixed(2)} • Neto ${component.netQuantity.toStringAsFixed(2)} • Merma ${component.technicalShrinkPct.toStringAsFixed(1)}%',
-                        ),
-                        trailing: IconButton(
-                          icon: Icon(Icons.delete_outline, color: colorScheme.error),
-                          onPressed: () => viewModel.removeDraftComponentAt(index),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 16),
-          _buildTheoreticalCostCard(
-            context,
-            viewModel,
-            double.tryParse(_yieldController.text.trim()) ?? 1,
-            isHandheld: isHandheld,
           ),
           const SizedBox(height: 16),
           _SectionCard(
@@ -371,307 +289,6 @@ class _RecipeViewState extends State<RecipeView> {
       ),
     );
   }
-
-  Widget _buildTheoreticalCostCard(
-    BuildContext context,
-    RecipeViewModel viewModel,
-    double yieldQuantity, {
-    required bool isHandheld,
-  }) {
-    if (viewModel.draftComponents.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    final costBreakdown = viewModel.calculateDraftTheoreticalCost(
-      yieldQuantity: yieldQuantity,
-    );
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return _SectionCard(
-      title: 'Costo Teórico & Rentabilidad',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (isHandheld)
-            Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: _CostMetricTile(
-                        label: 'Costo por Porción',
-                        value: 'C\$ ${costBreakdown.unitTheoreticalCostNio.toStringAsFixed(2)}',
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _CostMetricTile(
-                        label: 'Costo Total Batch',
-                        value: 'C\$ ${costBreakdown.totalBatchCostNio.toStringAsFixed(2)}',
-                        color: colorScheme.secondary,
-                      ),
-                    ),
-                  ],
-                ),
-                if (costBreakdown.grossMarginNio > 0) ...[
-                  const SizedBox(height: 8),
-                  _CostMetricTile(
-                    label: 'Margen Proyectado',
-                    value:
-                        'C\$ ${costBreakdown.grossMarginNio.toStringAsFixed(2)} (${costBreakdown.grossMarginPct.toStringAsFixed(1)}%)',
-                    color: Colors.green.shade700,
-                  ),
-                ],
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: _CostMetricTile(
-                    label: 'Costo por Porción',
-                    value: 'C\$ ${costBreakdown.unitTheoreticalCostNio.toStringAsFixed(2)}',
-                    color: colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _CostMetricTile(
-                    label: 'Costo Total Batch',
-                    value: 'C\$ ${costBreakdown.totalBatchCostNio.toStringAsFixed(2)}',
-                    color: colorScheme.secondary,
-                  ),
-                ),
-                if (costBreakdown.grossMarginNio > 0) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _CostMetricTile(
-                      label: 'Margen Proyectado',
-                      value:
-                          'C\$ ${costBreakdown.grossMarginNio.toStringAsFixed(2)} (${costBreakdown.grossMarginPct.toStringAsFixed(1)}%)',
-                      color: Colors.green.shade700,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          const SizedBox(height: 12),
-          const Text(
-            'PARTICIPACIÓN DE COSTOS',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 10,
-              letterSpacing: 0.8,
-            ),
-          ),
-          const SizedBox(height: 6),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: costBreakdown.componentCosts.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final comp = costBreakdown.componentCosts[index];
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: Text(
-                        comp.ingredientName,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    Expanded(
-                      flex: 2,
-                      child: Text(
-                        '${comp.grossQuantity.toStringAsFixed(2)} × C\$ ${comp.unitCostNio.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                    ),
-                    Text(
-                      'C\$ ${comp.totalCostNio.toStringAsFixed(2)} (${comp.costPercentage.toStringAsFixed(1)}%)',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _confirmPublish(BuildContext context, RecipeViewModel viewModel) async {
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('Publicar versión crítica', style: Theme.of(dialogContext).textTheme.titleLarge),
-              const SizedBox(height: 12),
-              const Text(
-                'Esta acción reemplaza la receta activa y conserva el historial para comparación BOH.',
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('CANCELAR'),
-              ),
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: () async {
-                  await viewModel.publishDraftVersion(
-                    yieldQuantity: double.tryParse(_yieldController.text.trim()) ?? 1,
-                    technicalShrinkPct: double.tryParse(_shrinkController.text.trim()) ?? 0,
-                    versionNote: _noteController.text.trim().isEmpty ? null : _noteController.text.trim(),
-                  );
-                  if (dialogContext.mounted) {
-                    Navigator.pop(dialogContext);
-                  }
-                },
-                child: const Text('PUBLICAR'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showAddComponentDialog(
-    BuildContext context,
-    RecipeViewModel viewModel,
-  ) async {
-    IngredientType ingredientType = IngredientType.insumo;
-    String? ingredientId;
-    String? ingredientName;
-    String? referenceVersionId;
-    final grossController = TextEditingController(text: '1');
-    final shrinkController = TextEditingController(text: '0');
-
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) {
-          final versionOptions = viewModel.recipeVersions
-              .where((version) => version.productId == ingredientId)
-              .toList(growable: false);
-          return AlertDialog(
-            title: const Text('Agregar componente'),
-            content: SizedBox(
-              width: 460,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<IngredientType>(
-                    initialValue: ingredientType,
-                    decoration: const InputDecoration(labelText: 'Tipo de componente'),
-                    items: const [
-                      DropdownMenuItem(value: IngredientType.insumo, child: Text('Insumo')),
-                      DropdownMenuItem(value: IngredientType.product, child: Text('Sub-receta')),
-                    ],
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() {
-                        ingredientType = value;
-                        ingredientId = null;
-                        ingredientName = null;
-                        referenceVersionId = null;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    initialValue: ingredientId,
-                    decoration: const InputDecoration(labelText: 'Componente'),
-                    items: (ingredientType == IngredientType.insumo
-                            ? viewModel.insumos
-                                .map((item) => DropdownMenuItem<String>(value: item.id, child: Text(item.name)))
-                            : viewModel.products
-                                .where((item) => item.id != viewModel.selectedProduct?.id)
-                                .map((item) => DropdownMenuItem<String>(value: item.id, child: Text(item.name))))
-                        .toList(growable: false),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setState(() {
-                        ingredientId = value;
-                        ingredientName = ingredientType == IngredientType.insumo
-                            ? viewModel.insumos.firstWhere((item) => item.id == value).name
-                            : viewModel.products.firstWhere((item) => item.id == value).name;
-                        referenceVersionId = null;
-                      });
-                    },
-                  ),
-                  if (ingredientType == IngredientType.product && ingredientId != null) ...[
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: referenceVersionId,
-                      decoration: const InputDecoration(labelText: 'Versión de sub-receta'),
-                      items: versionOptions
-                          .map(
-                            (version) => DropdownMenuItem<String>(
-                              value: version.id,
-                              child: Text('V${version.versionNumber}'),
-                            ),
-                          )
-                          .toList(growable: false),
-                      onChanged: (value) => setState(() => referenceVersionId = value),
-                    ),
-                  ],
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: grossController,
-                    decoration: const InputDecoration(labelText: 'Cantidad bruta'),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: shrinkController,
-                    decoration: const InputDecoration(labelText: 'Merma técnica %'),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('CANCELAR'),
-              ),
-              FilledButton(
-                onPressed: ingredientId == null
-                    ? null
-                    : () {
-                        viewModel.addDraftComponent(
-                          ingredientId: ingredientId!,
-                          ingredientName: ingredientName ?? ingredientId!,
-                          ingredientType: ingredientType,
-                          grossQuantity: double.tryParse(grossController.text.trim()) ?? 1,
-                          technicalShrinkPct: double.tryParse(shrinkController.text.trim()) ?? 0,
-                          referenceVersionId: referenceVersionId,
-                        );
-                        Navigator.pop(dialogContext);
-                      },
-                child: const Text('AGREGAR'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    grossController.dispose();
-    shrinkController.dispose();
-  }
 }
 
 class _SectionCard extends StatelessWidget {
@@ -698,54 +315,6 @@ class _SectionCard extends StatelessWidget {
             child,
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CostMetricTile extends StatelessWidget {
-  const _CostMetricTile({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
       ),
     );
   }

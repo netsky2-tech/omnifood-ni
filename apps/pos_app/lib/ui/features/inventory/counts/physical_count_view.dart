@@ -45,7 +45,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Conteos físicos BOH',
+                          'Conteos físicos',
                           style: Theme.of(context).textTheme.titleLarge,
                         ),
                         const SizedBox(height: 8),

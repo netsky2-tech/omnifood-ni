@@ -84,7 +84,7 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Kardex BOH'), findsOneWidget);
+    expect(find.text('Kardex'), findsOneWidget);
     expect(find.text('Leche Entera'), findsOneWidget);
     expect(find.text('Café Molido'), findsOneWidget);
     // Type label renders as written by the view model (Spanish free text),
