@@ -12,9 +12,14 @@ describe('PurchaseService.recordPurchase', () => {
 
   const insumo = {
     id: 'ins-1',
+    name: 'Harina',
     tenant_id: 'tenant-A',
     stock: 10,
     averageCost: 50,
+    // Identity conversion (same catalog unit, spelled differently): passes
+    // the S3 invariant while keeping the fixture's factor 1.
+    purchaseUom: 'kilogramo',
+    consumptionUom: 'kilo',
     conversionFactor: 1,
   };
   const supplier = { id: 'sup-1', tenant_id: 'tenant-A', name: 'Acme' };

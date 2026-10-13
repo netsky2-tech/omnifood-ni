@@ -47,6 +47,7 @@ import { InventorySyncReceipt } from '../../modules/inventory/entities/inventory
 import { Supplier } from '../../modules/inventory/entities/supplier.entity';
 import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
+import { UomCatalogEntry } from '../../modules/inventory/entities/uom-catalog-entry.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
 import { BcnFxRate } from '../../modules/inventory/entities/bcn-fx-rate.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
@@ -145,6 +146,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     Supplier,
     Warehouse,
     UomConversion,
+    UomCatalogEntry,
     Batch,
     BcnFxRate,
     PurchaseDocument,
