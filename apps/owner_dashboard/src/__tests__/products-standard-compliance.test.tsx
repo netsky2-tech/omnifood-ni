@@ -85,7 +85,7 @@ describe("S1 — ProductStatusBadge (NHILoS §26, §46)", () => {
     const badge = screen.getByTestId("product-status-badge");
 
     expect(badge).toHaveTextContent("Activo");
-    expect(badge.className).toContain("text-emerald-800");
+    expect(badge.className).toContain("text-emerald-700");
     expect(badge.className).toContain("bg-emerald-50");
 
     // Accessible dot indicator
@@ -155,6 +155,14 @@ describe("S2 — Form Sanitization & Accessibility (NHILoS §18.2/§18.3, §30)"
     const errorMsg = screen.getByText("El nombre es obligatorio");
     expect(errorMsg).toHaveAttribute("id", "name-error");
     expect(errorMsg).toHaveAttribute("role", "alert");
+
+    const uomSelect = screen.getByLabelText(/Unidad de Medida/i);
+    expect(uomSelect).toHaveAttribute("aria-invalid", "true");
+    expect(uomSelect).toHaveAttribute("aria-describedby", "uom-error");
+
+    const uomErrorMsg = screen.getByText("La unidad de medida es obligatoria");
+    expect(uomErrorMsg).toHaveAttribute("id", "uom-error");
+    expect(uomErrorMsg).toHaveAttribute("role", "alert");
   });
 });
 
@@ -180,6 +188,24 @@ describe("S3 — NHILoS Backoffice Experience Layout & Luxury (NHILoS §7, §41)
     expect(screen.getByTestId("product-summary-cards")).toBeInTheDocument();
     expect(screen.getByText("Total")).toBeInTheDocument();
     expect(screen.getByText("Activos")).toBeInTheDocument();
+    expect(screen.getByText("Inactivos")).toBeInTheDocument();
+    expect(screen.getByText("Con Receta")).toBeInTheDocument();
+  });
+
+  it("provides search input with clear action button", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const searchInput = screen.getByPlaceholderText("Buscar por nombre o UOM...");
+    await user.type(searchInput, "Espresso");
+    expect(searchInput).toHaveValue("Espresso");
+
+    const clearButton = screen.getByLabelText("Limpiar búsqueda");
+    expect(clearButton).toBeInTheDocument();
+
+    await user.click(clearButton);
+    expect(searchInput).toHaveValue("");
+    expect(screen.queryByLabelText("Limpiar búsqueda")).not.toBeInTheDocument();
   });
 
   it("formats prices and stock with tabular-nums", () => {

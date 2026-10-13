@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit2, Trash2 } from "lucide-react";
+import { Edit2, Trash2, X } from "lucide-react";
 import {
   usePaginatedProducts,
   useCreateProduct,
@@ -53,7 +53,7 @@ export const PRODUCT_STATUS_BADGES: Record<"active" | "inactive", StatusBadgeTon
   active: {
     label: "Activo",
     className:
-      "border-emerald-200/80 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium",
+      "border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium",
     dotClassName: "bg-emerald-500",
   },
   inactive: {
@@ -183,23 +183,39 @@ function ProductTable({
           toneClassName="text-muted-foreground"
         />
         <SummaryCard
-          label="En esta vista"
-          count={paginated.length}
+          label="Con Receta"
+          count={paginated.filter((p) => isRecipeBearingType(p.product_type)).length}
+          toneClassName="text-primary"
         />
       </div>
 
       <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between p-3 border-b border-border bg-muted/20">
-        <Input
-          placeholder="Buscar por nombre o UOM..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setCurrentPage(1);
-          }}
-          className="max-w-xs h-9 text-xs"
-          aria-label="Buscar productos"
-        />
+        <div className="relative w-full max-w-xs">
+          <Input
+            placeholder="Buscar por nombre o UOM..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="max-w-xs h-9 text-xs pr-8"
+            aria-label="Buscar productos"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setCurrentPage(1);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label="Limpiar búsqueda"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         <span className="text-xs text-muted-foreground">
           {search.trim()
             ? `Encontrados: ${total} productos`
@@ -442,7 +458,7 @@ function ProductDialog({
             uom: values.uom.trim(),
             product_type: editType,
             category_code: categoryCode || undefined,
-            sellPrice: values.sellPrice,
+            sellPrice: toFiniteNumber(values.sellPrice),
             is_perishable: isPerishable,
           },
         });
@@ -461,7 +477,7 @@ function ProductDialog({
           uom: values.uom.trim(),
           product_type: createTypeAnswer,
           category_code: categoryCode || undefined,
-          sellPrice: values.sellPrice,
+          sellPrice: toFiniteNumber(values.sellPrice),
           is_perishable: isPerishable,
         };
         await createMutation.mutateAsync(input);
