@@ -91,3 +91,10 @@ exceptions (e.g. operational stock min/max) deferred to a future issue.
   pase" — native review closure for this candidate is DECLINED-UNAVAILABLE (facade
   correction-plan slot defect, L5); the R3-001 fix is applied regardless. Merge of
   PR #910 authorized once CI is green.
+- L7 (delivery): PR #910 superseded by #916 (rebase onto main made #910's head
+  stale-conflicted; GitHub skips pull_request CI on uncreatable merge refs). One CI
+  round fixed a dart lint (no_leading_underscores_for_local_identifiers). #916
+  merged (8359e0af) with Admin Backend + POS App CI green — issue #899 DONE. All
+  acceptance criteria met: no BOH-local catalog edits, dashboard-only catalog
+  persistence (upstream gate + terminal origin skip), RED overwrite reproduction,
+  NHilos POS copy standard. Exceptions deferred to #909.
