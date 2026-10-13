@@ -72,6 +72,26 @@ void main() {
     registerFallbackValue(CatalogType.uom);
   });
 
+  /// Pumps [InsumoView] with a view model backed by a mocked repository and
+  /// stays on the INSUMOS tab (inventory flows live here).
+  Future<void> _pumpInsumoTab(WidgetTester tester) async {
+    final repository = _MockInventoryRepository();
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const []);
+    when(() => repository.getActiveProducts()).thenAnswer((_) async => const []);
+    when(() => repository.getActiveWarehouses()).thenAnswer((_) async => const []);
+    when(() => repository.getActiveCatalog(any())).thenAnswer((_) async => const []);
+
+    final viewModel = InsumoViewModel(repository);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<InsumoViewModel>.value(
+        value: viewModel,
+        child: const MaterialApp(home: InsumoView()),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
   group('BOH product list stock badge (issue #73)', () {
     testWidgets(
       'untracked product with 0 stock shows NO RASTREADO, never danger SIN STOCK',
@@ -172,6 +192,67 @@ void main() {
 
         final chip = _chipWithLabel(tester, 'ACTIVO');
         expect(chip.tone, DsChipTone.primary);
+      },
+    );
+  });
+
+  group('read-only catalog on POS terminal (issue #899 S4)', () {
+    testWidgets(
+      'products tab shows no catalog edit CTA and a calm Dashboard pointer banner',
+      (tester) async {
+        await _pumpProductList(tester, [
+          _product(id: 'p-ro-1', name: 'Gaseosa', stock: 5),
+        ]);
+
+        // No product/price edit affordance is reachable.
+        expect(find.text('REGISTRAR PRODUCTO'), findsNothing);
+        expect(find.text('Nuevo Producto'), findsNothing);
+        expect(find.text('Precio de venta (NIO)'), findsNothing);
+
+        // Honest read-only message pointing to the Dashboard.
+        expect(
+          find.textContaining('El catálogo se administra desde el Dashboard'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'empty products tab shows informational state without an edit CTA',
+      (tester) async {
+        await _pumpProductList(tester, const []);
+
+        expect(find.text('REGISTRAR PRIMER PRODUCTO'), findsNothing);
+        expect(
+          find.textContaining('El catálogo se administra desde el Dashboard'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'tapping a product opens only the read-only detail, never an editable form',
+      (tester) async {
+        await _pumpProductList(tester, [
+          _product(id: 'p-ro-2', name: 'Hamburguesa', stock: 3),
+        ]);
+
+        await tester.tap(find.text('Hamburguesa'));
+        await tester.pumpAndSettle();
+
+        // Detail opens (read access kept), but no catalog form/save affordance.
+        expect(find.text('Opciones: Hamburguesa'), findsOneWidget);
+        expect(find.text('Precio de venta (NIO)'), findsNothing);
+        expect(find.text('GUARDAR'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'insumo tab keeps its inventory registration flow (stock/PAR are not catalog)',
+      (tester) async {
+        await _pumpInsumoTab(tester);
+
+        expect(find.text('REGISTRAR PRIMER INSUMO'), findsOneWidget);
       },
     );
   });

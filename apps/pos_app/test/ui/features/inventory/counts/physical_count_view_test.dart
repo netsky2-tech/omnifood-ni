@@ -64,7 +64,7 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Conteos físicos BOH'), findsOneWidget);
+    expect(find.text('Conteos físicos'), findsOneWidget);
     expect(find.text('ABRIR SESIÓN DE CONTEO'), findsOneWidget);
     expect(find.text('Todavía no hay sesiones de conteo en esta terminal.'), findsOneWidget);
   });

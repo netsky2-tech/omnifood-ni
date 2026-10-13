@@ -234,7 +234,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   ),
                   ListTile(
                     leading: const Icon(Icons.account_tree_outlined),
-                    title: const Text('Inventario BOH'),
+                    title: const Text('Inventario'),
                     subtitle: Text(
                       _canAccessBohShell
                           ? 'Ítems, proveedores, almacenes, compras, producción, conteos, alertas, kardex, recetas y mermas.'

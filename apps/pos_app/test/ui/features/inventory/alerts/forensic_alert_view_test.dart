@@ -33,8 +33,8 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Todavía no hay alertas BOH activas para esta tienda.'), findsOneWidget);
-    expect(find.text('Bandeja persistente BOH.'), findsOneWidget);
+    expect(find.text('Todavía no hay alertas activas para esta tienda.'), findsOneWidget);
+    expect(find.text('Bandeja persistente de alertas.'), findsOneWidget);
   });
 
   testWidgets('renders alert details and acknowledges an alert from the screen', (tester) async {
