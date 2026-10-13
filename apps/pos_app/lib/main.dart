@@ -610,8 +610,11 @@ void main() async {
           ),
         ),
         ChangeNotifierProvider(
-          create: (_) =>
-              ShrinkageViewModel(inventoryRepository, movementEngine),
+          create: (_) => ShrinkageViewModel(
+            inventoryRepository,
+            movementEngine,
+            authRepository: authRepository,
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => ForensicAlertViewModel(alertService),

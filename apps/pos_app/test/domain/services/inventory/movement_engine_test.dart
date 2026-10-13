@@ -748,6 +748,81 @@ void main() {
       },
     );
 
+    test('recordShrinkage stamps author userId on saved kardex movement (issue #535)', () async {
+      final insumo = createInsumo(
+        id: 'cafe-audit',
+        name: 'Café',
+        stock: 550.0,
+        parLevel: 500.0,
+      );
+      when(mockRepo.getInsumoById('cafe-audit')).thenAnswer((_) async => insumo);
+
+      await engine.recordShrinkage(
+        'cafe-audit',
+        50.0,
+        'DESECHO_COCINA | observation:Spill',
+        userId: 'user-barista-1',
+      );
+
+      verify(
+        mockRepo.saveMovement(
+          argThat(
+            predicate<InventoryMovement>(
+              (m) =>
+                  m.insumoId == 'cafe-audit' &&
+                  m.quantity == -50.0 &&
+                  m.userId == 'user-barista-1' &&
+                  m.sourceDocumentType == 'INSUMO_MERMA',
+            ),
+          ),
+        ),
+      ).called(1);
+    });
+
+    test('recordProductShrinkage stamps author userId on all ingredient kardex movements (issue #535)', () async {
+      const productId = 'burger-audit';
+      final recipe = [
+        const Recipe(
+          id: 'r-audit-bun',
+          productId: productId,
+          ingredientId: 'bun-audit',
+          ingredientType: IngredientType.insumo,
+          quantity: 1,
+        ),
+      ];
+      const bun = Insumo(
+        id: 'bun-audit',
+        name: 'Pan',
+        consumptionUom: 'unit',
+        stock: 10,
+        averageCost: 5.0,
+      );
+
+      when(mockRepo.getRecipeByProductId(productId)).thenAnswer((_) async => recipe);
+      when(mockRepo.getInsumosByIds(['bun-audit'])).thenAnswer((_) async => [bun]);
+
+      await engine.recordProductShrinkage(
+        productId: productId,
+        quantity: 2,
+        reason: 'DESECHO_COCINA | observation:Dropped',
+        userId: 'user-cook-1',
+      );
+
+      verify(
+        mockRepo.saveMovement(
+          argThat(
+            predicate<InventoryMovement>(
+              (m) =>
+                  m.insumoId == 'bun-audit' &&
+                  m.quantity == -2 &&
+                  m.userId == 'user-cook-1' &&
+                  m.sourceDocumentType == 'PRODUCT_MERMA',
+            ),
+          ),
+        ),
+      ).called(1);
+    });
+
     test(
       'allows virtual negative stock for product merma ingredient deltas',
       () async {

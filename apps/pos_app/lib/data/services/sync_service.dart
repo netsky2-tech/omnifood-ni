@@ -2662,6 +2662,7 @@ class SyncService {
     final unitCostNio = _tryReadField(movement, 'unitCostNio');
     final sourceDocumentType = _tryReadField(movement, 'sourceDocumentType');
     final sourceDocumentId = _tryReadField(movement, 'sourceDocumentId');
+    final userId = _tryReadField(movement, 'userId');
 
     final fields = <String, Object>{};
     if (unitCostNio != null) {
@@ -2672,6 +2673,9 @@ class SyncService {
     }
     if (sourceDocumentId != null) {
       fields['sourceDocumentId'] = sourceDocumentId;
+    }
+    if (userId != null) {
+      fields['userId'] = userId;
     }
     return fields;
   }
@@ -2692,6 +2696,8 @@ class SyncService {
           return target.sourceDocumentType;
         case 'sourceDocumentId':
           return target.sourceDocumentId;
+        case 'userId':
+          return target.userId;
         case 'timestamp':
           return target.timestamp;
         case 'id':
