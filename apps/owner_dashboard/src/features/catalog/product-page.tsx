@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Edit2, Trash2, X } from "lucide-react";
+import { Edit2, Trash2, X, RotateCcw } from "lucide-react";
 import {
   usePaginatedProducts,
   useCreateProduct,
@@ -54,8 +54,8 @@ export const PRODUCT_STATUS_BADGES: Record<"active" | "inactive", StatusBadgeTon
   active: {
     label: "Activo",
     className:
-      "border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300 font-medium",
-    dotClassName: "bg-emerald-500",
+      "border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 font-medium",
+    dotClassName: "bg-emerald-600 dark:bg-emerald-400",
   },
   inactive: {
     label: "Inactivo",
@@ -137,10 +137,14 @@ function ProductTable({
   productType,
   onEdit,
   onDeactivate,
+  onReactivate,
+  reactivatePending = false,
 }: {
   productType: ProductType;
   onEdit: (product: Product) => void;
   onDeactivate: (product: Product) => void;
+  onReactivate: (product: Product) => void;
+  reactivatePending?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -304,7 +308,7 @@ function ProductTable({
                         <Edit2 className="h-3.5 w-3.5 mr-1" />
                         Editar
                       </Button>
-                      {p.is_active && (
+                      {p.is_active ? (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -313,6 +317,17 @@ function ProductTable({
                         >
                           <Trash2 className="h-3.5 w-3.5 mr-1" />
                           Desactivar
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onReactivate(p)}
+                          disabled={reactivatePending}
+                          className="h-8 px-2 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 dark:text-emerald-300"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5 mr-1" />
+                          Reactivar
                         </Button>
                       )}
                     </div>
@@ -426,6 +441,39 @@ function ProductDialog({
   const [awaitingTypeChangeConfirm, setAwaitingTypeChangeConfirm] =
     useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /** UOM options plus an honest synthetic entry when the saved value is not
+   * in the active catalog (§34: display the real stored value, never a blank
+   * that lies about what will be saved). */
+  const uomOptions = (() => {
+    const values = uomValues ?? [];
+    if (
+      isEdit &&
+      product?.uom &&
+      !values.some((v) => v.code === product.uom)
+    ) {
+      return [
+        ...values,
+        { code: product.uom, name: `${product.uom} (valor actual)` },
+      ];
+    }
+    return values;
+  })();
+
+  const categoryOptions = (() => {
+    const values = categoryValues ?? [];
+    if (
+      isEdit &&
+      product?.category_code &&
+      !values.some((v) => v.code === product.category_code)
+    ) {
+      return [
+        ...values,
+        { code: product.category_code, name: `${product.category_code} (valor actual)` },
+      ];
+    }
+    return values;
+  })();
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
@@ -674,13 +722,17 @@ function ProductDialog({
               <select
                 id="product-uom-select"
                 {...register("uom")}
+                // Controlled display: async catalog options must never blank
+                // out the saved value (uncontrolled selects reset to "" when
+                // the matching option is absent at mount).
+                value={uom ?? ""}
                 disabled={isPending}
                 aria-invalid={Boolean(errors.uom)}
                 aria-describedby={errors.uom ? "uom-error" : undefined}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <option value="">Seleccionar UOM</option>
-                {uomValues?.map((v) => (
+                {uomOptions.map((v) => (
                   <option key={v.code} value={v.code}>
                     {v.name} ({v.code})
                   </option>
@@ -712,7 +764,7 @@ function ProductDialog({
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
               >
                 <option value="">Sin categoría</option>
-                {categoryValues?.map((v) => (
+                {categoryOptions.map((v) => (
                   <option key={v.code} value={v.code}>
                     {v.name}
                   </option>
@@ -959,6 +1011,7 @@ export function ProductPage() {
   const [deactivatingProduct, setDeactivatingProduct] = useState<
     Product | undefined
   >();
+  const updateMutation = useUpdateProduct();
 
   const handleCreate = () => {
     setEditingProduct(undefined);
@@ -973,6 +1026,29 @@ export function ProductPage() {
   const handleCloseDialog = () => {
     setDialogOpen(false);
     setEditingProduct(undefined);
+  };
+
+  // Reactivation is non-destructive (is_active flip on the same audit path
+  // as every other update), so no destructive confirmation dialog is needed.
+  const handleReactivate = async (product: Product) => {
+    if (updateMutation.isPending) return;
+    try {
+      await updateMutation.mutateAsync({
+        id: product.id,
+        input: { is_active: true },
+      });
+      toast({
+        variant: "success",
+        title: "Producto reactivado",
+        description: `"${product.name}" vuelve a estar disponible para la venta.`,
+      });
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Error al reactivar",
+        description: getApiErrorMessage(err, "Error al reactivar el producto"),
+      });
+    }
   };
 
   return (
@@ -1014,6 +1090,8 @@ export function ProductPage() {
           productType={activeTab}
           onEdit={handleEdit}
           onDeactivate={setDeactivatingProduct}
+          onReactivate={handleReactivate}
+          reactivatePending={updateMutation.isPending}
         />
       </div>
 
