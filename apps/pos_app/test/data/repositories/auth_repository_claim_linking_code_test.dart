@@ -89,6 +89,7 @@ void main() {
       _MockDio(),
       totpSeedKeyProvider: totpSeedKeyProvider,
       claimDio: claimDio,
+      linkingRetryDelay: Duration.zero,
     );
   });
 
@@ -234,5 +235,129 @@ void main() {
         ),
       );
     }
+  });
+
+  test('claimLinkingCode auto-retries once on 500 cold start and succeeds on '
+      'the second attempt (issue #653)', () async {
+    var callCount = 0;
+    when(() => claimDio.post(any(),
+            data: any(named: 'data'), options: any(named: 'options')))
+        .thenAnswer((_) async {
+      callCount++;
+      if (callCount == 1) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+            statusCode: 500,
+          ),
+          type: DioExceptionType.badResponse,
+        );
+      }
+      return Response(
+        requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+        statusCode: 200,
+        data: {
+          'tenantId': 'tenant-uuid-1',
+          'slug': 'soho',
+          'deviceId': 'pos-local-abc',
+          'linkedAt': '2026-02-14T10:00:00.000Z',
+        },
+      );
+    });
+
+    final linking =
+        await repository.claimLinkingCode('AB12CD', 'pos-local-abc');
+
+    expect(callCount, 2);
+    expect(linking.slug, 'soho');
+    expect(linking.tenantId, 'tenant-uuid-1');
+  });
+
+  test('claimLinkingCode auto-retries once on timeout and succeeds on '
+      'the second attempt (issue #653)', () async {
+    var callCount = 0;
+    when(() => claimDio.post(any(),
+            data: any(named: 'data'), options: any(named: 'options')))
+        .thenAnswer((_) async {
+      callCount++;
+      if (callCount == 1) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+          type: DioExceptionType.connectionTimeout,
+        );
+      }
+      return Response(
+        requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+        statusCode: 200,
+        data: {
+          'tenantId': 'tenant-uuid-1',
+          'slug': 'soho',
+          'deviceId': 'pos-local-abc',
+          'linkedAt': '2026-02-14T10:00:00.000Z',
+        },
+      );
+    });
+
+    final linking =
+        await repository.claimLinkingCode('AB12CD', 'pos-local-abc');
+
+    expect(callCount, 2);
+    expect(linking.slug, 'soho');
+  });
+
+  test('claimLinkingCode distinguishes cold-start server 500 from network '
+      'error when retry also fails (issue #653)', () async {
+    var callCount = 0;
+    when(() => claimDio.post(any(),
+            data: any(named: 'data'), options: any(named: 'options')))
+        .thenAnswer((_) async {
+      callCount++;
+      throw DioException(
+        requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+          statusCode: 500,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+    });
+
+    await expectLater(
+      repository.claimLinkingCode('XXXXXX', 'pos-local-abc'),
+      throwsA(
+        isA<LinkingClaimException>()
+            .having((e) => e.statusCode, 'statusCode', 500)
+            .having(
+              (e) => e.userMessage,
+              'userMessage',
+              'El servidor está iniciando o temporalmente no disponible. Intente de nuevo en unos momentos.',
+            ),
+      ),
+    );
+    expect(callCount, 2);
+  });
+
+  test('claimLinkingCode does NOT retry on client auth errors (401)', () async {
+    var callCount = 0;
+    when(() => claimDio.post(any(),
+            data: any(named: 'data'), options: any(named: 'options')))
+        .thenAnswer((_) async {
+      callCount++;
+      throw DioException(
+        requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+        response: Response(
+          requestOptions: RequestOptions(path: '/onboarding/activation/link'),
+          statusCode: 401,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+    });
+
+    await expectLater(
+      repository.claimLinkingCode('XXXXXX', 'pos-local-abc'),
+      throwsA(isA<LinkingClaimException>()),
+    );
+    expect(callCount, 1);
   });
 }

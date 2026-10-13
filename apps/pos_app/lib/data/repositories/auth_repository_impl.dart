@@ -48,6 +48,10 @@ class AuthRepositoryImpl implements AuthRepository {
   /// stripped before the call.
   final Dio? _claimDio;
 
+  /// Backoff duration before retrying linking code claim on 5xx or timeout
+  /// (issue #653, cold-start mitigation). Defaults to 1 second.
+  final Duration _linkingRetryDelay;
+
   AuthRepositoryImpl(
     this._userDao,
     this._securityProfileDao,
@@ -60,6 +64,7 @@ class AuthRepositoryImpl implements AuthRepository {
     DeviceSyncBootstrapCoordinator? bootstrapCoordinator,
     LegacyHumanCredentialFallbackCleaner? cleaner,
     Dio? claimDio,
+    Duration linkingRetryDelay = const Duration(milliseconds: 1000),
   }) : _storage =
            storage ??
            const FlutterSecureStorage(
@@ -68,6 +73,7 @@ class AuthRepositoryImpl implements AuthRepository {
        _totpSeedKeyProvider =
            totpSeedKeyProvider ?? DeviceBoundTotpSeedKeyProvider(),
        _claimDio = claimDio,
+       _linkingRetryDelay = linkingRetryDelay,
        _capabilityCache = capabilityCache,
        _credentialCoordinator = credentialCoordinator,
        _bootstrapCoordinator = bootstrapCoordinator,
@@ -374,26 +380,63 @@ class AuthRepositoryImpl implements AuthRepository {
     // Pre-auth endpoint: never send credentials, even if a stale token sits
     // on the shared client (issue #556).
     claimDio.options.headers.remove('Authorization');
-    try {
-      final response = await claimDio.post(
-        '/onboarding/activation/link',
-        data: <String, dynamic>{
-          // Raw user input, trimmed; case normalization is server-side.
-          'code': code.trim(),
-          'deviceId': deviceId,
-        },
-      );
-      final data = Map<String, dynamic>.from(response.data as Map);
-      return TerminalLinking(
-        tenantId: (data['tenantId'] ?? '').toString(),
-        slug: (data['slug'] ?? '').toString(),
-        deviceId: (data['deviceId'] ?? deviceId).toString(),
-        linkedAt: data['linkedAt']?.toString(),
-      );
-    } on DioException catch (e) {
+
+    Response<dynamic>? response;
+    DioException? lastDioException;
+
+    bool isRetryable(DioException e) {
       final status = e.response?.statusCode;
-      debugPrint('[LinkClaim] DioException: type=${e.type}, status=$status, '
-          'message=${e.message}, url=${e.requestOptions.uri}');
+      if (status != null && (status >= 500 && status <= 504)) {
+        return true;
+      }
+      return e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.sendTimeout;
+    }
+
+    // Issue #653: Railway cold-start mitigation. Auto-retry once on 5xx/timeout.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0 && _linkingRetryDelay > Duration.zero) {
+        await Future<void>.delayed(_linkingRetryDelay);
+      }
+      try {
+        response = await claimDio.post(
+          '/onboarding/activation/link',
+          data: <String, dynamic>{
+            // Raw user input, trimmed; case normalization is server-side.
+            'code': code.trim(),
+            'deviceId': deviceId,
+          },
+        );
+        lastDioException = null;
+        break;
+      } on DioException catch (e) {
+        lastDioException = e;
+        final status = e.response?.statusCode;
+        debugPrint('[LinkClaim] DioException (attempt ${attempt + 1}): '
+            'type=${e.type}, status=$status, '
+            'message=${e.message}, url=${e.requestOptions.uri}');
+        if (e is UnconfiguredBackendException) {
+          break;
+        }
+        if (status == 401 || status == 403 || status == 429) {
+          break;
+        }
+        if (!isRetryable(e)) {
+          break;
+        }
+      } catch (e) {
+        debugPrint('[LinkClaim] Unexpected error: $e');
+        throw LinkingClaimException(
+          'Error de conexión. Verifique su red e intente de nuevo.',
+          statusCode: null,
+        );
+      }
+    }
+
+    if (lastDioException != null) {
+      final e = lastDioException;
+      final status = e.response?.statusCode;
       if (e is UnconfiguredBackendException) {
         // No socket was ever opened: there is no server URL to connect to,
         // so a network check cannot fix this. Reuse the honest condition
@@ -418,17 +461,27 @@ class AuthRepositoryImpl implements AuthRepository {
           statusCode: status,
         );
       }
+      // Issue #653: distinguish cold-start server initialization/crash from
+      // client network problem.
+      if (status != null && status >= 500 && status <= 504) {
+        throw LinkingClaimException(
+          'El servidor está iniciando o temporalmente no disponible. Intente de nuevo en unos momentos.',
+          statusCode: status,
+        );
+      }
       throw LinkingClaimException(
         'Error de conexión. Verifique su red e intente de nuevo.',
         statusCode: status,
       );
-    } catch (e) {
-      debugPrint('[LinkClaim] Unexpected error: $e');
-      throw LinkingClaimException(
-        'Error de conexión. Verifique su red e intente de nuevo.',
-        statusCode: null,
-      );
     }
+
+    final data = Map<String, dynamic>.from(response!.data as Map);
+    return TerminalLinking(
+      tenantId: (data['tenantId'] ?? '').toString(),
+      slug: (data['slug'] ?? '').toString(),
+      deviceId: (data['deviceId'] ?? deviceId).toString(),
+      linkedAt: data['linkedAt']?.toString(),
+    );
   }
 
   @override
