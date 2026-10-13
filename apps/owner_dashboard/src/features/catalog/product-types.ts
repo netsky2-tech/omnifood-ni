@@ -106,7 +106,10 @@ export const productFormSchema = z.object({
     .string()
     .min(1, "El nombre es obligatorio")
     .max(200, "El nombre no debe exceder 200 caracteres"),
-  uom: z.string().min(1, "La unidad de medida es obligatoria"),
+  uom: z
+    .string()
+    .min(1, "La unidad de medida es obligatoria")
+    .max(32, "La unidad de medida no debe exceder 32 caracteres"),
   sellPrice: z
     .number({ invalid_type_error: "El precio de venta debe ser un número" })
     .min(0, "El precio de venta debe ser mayor o igual a 0")

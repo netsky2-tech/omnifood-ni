@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -82,18 +82,20 @@ function renderPage() {
 }
 
 describe("S1 — ProductStatusBadge (NHILoS §26, §46)", () => {
-  it("renders active badge with high contrast emerald palette and dot indicator", () => {
+  it("renders active badge with the strong lifecycle palette and dot indicator", () => {
     const { container } = render(<ProductStatusBadge isActive={true} />);
     const badge = screen.getByTestId("product-status-badge");
 
     expect(badge).toHaveTextContent("Activo");
-    expect(badge.className).toContain("text-emerald-700");
-    expect(badge.className).toContain("bg-emerald-50");
+    // Strong tint per user feedback: bg-emerald-50 read as gray on white.
+    expect(badge.className).toContain("text-emerald-800");
+    expect(badge.className).toContain("bg-emerald-100");
+    expect(badge.className).toContain("border-emerald-300");
 
     // Accessible dot indicator
     const dot = container.querySelector('[aria-hidden="true"]');
     expect(dot).toBeInTheDocument();
-    expect(dot?.className).toContain("bg-emerald-500");
+    expect(dot?.className).toContain("bg-emerald-600");
   });
 
   it("renders inactive badge with muted neutral palette and dot indicator", () => {
@@ -227,5 +229,105 @@ describe("S3 — NHILoS Backoffice Experience Layout & Luxury (NHILoS §7, §41)
     const monogram = screen.getByTestId("product-table-monogram");
     expect(monogram).toBeInTheDocument();
     expect(monogram).toHaveTextContent("TA");
+  });
+
+  it("offers Reactivar for inactive products and calls the update hook with is_active: true (S4)", async () => {
+    const { useUpdateProduct } = await import("@/features/catalog/use-product");
+    const updateMutateAsync = vi.fn().mockResolvedValue({});
+    vi.mocked(useUpdateProduct).mockReturnValue({
+      mutateAsync: updateMutateAsync,
+      isPending: false,
+    } as any);
+
+    const user = userEvent.setup();
+    renderPage();
+
+    const inactiveRow = screen.getByText("Tarta de Limón").closest("tr");
+    expect(inactiveRow).not.toBeNull();
+
+    // Active product has no Reactivar; inactive one does.
+    expect(within(inactiveRow!).getByRole("button", { name: /Reactivar/i })).toBeInTheDocument();
+
+    await user.click(within(inactiveRow!).getByRole("button", { name: /Reactivar/i }));
+
+    await waitFor(() => {
+      expect(updateMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(updateMutateAsync.mock.calls[0]![0]).toEqual({
+      id: "p2",
+      input: { is_active: true },
+    });
+  });
+});
+
+describe("S1 — Edit dialog prefill (honest display, async catalog options)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(usePaginatedProducts).mockReturnValue({
+      data: {
+        data: mockProducts,
+        total: 2,
+        page: 1,
+        pageSize: 25,
+        totalPages: 1,
+      },
+      isLoading: false,
+      error: null,
+    } as any);
+  });
+
+  it("shows the saved UOM selected even when the catalog does not list it (synthetic current option)", async () => {
+    // Catalog only knows "taza"; the saved product uses "porción".
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(within(screen.getByText("Tarta de Limón").closest("tr")!).getByRole("button", { name: /Editar/i }));
+    await screen.findByText("Editar Producto");
+
+    const uomSelect = screen.getByLabelText(/Unidad de Medida/i) as HTMLSelectElement;
+    expect(uomSelect.value).toBe("porción");
+    expect(screen.getByText(/porción \(valor actual\)/i)).toBeInTheDocument();
+  });
+
+  it("shows the saved category selected even when the catalog does not list it", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(within(screen.getByText("Tarta de Limón").closest("tr")!).getByRole("button", { name: /Editar/i }));
+    await screen.findByText("Editar Producto");
+
+    const categorySelect = screen.getByLabelText(/Categoría/i) as HTMLSelectElement;
+    expect(categorySelect.value).toBe("POSTRES");
+    expect(screen.getByText(/POSTRES \(valor actual\)/i)).toBeInTheDocument();
+  });
+});
+
+describe("S2 — Schema aligned with backend DTO", () => {
+  it("refuses a uom longer than 32 characters with the app's Spanish message", async () => {
+    const { productFormSchema } = await import("@/features/catalog/product-types");
+
+    const result = productFormSchema.safeParse({
+      name: "Producto Válido",
+      uom: "x".repeat(33),
+      sellPrice: 10,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]!.message).toBe(
+        "La unidad de medida no debe exceder 32 caracteres",
+      );
+    }
+  });
+
+  it("accepts a uom of exactly 32 characters", () => {
+    return import("@/features/catalog/product-types").then(({ productFormSchema }) => {
+      const result = productFormSchema.safeParse({
+        name: "Producto Válido",
+        uom: "x".repeat(32),
+        sellPrice: 10,
+      });
+      expect(result.success).toBe(true);
+    });
   });
 });
