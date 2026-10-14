@@ -17,6 +17,8 @@ import { ProductionOrderLine } from './entities/production-order-line.entity';
 import { ProductionBatchHistory } from './entities/production-batch-history.entity';
 import { Shrinkage } from './entities/shrinkage.entity';
 import { ShrinkageDetail } from './entities/shrinkage-detail.entity';
+import { CountSession } from './entities/count-session.entity';
+import { CountSessionEntry } from './entities/count-session-entry.entity';
 import { InventorySyncOutbox } from './entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
 import { BcnFxRate } from './entities/bcn-fx-rate.entity';
@@ -86,6 +88,11 @@ import { AuditModule } from '../audit/audit.module';
       ProductionBatchHistory,
       Shrinkage,
       ShrinkageDetail,
+      // R19: the count session document and its append-only counted entries;
+      // without forFeature the first real count dies on
+      // EntityMetadataNotFoundError.
+      CountSession,
+      CountSessionEntry,
       InventorySyncOutbox,
       InventorySyncReceipt,
       BcnFxRate,

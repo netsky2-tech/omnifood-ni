@@ -59,6 +59,8 @@ import { ProductionOrderLine } from '../../modules/inventory/entities/production
 import { ProductionBatchHistory } from '../../modules/inventory/entities/production-batch-history.entity';
 import { Shrinkage } from '../../modules/inventory/entities/shrinkage.entity';
 import { ShrinkageDetail } from '../../modules/inventory/entities/shrinkage-detail.entity';
+import { CountSession } from '../../modules/inventory/entities/count-session.entity';
+import { CountSessionEntry } from '../../modules/inventory/entities/count-session-entry.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -158,6 +160,9 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     ProductionBatchHistory,
     Shrinkage,
     ShrinkageDetail,
+    // R19: the count session document and its append-only counted entries.
+    CountSession,
+    CountSessionEntry,
     SystemParametersConfig,
     SystemParametersConfigActiveView,
     KardexRecalculateQueue,

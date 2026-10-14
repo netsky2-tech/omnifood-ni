@@ -308,7 +308,7 @@ describe('CountSessionService persistence contract (Real PostgreSQL DB, migratio
     );
 
     // The legal core of R-05: who counted, when, who disputed.
-    expect(first.counted_quantity).toBe('9');
+    expect(first.counted_quantity).toBe('9.0000');
     expect(first.counted_at).toBeTruthy();
     expect(new Date(first.counted_at).toISOString()).toBe(
       document.lines[0].entries[0].countedAt,
@@ -318,7 +318,7 @@ describe('CountSessionService persistence contract (Real PostgreSQL DB, migratio
     expect(first.is_disputed).toBe(true);
     expect(first.is_approved).toBe(false);
 
-    expect(second.counted_quantity).toBe('12');
+    expect(second.counted_quantity).toBe('12.0000');
     expect(new Date(second.counted_at).toISOString()).toBe(
       document.lines[0].entries[1].countedAt,
     );

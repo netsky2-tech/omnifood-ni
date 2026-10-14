@@ -9,6 +9,8 @@ import { drawBatchOutflow } from './batch-allocation';
 import { toCalendarDay } from '../../core/database/calendar-day';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { Insumo } from './entities/insumo.entity';
+import { CountSession } from './entities/count-session.entity';
+import { CountSessionEntry } from './entities/count-session-entry.entity';
 import {
   InventoryMovement,
   MovementType,
@@ -74,12 +76,79 @@ export class CountSessionService {
         sessionId,
       );
 
+      // R19 (S13): the session itself persists on the SAME write path, in the
+      // SAME transaction (any failure above or below rolls the document back
+      // with the ledger) and under the SAME idempotency — this code is only
+      // reached when no movement with `sourceDocumentId = sessionId` exists,
+      // so a POS retry returns at the guard and can never duplicate the
+      // session, its entries, or the adjustment. The document must survive
+      // even when the variance is zero: the act of counting is evidence
+      // (R-05/R-06) regardless of the accounting effect it produced.
+      await this.persistSessionDocument(
+        manager,
+        input.tenantId,
+        input.document,
+      );
+
       return {
         sessionId,
         movementsCreated,
         skippedExisting: false,
       };
     });
+  }
+
+  /**
+   * R19 (S12): persist the count document itself — header plus one row per
+   * counted entry. The line identity (`insumoName`, `uom`,
+   * `theoreticalQuantity`) is FROZEN from the document exactly as the signed
+   * sheet printed it; re-reading the insumo catalog here would break the
+   * reprint-identical-years-later guarantee the moment the insumo is renamed.
+   */
+  private async persistSessionDocument(
+    manager: EntityManager,
+    tenantId: string,
+    document: CountSessionDocumentDto,
+  ): Promise<void> {
+    await manager.save(
+      manager.create(CountSession, {
+        id: document.id,
+        tenant_id: tenantId,
+        warehouse_id: document.warehouseId,
+        warehouse_name: document.warehouseName,
+        status: document.status,
+        notes: document.notes ?? null,
+        cutoff_at: new Date(document.cutoffAt),
+        posted_at: document.postedAt ? new Date(document.postedAt) : null,
+        movement_references: document.movementReferences ?? null,
+      }),
+    );
+
+    const entries = document.lines.flatMap((line, lineIndex) =>
+      line.entries.map((entry, entryIndex) =>
+        manager.create(CountSessionEntry, {
+          tenant_id: tenantId,
+          session_id: document.id,
+          insumo_id: line.insumoId,
+          // FROZEN (S12): the sheet's identity, never the catalog's.
+          insumo_name: line.insumoName,
+          uom: line.uom,
+          theoretical_quantity: line.theoreticalQuantity,
+          line_id: line.id,
+          line_index: lineIndex,
+          entry_index: entryIndex,
+          counted_quantity: entry.countedQuantity,
+          counted_at: entry.countedAt ? new Date(entry.countedAt) : null,
+          actor_label: entry.actorLabel ?? null,
+          notes: entry.notes ?? null,
+          is_disputed: entry.disputed ?? false,
+          is_approved: line.approvedEntryIndex === entryIndex,
+        }),
+      ),
+    );
+    if (entries.length > 0) {
+      await manager.save(CountSessionEntry, entries);
+    }
   }
 
   private async createVarianceMovements(
