@@ -1,5 +1,12 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
+/** Raw row of the shared-sequence conflict probe in down(). */
+interface KardexSequenceConflictRow {
+  tenant_id: string;
+  source_device_id: string;
+  source_sequence: string;
+}
+
 /**
  * H-R13 (odd/tasks/nucleo-inventario-paridad-contrato.md): the kardex was the
  * only place where a device's sync sequence lived in ONE namespace.
@@ -34,9 +41,7 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  * Widening a unique key never invalidates an existing row, so this migration is
  * additive: it touches no data.
  */
-export class SplitKardexSequenceNamespaceByFlow1809910000000
-  implements MigrationInterface
-{
+export class SplitKardexSequenceNamespaceByFlow1809910000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       'DROP INDEX IF EXISTS uq_inventory_kardex_source_sequence',
@@ -72,14 +77,14 @@ export class SplitKardexSequenceNamespaceByFlow1809910000000
     //   FROM inventory_kardex
     //   WHERE source_device_id IS NOT NULL AND source_sequence IS NOT NULL
     //   GROUP BY 1, 2, 3 HAVING count(*) > 1;
-    const conflicts: Array<Record<string, string>> = await queryRunner.query(`
+    const conflicts = (await queryRunner.query(`
       SELECT tenant_id, source_device_id, source_sequence
       FROM inventory_kardex
       WHERE source_device_id IS NOT NULL AND source_sequence IS NOT NULL
       GROUP BY 1, 2, 3
       HAVING COUNT(*) > 1
       LIMIT 20
-    `);
+    `)) as KardexSequenceConflictRow[];
 
     if (conflicts.length > 0) {
       const first = conflicts[0];
