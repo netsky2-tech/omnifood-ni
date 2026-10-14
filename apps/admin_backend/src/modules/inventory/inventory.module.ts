@@ -52,7 +52,9 @@ import {
 import { UomConversionCalculator } from './uom-conversion-calculator';
 import { IdentityModule } from '../identity/identity.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
+import { TenantModule } from '../tenant/tenant.module';
 import { CountSessionService } from './count-session.service';
+import { CountSessionPrintableService } from './services/count-session-printable.service';
 import { GovernanceApprovalService } from './services/governance-approval.service';
 import { KardexRegularizationService } from './services/kardex-regularization.service';
 import { RegularizationController } from './controllers/regularization.controller';
@@ -67,6 +69,10 @@ import { AuditModule } from '../audit/audit.module';
     IdentityModule,
     AuditModule,
     DeviceSyncModule,
+    // R19 T3: the printable count list consumes the RESOLVED company
+    // identity from where the tenant data lives (S4); the renderer itself
+    // never reads the tenant row.
+    TenantModule,
     TypeOrmModule.forFeature([
       Insumo,
       // S9 (L33) / R-01: the client's own market price, with its date. Without
@@ -121,6 +127,7 @@ import { AuditModule } from '../audit/audit.module';
     ShrinkageService,
     CostCalculatorService,
     CountSessionService,
+    CountSessionPrintableService,
     ForensicAlertService,
     GovernanceApprovalService,
     KardexRegularizationService,

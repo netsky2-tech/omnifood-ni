@@ -1,11 +1,15 @@
 import {
   Controller,
   Get,
+  Param,
   Query,
+  Res,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { InventoryReportsService } from '../services/inventory-reports.service';
+import { CountSessionPrintableService } from '../services/count-session-printable.service';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { AuthGuard } from '../../identity/guards/auth.guard';
@@ -24,7 +28,10 @@ import {
 @UseGuards(AuthGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class InventoryReportsController {
-  constructor(private readonly reportsService: InventoryReportsService) {}
+  constructor(
+    private readonly reportsService: InventoryReportsService,
+    private readonly countSessionPrintableService: CountSessionPrintableService,
+  ) {}
 
   @Get('valuation')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
@@ -73,5 +80,34 @@ export class InventoryReportsController {
     @GetTenantId() tenantId: string,
   ): Promise<InventoryAlertsSummaryDto> {
     return this.reportsService.getAlertsSummaryReport(tenantId);
+  }
+
+  /**
+   * R19 T3 (S10/S14/S15-bis): the persisted count session's printable,
+   * signable list as a server-side PDF. Served `inline` (not as a forced
+   * download) because the document's purpose is to be printed and signed by
+   * hand on every sheet (Reglamento de la Ley 822, art. 33, R-05).
+   *
+   * Read route on this EXISTING human controller: no new transport-registry
+   * declaration is needed (the controller is already classified `human`).
+   */
+  @Get('count-sessions/:sessionId/printable-list')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getCountSessionPrintableList(
+    @GetTenantId() tenantId: string,
+    @Param('sessionId') sessionId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Buffer> {
+    const result =
+      await this.countSessionPrintableService.buildPrintableCountList(
+        tenantId,
+        sessionId,
+      );
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${result.filename}"`,
+    );
+    return result.buffer;
   }
 }

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { InventoryReportsController } from './inventory-reports.controller';
 import { InventoryReportsService } from '../services/inventory-reports.service';
+import { CountSessionPrintableService } from '../services/count-session-printable.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
@@ -22,6 +23,10 @@ describe('InventoryReportsController', () => {
       getAlertsSummaryReport: jest.fn(),
     } as unknown as jest.Mocked<InventoryReportsService>;
 
+    const printableService = {
+      buildPrintableCountList: jest.fn(),
+    } as unknown as jest.Mocked<CountSessionPrintableService>;
+
     const module: TestingModule = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: jwtSecret })],
       controllers: [InventoryReportsController],
@@ -29,6 +34,10 @@ describe('InventoryReportsController', () => {
         {
           provide: InventoryReportsService,
           useValue: service,
+        },
+        {
+          provide: CountSessionPrintableService,
+          useValue: printableService,
         },
         {
           provide: ConfigService,
@@ -77,6 +86,43 @@ describe('InventoryReportsController', () => {
 
     expect(service.getValuationReport).toHaveBeenCalledWith('tenant-1');
     expect(result).toBe(mockReport);
+  });
+
+  describe('GET count-sessions/:sessionId/printable-list (R19 T3)', () => {
+    const getPrintableService = (): jest.Mocked<CountSessionPrintableService> =>
+      (
+        controller as unknown as {
+          countSessionPrintableService: jest.Mocked<CountSessionPrintableService>;
+        }
+      ).countSessionPrintableService;
+
+    it('returns the PDF buffer and stamps Content-Disposition with the printable filename', async () => {
+      const buffer = Buffer.from('%PDF-fake');
+      const headers = new Map<string, string>();
+      const res = {
+        setHeader: (name: string, value: string) => headers.set(name, value),
+      } as never;
+      getPrintableService().buildPrintableCountList.mockResolvedValue({
+        buffer,
+        contentType: 'application/pdf',
+        filename: 'conteo-fisico-CS-001.pdf',
+      });
+
+      const result = await controller.getCountSessionPrintableList(
+        'tenant-1',
+        'CS/001',
+        res,
+      );
+
+      expect(
+        getPrintableService().buildPrintableCountList,
+      ).toHaveBeenCalledWith('tenant-1', 'CS/001');
+      expect(result).toBe(buffer);
+      expect(headers.get('Content-Type')).toBe('application/pdf');
+      expect(headers.get('Content-Disposition')).toBe(
+        'inline; filename="conteo-fisico-CS-001.pdf"',
+      );
+    });
   });
 
   it('delegates COGS report retrieval to InventoryReportsService with tenant context and date filters', async () => {
