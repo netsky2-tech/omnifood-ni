@@ -331,26 +331,30 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
 
   /** Shared render for the seeding action: outline-secondary next to the
    *  catalog acquisition primary CTA, with the side-effect spelled out. */
-  const renderSeedCatalogDefaultsButton = () => (
+  const renderSeedCatalogDefaultsButton = (compact = false) => (
     <>
       <Button
         size="sm"
         variant="outline"
-        data-testid="seed-catalog-defaults-btn"
+        data-testid={
+          compact ? "seed-catalog-defaults-step-btn" : "seed-catalog-defaults-btn"
+        }
         onClick={handleSeedCatalogDefaults}
         disabled={seedCatalogDefaults.isPending}
-        className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+        className={`flex items-center gap-2 text-xs focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2${compact ? "" : " w-fit"}`}
       >
-        <Boxes className="h-4 w-4" />
+        <Boxes className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} />
         {seedCatalogDefaults.isPending
-          ? "Preparando catálogos..."
+          ? "Preparando..."
           : "Preparar catálogos base"}
       </Button>
-      <span className="w-full text-[11px] text-muted-foreground">
-        Carga unidades de medida, categorías y tipos predefinidos para tus
-        formularios. No crea productos: el catálogo vendible se arma con
-        plantilla, CSV o alta manual.
-      </span>
+      {!compact && (
+        <span className="w-full text-[11px] text-muted-foreground">
+          Carga unidades de medida, categorías y tipos predefinidos para tus
+          formularios. No crea productos: el catálogo vendible se arma con
+          plantilla, CSV o alta manual.
+        </span>
+      )}
     </>
   );
 
@@ -946,21 +950,9 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
                           Configurar Fiscal
                         </Button>
                       )}
-                      {step.key === "catalog" && !isDone && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleSeedCatalogDefaults}
-                          disabled={seedCatalogDefaults.isPending}
-                          className="text-xs flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
-                          data-testid="seed-catalog-defaults-step-btn"
-                        >
-                          <Boxes className="h-3.5 w-3.5" />
-                          {seedCatalogDefaults.isPending
-                            ? "Preparando..."
-                            : "Preparar catálogos base"}
-                        </Button>
-                      )}
+                      {step.key === "catalog" &&
+                        !isDone &&
+                        renderSeedCatalogDefaultsButton(true)}
                       {step.key === "catalog" && (
                         <Button
                           size="sm"
