@@ -79,12 +79,22 @@ async function withFreshSchema(
 const runMigrations = async (dataSource: DataSource) => {
   // Sequential on purpose: the predicate fix (1809520000000) reconciles the
   // policy the create migration (1809360000000) just installed.
-  await new CreateDeviceLinkingCodes1809360000000().up(
-    dataSource.createQueryRunner(),
-  );
-  await new FixDeviceLinkingClaimRlsPredicate1809520000000().up(
-    dataSource.createQueryRunner(),
-  );
+  // R3-QUERY-RUNNER-LEAK: each migration query runner is RELEASED after its
+  // up() — a Postgres query runner checks out a pooled connection until
+  // release(), and a leaked runner would hang dataSource.destroy() below
+  // until the Jest timeout, skipping the scratch-schema cleanup.
+  const createRunner = dataSource.createQueryRunner();
+  try {
+    await new CreateDeviceLinkingCodes1809360000000().up(createRunner);
+  } finally {
+    await createRunner.release();
+  }
+  const fixRunner = dataSource.createQueryRunner();
+  try {
+    await new FixDeviceLinkingClaimRlsPredicate1809520000000().up(fixRunner);
+  } finally {
+    await fixRunner.release();
+  }
 };
 
 describe('DeviceLinkingService.claimCode double-claim (real DB, #652)', () => {
@@ -102,10 +112,7 @@ describe('DeviceLinkingService.claimCode double-claim (real DB, #652)', () => {
         );
 
         const service = new DeviceLinkingService(dataSource);
-        const { code } = await service.generateLinkingCode(
-          tenantId,
-          'actor-1',
-        );
+        const { code } = await service.generateLinkingCode(tenantId, 'actor-1');
 
         // First claim: binds the device and returns the tenant context.
         const first = await service.claimCode(code, 'pos-device-1');
