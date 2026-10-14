@@ -38,6 +38,10 @@ function buildEnvelope(overrides: {
           isActive: true,
           isPerishable: false,
           categoryId: null,
+          // Display label of the resolved category, shipped alongside the id so
+          // the terminal can label its catalog filter and pick the §12.6 glyph
+          // without resolving the opaque catalog id itself.
+          category: null,
           warehouseId: null,
           productType: 'SIMPLE',
           mappingVersionId: null,
