@@ -175,7 +175,7 @@ void main() {
       // under test is counted from a clean interaction log.
       clearInteractions(mockViewModel);
       await tester.tap(
-        find.widgetWithText(DsSecondaryButton, 'Limpiar búsqueda'),
+        find.widgetWithText(DsSecondaryButton, 'Limpiar filtros'),
       );
       await tester.pump();
       verify(mockViewModel.setSearchQuery('')).called(1);
