@@ -28,6 +28,22 @@ export class Tenant {
   @Column({ type: 'varchar', nullable: true })
   ruc: string | null;
 
+  /**
+   * Company identity parity P1 (odd/tasks/identidad-empresa-paridad.md):
+   * nullable contact/identity columns the fiscal setup persists and the
+   * fiscal config snapshot delivers to terminals. Nullable BY DESIGN (S3 —
+   * absence discipline): a value never configured stays NULL and is declared
+   * downstream, never defaulted to ''.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  phone: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  email: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  address: string | null;
+
   @Column({ default: true })
   is_active: boolean;
 

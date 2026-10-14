@@ -287,7 +287,7 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
     vi.unstubAllGlobals();
   });
 
-  it("FiscalSetupForm clearly identifies non-persisted fields (phone, address) and preserves persisted DGI parameters (AC-04, AC-05)", async () => {
+  it("FiscalSetupForm prefills the persisted identity fields (phone, address, email) and preserves persisted DGI parameters (AC-04, AC-05, P1 company identity parity)", async () => {
     serverFiscal = {
       tenantId: "tenant-alpha",
       businessName: "Café de Especialidad",
@@ -295,6 +295,9 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
       regime: FiscalRegime.REGIMEN_GENERAL,
       commercialFxSpread: 36.5,
       pricesIncludeTax: true,
+      phone: "+505 8888-0000",
+      address: "Km 12 Carretera Sur, Managua",
+      email: "facturacion@cafeespecialidad.ni",
     };
 
     render(<FiscalSetupForm />, { wrapper: TestWrapper });
@@ -303,11 +306,18 @@ describe("ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition", (
       expect(screen.getByDisplayValue("Café de Especialidad")).toBeInTheDocument();
     });
 
-    // Verify non-persisted badges and notes are visible (AC-05)
-    expect(screen.getByTestId("phone-non-persisted-badge")).toHaveTextContent("No persistido fiscalmente");
-    expect(screen.getByTestId("address-non-persisted-badge")).toHaveTextContent("No persistido fiscalmente");
-    expect(screen.getByTestId("phone-non-persisted-note")).toBeInTheDocument();
-    expect(screen.getByTestId("address-non-persisted-note")).toBeInTheDocument();
+    // Company identity parity P1: the identity fields are PERSISTED on the
+    // tenant now — the form prefills the stored values instead of the old
+    // hardcoded "" reset, and the "No persistido fiscalmente" badges/notes
+    // are gone (the old lie is removed, S3: absence stays an empty input,
+    // never a stray null/undefined).
+    expect(screen.getByDisplayValue("+505 8888-0000")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Km 12 Carretera Sur, Managua")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("facturacion@cafeespecialidad.ni")).toBeInTheDocument();
+    expect(screen.queryByTestId("phone-non-persisted-badge")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("address-non-persisted-badge")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("phone-non-persisted-note")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("address-non-persisted-note")).not.toBeInTheDocument();
   });
 
   it("Setup Center allows acquiring catalog via Manual Minimal Product and transitions to SALE_READY (AC-06, AC-07, AC-08, AC-27, AC-28)", async () => {

@@ -200,6 +200,9 @@ export class FiscalSetupService {
       tenantId: tenant.id,
       businessName: tenant.name,
       ruc: tenant.ruc,
+      phone: tenant.phone ?? null,
+      address: tenant.address ?? null,
+      email: tenant.email ?? null,
       regime,
       taxRateIva,
       pricesIncludeTax,
@@ -302,6 +305,15 @@ export class FiscalSetupService {
 
         tenant.name = dto.businessName.trim();
         tenant.ruc = trimmedRuc;
+        // Company identity parity P1: the contact identity fields were
+        // declared in the DTO but silently dropped before P1. Same
+        // optionality contract as the mode params (D-16 spirit): undefined
+        // asserts NOTHING and leaves the stored column untouched; an
+        // explicit null (or a blank string, transformed to null at the
+        // boundary) CLEARS the column — never by storing '' (S3).
+        this.applyIdentityColumn(tenant, 'phone', dto.phone);
+        this.applyIdentityColumn(tenant, 'address', dto.address);
+        this.applyIdentityColumn(tenant, 'email', dto.email);
         // NOTE: tenant.slug is intentionally NOT updated here (issue #556,
         // founder decision): the slug is a stable provisioning identifier,
         // not a display name, so a business rename leaves it unchanged.
@@ -444,6 +456,9 @@ export class FiscalSetupService {
           tenantId: trimmedTenantId,
           businessName: tenant.name,
           ruc: tenant.ruc,
+          phone: tenant.phone ?? null,
+          address: tenant.address ?? null,
+          email: tenant.email ?? null,
           regime: dto.regime,
           taxRateIva: targetTaxRate,
           pricesIncludeTax: dto.pricesIncludeTax,
@@ -483,6 +498,25 @@ export class FiscalSetupService {
     }
 
     return result;
+  }
+
+  /**
+   * Company identity parity P1: applies one optional identity field to the
+   * tenant row. Undefined is a NO-OP (an absent field never erases a stored
+   * value — D-16 spirit); null or a blank string clears the column to NULL;
+   * a real value is trimmed and stored. Never persists '' (S3: absence is
+   * NULL, declared downstream, never an empty string).
+   */
+  private applyIdentityColumn(
+    tenant: Tenant,
+    field: 'phone' | 'address' | 'email',
+    value: string | null | undefined,
+  ): void {
+    if (value === undefined) {
+      return;
+    }
+    const trimmed = value?.trim() ?? '';
+    tenant[field] = trimmed === '' ? null : trimmed;
   }
 
   /**

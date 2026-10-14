@@ -39,6 +39,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     name: 'Restaurante El Volcán',
     slug: normalizeTenantSlug('Restaurante El Volcán'),
     ruc: 'J0310000000001',
+    phone: '+505 2255-0000',
+    email: 'facturacion@elvolcan.ni',
+    address: 'Km 12 Carretera Sur, Managua',
     is_active: true,
     created_at: new Date('2026-01-01'),
     updated_at: new Date('2026-01-01'),
@@ -162,6 +165,11 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         tenantId,
         businessName: 'Restaurante El Volcán',
         ruc: 'J0310000000001',
+        // Company identity parity P1: the contact identity rides the
+        // fingerprinted payload; absence would read as null (S3).
+        phone: '+505 2255-0000',
+        address: 'Km 12 Carretera Sur, Managua',
+        email: 'facturacion@elvolcan.ni',
         fiscalRegime: FiscalRegime.REGIMEN_GENERAL,
         taxRate: 0.15,
         pricesIncludeTax: true,
@@ -253,6 +261,31 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       expect(snapshot.dgiAuthorizationCode).toBe('DGI-SFC-2024-00123');
       expect(snapshot.dgiAuthorizationIssuedAt).toBe('2025-01-15');
       expect(snapshot.dgiAuthorizationExpiresAt).toBe('2026-01-15');
+    });
+
+    it('exposes the company identity (phone, address, email) in the config snapshot for cloud sync (P1, S2 — the existing versioned channel)', async () => {
+      revisionRepo.findOne.mockResolvedValue(null);
+
+      const snapshot = await service.getFiscalConfigSnapshot(tenantId);
+
+      expect(snapshot.phone).toBe('+505 2255-0000');
+      expect(snapshot.address).toBe('Km 12 Carretera Sur, Managua');
+      expect(snapshot.email).toBe('facturacion@elvolcan.ni');
+    });
+
+    it('reads unconfigured identity fields as null in the payload (S3 — absence is declared, never "")', async () => {
+      tenantRepo.findOne.mockResolvedValueOnce({
+        ...mockTenant,
+        phone: null,
+        address: null,
+        email: null,
+      });
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+
+      expect(payload.phone).toBeNull();
+      expect(payload.address).toBeNull();
+      expect(payload.email).toBeNull();
     });
 
     it('covers the DGI authorization fields in the fingerprint: configuring a code changes it', async () => {
@@ -593,6 +626,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         tenantId,
         businessName: 'Old Business Name',
         ruc: 'J0310000000001',
+        phone: null,
+        address: null,
+        email: null,
         fiscalRegime: FiscalRegime.CUOTA_FIJA,
         taxRate: 0.0,
         pricesIncludeTax: true,

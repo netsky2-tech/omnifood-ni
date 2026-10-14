@@ -190,6 +190,12 @@ export class FiscalConfigVersionService {
       tenantId: tenant.id,
       businessName: tenant.name,
       ruc: tenant.ruc || null,
+      // Company identity parity P1: the contact identity rides the
+      // fingerprinted payload (null = never configured — S3). See the
+      // EffectiveFiscalPayload doc for the S6 local-override exception.
+      phone: tenant.phone || null,
+      address: tenant.address || null,
+      email: tenant.email || null,
       fiscalRegime,
       taxRate,
       pricesIncludeTax,
@@ -328,6 +334,9 @@ export class FiscalConfigVersionService {
         tenantId: payload.tenantId,
         businessName: payload.businessName,
         ruc: payload.ruc,
+        phone: payload.phone,
+        address: payload.address,
+        email: payload.email,
         fiscalRegime: payload.fiscalRegime,
         taxRate: payload.taxRate,
         pricesIncludeTax: payload.pricesIncludeTax,
@@ -348,6 +357,9 @@ export class FiscalConfigVersionService {
       tenantId: payload.tenantId,
       businessName: payload.businessName,
       ruc: payload.ruc,
+      phone: payload.phone,
+      address: payload.address,
+      email: payload.email,
       fiscalRegime: payload.fiscalRegime,
       taxRate: payload.taxRate,
       pricesIncludeTax: payload.pricesIncludeTax,
