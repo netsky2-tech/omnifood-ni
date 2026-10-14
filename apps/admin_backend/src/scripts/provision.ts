@@ -10,6 +10,8 @@ import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import { CatalogService } from '../modules/catalog/catalog.service';
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
+import { assertSeedOutcome } from './provision-seed-guard';
+
 
 /**
  * MASS PROVISIONING SCRIPT
@@ -86,6 +88,7 @@ async function provision() {
     // button in the insumo form.
     const catalogService = app.get(CatalogService);
     const seeded = await catalogService.seedDefaults(tenantId);
+    assertSeedOutcome(tenantId, seeded);
     console.log(`✅ Catálogos por defecto sembrados: ${seeded} valores`);
 
     console.log('--- Provisión completada exitosamente ---');
