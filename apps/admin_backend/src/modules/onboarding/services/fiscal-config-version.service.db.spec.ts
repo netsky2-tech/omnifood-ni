@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -54,6 +55,10 @@ async function withIsolatedSchema(
       schema,
       entities: [
         Tenant,
+        // P3 slice 1: the snapshot reads the logo sha256 REFERENCE from the
+        // brand-asset table; the entity must be registered for the manager
+        // to resolve metadata (the EntityMetadataNotFoundError trap).
+        TenantBrandAsset,
         SystemParametersConfig,
         SystemParametersConfigActiveView,
         FiscalConfigRevision,

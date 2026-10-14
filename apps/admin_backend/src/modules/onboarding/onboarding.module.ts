@@ -85,6 +85,9 @@ import { DeviceSyncModule } from '../identity/device-sync.module';
 import { FulfillmentModule } from '../fulfillment/fulfillment.module';
 import { AuditModule } from '../audit/audit.module';
 import { SalesModule } from '../sales/sales.module';
+import { TenantModule } from '../tenant/tenant.module';
+import { CompanyLogoService } from './services/company-logo.service';
+import { CompanyLogoController } from './controllers/company-logo.controller';
 
 export const getRequiredOnboardingJwtSecret = (
   configService: ConfigService,
@@ -104,6 +107,9 @@ export const getRequiredOnboardingJwtSecret = (
     FulfillmentModule,
     AuditModule,
     forwardRef(() => SalesModule),
+    // P3 slice 1: the logo storage seam (TenantBrandAssetService) is
+    // tenant-owned; onboarding only orchestrates upload + revision bump.
+    TenantModule,
     TypeOrmModule.forFeature([
       IndustryTemplate,
       TemplateInsumo,
@@ -152,6 +158,7 @@ export const getRequiredOnboardingJwtSecret = (
     TerminalPrimingController,
     OnboardingTelemetryController,
     OnboardingRolloutController,
+    CompanyLogoController,
   ],
   providers: [
     IndustryTemplateService,
@@ -162,6 +169,7 @@ export const getRequiredOnboardingJwtSecret = (
     MenuImportService,
     FiscalSetupService,
     FiscalConfigVersionService,
+    CompanyLogoService,
     ImportStagingService,
     OnboardingSessionService,
     OnboardingReadinessEvaluator,

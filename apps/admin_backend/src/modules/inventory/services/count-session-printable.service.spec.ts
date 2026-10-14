@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { CountSessionPrintableService } from './count-session-printable.service';
 import { CompanyIdentityService } from '../../tenant/services/company-identity.service';
+import { TenantBrandAssetService } from '../../tenant/services/tenant-brand-asset.service';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import { CountSession } from '../entities/count-session.entity';
 import { CountSessionEntry } from '../entities/count-session-entry.entity';
 import {
@@ -68,13 +70,20 @@ describe('CountSessionPrintableService', () => {
         email: null,
       }),
     };
+    // P3 slice 1: no brand asset seeded — the logo resolves present:false
+    // and the document is produced without an embedded image.
+    const brandAssetRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
     manager = {
       getRepository: jest.fn((entity: unknown) =>
         entity === CountSession
           ? sessionRepo
           : entity === CountSessionEntry
             ? entryRepo
-            : tenantRepo,
+            : entity === TenantBrandAsset
+              ? brandAssetRepo
+              : tenantRepo,
       ),
       query: jest.fn().mockResolvedValue([]),
     } as unknown as EntityManager;
@@ -88,6 +97,7 @@ describe('CountSessionPrintableService', () => {
       providers: [
         CountSessionPrintableService,
         CompanyIdentityService,
+        TenantBrandAssetService,
         { provide: DataSource, useValue: dataSource },
       ],
     }).compile();

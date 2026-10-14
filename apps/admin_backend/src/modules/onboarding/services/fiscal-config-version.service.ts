@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -196,6 +197,18 @@ export class FiscalConfigVersionService {
       phone: tenant.phone || null,
       address: tenant.address || null,
       email: tenant.email || null,
+      // Company identity parity P3, slice 1 (S5): the logo REFERENCE rides
+      // the fingerprinted payload — the sha256 only, never the bytes (the
+      // payload is stored whole per revision). Read from the brand-asset
+      // table directly, the same way the tenant row is read here; absence
+      // (no logo) rides as null like every other unconfigured field.
+      logoSha256:
+        (
+          await manager.getRepository(TenantBrandAsset).findOne({
+            where: { tenant_id: trimmedTenantId },
+            select: ['sha256'],
+          })
+        )?.sha256 ?? null,
       fiscalRegime,
       taxRate,
       pricesIncludeTax,
@@ -337,6 +350,7 @@ export class FiscalConfigVersionService {
         phone: payload.phone,
         address: payload.address,
         email: payload.email,
+        logoSha256: payload.logoSha256,
         fiscalRegime: payload.fiscalRegime,
         taxRate: payload.taxRate,
         pricesIncludeTax: payload.pricesIncludeTax,
@@ -360,6 +374,7 @@ export class FiscalConfigVersionService {
       phone: payload.phone,
       address: payload.address,
       email: payload.email,
+      logoSha256: payload.logoSha256,
       fiscalRegime: payload.fiscalRegime,
       taxRate: payload.taxRate,
       pricesIncludeTax: payload.pricesIncludeTax,

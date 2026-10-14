@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -98,6 +99,8 @@ async function withIsolatedSchema(
       schema,
       entities: [
         Tenant,
+        // P3 slice 1: the snapshot reads the logo sha256 REFERENCE.
+        TenantBrandAsset,
         SystemParametersConfig,
         SystemParametersConfigActiveView,
         FiscalConfigRevision,

@@ -34,6 +34,16 @@ export interface EffectiveFiscalPayload {
   phone: string | null;
   address: string | null;
   email: string | null;
+  /**
+   * Company identity parity P3, slice 1 (S5): the sha256 of the tenant's
+   * cloud-stored logo ORIGINAL — a REFERENCE, never the bytes. The fiscal
+   * payload is stored whole per revision in fiscal_config_revisions, so
+   * embedding base64 here would be one logo copy per revision; the reference
+   * rides the fingerprint instead, which makes a logo change read as what it
+   * is: a TERMINAL-CONFIG change delivered through the existing versioned
+   * channel (S2), not a fiscal one. null = the tenant has no logo.
+   */
+  logoSha256: string | null;
   /** BXW-007 U1 rev 2: null = the tenant never configured it — rides the fingerprint as null. */
   operationMode: TenantOperationMode | null;
   /** BXW-007 U1 rev 2: null = the tenant never configured it — rides the fingerprint as null. */
@@ -60,6 +70,14 @@ export interface FiscalConfigSnapshot {
   phone?: string | null;
   address?: string | null;
   email?: string | null;
+  /**
+   * Company identity parity P3, slice 1 (S5): the sha256 REFERENCE to the
+   * tenant's cloud logo original (null = no logo). Optional so pre-P3
+   * builders keep compiling. The terminal uses it to know it must re-fetch
+   * and re-derive its local raster; the bytes themselves are fetched from
+   * the brand-asset surface, never from this payload.
+   */
+  logoSha256?: string | null;
   fiscalRegime: FiscalRegime;
   taxRate: number;
   pricesIncludeTax: boolean;

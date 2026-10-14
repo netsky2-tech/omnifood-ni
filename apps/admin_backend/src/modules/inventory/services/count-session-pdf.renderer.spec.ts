@@ -127,6 +127,51 @@ const makeDocument = (
   ...overrides,
 });
 
+/** Builds a structurally valid 2x1 RGB PNG (IHDR + IDAT + IEND, CRCs set). */
+const buildTestPng = (left: number, right: number): Buffer => {
+  const crcTable = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n += 1) {
+      let c = n;
+      for (let k = 0; k < 8; k += 1) {
+        c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  const crc32 = (data: Buffer): number => {
+    let crc = 0xffffffff;
+    for (const byte of data) {
+      crc = crcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(2, 0); // width
+  ihdr.writeUInt32BE(1, 4); // height
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // color type: truecolor RGB
+  const raw = Buffer.from([0, left, 128, 64, right, 200, 90]);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+};
+
+const hasEmbeddedImage = (buffer: Buffer): boolean =>
+  buffer.toString('latin1').includes('/Subtype /Image');
+
 const renderText = async (
   document: CountSessionPrintDocument,
   identity: CompanyIdentity,
@@ -339,5 +384,90 @@ describe('count-session-pdf.renderer — the signed count list (R19 T3, S14/S15/
     expect(printed).toContain('LISTA DE CONTEO FÍSICO DE INVENTARIO');
     expect(printed).toContain('Firma de quien realizó el recuento físico');
     expect(pageCountOf(buffer)).toBe(1);
+  });
+
+  describe('P3 slice 1 — the company logo original (S5/S15)', () => {
+    const renderWithLogo = async (
+      logo: Parameters<typeof renderCountSessionPdf>[3],
+    ): Promise<{ buffer: Buffer; text: string; pages: number }> => {
+      const buffer = await renderCountSessionPdf(
+        makeDocument(makeEntries(1)),
+        makeIdentity(0),
+        { compress: false },
+        logo,
+      );
+      return {
+        buffer,
+        text: extractPrintedText(buffer),
+        pages: pageCountOf(buffer),
+      };
+    };
+
+    it('embeds the ORIGINAL bytes when a logo is present and the header text survives', async () => {
+      const { buffer, text, pages } = await renderWithLogo({
+        present: true,
+        bytes: buildTestPng(10, 20),
+        contentType: 'image/png',
+      });
+      // The image XObject is IN the document — not just "a buffer exists".
+      expect(hasEmbeddedImage(buffer)).toBe(true);
+      expect(buffer.toString('latin1')).toContain('/Width 2');
+      expect(buffer.toString('latin1')).toContain('/Height 1');
+      // S15: the formal document is intact around the image.
+      expect(text).toContain('LISTA DE CONTEO FÍSICO DE INVENTARIO');
+      expect(text).toContain('Pupusería La Casita, S.A.');
+      expect(text).toContain('Firma de quien realizó el recuento físico');
+      expect(pages).toBe(1);
+    });
+
+    it('a tenant with NO logo produces the same valid, formal document', async () => {
+      const { buffer, text, pages } = await renderWithLogo({
+        present: false,
+      });
+      expect(hasEmbeddedImage(buffer)).toBe(false);
+      expect(text).toContain('LISTA DE CONTEO FÍSICO DE INVENTARIO');
+      expect(text).toContain('Pupusería La Casita, S.A.');
+      expect(text).toContain('RUC: J0310001234567');
+      expect(text).toContain('Firma de quien realizó el recuento físico');
+      expect(pages).toBe(1);
+    });
+
+    it('a logo that cannot be decoded or rendered never takes the document down', async () => {
+      // PNG signature followed by garbage: pdfkit's parser throws on the
+      // truncated chunk walk — the renderer must skip the image and still
+      // produce the whole signed document.
+      const corrupt = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.from([0x00, 0x00, 0xff, 0xff, 0x7f, 0x7f, 0x7f, 0x7f]),
+      ]);
+      const { buffer, text, pages } = await renderWithLogo({
+        present: true,
+        bytes: corrupt,
+        contentType: 'image/png',
+      });
+      expect(hasEmbeddedImage(buffer)).toBe(false);
+      expect(text).toContain('LISTA DE CONTEO FÍSICO DE INVENTARIO');
+      expect(text).toContain('Pupusería La Casita, S.A.');
+      expect(text).toContain('Firma de quien realizó el recuento físico');
+      expect(pages).toBe(1);
+    });
+
+    it('the logo repeats on EVERY page (S15-bis attribution) without duplicating the bytes', async () => {
+      const bytes = buildTestPng(10, 20);
+      const buffer = await renderCountSessionPdf(
+        makeDocument(makeEntries(60)),
+        makeIdentity(0),
+        { compress: false },
+        { present: true, bytes, contentType: 'image/png' },
+      );
+      expect(pageCountOf(buffer)).toBeGreaterThan(1);
+      expect(hasEmbeddedImage(buffer)).toBe(true);
+      // One embedded image object, not one copy per page: the raw bytes of
+      // the IDAT stream appear ONCE in the document.
+      const idat = zlib.deflateSync(Buffer.from([0, 10, 128, 64, 20, 200, 90]));
+      const occurrences =
+        buffer.toString('latin1').split(idat.toString('latin1')).length - 1;
+      expect(occurrences).toBe(1);
+    });
   });
 });

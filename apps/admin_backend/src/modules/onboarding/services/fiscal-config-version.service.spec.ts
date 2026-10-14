@@ -11,6 +11,7 @@ import {
 } from '../../../core/database/tenant-transaction';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -29,6 +30,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
   let revisionRepo: jest.Mocked<Repository<FiscalConfigRevision>>;
   let tenantRepo: jest.Mocked<Repository<Tenant>>;
   let sysParamRepo: jest.Mocked<Repository<SystemParametersConfigActiveView>>;
+  // P3 slice 1: the snapshot reads the logo REFERENCE from the brand-asset
+  // table; the mock resolves it to "no logo" unless a test seeds a row.
+  let brandAssetRepo: jest.Mocked<Repository<TenantBrandAsset>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
 
@@ -120,6 +124,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       find: jest.fn().mockResolvedValue(mockParams),
     } as unknown as jest.Mocked<Repository<SystemParametersConfigActiveView>>;
 
+    brandAssetRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<Repository<TenantBrandAsset>>;
+
     mockManager = {
       query: jest.fn().mockResolvedValue(undefined),
       getRepository: jest.fn((target: unknown) => {
@@ -127,6 +135,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         // Issue #377: configuration reads resolve through the
         // active-configuration view instead of the append-only table.
         if (target === SystemParametersConfigActiveView) return sysParamRepo;
+        if (target === TenantBrandAsset) return brandAssetRepo;
         if (target === FiscalConfigRevision) return revisionRepo;
         throw new Error(
           `Unexpected repository target: ${(target as { name?: string }).name ?? '<anonymous>'}`,
@@ -188,6 +197,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         // the fingerprinted payload as null, same school as D-4.
         maxDiscountAmount: null,
         maxDiscountPercent: null,
+        // P3 slice 1: no brand asset seeded in this mock — the logo
+        // REFERENCE rides as null (never the bytes).
+        logoSha256: null,
       });
 
       const fingerprint = service.computeCanonicalFingerprint(payload);
@@ -289,19 +301,23 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     });
 
     it('covers the DGI authorization fields in the fingerprint: configuring a code changes it', async () => {
-      const payloadWithoutDgi = await service.getEffectiveFiscalPayload(tenantId);
-      const fingerprintWithoutDgi = service.computeCanonicalFingerprint(payloadWithoutDgi);
+      const payloadWithoutDgi =
+        await service.getEffectiveFiscalPayload(tenantId);
+      const fingerprintWithoutDgi =
+        service.computeCanonicalFingerprint(payloadWithoutDgi);
 
       sysParamRepo.find.mockResolvedValueOnce(paramsWithDgi);
       const payloadWithDgi = await service.getEffectiveFiscalPayload(tenantId);
-      const fingerprintWithDgi = service.computeCanonicalFingerprint(payloadWithDgi);
+      const fingerprintWithDgi =
+        service.computeCanonicalFingerprint(payloadWithDgi);
 
       expect(fingerprintWithDgi).not.toBe(fingerprintWithoutDgi);
     });
 
     it('records a strictly higher revision when the DGI authorization code changes', async () => {
       const baselinePayload = await service.getEffectiveFiscalPayload(tenantId);
-      const baselineFingerprint = service.computeCanonicalFingerprint(baselinePayload);
+      const baselineFingerprint =
+        service.computeCanonicalFingerprint(baselinePayload);
 
       const existingRevision: FiscalConfigRevision = {
         id: 'rev-1-id',
@@ -550,10 +566,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       expect(Object.keys(oldShape)).not.toContain('maxDiscountAmount');
 
       const newShapeFingerprint = service.computeCanonicalFingerprint(newShape);
-      const oldShapeFingerprint =
-        service.computeCanonicalFingerprint(
-          oldShape as unknown as EffectiveFiscalPayload,
-        );
+      const oldShapeFingerprint = service.computeCanonicalFingerprint(
+        oldShape as unknown as EffectiveFiscalPayload,
+      );
 
       // The shape change alone (no configuration change) alters the
       // fingerprint — the documented re-fingerprint wave.
@@ -629,6 +644,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         phone: null,
         address: null,
         email: null,
+        logoSha256: null,
         fiscalRegime: FiscalRegime.CUOTA_FIJA,
         taxRate: 0.0,
         pricesIncludeTax: true,

@@ -827,6 +827,7 @@ const NORMALIZE = {
   "timestamp with time zone": "timestamp with time zone",
   "date": "date",
   "jsonb": "jsonb",
+  "bytea": "bytea",
   "json": "json",
   "text": "text",
   "uuid": "uuid",

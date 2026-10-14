@@ -6,6 +6,7 @@ import {
   CompanyIdentity,
   CompanyIdentityService,
 } from '../../tenant/services/company-identity.service';
+import { TenantBrandAssetService } from '../../tenant/services/tenant-brand-asset.service';
 import { CountSession } from '../entities/count-session.entity';
 import { CountSessionEntry } from '../entities/count-session-entry.entity';
 import {
@@ -41,12 +42,19 @@ const buildFilename = (sessionId: string): string => {
  * S4: the company identity is RESOLVED here through CompanyIdentityService
  * (the tenant-side owner of that data) — this service never queries the
  * tenant row itself and never decides whether an identity field exists.
+ *
+ * Company identity parity P3, slice 1 (S5): the logo's ORIGINAL is resolved
+ * through the same seam (TenantBrandAssetService, same declared-absence
+ * discipline) and embedded in the PDF as-is. Absence or an unrenderable
+ * logo degrades nothing: the renderer skips it and the document stays
+ * formal (S15).
  */
 @Injectable()
 export class CountSessionPrintableService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly companyIdentityService: CompanyIdentityService,
+    private readonly tenantBrandAssetService: TenantBrandAssetService,
   ) {}
 
   async buildPrintableCountList(
@@ -87,10 +95,19 @@ export class CountSessionPrintableService {
             tenantId,
           );
 
+        // P3 slice 1 (S5): the logo original comes from the SAME transaction
+        // and the SAME declared-absence seam; null bytes never reach the
+        // renderer — it receives present:false and skips the image.
+        const logo = await this.tenantBrandAssetService.resolveWithinManager(
+          manager,
+          tenantId,
+        );
+
         const buffer = await renderCountSessionPdf(
           this.toPrintDocument(session, entries),
           identity,
           rendererOptions,
+          logo,
         );
 
         return {

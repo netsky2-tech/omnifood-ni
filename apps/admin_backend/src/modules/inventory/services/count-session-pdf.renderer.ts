@@ -23,10 +23,23 @@ import type {
  * company value can never print `null`, `undefined` or `''`, never break
  * the header, and never break a page.
  *
- * The logo is deliberately absent: it does not exist server-side (L5/L7 of
- * the feature spec) and belongs to the POS<->web identity-parity feature.
- * This header prints the identity that exists and declares the rest.
+ * Company identity parity P3, slice 1 (S5/S15): the header can now carry
+ * the company logo's ORIGINAL bytes (pdfkit accepts a Buffer) — not the
+ * terminal's 1-bit raster, which belongs to the printer. The logo is passed
+ * as a declared-presence shape; a logo that cannot be decoded or rendered
+ * is SKIPPED (S15: an absence never degrades the document), and a tenant
+ * with no logo still produces the exact formal document this renderer
+ * produced before this slice.
  */
+
+/** The declared-presence logo a formal document may embed. */
+export type CompanyLogoForPrint =
+  | {
+      readonly present: true;
+      readonly bytes: Buffer;
+      readonly contentType: string;
+    }
+  | { readonly present: false };
 
 export interface CountSessionPrintEntry {
   /** 1-based position in the printed list. */
@@ -70,6 +83,10 @@ const MISSING_EVIDENCE_MARKER = 'sin dato';
 const PAGE_MARGIN = 48;
 /** Bottom strip reserved for the per-page signature block and page identity. */
 const FOOTER_ZONE_HEIGHT = 118;
+
+/** Logo box in the header: the original scales DOWN to fit, never up. */
+const MAX_LOGO_WIDTH = 180;
+const MAX_LOGO_HEIGHT = 52;
 
 const CONTENT_WIDTH = 612 - PAGE_MARGIN * 2;
 const CONTENT_BOTTOM = 792 - PAGE_MARGIN - FOOTER_ZONE_HEIGHT;
@@ -167,6 +184,7 @@ export const renderCountSessionPdf = (
   document: CountSessionPrintDocument,
   identity: CompanyIdentity,
   options: RenderCountSessionPdfOptions = {},
+  logo: CompanyLogoForPrint = { present: false },
 ): Promise<Buffer> => {
   const doc = new PDFDocument({
     size: 'LETTER',
@@ -179,6 +197,26 @@ export const renderCountSessionPdf = (
     },
   });
   const done = buildPdfBuffer(doc);
+
+  // The logo is parsed ONCE and the same opened image is embedded on every
+  // page: pdfkit only deduplicates images registered by string path, so
+  // re-passing the buffer per page would embed a fresh copy of the bytes on
+  // every sheet. `openImage` and object-form image sources exist in the
+  // pdfkit runtime (PDFImage.open / `src.width && src.height`) but not in
+  // its typings, hence the two narrow casts. A buffer pdfkit cannot parse
+  // reads as an absent logo (S15: the document is never taken down).
+  let logoImage: { width: number; height: number } | null = null;
+  if (logo.present) {
+    try {
+      logoImage = (
+        doc as unknown as {
+          openImage(src: Buffer): { width: number; height: number };
+        }
+      ).openImage(logo.bytes);
+    } catch {
+      logoImage = null;
+    }
+  }
 
   const rule = (): void => {
     doc
@@ -193,6 +231,27 @@ export const renderCountSessionPdf = (
   /** The formal header, repeated on EVERY page (S15-bis identity + date). */
   const drawPageHeader = (): void => {
     doc.y = PAGE_MARGIN;
+
+    // S5/S15: the logo original, embedded as-is, repeated on every page so a
+    // loose sheet stays attributable. A logo that cannot be decoded or
+    // rendered is skipped — and that throw must never reach the document;
+    // the header then renders exactly as it does for a tenant with no logo.
+    if (logoImage && logoImage.width > 0 && logoImage.height > 0) {
+      const scale = Math.min(
+        1,
+        MAX_LOGO_WIDTH / logoImage.width,
+        MAX_LOGO_HEIGHT / logoImage.height,
+      );
+      const drawWidth = logoImage.width * scale;
+      const drawHeight = logoImage.height * scale;
+      doc.image(
+        logoImage as unknown as Parameters<PDFKit.PDFDocument['image']>[0],
+        (612 - drawWidth) / 2,
+        doc.y,
+        { width: drawWidth, height: drawHeight },
+      );
+      doc.y += drawHeight + 10;
+    }
 
     doc
       .font(IDENTITY_TABLE_BOLD)

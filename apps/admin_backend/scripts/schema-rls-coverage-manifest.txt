@@ -49,12 +49,13 @@
 #                   written once and never mutated, and the immutability
 #                   triggers plus the missing UPDATE/DELETE policies both
 #                   enforce that.
-#   direct:SIU   (6)  — queue/state tables that mutate rows in place but never
+#   direct:SIU   (7)  — queue/state tables that mutate rows in place but never
 #                   delete them (recovery tokens, rollout cohorts, tenant
 #                   publication state, terminal ack floor, inventory_sync_outbox,
 #                   kardex_recalculate_queue after slice 10 split its FOR ALL
-#                   policy): workers claim and advance rows, nothing prunes
-#                   them by policy.
+#                   policy, tenant_brand_assets whose single logo row is
+#                   replaced in place with no delete path): workers claim and
+#                   advance rows, nothing prunes them by policy.
 #
 # Every public base table absent from this list is unclassified and FAILS.
 # Unknown classifications, malformed lines, unknown command letters, empty or
@@ -63,7 +64,7 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (68 entries: 52 direct:SIUD + 10 direct:SI + 6 direct:SIU; entry ORDER is
+# (69 entries: 52 direct:SIUD + 10 direct:SI + 7 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest for pre-existing entries)
 # ---------------------------------------------------------------------------
 batches|direct:SIUD
@@ -134,6 +135,7 @@ promotions|direct:SIUD
 tenant_capability_event|direct:SIUD
 tenant_fulfillment_records|direct:SIUD
 tenant_topology_revisions|direct:SI
+tenant_brand_assets|direct:SIU
 warehouses|direct:SIUD
 uom_conversions|direct:SIUD
 

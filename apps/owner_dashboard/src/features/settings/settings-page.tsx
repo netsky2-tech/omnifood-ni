@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { FiscalSetupForm } from "./fiscal-setup-form";
+import { CompanyLogoCard } from "./company-logo-card";
 import { IndustryTemplatesList } from "./industry-templates-list";
 import { BulkImportWizard } from "./bulk-import-wizard";
 import { MenuImportWizard } from "./menu-import-wizard";
@@ -125,7 +126,10 @@ export function SettingsPage({ initialTab = "setup" }: SettingsPageProps) {
         )}
 
         {activeTab === "fiscal" && (
-          <div role="tabpanel" data-testid="tabpanel-fiscal">
+          <div role="tabpanel" data-testid="tabpanel-fiscal" className="space-y-6">
+            {/* P3 slice 1: the company logo lives beside the identity the
+                fiscal form already owns — one identity, one place. */}
+            <CompanyLogoCard />
             <FiscalSetupForm />
           </div>
         )}

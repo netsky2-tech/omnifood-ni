@@ -3,6 +3,8 @@ import { setTokens, clearTokens } from "@/lib/api";
 import {
   fetchFiscalSetup,
   updateFiscalSetup,
+  fetchCompanyLogo,
+  uploadCompanyLogo,
   fetchIndustryTemplates,
   applyIndustryTemplate,
   uploadImportBatch,
@@ -616,6 +618,55 @@ describe("W9 — Fiscal Setup & Onboarding API & Schemas (TDD RED -> GREEN -> TR
       expect(JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string).rows.length).toBe(100);
       expect(JSON.parse(fetchSpy.mock.calls[1]?.[1]?.body as string).rows.length).toBe(100);
       expect(JSON.parse(fetchSpy.mock.calls[2]?.[1]?.body as string).rows.length).toBe(50);
+    });
+  });
+
+  // Company identity parity P3, slice 1: the dashboard's logo surface.
+  describe("fetchCompanyLogo / uploadCompanyLogo", () => {
+    it("GETs the current logo and tolerates a declared absence (null)", async () => {
+      const logo = {
+        sha256: "a".repeat(64),
+        contentType: "image/png",
+        byteLength: 70,
+        base64: "iVBORw0KGgo=",
+      };
+      mockFetchSuccess(logo);
+
+      const result = await fetchCompanyLogo();
+      expect(result).toEqual(logo);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/onboarding/company-logo",
+        expect.objectContaining({ method: "GET" }),
+      );
+
+      mockFetchSuccess(null);
+      await expect(fetchCompanyLogo()).resolves.toBeNull();
+    });
+
+    it("POSTs the base64 payload with the content type and returns the stored logo", async () => {
+      const stored = {
+        sha256: "b".repeat(64),
+        contentType: "image/png",
+        byteLength: 70,
+        base64: "iVBORw0KGgo=",
+      };
+      mockFetchSuccess(stored);
+
+      const payload = { content_type: "image/png", data: "iVBORw0KGgo=" };
+      const result = await uploadCompanyLogo(payload);
+      expect(result).toEqual(stored);
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/onboarding/company-logo",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(JSON.parse(fetchSpy.mock.calls[0]?.[1]?.body as string)).toEqual(payload);
+    });
+
+    it("surfaces the backend rejection reason (a rejected upload leaves the previous logo untouched)", async () => {
+      mockFetchError(400, "corrupt PNG chunk IHDR (CRC mismatch)");
+      await expect(
+        uploadCompanyLogo({ content_type: "image/png", data: "AAAA" }),
+      ).rejects.toThrow("corrupt PNG chunk IHDR (CRC mismatch)");
     });
   });
 });

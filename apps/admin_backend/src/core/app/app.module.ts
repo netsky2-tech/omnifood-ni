@@ -35,6 +35,7 @@ import { TenantFulfillmentRecord } from '../../modules/fulfillment/entities/tena
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../modules/tenant/entities/tenant-brand-asset.entity';
 import { User } from '../../modules/identity/entities/user.entity';
 import { AuditLog } from '../../modules/identity/entities/audit-log.entity';
 import { AuditIntegrityAlert } from '../../modules/identity/entities/audit-integrity-alert.entity';
@@ -136,6 +137,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
   }),
   entities: [
     Tenant,
+    TenantBrandAsset,
     User,
     SecurityProfile,
     AuditLog,

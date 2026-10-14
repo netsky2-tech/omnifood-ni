@@ -4,6 +4,8 @@ import { NotFoundException } from '@nestjs/common';
 import { createMigrationBuiltSchemaFixture } from '../../../../test/support/migration-built-schema.helper';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { CompanyIdentityService } from '../../tenant/services/company-identity.service';
+import { TenantBrandAssetService } from '../../tenant/services/tenant-brand-asset.service';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import { CountSession } from '../entities/count-session.entity';
 import { CountSessionEntry } from '../entities/count-session-entry.entity';
 import { CountSessionPrintableService } from './count-session-printable.service';
@@ -152,7 +154,7 @@ describe('CountSessionPrintableService read path (Real PostgreSQL DB, migration-
       username: fixture.runtimeRoleName,
       password: fixture.runtimeRolePassword,
       schema: fixture.schema,
-      entities: [Tenant, CountSession, CountSessionEntry],
+      entities: [Tenant, TenantBrandAsset, CountSession, CountSessionEntry],
       ...poolCleanupExtra,
     });
     await runtime.initialize();
@@ -160,9 +162,13 @@ describe('CountSessionPrintableService read path (Real PostgreSQL DB, migration-
     // Real collaborators on the real connection: the identity read shares
     // the printable service's transaction (S4), so it must be the REAL
     // CompanyIdentityService over the SAME runtime DataSource, not a stub.
+    // The same is true of the brand-asset seam (P3 slice 1): with no logo
+    // stored for the seeded tenant it resolves present:false and the PDF is
+    // produced without an embedded image, exactly as before this slice.
     service = new CountSessionPrintableService(
       runtime,
       new CompanyIdentityService(runtime),
+      new TenantBrandAssetService(runtime),
     );
 
     // A second runtime-role connection that is NEVER tenant-bound, used only
@@ -178,7 +184,7 @@ describe('CountSessionPrintableService read path (Real PostgreSQL DB, migration-
       username: fixture.runtimeRoleName,
       password: fixture.runtimeRolePassword,
       schema: fixture.schema,
-      entities: [Tenant, CountSession, CountSessionEntry],
+      entities: [Tenant, TenantBrandAsset, CountSession, CountSessionEntry],
       ...poolCleanupExtra,
     });
     await unboundRuntime.initialize();
