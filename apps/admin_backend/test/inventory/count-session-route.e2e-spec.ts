@@ -27,6 +27,11 @@ import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { CurrentUserAuthorizationService } from '../../src/modules/identity/services/current-user-authorization.service';
 import { SyncTransportGuard } from '../../src/modules/identity/guards/sync-transport.guard';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
+// R13: drawBatchOutflow asks the transaction manager for the Batch repo when
+// the counted variance is negative. This spec exercises the count-session
+// route contract with a batch-less insumo, where the outflow is a documented
+// no-op (no candidates → return).
+import { Batch } from '../../src/modules/inventory/entities/batch.entity';
 import {
   InventoryMovement,
   MovementType,
@@ -132,6 +137,13 @@ describe('Count session route (integration)', () => {
           create: createMovement,
           findOneBy: findExistingMovement,
           save: saveMovement,
+        };
+      }
+
+      if (entity === Batch) {
+        return {
+          find: jest.fn().mockResolvedValue([]),
+          save: jest.fn(),
         };
       }
 
