@@ -126,9 +126,8 @@ void main() {
       );
     });
 
-    testWidgets('el buscador declara que acepta nombre y SKU (§13.1)', (
-      tester,
-    ) async {
+    testWidgets('la pista del buscador nombra nombre y SKU y cabe en 384 dp '
+        '(§13.1)', (tester) async {
       tester.view.physicalSize = const Size(1080, 2316);
       tester.view.devicePixelRatio = 2.8125;
       addTearDown(tester.view.reset);
@@ -136,7 +135,18 @@ void main() {
       await tester.pumpWidget(buildTestApp());
       await tester.pumpAndSettle();
 
-      expect(find.text('Buscar nombre o SKU'), findsOneWidget);
+      final hint = find.text('Nombre o SKU');
+      expect(hint, findsOneWidget);
+
+      // Measured on the S23 (1080x2316 @ 2.8125): the field leaves about 85 dp
+      // for the hint at 12 dp, which fits roughly 13 glyphs. "Buscar nombre o
+      // SKU" (19 glyphs) came out ellipsised as "Buscar nom...", hiding the
+      // SKU capability this hint exists to announce; the magnifier icon
+      // already carries the verb. The test font is square (1 em per glyph),
+      // so the guard is expressed in glyphs, not in pixels.
+      final data = tester.widget<Text>(hint).data!;
+      expect(data.length, lessThanOrEqualTo(13));
+      expect(data.toLowerCase(), contains('sku'));
     });
 
     testWidgets('catálogo vacío no es "sin resultados": lo dice y ofrece '

@@ -51,7 +51,7 @@ La card del catálogo de ventas desperdicia el 52% de su superficie (medido en S
 | T2 | S3, S13, S14 | Estados de la pantalla: esqueleto de carga local, "sin datos" vs "sin resultados" con reset | ✅ `07241cb8` |
 | T3 | S3, S15 | Precisión del carrito: tabular en precios de línea, plural del contador, vacío válido | ✅ `07241cb8` |
 | T4 | S3, S13, S17, S18 | Filtro por categoría con `ChoiceChip` + estado visible con reset "Todas" | ✅ `ae7fdeaf` |
-| T5 | S4 | Evidencia: tests focalizados + capturas antes/después (S23) + verificación de geometría en Q80/V2s | ⏳ |
+| T5 | S4 | Evidencia: tests focalizados + capturas antes/después (S23) + verificación de geometría en Q80/V2s | ✅ `.pi/tmp/` |
 
 ## Log
 
@@ -75,3 +75,7 @@ La card del catálogo de ventas desperdicia el 52% de su superficie (medido en S
 - **L18** — Riesgo declarado: el fix del borde de `DsEmptyState` (#767777 → token `outlineVariant`) alcanza a otras superficies que usan el componente (historial de ventas, reporte DGI, log de auditoría, recetas, insumos) → item 3 de la lista de riesgo, con verificación independiente pendiente.
 - **L19** — Instalado `versionCode=22051` en el S23 (`Success`, datos locales intactos). Al relanzar, la app quedó en "Iniciar Sesión": la sesión del cajero no sobrevive al reinicio de la app (la terminal sigue configurada: ofrece el acceso offline por PIN). Las capturas "después" quedan bloqueadas hasta que el usuario inicie sesión.
 - **L20** — Flake descartado: una corrida completa de la suite reportó `product_visual_resolver_test.dart` fallando en la etapa de *carga*; aislado pasa 8/8 y la corrida siguiente quedó en 540 verdes. Es la flaqueza de memoria del host que documenta `AGENTS.md`, no un efecto de estos cambios.
+- **L21** — Evidencia en dispositivo (S23, `22051`), capturas ADB en `.pi/tmp/`: `pos_ventas_before.png` / `before_cart_bar.png` / `before_cart_sheet.png` contra `after_catalog.png` / `after_cart_bar.png` / `after_cart_sheet.png` / `after_no_results.png` / `after_filters_cleared.png`. Medición sobre la captura nueva: **3 columnas**, foto de ancho completo (108 dp = 304 px ≈ nativa, sin suavizado visible), pie de 64 dp con nombre a 2 líneas y precio tabular, cero aire dentro de la tarjeta; el contador de la barra dice "1 producto agregado" (antes "1 productos agregados"); el monto de línea del carrito pasó de gris a Slate 900; "Limpiar filtros" devuelve el catálogo completo; el buscador muestra el término buscado y el estado vacío lo nombra.
+- **L22** — La pista con SKU salió **truncada** en el dispositivo ("Buscar nom..."): la captura desmintió mi estimación de ancho. Corregida a `Nombre o SKU` (13 glifos) con guardián de longitud en el test, porque el campo deja ~85 dp de texto a 12 dp. El verbo queda en el icono de lupa.
+- **L23** — El catálogo de ese terminal (4 productos de conveniencia: Oreo, Coca-Cola, Tosty, Agua) no tiene categoría cargada, así que la fila de chips no se dibuja: es el comportamiento diseñado (§43, nada de ruido vacío). La fila queda verificada por 5 tests de widget y por render local; para verla en el terminal hay que categorizar productos en el dashboard.
+- **L24** — La sesión de cajero no sobrevive al reinicio de la app, así que cada instalación de validación cuesta una vuelta de login manual del usuario. Anotado para futuras validaciones de UI en dispositivo.

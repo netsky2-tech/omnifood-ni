@@ -977,9 +977,12 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
         },
         decoration: InputDecoration(
           hintText: isHandheld
-              // §13.1: the hint names what the operator can search by. On the
-              // terminal this field also accepts a scanned or typed SKU.
-              ? 'Buscar nombre o SKU'
+              // §13.1: the hint names what the operator can search by, and it
+              // has to FIT: on the 384 dp terminal the field leaves ~85 dp for
+              // text, so the verb stays in the magnifier icon and both keys
+              // (name, SKU) are spelled out. A longer hint is ellipsised and
+              // hides the SKU capability.
+              ? 'Nombre o SKU'
               : 'Buscar por nombre o SKU...',
           hintStyle: TextStyle(fontSize: isHandheld ? 12 : 14),
           border: InputBorder.none,
