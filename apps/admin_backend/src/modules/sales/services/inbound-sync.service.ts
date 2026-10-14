@@ -499,6 +499,11 @@ export class InboundSyncService {
       authorizedByUserId: row.authorizedByUserId ?? null,
       authorizedByRole: row.authorizedByRole ?? null,
       isCanceled: row.isCanceled,
+      paymentStatus: row.paymentStatus,
+      globalTaxOverride: row.globalTaxOverride,
+      bcnOfficialRate: Number(row.bcnOfficialRate),
+      commercialRate: Number(row.commercialRate),
+      totalUsd: Number(row.totalUsd),
       createdAt: row.created_at.toISOString(),
       updatedAt: row.updated_at.toISOString(),
     }));

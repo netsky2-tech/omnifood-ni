@@ -450,6 +450,11 @@ export interface InboundSyncCreditNoteDto {
   authorizedByUserId: string | null;
   authorizedByRole: string | null;
   isCanceled: boolean;
+  paymentStatus: string;
+  globalTaxOverride: boolean;
+  bcnOfficialRate: number;
+  commercialRate: number;
+  totalUsd: number;
   createdAt: string;
   updatedAt: string;
 }
