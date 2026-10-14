@@ -43,12 +43,21 @@ describe('CountSessionService', () => {
   const findOneBy = jest.fn();
   const bindTenantQuery = jest.fn();
   const create = jest.fn((entity: unknown) => entity);
+  // R19 T2 persists the count-session document through the EntityManager's
+  // own create/save on this same transaction, so the fake manager needs those
+  // two methods. They are separate from `create` above on purpose: that one
+  // belongs to the InventoryMovement repository, and the assertions about the
+  // movement must keep seeing only its own calls.
+  const managerCreate = jest.fn((entity: unknown) => entity);
+  const managerSave = jest.fn();
   const transaction = jest.fn((callback: (manager: unknown) => unknown) =>
     Promise.resolve(
       callback({
         // CountSessionService binds the RLS tenant context on its own
         // transaction (bindTenantContext) before any RLS-protected query.
         query: bindTenantQuery,
+        create: managerCreate,
+        save: managerSave,
         getRepository: (entity: unknown) => {
           if (entity === Insumo) return { findOne, save };
           if (entity === InventoryMovement) return { create, findOneBy, save };
@@ -57,7 +66,8 @@ describe('CountSessionService', () => {
           // stub reports no batches, which is the honest fixture for a
           // non batch-managed insumo: `drawBatchOutflow` returns early and this
           // spec keeps asserting exactly what it asserted before.
-          if (entity === Batch) return { find: jest.fn().mockResolvedValue([]), save };
+          if (entity === Batch)
+            return { find: jest.fn().mockResolvedValue([]), save };
           throw new Error('Unexpected repository');
         },
       }),
