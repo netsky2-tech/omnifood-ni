@@ -20,7 +20,9 @@ import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
+import 'widgets/product_card.dart';
 import 'widgets/product_card_thumbnail.dart';
+import 'widgets/product_grid_geometry.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
@@ -377,7 +379,11 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                   ],
                 ),
               )
-            : ProductGrid(products: viewModel.filteredProducts);
+            : ProductGrid(
+                products: viewModel.filteredProducts,
+                promotions: viewModel.promotions,
+                onProductTap: _openProduct,
+              );
 
     return Scaffold(
       appBar: AppBar(
@@ -625,6 +631,23 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
             ],
           )
           : const BoxOpeningContent(),
+    );
+  }
+
+  /// Adds a product with no options straight to the cart; a product with
+  /// variants or modifiers opens its options dialog first, so an
+  /// under-specified line never reaches the ticket.
+  void _openProduct(Product product) {
+    if (product.variants.isEmpty &&
+        product.availableModifiers.isEmpty &&
+        product.availableModifierGroups.isEmpty) {
+      _viewModel.addToCart(product);
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => ProductOptionsDialog(product: product),
     );
   }
 
@@ -1063,132 +1086,65 @@ class CartSheetErrorBanner extends StatelessWidget {
 }
 
 class ProductGrid extends StatelessWidget {
+  const ProductGrid({
+    super.key,
+    required this.products,
+    this.promotions = const [],
+    this.onProductTap,
+  });
+
   final List<Product> products;
-  const ProductGrid({super.key, required this.products});
+
+  /// Promotions of the tenant. The grid renders only the active ones that
+  /// target a visible product; the label copy is unchanged (2x1 / -10% /
+  /// PROMO) so the badge keeps meaning the same thing on every surface.
+  final List<Promotion> promotions;
+
+  /// Catalog tap handler. The grid never adds to the cart by itself: a product
+  /// with variants or modifiers has to be configured first.
+  final ValueChanged<Product>? onProductTap;
 
   @override
   Widget build(BuildContext context) {
-    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
-    final colorScheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final geometry = ProductGridGeometry(
+          viewportWidth: constraints.maxWidth,
+          devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+        );
 
-    final viewModel = context.watch<SaleViewModel>();
-
-    return GridView.builder(
-      padding: EdgeInsets.all(isHandheld ? 10 : 16),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: isHandheld ? 180 : 200,
-        childAspectRatio: isHandheld ? 0.82 : 0.84,
-        crossAxisSpacing: isHandheld ? 8 : 12,
-        mainAxisSpacing: isHandheld ? 8 : 12,
-      ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final product = products[index];
-        final promo = viewModel.promotions
-            .where((p) => p.isActive && p.targetProductId == product.id)
-            .firstOrNull;
-
-        return InkWell(
-          onTap: () => _showProductOptions(context, product),
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: NhilosRadii.cardRadius,
-              side: BorderSide(
-                color: promo != null
-                    ? Colors.deepOrange
-                    : colorScheme.outlineVariant,
-                width: promo != null ? 1.5 : 1,
-              ),
-            ),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ProductCardThumbnail(
-                        imageUrl: product.imageUrl,
-                        category: product.category,
-                        productName: product.name,
-                        size: isHandheld ? 36 : 46,
-                        color: promo != null ? Colors.deepOrange : colorScheme.primary,
-                      ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Text(
-                          product.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: isHandheld ? 12 : 13,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'C\$ ${product.sellPrice.toStringAsFixed(2)}',
-                        textAlign: TextAlign.center,
-                        style: NhilosTextStyles.tabular(
-                          base: TextStyle(
-                            color: promo != null ? Colors.deepOrange : colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: isHandheld ? 13 : 15,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (promo != null)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(
-                        color: Colors.deepOrange,
-                        borderRadius: NhilosRadii.badgeRadius,
-                      ),
-                      child: Text(
-                        promo.type == PromotionType.buyXGetYFree
-                            ? '2x1'
-                            : (promo.type == PromotionType.percentageDiscount
-                                ? '-${promo.discountValue.toStringAsFixed(0)}%'
-                                : 'PROMO'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+        return GridView.builder(
+          padding: EdgeInsets.all(geometry.horizontalPadding),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: geometry.columns,
+            childAspectRatio: geometry.childAspectRatio,
+            crossAxisSpacing: geometry.crossAxisSpacing,
+            mainAxisSpacing: geometry.mainAxisSpacing,
           ),
+          itemCount: products.length,
+          itemBuilder: (context, index) {
+            final product = products[index];
+            final promo = promotions
+                .where((p) => p.isActive && p.targetProductId == product.id)
+                .firstOrNull;
+
+            return ProductCard(
+              product: product,
+              promoLabel: promo == null ? null : _promoLabel(promo),
+              onTap: () => onProductTap?.call(product),
+            );
+          },
         );
       },
     );
   }
 
-  void _showProductOptions(BuildContext context, Product product) {
-    if (product.variants.isEmpty &&
-        product.availableModifiers.isEmpty &&
-        product.availableModifierGroups.isEmpty) {
-      context.read<SaleViewModel>().addToCart(product);
-      return;
+  static String _promoLabel(Promotion promo) {
+    if (promo.type == PromotionType.buyXGetYFree) return '2x1';
+    if (promo.type == PromotionType.percentageDiscount) {
+      return '-${promo.discountValue.toStringAsFixed(0)}%';
     }
-
-    showDialog(
-      context: context,
-      builder: (context) => ProductOptionsDialog(product: product),
-    );
+    return 'PROMO';
   }
 }
 
