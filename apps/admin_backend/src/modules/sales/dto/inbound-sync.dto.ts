@@ -421,7 +421,42 @@ export interface InboundSyncDeltasDto {
   modifierGroups?: InboundSyncModifierGroupDto[];
   categoryModifierGroups?: InboundSyncCategoryModifierGroupDto[];
   productModifierGroups?: InboundSyncProductModifierGroupDto[];
+  /**
+   * #553 part 2 T3a: backoffice-issued credit notes as stored facts. Optional
+   * in the type like `alerts` — older envelope literals predate it — but the
+   * service always populates it (empty when not requested).
+   */
+  creditNotes?: InboundSyncCreditNoteDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
+}
+
+/**
+ * A credit note the POS receives as a document. Every field is read from the
+ * invoices row — nothing is recomputed (issue #553 S9) — and the origin
+ * invoice is referenced by id: the POS resolves its number from its own
+ * local records. POS-issued notes never reach the backend (DEC-3 outbound
+ * filter), so this channel carries backoffice-issued rows only, numbered in
+ * CREDIT_NOTE_SERIES — a distinct format from the POS cursor (DEC-1).
+ */
+export interface InboundSyncCreditNoteDto {
+  id: string;
+  number: string;
+  originInvoiceId: string | null;
+  subtotal: number;
+  totalTax: number;
+  total: number;
+  refundReasonCode: string | null;
+  refundReasonPolicy: string | null;
+  authorizedByUserId: string | null;
+  authorizedByRole: string | null;
+  isCanceled: boolean;
+  paymentStatus: string;
+  globalTaxOverride: boolean;
+  bcnOfficialRate: number;
+  commercialRate: number;
+  totalUsd: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Statuses the negotiation answers an opted-in client with (design §12). */

@@ -17,6 +17,7 @@ import { ProductInventoryMappingVersion } from '../../inventory/entities/product
 import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { Invoice } from '../entities/invoice.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
@@ -40,6 +41,7 @@ import {
   InboundSyncQueryDto,
   InboundSyncResponseDto,
   InboundSyncDeltasDto,
+  InboundSyncCreditNoteDto,
   InboundSyncProductDto,
   InboundSyncCatalogValueDto,
   InboundSyncInsumoDto,
@@ -234,6 +236,10 @@ export class InboundSyncService {
       alerts: requestedTypes.has('alerts')
         ? await this.fetchAlertDeltas(tenantId, sinceDate, entityManager)
         : [],
+      creditNotes:
+        requestedTypes.has('creditnotes') || requestedTypes.has('credit_notes')
+          ? await this.fetchCreditNoteDeltas(tenantId, sinceDate, entityManager)
+          : [],
       fiscalConfig,
     };
 
@@ -448,6 +454,61 @@ export class InboundSyncService {
     return null;
   }
 
+  /**
+   * #553 part 2 T3a: backoffice-issued credit notes travel to the POS as
+   * received documents. Every field is a stored fact read from the row
+   * (issue #553 S9): nothing is recomputed, and the origin invoice is
+   * referenced by id — the POS resolves its number from its own local
+   * records. POS-issued notes never reach the backend (DEC-3 outbound
+   * filter), so this channel carries backoffice rows only. The cursor is
+   * the row's `updated_at` watermark (inclusive, like the other deltas:
+   * the terminal applies each insert-if-absent).
+   */
+  private async fetchCreditNoteDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncCreditNoteDto[]> {
+    if (!entityManager) {
+      throw new UnauthorizedException(
+        'Inbound credit note sync requires a tenant-bound transaction manager',
+      );
+    }
+    const invoiceRepository = entityManager.getRepository(Invoice);
+    const qb = invoiceRepository
+      .createQueryBuilder('invoice')
+      .where('invoice.tenant_id = :tenantId', { tenantId })
+      .andWhere('invoice.type = :type', { type: 'creditNote' });
+
+    if (sinceDate) {
+      qb.andWhere('invoice.updated_at >= :sinceDate', { sinceDate });
+    }
+
+    qb.orderBy('invoice.updated_at', 'ASC').addOrderBy('invoice.id', 'ASC');
+
+    const rows = await qb.getMany();
+    return rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      originInvoiceId: row.originInvoiceId ?? null,
+      subtotal: Number(row.subtotal),
+      totalTax: Number(row.totalTax),
+      total: Number(row.total),
+      refundReasonCode: row.refundReasonCode ?? null,
+      refundReasonPolicy: row.refundReasonPolicy ?? null,
+      authorizedByUserId: row.authorizedByUserId ?? null,
+      authorizedByRole: row.authorizedByRole ?? null,
+      isCanceled: row.isCanceled,
+      paymentStatus: row.paymentStatus,
+      globalTaxOverride: row.globalTaxOverride,
+      bcnOfficialRate: Number(row.bcnOfficialRate),
+      commercialRate: Number(row.commercialRate),
+      totalUsd: Number(row.totalUsd),
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+    }));
+  }
+
   private parseRequestedTypes(types?: string): Set<string> {
     if (!types || types.trim() === '') {
       return new Set([
@@ -470,6 +531,8 @@ export class InboundSyncService {
         'productmodifiergroups',
         'product_modifier_groups',
         'alerts',
+        'creditnotes',
+        'credit_notes',
         'fiscal',
         'fiscal_config',
         'fiscalconfig',

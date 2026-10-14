@@ -29,6 +29,9 @@ export const AppPermission = {
   SALES_DISCOUNT_OVERRIDE: "sales:discount_override",
   SALES_ITEM_CANCEL: "sales:item_cancel",
   SALES_PRICE_OVERRIDE: "sales:price_override",
+  // #553 Part 2 (D-14): the SOHO Backoffice emitter under the backend's
+  // SALES_ISSUE_CREDIT_NOTE — mirrors apps/admin_backend permissions.enum.ts.
+  SALES_ISSUE_CREDIT_NOTE: "sales:issue_credit_note",
   CASH_MANUAL_DRAWER_OPEN: "cash:manual_drawer_open",
   CASH_REOPEN_SHIFT: "cash:reopen_shift",
   INVENTORY_RECIPE_EDIT: "inventory:recipe_edit",
@@ -86,6 +89,13 @@ export const PERMISSIONS_CATALOG: Record<AppPermission, PermissionMetadata> = {
     key: AppPermission.SALES_PRICE_OVERRIDE,
     label: "Modificar Precio en Línea",
     description: "Sobrescribir el precio de lista de un producto en el POS",
+    category: "Ventas",
+  },
+  [AppPermission.SALES_ISSUE_CREDIT_NOTE]: {
+    key: AppPermission.SALES_ISSUE_CREDIT_NOTE,
+    label: "Emitir Notas de Crédito",
+    description:
+      "Emitir notas de crédito desde el backoffice (D-14: el emisor es SOHO, no el POS)",
     category: "Ventas",
   },
   [AppPermission.CASH_MANUAL_DRAWER_OPEN]: {

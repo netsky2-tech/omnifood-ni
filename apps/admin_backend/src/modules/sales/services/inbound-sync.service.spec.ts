@@ -15,6 +15,7 @@ import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
 import { RewardDefinition } from '../../loyalty/entities/reward-definition.entity';
 import { Promotion } from '../../promotions/entities/promotion.entity';
 import { Customer } from '../../customers/entities/customer.entity';
+import { Invoice } from '../entities/invoice.entity';
 import { ModifierGroup } from '../../modifiers/entities/modifier-group.entity';
 import { ModifierOption } from '../../modifiers/entities/modifier-option.entity';
 import { CategoryModifierGroup } from '../../modifiers/entities/category-modifier-group.entity';
@@ -85,6 +86,7 @@ describe('InboundSyncService', () => {
   let modifierOptionQb: MockQueryBuilder<ModifierOption>;
   let categoryAttachmentQb: MockQueryBuilder<CategoryModifierGroup>;
   let productAttachmentQb: MockQueryBuilder<ProductModifierGroup>;
+  let creditNoteQb: MockQueryBuilder<Invoice>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
   let mockCatalogRepo: { createQueryBuilder: jest.Mock };
@@ -105,6 +107,7 @@ describe('InboundSyncService', () => {
   let mockModifierOptionRepo: { createQueryBuilder: jest.Mock };
   let mockCategoryAttachmentRepo: { createQueryBuilder: jest.Mock };
   let mockProductAttachmentRepo: { createQueryBuilder: jest.Mock };
+  let mockInvoiceRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
     productQb = createMockQueryBuilder<Product>([]);
@@ -125,6 +128,7 @@ describe('InboundSyncService', () => {
     modifierOptionQb = createMockQueryBuilder<ModifierOption>([]);
     categoryAttachmentQb = createMockQueryBuilder<CategoryModifierGroup>([]);
     productAttachmentQb = createMockQueryBuilder<ProductModifierGroup>([]);
+    creditNoteQb = createMockQueryBuilder<Invoice>([]);
 
     mockProductRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productQb),
@@ -174,6 +178,9 @@ describe('InboundSyncService', () => {
     };
     mockProductAttachmentRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productAttachmentQb),
+    };
+    mockInvoiceRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(creditNoteQb),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -265,6 +272,7 @@ describe('InboundSyncService', () => {
         if (entity === ModifierOption) return mockModifierOptionRepo;
         if (entity === CategoryModifierGroup) return mockCategoryAttachmentRepo;
         if (entity === ProductModifierGroup) return mockProductAttachmentRepo;
+        if (entity === Invoice) return mockInvoiceRepo;
         if (entity === ForensicAlert)
           return {
             createQueryBuilder: jest
@@ -2586,6 +2594,91 @@ describe('InboundSyncService', () => {
       expect(
         mockProductAttachmentRepo.createQueryBuilder,
       ).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('credit notes domain (#553 part 2 T3a)', () => {
+    const mockCreditNotes = [
+      {
+        id: 'cn-1',
+        number: 'NC-00000001',
+        tenant_id: 'tenant-abc',
+        type: 'creditNote',
+        originInvoiceId: '11111111-1111-4111-8111-111111111111',
+        subtotal: -50,
+        totalTax: -7.5,
+        total: -57.5,
+        refundReasonCode: 'ERROR_DE_CAPTURA',
+        refundReasonPolicy: 'FINANCIAL_ONLY',
+        authorizedByUserId: 'authorizer-1',
+        authorizedByRole: 'OWNER',
+        isCanceled: false,
+        paymentStatus: 'pending',
+        globalTaxOverride: false,
+        bcnOfficialRate: 36.6241,
+        commercialRate: 36.9,
+        totalUsd: -1.56,
+        created_at: new Date('2026-10-01T00:00:00Z'),
+        updated_at: new Date('2026-10-02T00:00:00Z'),
+      } as unknown as Invoice,
+    ];
+
+    it('delivers stored-fact credit notes when the type is requested, honoring the update watermark', async () => {
+      creditNoteQb.getMany.mockResolvedValue(mockCreditNotes);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'creditnotes', since: '2026-09-30T00:00:00Z' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.creditNotes).toEqual([
+        {
+          id: 'cn-1',
+          number: 'NC-00000001',
+          originInvoiceId: '11111111-1111-4111-8111-111111111111',
+          subtotal: -50,
+          totalTax: -7.5,
+          total: -57.5,
+          refundReasonCode: 'ERROR_DE_CAPTURA',
+          refundReasonPolicy: 'FINANCIAL_ONLY',
+          authorizedByUserId: 'authorizer-1',
+          authorizedByRole: 'OWNER',
+          isCanceled: false,
+          paymentStatus: 'pending',
+          globalTaxOverride: false,
+          bcnOfficialRate: 36.6241,
+          commercialRate: 36.9,
+          totalUsd: -1.56,
+          createdAt: '2026-10-01T00:00:00.000Z',
+          updatedAt: '2026-10-02T00:00:00.000Z',
+        },
+      ]);
+      expect(creditNoteQb.andWhere).toHaveBeenCalledWith(
+        'invoice.updated_at >= :sinceDate',
+        { sinceDate: expect.anything() },
+      );
+    });
+
+    it('ships an empty creditNotes domain when another type is requested', async () => {
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.creditNotes).toEqual([]);
+      expect(creditNoteQb.getMany).not.toHaveBeenCalled();
+    });
+
+    it('fails closed without a tenant-bound manager', async () => {
+      await expect(
+        service.getInboundDeltas('tenant-abc', { types: 'creditnotes' }),
+      ).rejects.toThrow(
+        'Inbound credit note sync requires a tenant-bound transaction manager',
+      );
     });
   });
 });

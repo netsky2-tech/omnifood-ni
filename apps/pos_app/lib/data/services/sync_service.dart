@@ -40,6 +40,7 @@ import '../models/modifiers/product_modifier_group_entity.dart';
 import '../models/sales/cashier_session_entity.dart';
 import '../models/sales/cash_movement_entity.dart';
 import '../models/sales/payment_entity.dart';
+import '../models/sales/invoice_entity.dart';
 import 'fiscal_inbox_handler.dart';
 import 'authority_delta_adapter.dart';
 import '../../core/utils/numeric_utils.dart';
@@ -120,6 +121,12 @@ class InboundSyncResult {
   final int usersCount;
   final int alertsCount;
 
+  /// #553 part 2 T3b: backoffice-issued credit notes delivered as received
+  /// read-model documents (type creditNote, syncStatus synced). They never
+  /// touch the local DGI cursor (DEC-1: the received number comes from
+  /// CREDIT_NOTE_SERIES).
+  final int creditNotesCount;
+
   /// Promotions rows delivered by the `promotions` delta. The open checkout
   /// uses this as a precise reload signal: the cloud is authoritative for
   /// promotions, so any delivered row (new or re-delivered) must trigger a
@@ -149,6 +156,7 @@ class InboundSyncResult {
     this.recipesCount = 0,
     this.usersCount = 0,
     this.alertsCount = 0,
+    this.creditNotesCount = 0,
     this.promotionsCount = 0,
     this.appliedFiscalRevision,
     this.appliedFiscalFingerprint,
@@ -4975,6 +4983,51 @@ class SyncService {
           );
         }
 
+        // 5c. #553 part 2 T3b: backoffice-issued credit notes land as
+        // received read-model documents. Every field is a stored fact from
+        // the delta (S9); the local DGI cursor is never touched (DEC-1: the
+        // received number comes from CREDIT_NOTE_SERIES — a distinct format
+        // from the POS cursor), and these rows are never locally issuable:
+        // the history lists them read-only.
+        final rawCreditNotes =
+            rawDeltas['creditNotes'] as List<dynamic>? ?? const [];
+        var creditNotesCount = 0;
+        for (final cn in rawCreditNotes) {
+          final map = Map<String, dynamic>.from(cn as Map);
+          final entity = InvoiceEntity(
+            id: map['id'] as String,
+            number: map['number'] as String,
+            createdAt: DateTime.parse(map['createdAt'] as String)
+                .millisecondsSinceEpoch,
+            // Provenance: the backend authorizer is the emitter of this
+            // received document; the terminal has no local user row for it.
+            userId: map['authorizedByUserId'] as String? ?? '',
+            subtotal: asDouble(map['subtotal']) ?? 0.0,
+            totalTax: asDouble(map['totalTax']) ?? 0.0,
+            total: asDouble(map['total']) ?? 0.0,
+            isCanceled: map['isCanceled'] as bool? ?? false,
+            syncStatus: 'synced',
+            paymentStatus: map['paymentStatus'] as String? ?? 'pending',
+            globalTaxOverride: map['globalTaxOverride'] as bool? ?? false,
+            type: 'creditNote',
+            originInvoiceId: map['originInvoiceId'] as String?,
+            refundReasonCode: map['refundReasonCode'] as String?,
+            refundReasonPolicy: map['refundReasonPolicy'] as String?,
+            authorizedByUserId: map['authorizedByUserId'] as String?,
+            authorizedByRole: map['authorizedByRole'] as String?,
+            bcnOfficialRate: asDouble(map['bcnOfficialRate']) ?? 0.0,
+            commercialRate: asDouble(map['commercialRate']) ?? 0.0,
+            totalUsd: asDouble(map['totalUsd']) ?? 0.0,
+          );
+          // Insert-if-absent: the inclusive watermark re-delivers rows, and
+          // a cloud replay must never overwrite a local row (append-only).
+          final existing =
+              await _database!.salesTransactionDao.getInvoiceById(entity.id);
+          if (existing != null) continue;
+          await _database!.salesTransactionDao.insertInvoice(entity);
+          creditNotesCount++;
+        }
+
         // Update local sync watermark version
         final currentVersion = data['currentVersion'];
         if (currentVersion != null) {
@@ -5007,6 +5060,7 @@ class SyncService {
           recipesCount: recipeEntities.length,
           usersCount: userEntities.length,
           alertsCount: alertsCount,
+          creditNotesCount: creditNotesCount,
           appliedFiscalRevision: appliedFiscalRevision,
           appliedFiscalFingerprint: appliedFiscalFingerprint,
           authorityInsumosCount: authorityInsumosCount,

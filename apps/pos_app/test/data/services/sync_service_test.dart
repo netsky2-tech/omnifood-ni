@@ -2881,6 +2881,93 @@ void main() {
       },
     );
 
+    test(
+      'pullInboundDeltas applies received credit notes as synced read-model '
+      'documents without touching the DGI cursor (#553 part 2 T3b)',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-10-14T18:00:00.000Z',
+            'currentVersion': 1792000000000,
+            'deltas': {
+              'creditNotes': [
+                {
+                  'id': 'cn-cloud-1',
+                  'number': 'NC-00000041',
+                  'originInvoiceId': 'origin-uuid-1',
+                  'subtotal': -50.0,
+                  'totalTax': -7.5,
+                  'total': -57.5,
+                  'refundReasonCode': 'ERROR_DE_CAPTURA',
+                  'refundReasonPolicy': 'FINANCIAL_ONLY',
+                  'authorizedByUserId': 'authorizer-1',
+                  'authorizedByRole': 'OWNER',
+                  'isCanceled': false,
+                  'paymentStatus': 'pending',
+                  'globalTaxOverride': false,
+                  'bcnOfficialRate': 36.6241,
+                  'commercialRate': 36.9,
+                  'totalUsd': -1.56,
+                  'createdAt': '2026-10-14T17:00:00.000Z',
+                  'updatedAt': '2026-10-14T17:05:00.000Z',
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          expect(result!.creditNotesCount, 1);
+
+          // The received NC lands as a read-model document: type creditNote,
+          // synced, with the backend provenance columns persisted.
+          final saved = await database.salesTransactionDao.getInvoiceById(
+            'cn-cloud-1',
+          );
+          expect(saved, isNotNull);
+          expect(saved!.type, 'creditNote');
+          expect(saved.syncStatus, 'synced');
+          expect(saved.number, 'NC-00000041');
+          expect(saved.originInvoiceId, 'origin-uuid-1');
+          expect(saved.total, -57.5);
+          expect(saved.refundReasonCode, 'ERROR_DE_CAPTURA');
+          expect(saved.refundReasonPolicy, 'FINANCIAL_ONLY');
+          expect(saved.authorizedByUserId, 'authorizer-1');
+          expect(saved.authorizedByRole, 'OWNER');
+          expect(saved.isCanceled, false);
+
+          // DEC-1: the received number comes from CREDIT_NOTE_SERIES — the
+          // local DGI sales cursor must be untouched by the pull.
+          final dgiCursor = await database.localConfigDao.getConfigByKey(
+            'dgi_current_number',
+          );
+          expect(dgiCursor, isNull);
+
+          // The pull cursor advanced.
+          final savedVersionConfig = await database.localConfigDao
+              .getConfigByKey('last_inbound_sync_version');
+          expect(savedVersionConfig, isNotNull);
+          expect(savedVersionConfig!.value, '1792000000000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
     // Issue #899 S5/T3: defense in depth — the terminal never persists
     // catalog deltas it generated itself. The Dashboard is the only catalog
     // writer; a row echoed back from the terminal's own BOH edit must not

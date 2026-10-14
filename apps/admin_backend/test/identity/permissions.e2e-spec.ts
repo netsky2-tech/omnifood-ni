@@ -351,6 +351,36 @@ describe('Permissions & Fine-Grained RBAC (e2e) (Slice 10.1)', () => {
       expect(auditRepository.save).toHaveBeenCalled();
     });
 
+    it('grants and surfaces sales:issue_credit_note (the SOHO backoffice emitter, #553 part 2)', async () => {
+      const token = generateTestToken(ownerUserId, UserRole.OWNER);
+
+      const profile = {
+        user_id: cashierUserId,
+        custom_permissions: [],
+      };
+      securityProfileRepository.findOne.mockResolvedValue(profile);
+      securityProfileRepository.save.mockImplementation(
+        async (p: unknown) => p,
+      );
+      auditRepository.save.mockResolvedValue({ id: 'audit-2' });
+
+      const res = await request(app.getHttpServer())
+        .put(`/identity/users/${cashierUserId}/permissions`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          custom_permissions: [AppPermission.SALES_ISSUE_CREDIT_NOTE],
+        })
+        .expect(200);
+
+      const updateBody = res.body as {
+        effective_permissions: string[];
+      };
+      expect(updateBody.effective_permissions).toContain(
+        AppPermission.SALES_ISSUE_CREDIT_NOTE,
+      );
+      expect(auditRepository.save).toHaveBeenCalled();
+    });
+
     it('returns 403 when non-owner attempts to modify permissions', async () => {
       const waiterToken = generateTestToken(waiterUserId, UserRole.WAITER);
 
