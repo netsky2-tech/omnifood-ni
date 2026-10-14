@@ -992,6 +992,15 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           prefixIcon: Icon(Icons.search, size: 20, color: colorScheme.primary),
+          // §42.6/§43: on the 384 dp terminal the field is 150 dp wide and
+          // Flutter's default 48 dp minimum prefix box left 72 dp for the hint,
+          // which ellipsised "Nombre o SKU" into "Nombre o S...". The magnifier
+          // is decorative — not a tap target — so its box shrinks and the
+          // operator gets to read what the field accepts.
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 34,
+            minHeight: 34,
+          ),
           suffixIcon: viewModel.searchQuery.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.clear, size: 18),

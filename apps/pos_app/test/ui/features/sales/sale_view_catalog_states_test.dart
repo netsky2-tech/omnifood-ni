@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:pos_app/data/services/sync_service.dart';
@@ -138,15 +139,28 @@ void main() {
       final hint = find.text('Nombre o SKU');
       expect(hint, findsOneWidget);
 
-      // Measured on the S23 (1080x2316 @ 2.8125): the field leaves about 85 dp
-      // for the hint at 12 dp, which fits roughly 13 glyphs. "Buscar nombre o
-      // SKU" (19 glyphs) came out ellipsised as "Buscar nom...", hiding the
-      // SKU capability this hint exists to announce; the magnifier icon
-      // already carries the verb. The test font is square (1 em per glyph),
-      // so the guard is expressed in glyphs, not in pixels.
+      // Measured on the S23 (1080x2316 @ 2.8125): the field is 150 dp wide and
+      // renders the hint at about 5.75 dp per glyph, so the copy has to stay
+      // short. "Buscar nombre o SKU" (19 glyphs) came out as "Buscar nom..."
+      // and "Nombre o SKU" (13) as "Nombre o S..." while the decorative search
+      // icon still claimed a 48 dp box; the box is now 34 dp (the icon is not a
+      // tap target) and the hint keeps naming both keys. The test font is
+      // square (1 em per glyph), so the guard is expressed in glyphs.
       final data = tester.widget<Text>(hint).data!;
       expect(data.length, lessThanOrEqualTo(13));
       expect(data.toLowerCase(), contains('sku'));
+
+      // Both halves of the equation, pinned in one place: the field must hand
+      // the hint at least ~84 dp (13 glyphs x 5.75 dp as measured on the S23),
+      // and the copy must not need more than that. Before the decorative
+      // search icon gave back its 48 dp box, the field only offered ~72 dp,
+      // which is what ellipsised the hint on the device.
+      final paragraph = tester.renderObject<RenderParagraph>(hint);
+      expect(
+        paragraph.constraints.maxWidth,
+        greaterThanOrEqualTo(84.0),
+        reason: 'el campo está dejando muy poco ancho para la pista',
+      );
     });
 
     testWidgets('catálogo vacío no es "sin resultados": lo dice y ofrece '
