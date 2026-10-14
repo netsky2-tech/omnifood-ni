@@ -956,6 +956,21 @@ class InvoiceDetailsPanel extends StatelessWidget {
                             ),
                           ),
                         );
+                        // #539 S1.3 (AC-3): a reprint without the DGI
+                        // authorization number surfaces the configuration
+                        // warning — never a silently blank fiscal line.
+                        final fiscalWarning =
+                            saleViewModel.fiscalConfigWarning;
+                        if (fiscalWarning != null &&
+                            fiscalWarning.isNotEmpty) {
+                          saleViewModel.clearFiscalConfigWarning();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(fiscalWarning),
+                              duration: const Duration(seconds: 5),
+                            ),
+                          );
+                        }
                         // No list reload: a reprint writes no invoice data.
                       } else {
                         setDialogState(() => submitting = false);

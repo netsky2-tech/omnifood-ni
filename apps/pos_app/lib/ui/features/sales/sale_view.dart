@@ -246,6 +246,7 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
     _viewModel.addListener(_presentLoyaltyWarning);
     _presentError();
     _presentLoyaltyWarning();
+    _presentFiscalConfigWarning();
     WidgetsBinding.instance.addObserver(this);
     _checkAuth();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -343,6 +344,24 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
         ),
       );
     });
+  }
+
+  /// #539 S1.3 (AC-3): a computerized-invoice ticket printed without the DGI
+  /// authorization number surfaces a NON-blocking configuration warning
+  /// after the sale was registered. The warning is per-print state on the
+  /// view model; consuming it here prevents a stale copy from re-appearing
+  /// on an unrelated rebuild.
+  void _presentFiscalConfigWarning() {
+    if (!mounted) return;
+    final warning = _viewModel.fiscalConfigWarning;
+    if (warning == null || warning.isEmpty) return;
+    _viewModel.clearFiscalConfigWarning();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(warning),
+        duration: const Duration(seconds: 5),
+      ),
+    );
   }
 
   @override

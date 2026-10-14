@@ -901,6 +901,77 @@ void main() {
     );
 
     test(
+      'a blank DGI authorization number prints WITHOUT the line and surfaces '
+      'the configuration warning (#539 S1.3 AC-3/AC-6)',
+      () async {
+        arrangeIssuableManager();
+        // The persisted snapshot carries NO authorization number: the print
+        // must omit the line (AC-6 — no placeholder may be fabricated) and
+        // the operator must SEE the configuration warning naming the
+        // Business Profile field (AC-3 — never a silently blank ticket).
+        const blankHeader = {
+          'businessName': 'Café Original',
+          'ruc': 'A0011234567890',
+          'taxRegime': 'REGIMEN_GENERAL',
+        };
+        when(mockInvoiceDao.getInvoiceById('cn-new-1')).thenAnswer(
+          (_) async => InvoiceEntity(
+            id: 'cn-new-1',
+            number: '001-001-01-00000099',
+            createdAt: DateTime(2026, 10, 1, 9, 30).millisecondsSinceEpoch,
+            userId: 'cashier-1',
+            subtotal: -100,
+            totalTax: -15,
+            total: -115,
+            type: 'creditNote',
+            relatedInvoiceId: 'invoice-1',
+            originInvoiceId: 'invoice-1',
+            refundReasonCode: reason,
+            paymentStatus: 'paid',
+            syncStatus: 'pending',
+            fiscalHeaderSnapshot: jsonEncode(blankHeader),
+          ),
+        );
+        final vm = buildPrintViewModel();
+        await vm.loadCompanyTaxRegime();
+
+        final creditNoteId = await vm.processReturn('F001-000123', reason);
+
+        expect(creditNoteId, 'cn-new-1');
+        expect(vm.lastCreditNotePrintSucceeded, isTrue,
+            reason: 'print failed: ${vm.lastPrintError}');
+        final printed = printer.printHistory.single.printedText ?? '';
+        expect(printed, contains('NOTA DE CREDITO'));
+        // AC-6: blank must be impossible to mistake for a number — no line.
+        expect(printed, isNot(contains('Autorización DGI:')));
+        // AC-3: the warning is visible, in Spanish, and names both the field
+        // and where the client configures it.
+        expect(vm.fiscalConfigWarning, isNotNull);
+        expect(vm.fiscalConfigWarning, contains('Perfil de Negocio'));
+        expect(vm.fiscalConfigWarning, contains('Autorización DGI'));
+      },
+    );
+
+    test(
+      'a configured DGI authorization number prints and raises NO warning',
+      () async {
+        arrangeIssuableManager();
+        final vm = buildPrintViewModel();
+        await vm.loadCompanyTaxRegime();
+
+        final creditNoteId = await vm.processReturn('F001-000123', reason);
+
+        expect(creditNoteId, 'cn-new-1');
+        expect(vm.lastCreditNotePrintSucceeded, isTrue,
+            reason: 'print failed: ${vm.lastPrintError}');
+        final printed = printer.printHistory.single.printedText ?? '';
+        expect(printed, contains('Autorización DGI:'));
+        expect(printed, contains('AUT-DGI-2026-0001'));
+        expect(vm.fiscalConfigWarning, isNull);
+      },
+    );
+
+    test(
       'a print failure does NOT fail the committed credit note (offline-first)',
       () async {
         arrangeIssuableManager();
