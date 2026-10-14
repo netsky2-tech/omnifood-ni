@@ -170,8 +170,8 @@ describe('parent-owned inventory children tenant RLS (Real PostgreSQL DB, migrat
 
     // Shrinkages: shrinkage_type is NOT NULL.
     await admin.query(
-      `INSERT INTO shrinkages (id, tenant_id, shrinkage_type)
-       VALUES ($1, $2, 'SPILLAGE'), ($3, $4, 'SPILLAGE')`,
+      `INSERT INTO shrinkages (id, tenant_id, shrinkage_type, observation)
+       VALUES ($1, $2, 'SPILLAGE', 'Seed RLS: derrame registrado A'), ($3, $4, 'SPILLAGE', 'Seed RLS: derrame registrado B')`,
       [shrinkageAId, tenantAId, shrinkageBId, tenantBId],
     );
 

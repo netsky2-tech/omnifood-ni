@@ -10,12 +10,16 @@ import { InventoryMovementController } from '../../src/modules/inventory/invento
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
-import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
 import { InventoryReportsService } from '../../src/modules/inventory/services/inventory-reports.service';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
+// R13: the count-session flow reads `batches` through drawBatchOutflow when
+// the counted variance is negative. This suite seeds no batches, so the
+// outflow is a documented no-op — but the entity must be registered and the
+// restricted role must hold SELECT, or the flow 500s before it no-ops.
+import { Batch } from '../../src/modules/inventory/entities/batch.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
@@ -68,6 +72,7 @@ const ALL_ENTITIES = [
   Insumo,
   UomConversion,
   InventoryMovement,
+  Batch,
   DeviceSyncCredential,
   ActivationAttempt,
 ];
@@ -81,6 +86,7 @@ const RLS_ROLE_TABLES = [
   'tenants',
   'insumos',
   'inventory_kardex',
+  'batches',
   'device_sync_credentials',
   'onboarding_activation_attempts',
 ] as const;
@@ -242,7 +248,6 @@ async function withIsolatedSchema(
           },
         },
         { provide: ShrinkageService, useValue: { recordShrinkage: jest.fn() } },
-        { provide: InventoryService, useValue: { syncMovements: jest.fn() } },
         { provide: RecipeService, useValue: { ingestPosVersion: jest.fn() } },
         {
           provide: ProductionService,

@@ -14,7 +14,6 @@ import { CountSessionService } from '../../src/modules/inventory/count-session.s
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { FX_RATE_RESOLVER } from '../../src/modules/inventory/inventory-purchase.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
-import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
 import {
   type IngestPosVersionInput,
@@ -202,12 +201,6 @@ describe('Recipe version ingestion route (integration)', () => {
           provide: ShrinkageService,
           useValue: {
             recordShrinkage: jest.fn(),
-          },
-        },
-        {
-          provide: InventoryService,
-          useValue: {
-            syncMovements: jest.fn(),
           },
         },
         {

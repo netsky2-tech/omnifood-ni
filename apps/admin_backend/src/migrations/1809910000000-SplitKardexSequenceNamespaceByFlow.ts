@@ -1,5 +1,12 @@
 import type { MigrationInterface, QueryRunner } from 'typeorm';
 
+/** Raw row of the shared-sequence conflict probe in down(). */
+interface KardexSequenceConflictRow {
+  tenant_id: string;
+  source_device_id: string;
+  source_sequence: string;
+}
+
 /**
  * H-R13 (odd/tasks/nucleo-inventario-paridad-contrato.md): the kardex was the
  * only place where a device's sync sequence lived in ONE namespace.
@@ -34,9 +41,7 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  * Widening a unique key never invalidates an existing row, so this migration is
  * additive: it touches no data.
  */
-export class SplitKardexSequenceNamespaceByFlow1809910000000
-  implements MigrationInterface
-{
+export class SplitKardexSequenceNamespaceByFlow1809910000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       'DROP INDEX IF EXISTS uq_inventory_kardex_source_sequence',
@@ -59,6 +64,37 @@ export class SplitKardexSequenceNamespaceByFlow1809910000000
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    // The wide key lets two flows share one device sequence, and such a row
+    // cannot be reconciled from here: the ledger is append-only by trigger
+    // (1773000000000), and moving a row out would desynchronise `insumos.stock`
+    // from the ledger that 1774000000000 validates on every later insert. The
+    // narrow key can only come back while the data still satisfies it, so it is
+    // checked FIRST: a rollback of compatible data is unchanged, and a rollback
+    // of data that used the wide key names the rows that block it instead of
+    // failing with an opaque duplicate-key error. Reconcile explicitly with:
+    //
+    //   SELECT tenant_id, source_device_id, source_sequence, count(*)
+    //   FROM inventory_kardex
+    //   WHERE source_device_id IS NOT NULL AND source_sequence IS NOT NULL
+    //   GROUP BY 1, 2, 3 HAVING count(*) > 1;
+    const conflicts = (await queryRunner.query(`
+      SELECT tenant_id, source_device_id, source_sequence
+      FROM inventory_kardex
+      WHERE source_device_id IS NOT NULL AND source_sequence IS NOT NULL
+      GROUP BY 1, 2, 3
+      HAVING COUNT(*) > 1
+      LIMIT 20
+    `)) as KardexSequenceConflictRow[];
+
+    if (conflicts.length > 0) {
+      const first = conflicts[0];
+      throw new Error(
+        `Cannot restore the pre-flow kardex sequence key: ${conflicts.length} device sequence(s) are shared by more than one flow ` +
+          `(first: tenant ${first.tenant_id}, device ${first.source_device_id}, sequence ${first.source_sequence}). ` +
+          'The kardex is append-only, so reconcile explicitly before rolling back.',
+      );
+    }
+
     await queryRunner.query(
       'DROP INDEX IF EXISTS uq_inventory_kardex_source_sequence',
     );
