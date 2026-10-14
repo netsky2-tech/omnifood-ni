@@ -72,6 +72,8 @@ cash_shift_sessions|direct:SIUD
 category_modifier_groups|direct:SIUD
 catalog_values|direct:SIUD
 change_log|direct:SIUD
+count_session_entries|direct:SI
+count_sessions|direct:SIUD
 customer_loyalty_account_projection|direct:SIUD
 customer_point_transactions|direct:SIUD
 customers|direct:SIUD
