@@ -7,6 +7,7 @@ import { BomExplosionService } from './bom-explosion.service';
 import { Insumo } from './entities/insumo.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
 import { Batch } from './entities/batch.entity';
+import { Shrinkage } from './entities/shrinkage.entity';
 import { Product } from './entities/product.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { RecipeVersion } from './entities/recipe-version.entity';
@@ -220,6 +221,13 @@ describe('ShrinkageService kardex write contract (Real PostgreSQL DB, migration-
         UomConversion,
         Product,
         InventoryMovement,
+        // R20: ShrinkageService now PERSISTS the shrinkage document (its motive
+        // and observation finally have a home), so this DataSource must carry
+        // the Shrinkage metadata. Same loud failure as R13's Batch note below:
+        // a missing entity is not skipped, `manager.getRepository(Shrinkage)`
+        // throws EntityMetadataNotFoundError. That is exactly what turned all
+        // three of these tests red when the service learned to write it.
+        Shrinkage,
         RecipeVersion,
         RecipeDetail,
         // R13: ShrinkageService now draws the outflow from the batches, so this
@@ -322,6 +330,63 @@ describe('ShrinkageService kardex write contract (Real PostgreSQL DB, migration-
 
     expect(Number(insumo.stock)).toBe(INSUMO_STOCK - quantity);
     expect(Number(insumo.existencia_actual)).toBe(INSUMO_STOCK - quantity);
+  });
+
+  it('R20: persists the shrinkage DOCUMENT its kardex row points at, with the taxonomy and the observation', async () => {
+    const tenantId = await seedTenant('r20-shrinkage-document');
+    const insumoId = await seedInsumo({
+      tenantId,
+      name: 'Harina de trigo (R20)',
+      stock: INSUMO_STOCK,
+      cppNio: INSUMO_CPP_NIO,
+    });
+
+    const observation = 'R20: se mojo en el traslado y no es apta para consumo';
+
+    await buildService().recordShrinkage(
+      tenantId,
+      insumoId,
+      2,
+      'VENCIDO',
+      observation,
+    );
+
+    const movements = await readShrinkageMovements(tenantId);
+    expect(movements).toHaveLength(1);
+
+    // The row's document identity has to RESOLVE. Before this fix the id was
+    // minted, stored here as `source_document_id`, and NO shrinkage document was
+    // ever created — so the motive was unrecoverable and the reference dangled.
+    const documentId = movements[0].source_document_id;
+    expect(documentId).toBeTruthy();
+
+    const documents = await admin.query<
+      Array<{
+        id: string;
+        shrinkage_type: string;
+        observation: string;
+        reason: string | null;
+      }>
+    >(
+      `SELECT id, shrinkage_type, observation, reason
+         FROM shrinkages WHERE id = $1`,
+      [documentId],
+    );
+
+    expect(documents).toHaveLength(1);
+
+    // The taxonomy is recorded on the document (its NOT NULL column).
+    expect(documents[0].shrinkage_type).toBeTruthy();
+
+    // And the observation is the whole point: the service REQUIRED it
+    // (`requireMermaObservation`) and then threw it away, because no column
+    // anywhere could hold it. This assertion is what proves it now lands.
+    expect(documents[0].observation).toBe(observation);
+
+    // The taxonomy has ONE home. `reason` stays empty on purpose rather than
+    // carrying a duplicate of the same string — duplicating one value into two
+    // columns is how the disagreements this codebase keeps finding begin.
+    expect(documents[0].reason).toBeNull();
   });
 
   it('records a PRODUCT shrinkage by exploding its BOM and satisfies every NOT NULL column on the ledger row', async () => {

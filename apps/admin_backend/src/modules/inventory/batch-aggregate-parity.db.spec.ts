@@ -10,6 +10,7 @@ import { RecipeDetail } from './entities/recipe-detail.entity';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { Batch } from './entities/batch.entity';
+import { Shrinkage } from './entities/shrinkage.entity';
 import { CountSessionService } from './count-session.service';
 import { ShrinkageService } from './shrinkage.service';
 import { InvoicesService } from '../sales/services/invoices.service';
@@ -227,6 +228,7 @@ describe('batch balances vs aggregate stock parity (Real PostgreSQL DB, migratio
         RecipeVersion,
         RecipeDetail,
         Batch,
+        Shrinkage,
       ],
       ...poolCleanupExtra,
     });

@@ -13,6 +13,7 @@ import { Repository, DataSource } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
 import { Product } from './entities/product.entity';
+import { Shrinkage } from './entities/shrinkage.entity';
 import {
   InventoryMovement,
   MovementType,
@@ -120,6 +121,24 @@ export class ShrinkageService {
           operationDay: todayCalendarDay(),
         });
 
+        // R20: the document this kardex row points at has to EXIST. Before
+        // this, the id was minted, stored as `source_document_id`, and no
+        // Shrinkage row was ever created — so the motive was unrecoverable and
+        // the reference dangled. The row and its document now share one id.
+        //
+        // The taxonomy lives in `shrinkage_type`: its NOT NULL and its name are
+        // for exactly that. `reason` is deliberately left null because this
+        // input's `reason` IS the taxonomy, and writing one string into two
+        // columns is how the disagreements this codebase keeps finding begin.
+        await manager.save(
+          manager.create(Shrinkage, {
+            id: shrinkageDocumentId,
+            tenant_id: insumo.tenant_id,
+            shrinkage_type: canonicalReason,
+            observation: requiredObservation,
+          }),
+        );
+
         const movement = manager.create(InventoryMovement, {
           tenant_id: insumo.tenant_id,
           insumoId: insumo.id,
@@ -130,8 +149,11 @@ export class ShrinkageService {
           averageCostAfterNio: unitCostNio,
           unitCostNio,
           totalCostNio,
-          reason: canonicalReason,
-          observation: requiredObservation,
+          // R20: never add `reason:` or `observation:` here. `reason` is a
+          // getter/setter alias for `sourceDocumentId` — the SAME column — so
+          // the id below would overwrite it; and `observation` has no column on
+          // this entity, so TypeORM drops it without a word. The motive now
+          // lives on the shrinkage document this row points at.
           sourceDocumentType: 'SHRINKAGE',
           sourceDocumentId: shrinkageDocumentId,
         });
@@ -211,6 +233,25 @@ export class ShrinkageService {
           orderQuantity: normalizedQuantity,
         });
 
+        // R20: the document is created ONCE, before the loop, and every
+        // component movement below points at it. This is deliberately NOT a
+        // copy of the insumo site's fix: here the movements are the components
+        // of one exploded recipe, so a per-iteration save would have the second
+        // component insert the SAME id and violate the primary key. The two
+        // sites look symmetrical and are not.
+        //
+        // Same column split as the insumo site: the taxonomy goes in
+        // `shrinkage_type`, and `reason` stays null because this input's
+        // `reason` IS the taxonomy.
+        await manager.save(
+          manager.create(Shrinkage, {
+            id: shrinkageDocumentId,
+            tenant_id: product.tenant_id,
+            shrinkage_type: canonicalReason,
+            observation: requiredObservation,
+          }),
+        );
+
         for (const [insumoId, explodedQuantity] of exploded.entries()) {
           const normalizedIngredientQuantity = round4(explodedQuantity);
           const insumo = await manager.findOne(Insumo, {
@@ -250,8 +291,11 @@ export class ShrinkageService {
             averageCostAfterNio: unitCostNio,
             unitCostNio,
             totalCostNio,
-            reason: canonicalReason,
-            observation: requiredObservation,
+            // R20: never add `reason:` or `observation:` here. `reason` is a
+            // getter/setter alias for `sourceDocumentId` — the SAME column — so
+            // the id below would overwrite it; and `observation` has no column
+            // on this entity, so TypeORM drops it without a word. The motive
+            // lives on the shrinkage document created above.
             sourceDocumentType: 'SHRINKAGE',
             sourceDocumentId: shrinkageDocumentId,
           });
