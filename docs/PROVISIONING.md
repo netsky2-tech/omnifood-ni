@@ -1,6 +1,6 @@
 # Guía de Provisionamiento y Administración de Identidad
 
-Esta guía detalla cómo gestionar usuarios, roles y el alta masiva de nuevos clientes (Tenants) en OmniFood NI.
+Esta guía detalla cómo gestionar usuarios, roles y el alta masiva de nuevos clientes (Tenants) en NHILOS POS.
 
 ## 1. Alta de Nuevos Clientes (Provisionamiento Masivo)
 

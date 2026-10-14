@@ -1,5 +1,5 @@
 # Plan de Aceptación y Definition of Done (DoD)
-## Configurable Tenant Fulfillment Topology (OmniFood NI)
+## Configurable Tenant Fulfillment Topology (NHILOS POS)
 
 **Basado en:**
 - `docs/PRDs/prd_modulo_ventas.md` (Topología A: Restaurante Multidispositivo vs Topología B: Ultra-Ligero SOHO)

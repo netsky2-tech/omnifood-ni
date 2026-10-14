@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary & Rollout Strategy
 
-This runbook outlines the operational procedures for rolling out and managing the **Configurable Fulfillment Topology** in OmniFood NI across Food Parks, high-rotation retail, and pilot establishments in Nicaragua.
+This runbook outlines the operational procedures for rolling out and managing the **Configurable Fulfillment Topology** in NHILOS POS across Food Parks, high-rotation retail, and pilot establishments in Nicaragua.
 
 The rollout follows strict compliance with:
 - **Offline-First Resilience**: Local SQLite is the single source of truth; synchronization with the central cloud is idempotent and append-only.
