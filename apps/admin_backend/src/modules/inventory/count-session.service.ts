@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { bindTenantContext } from '../../core/database/tenant-transaction';
+import { drawBatchOutflow } from './batch-allocation';
+import { toCalendarDay } from '../../core/database/calendar-day';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { Insumo } from './entities/insumo.entity';
 import {
@@ -122,6 +124,20 @@ export class CountSessionService {
       insumo.existenciaActual = newStock;
       insumo.averageCost = previousAverageCostNio;
       await insumoRepo.save(insumo);
+
+      if (variance < 0) {
+        // R13: a NEGATIVE variance is an outflow and must leave the batch
+        // balances too. A POSITIVE variance is stock appearing with no known
+        // lot, and `batches.expiration_date` is NOT NULL, so no batch can be
+        // invented: that case is open and documented, never approximated here.
+        await drawBatchOutflow({
+          manager,
+          tenantId,
+          insumoId: line.insumoId,
+          quantity: Math.abs(variance),
+          operationDay: toCalendarDay(document.postedAt ?? document.cutoffAt),
+        });
+      }
 
       const movement = movementRepo.create({
         tenant_id: tenantId,

@@ -5,6 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { drawBatchOutflow } from './batch-allocation';
+import { todayCalendarDay } from '../../core/database/calendar-day';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
@@ -69,6 +72,21 @@ export class ShrinkageService {
 
     const normalizedQuantity = round4(quantity);
 
+    // A shrinkage IS a document, and the ledger row has to name it: the kardex
+    // `source_document_id` column is NOT NULL, and both inserts here used to
+    // omit it, so EVERY shrinkage failed with a NOT NULL violation — the
+    // transaction rolled back and nothing was ever recorded.
+    //
+    // The identity is minted HERE, before the insert, so the same id names the
+    // ledger row AND the forensic alert reference. Deriving the alert reference
+    // from `movement.id` (as this used to) ties a document reference to a row
+    // that only exists once the insert needing it has already succeeded.
+    //
+    // One id per shrinkage request, not per movement: the product path explodes
+    // one shrinkage into several component movements and all of them belong to
+    // the same document.
+    const shrinkageDocumentId = randomUUID();
+
     // Issue #512: the insumos/products tables are tenant-protected, so the
     // whole shrinkage write runs inside a tenant-bound transaction. The bind
     // is the first statement on the manager and a blank tenant id fails
@@ -92,6 +110,16 @@ export class ShrinkageService {
         insumo.existenciaActual = newStock;
         const updatedInsumo = await manager.save(insumo);
 
+        // R13: the aggregate just left; the BATCH balances have to leave with
+        // it, or FEFO keeps reading a balance that is no longer real.
+        await drawBatchOutflow({
+          manager,
+          tenantId: insumo.tenant_id,
+          insumoId: insumo.id,
+          quantity: normalizedQuantity,
+          operationDay: todayCalendarDay(),
+        });
+
         const movement = manager.create(InventoryMovement, {
           tenant_id: insumo.tenant_id,
           insumoId: insumo.id,
@@ -105,6 +133,7 @@ export class ShrinkageService {
           reason: canonicalReason,
           observation: requiredObservation,
           sourceDocumentType: 'SHRINKAGE',
+          sourceDocumentId: shrinkageDocumentId,
         });
         await manager.save(movement);
 
@@ -114,7 +143,7 @@ export class ShrinkageService {
           insumoName: insumo.name,
           quantity: normalizedQuantity,
           totalCostNio,
-          originDocumentRef: `shrinkage:${movement.id}`,
+          originDocumentRef: `shrinkage:${shrinkageDocumentId}`,
           manager,
         });
 
@@ -141,6 +170,10 @@ export class ShrinkageService {
     }
     const requiredObservation = requireMermaObservation(input.observation);
     const normalizedQuantity = round4(input.quantity);
+
+    // Same document identity rule as recordShrinkage: minted before the insert,
+    // shared by every component movement this shrinkage explodes into.
+    const shrinkageDocumentId = randomUUID();
 
     // Issue #512: same tenant-bound transaction contract as recordShrinkage.
     return runInTenantTransaction(
@@ -198,6 +231,15 @@ export class ShrinkageService {
           insumo.existenciaActual = newStock;
           await manager.save(insumo);
 
+          // Same contract per exploded component (R13).
+          await drawBatchOutflow({
+            manager,
+            tenantId: insumo.tenant_id,
+            insumoId: insumo.id,
+            quantity: normalizedIngredientQuantity,
+            operationDay: todayCalendarDay(),
+          });
+
           const movement = manager.create(InventoryMovement, {
             tenant_id: insumo.tenant_id,
             insumoId: insumo.id,
@@ -211,6 +253,7 @@ export class ShrinkageService {
             reason: canonicalReason,
             observation: requiredObservation,
             sourceDocumentType: 'SHRINKAGE',
+            sourceDocumentId: shrinkageDocumentId,
           });
           await manager.save(movement);
 
@@ -220,7 +263,7 @@ export class ShrinkageService {
             insumoName: insumo.name,
             quantity: normalizedIngredientQuantity,
             totalCostNio,
-            originDocumentRef: `product-shrinkage:${product.id}:${movement.id}`,
+            originDocumentRef: `product-shrinkage:${product.id}:${shrinkageDocumentId}`,
             manager,
           });
         }

@@ -21,6 +21,8 @@ type TransactionManager = {
   save: jest.Mock;
   create: jest.Mock;
   query: jest.Mock;
+  // R13: the outflow now resolves the Batch repository through the manager.
+  getRepository: jest.Mock;
 };
 
 describe('ShrinkageService', () => {
@@ -32,6 +34,13 @@ describe('ShrinkageService', () => {
   const findOne = jest.fn();
   const create = jest.fn();
   const query = jest.fn();
+  // R13: reports NO batches, which is the honest fixture for a non
+  // batch-managed insumo — `drawBatchOutflow` returns early and every
+  // assertion in this suite keeps asserting exactly what it asserted before.
+  const getRepository = jest.fn(() => ({
+    find: jest.fn().mockResolvedValue([]),
+    save: jest.fn(),
+  }));
   const transaction = jest.fn();
   const forensicAlertService = { create: jest.fn() };
   const productRepo = {};
@@ -45,7 +54,7 @@ describe('ShrinkageService', () => {
     jest.clearAllMocks();
     transaction.mockImplementation(
       (cb: (manager: TransactionManager) => Promise<unknown>) =>
-        cb({ findOne, save, create, query }),
+        cb({ findOne, save, create, query, getRepository }),
     );
     create.mockImplementation((_entity: unknown, payload: unknown) => payload);
 

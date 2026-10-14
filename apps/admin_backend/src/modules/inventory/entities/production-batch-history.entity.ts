@@ -33,8 +33,10 @@ export class ProductionBatchHistory {
   @Column()
   produced_batch_number: string;
 
+  // A PostgreSQL `date`: an ISO calendar-day string, never a `Date`.
+  // See src/core/database/calendar-day.ts.
   @Column({ type: 'date' })
-  produced_expiration_date: Date;
+  produced_expiration_date: string;
 
   @Column('decimal', { precision: 14, scale: 4 })
   planned_quantity: number;

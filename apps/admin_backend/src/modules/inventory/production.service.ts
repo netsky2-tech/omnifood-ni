@@ -26,6 +26,7 @@ import {
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
 import { ProductionBatchHistory } from './entities/production-batch-history.entity';
 import { bindTenantContext } from '../../core/database/tenant-transaction';
+import { toCalendarDay } from '../../core/database/calendar-day';
 
 const SCALE_4 = 4;
 const PRODUCTION_FLOW_TYPE = 'production';
@@ -244,188 +245,6 @@ export class ProductionService {
     }
   }
 
-  async processOrder(input: {
-    tenantId: string;
-    recipeVersionId: string;
-    orderQuantity: number;
-    producedInsumoId: string;
-    producedBatchNumber: string;
-    producedExpirationDate: Date;
-    operationDate: Date;
-  }): Promise<{
-    valuationTraceability: Record<string, BatchConsumptionTrace[]>;
-  }> {
-    const snapshot = await this.recipeService.getSnapshot(
-      input.recipeVersionId,
-      input.tenantId,
-    );
-
-    const exploded = this.bomExplosionService.explode({
-      snapshotComponents: snapshot.components,
-      orderQuantity: input.orderQuantity,
-    });
-
-    const valuationTraceability: Record<string, BatchConsumptionTrace[]> = {};
-    let totalConsumedValueNio = 0;
-
-    await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
-      // Issue #512 slice 2 part A: the SERIALIZABLE transaction binds
-      // app.tenant_id before its first protected access, and every read/write
-      // inside resolves from the bound manager. A blank or missing tenant
-      // fails closed (TenantContextRequiredError) before any SQL is issued;
-      // an unbound access under FORCE RLS would fail closed (zero rows /
-      // error), not leak across tenants.
-      await bindTenantContext(manager, input.tenantId);
-
-      for (const [insumoId, requiredQuantity] of exploded.entries()) {
-        const candidates = await manager.getRepository(Batch).find({
-          where: { tenant_id: input.tenantId, insumo_id: insumoId },
-          order: { batch_number: 'ASC' },
-        });
-
-        const trace = this.batchCostingService.buildValuationTrace({
-          requiredQuantity,
-          operationDate: input.operationDate,
-          candidates: candidates.map<BatchCandidate>((batch) => ({
-            batchId: batch.id,
-            insumoId,
-            remainingStock: Number(batch.remaining_stock),
-            unitCostNio: Number(batch.cost),
-            expirationDate: batch.expiration_date,
-          })),
-        });
-
-        valuationTraceability[insumoId] = trace;
-
-        const consumedTotal = round4(
-          trace.reduce((sum, item) => sum + item.consumedQuantity, 0),
-        );
-        const consumedValueNio = round4(
-          trace.reduce((sum, item) => sum + item.totalCostNio, 0),
-        );
-        totalConsumedValueNio = round4(
-          totalConsumedValueNio + consumedValueNio,
-        );
-
-        if (consumedTotal <= 0) {
-          continue;
-        }
-
-        const insumo = await manager
-          .createQueryBuilder(Insumo, 'insumo')
-          .setLock('pessimistic_write')
-          .where('insumo.id = :insumoId', { insumoId })
-          .andWhere('insumo.tenant_id = :tenantId', {
-            tenantId: input.tenantId,
-          })
-          .getOne();
-
-        if (!insumo) {
-          continue;
-        }
-
-        const previousStock = Number(insumo.stock);
-        const newStock = round4(previousStock - consumedTotal);
-        const averageCostAfterNio = round4(Number(insumo.averageCost));
-
-        insumo.stock = newStock;
-        insumo.existenciaActual = newStock;
-        await manager.save(Insumo, insumo);
-
-        const averageUnitCost =
-          trace.length === 0
-            ? Number(insumo.averageCost)
-            : round4(
-                trace.reduce((sum, item) => sum + item.totalCostNio, 0) /
-                  consumedTotal,
-              );
-
-        await manager.save(
-          InventoryMovement,
-          manager.create(InventoryMovement, {
-            tenant_id: input.tenantId,
-            insumoId,
-            type: MovementType.PRODUCTION,
-            quantity: round4(-consumedTotal),
-            previousStock,
-            newStock,
-            averageCostAfterNio,
-            unitCostNio: averageUnitCost,
-            totalCostNio: round4(consumedTotal * averageUnitCost),
-            reason: `PRODUCTION_CONSUME:${input.recipeVersionId}`,
-          }),
-        );
-      }
-
-      const producedInsumo = await manager
-        .createQueryBuilder(Insumo, 'insumo')
-        .setLock('pessimistic_write')
-        .where('insumo.id = :insumoId', { insumoId: input.producedInsumoId })
-        .andWhere('insumo.tenant_id = :tenantId', { tenantId: input.tenantId })
-        .getOne();
-
-      if (producedInsumo) {
-        const previousStock = Number(producedInsumo.stock);
-        const newStock = round4(previousStock + input.orderQuantity);
-        const averageCostAfterNio = round4(Number(producedInsumo.averageCost));
-        producedInsumo.stock = newStock;
-        producedInsumo.existenciaActual = newStock;
-        await manager.save(Insumo, producedInsumo);
-
-        const producedUnitCostNio =
-          input.orderQuantity <= 0
-            ? round4(Number(producedInsumo.averageCost))
-            : round4(totalConsumedValueNio / input.orderQuantity);
-
-        await manager.save(
-          InventoryMovement,
-          manager.create(InventoryMovement, {
-            tenant_id: input.tenantId,
-            insumoId: input.producedInsumoId,
-            type: MovementType.PRODUCTION,
-            quantity: round4(input.orderQuantity),
-            previousStock,
-            newStock,
-            averageCostAfterNio,
-            unitCostNio: producedUnitCostNio,
-            totalCostNio: round4(input.orderQuantity * producedUnitCostNio),
-            reason: `PRODUCTION_RECEIPT:${input.recipeVersionId}`,
-            sourceDocumentType: 'PRODUCTION',
-          }),
-        );
-
-        const existingBatch = await manager.findOne(Batch, {
-          where: {
-            tenant_id: input.tenantId,
-            insumo_id: input.producedInsumoId,
-            batch_number: input.producedBatchNumber,
-          },
-        });
-
-        if (existingBatch) {
-          existingBatch.remaining_stock = round4(
-            Number(existingBatch.remaining_stock) + input.orderQuantity,
-          );
-          existingBatch.expiration_date = input.producedExpirationDate;
-          await manager.save(Batch, existingBatch);
-        } else {
-          await manager.save(
-            Batch,
-            manager.create(Batch, {
-              tenant_id: input.tenantId,
-              insumo_id: input.producedInsumoId,
-              batch_number: input.producedBatchNumber,
-              expiration_date: input.producedExpirationDate,
-              remaining_stock: round4(input.orderQuantity),
-              cost: producedUnitCostNio,
-            }),
-          );
-        }
-      }
-    });
-
-    return { valuationTraceability };
-  }
 
   private async postProductionClose(
     input: ReplayProductionCloseInput,
@@ -459,7 +278,7 @@ export class ProductionService {
       });
       const trace = this.batchCostingService.buildValuationTrace({
         requiredQuantity,
-        operationDate: new Date(input.document.operationDate),
+        operationDate: toCalendarDay(input.document.operationDate),
         candidates: candidates.map<BatchCandidate>((batch) => ({
           batchId: batch.id,
           insumoId,
@@ -640,7 +459,7 @@ export class ProductionService {
       existingBatch.remaining_stock = round4(
         Number(existingBatch.remaining_stock) + input.document.actualQuantity,
       );
-      existingBatch.expiration_date = new Date(
+      existingBatch.expiration_date = toCalendarDay(
         input.document.producedExpirationDate,
       );
       await manager.save(Batch, existingBatch);
@@ -652,8 +471,8 @@ export class ProductionService {
         tenant_id: input.tenantId,
         insumo_id: input.document.producedInsumoId,
         batch_number: input.document.producedBatchNumber,
-        expiration_date: new Date(input.document.producedExpirationDate),
-        received_date: new Date(input.document.operationDate),
+        expiration_date: toCalendarDay(input.document.producedExpirationDate),
+        received_date: toCalendarDay(input.document.operationDate),
         remaining_stock: round4(input.document.actualQuantity),
         cost: producedUnitCostNio,
       }),
@@ -676,7 +495,7 @@ export class ProductionService {
         recipe_version_id: input.document.recipeVersionId,
         produced_insumo_id: input.document.producedInsumoId,
         produced_batch_number: input.document.producedBatchNumber,
-        produced_expiration_date: new Date(
+        produced_expiration_date: toCalendarDay(
           input.document.producedExpirationDate,
         ),
         planned_quantity: input.document.plannedQuantity,

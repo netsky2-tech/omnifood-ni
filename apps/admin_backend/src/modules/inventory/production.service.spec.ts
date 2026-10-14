@@ -143,81 +143,6 @@ describe('ProductionService', () => {
     service = module.get<ProductionService>(ProductionService);
   });
 
-  it('processes production by consuming exploded ingredients and creating receipt stock', async () => {
-    recipeService.getSnapshot.mockResolvedValue({
-      recipeVersion: { id: 'v3' },
-      components: [{ insumo_id: 'ins-raw', quantity: 0.5 }],
-    });
-    bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 2]]));
-    batchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 2, cost: 1.5 },
-    ]);
-    batchCostingService.buildValuationTrace.mockReturnValue([
-      {
-        batchId: 'b1',
-        consumedQuantity: 2,
-        unitCostNio: 1.5,
-        totalCostNio: 3,
-        isSoftExpired: false,
-      },
-    ]);
-
-    const result = await service.processOrder({
-      tenantId: 'tenant-A',
-      recipeVersionId: 'v3',
-      orderQuantity: 4,
-      producedInsumoId: 'ins-finished',
-      producedBatchNumber: 'PB-001',
-      producedExpirationDate: new Date('2026-12-01T00:00:00.000Z'),
-      operationDate: new Date('2026-05-01T00:00:00.000Z'),
-    });
-
-    expect(dataSource.transaction).toHaveBeenCalledWith(
-      'SERIALIZABLE',
-      expect.any(Function),
-    );
-    expect(result.valuationTraceability['ins-raw']).toHaveLength(1);
-    expect(manager.save).toHaveBeenCalled();
-    expect(manager.create).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        reason: 'PRODUCTION_RECEIPT:v3',
-        unitCostNio: 0.75,
-        totalCostNio: 3,
-        averageCostAfterNio: 3,
-      }),
-    );
-  });
-
-  it('keeps valuation traceability with soft-expired flag from costing service', async () => {
-    recipeService.getSnapshot.mockResolvedValue({
-      recipeVersion: { id: 'v3' },
-      components: [],
-    });
-    bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 1]]));
-    batchRepo.find.mockResolvedValue([]);
-    batchCostingService.buildValuationTrace.mockReturnValue([
-      {
-        batchId: 'expired-1',
-        consumedQuantity: 1,
-        unitCostNio: 2,
-        totalCostNio: 2,
-        isSoftExpired: true,
-      },
-    ]);
-
-    const result = await service.processOrder({
-      tenantId: 'tenant-A',
-      recipeVersionId: 'v3',
-      orderQuantity: 1,
-      producedInsumoId: 'ins-finished',
-      producedBatchNumber: 'PB-002',
-      producedExpirationDate: new Date('2026-12-01T00:00:00.000Z'),
-      operationDate: new Date('2026-05-01T00:00:00.000Z'),
-    });
-
-    expect(result.valuationTraceability['ins-raw'][0].isSoftExpired).toBe(true);
-  });
 
   it('replays a completed production close once and freezes immutable batch history', async () => {
     recipeService.getSnapshot.mockResolvedValue({
@@ -226,7 +151,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
     batchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -342,7 +267,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
     batchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -399,7 +324,7 @@ describe('ProductionService', () => {
       new Error('Injected batch repository must not be used during replay'),
     );
     managerBatchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -1082,7 +1007,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
     managerBatchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -1320,7 +1245,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
     managerBatchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -1380,7 +1305,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 6]]));
     managerBatchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -1433,7 +1358,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
     managerBatchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -1597,7 +1522,7 @@ describe('ProductionService', () => {
     });
     bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
     batchRepo.find.mockResolvedValue([
-      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: new Date() },
+      { id: 'b1', remaining_stock: 10, cost: 2, expiration_date: '2099-12-31' },
     ]);
     batchCostingService.buildValuationTrace.mockReturnValue([
       {
@@ -1633,8 +1558,8 @@ describe('ProductionService', () => {
       Batch,
       expect.objectContaining({
         batch_number: 'PB-NEW',
-        received_date: new Date('2026-05-01T10:30:00.000Z'),
-        expiration_date: new Date('2026-12-01T00:00:00.000Z'),
+        received_date: '2026-05-01',
+        expiration_date: '2026-12-01',
         remaining_stock: 4,
         cost: 2,
       }),
