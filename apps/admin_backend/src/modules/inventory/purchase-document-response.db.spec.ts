@@ -119,8 +119,11 @@ describe('serializePurchaseDocuments — real PostgreSQL wire shape', () => {
             insumo_id: insumo.id,
             supplier_id: supplier.id,
             invoice_number: 'F-900',
-            invoice_date: new Date('2026-09-30T00:00:00.000Z'),
-            entry_date: new Date('2026-09-30T00:00:00.000Z'),
+            // invoice_date/entry_date are calendar days: the entity types them
+            // as strings (src/core/database/calendar-day.ts) — passing a Date
+            // here is what broke the ts-jest overload resolution (TS2769).
+            invoice_date: '2026-09-30',
+            entry_date: '2026-09-30',
             entry_timestamp: new Date('2026-09-30T10:00:00.000Z'),
             quantity: 12.5,
             unit_cost: 350.25,
@@ -202,8 +205,8 @@ describe('serializePurchaseDocuments — real PostgreSQL wire shape', () => {
             insumo_id: insumo.id,
             supplier_id: supplier.id,
             invoice_number: 'F-0',
-            invoice_date: new Date('2026-09-30T00:00:00.000Z'),
-            entry_date: new Date('2026-09-30T00:00:00.000Z'),
+            invoice_date: '2026-09-30',
+            entry_date: '2026-09-30',
             entry_timestamp: new Date('2026-09-30T10:00:00.000Z'),
             quantity: 0,
             unit_cost: 0,

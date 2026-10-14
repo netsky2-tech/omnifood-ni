@@ -32,7 +32,6 @@ import { CatalogController } from '../../src/modules/catalog/catalog.controller'
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
-import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
@@ -278,7 +277,6 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         { provide: FxRateResolverService, useValue: {} },
         { provide: InventoryPurchaseService, useValue: purchaseService },
         { provide: ShrinkageService, useValue: {} },
-        { provide: InventoryService, useValue: {} },
         { provide: RecipeService, useValue: {} },
         { provide: CountSessionService, useValue: {} },
         { provide: ProductionService, useValue: {} },

@@ -10,7 +10,6 @@ import { InventoryMovementController } from '../../src/modules/inventory/invento
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
-import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
@@ -242,7 +241,6 @@ async function withIsolatedSchema(
           },
         },
         { provide: ShrinkageService, useValue: { recordShrinkage: jest.fn() } },
-        { provide: InventoryService, useValue: { syncMovements: jest.fn() } },
         { provide: RecipeService, useValue: { ingestPosVersion: jest.fn() } },
         {
           provide: ProductionService,
