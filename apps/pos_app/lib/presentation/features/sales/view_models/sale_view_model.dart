@@ -256,6 +256,22 @@ class SaleViewModel extends ChangeNotifier {
   String? _lastPrintError;
   String? get lastPrintError => _lastPrintError;
 
+  /// #539 S1.3 (AC-3): a computerized-invoice ticket printed WITHOUT the DGI
+  /// authorization number must not pass silently — the operator sees a
+  /// configuration warning naming the Business Profile field. Cleared on
+  /// every print that carries a non-blank number (per-print state, AC-6
+  /// stays guaranteed by the formatter: blank renders no line at all).
+  String? _fiscalConfigWarning;
+  String? get fiscalConfigWarning => _fiscalConfigWarning;
+
+  /// Called by the view after surfacing the warning, so a stale copy cannot
+  /// re-appear on an unrelated rebuild (per-print state, like lastPrintError).
+  void clearFiscalConfigWarning() {
+    if (_fiscalConfigWarning == null) return;
+    _fiscalConfigWarning = null;
+    notifyListeners();
+  }
+
   Invoice? _lastProcessedInvoice;
   Invoice? get lastProcessedInvoice => _lastProcessedInvoice;
 
@@ -2335,6 +2351,17 @@ class SaleViewModel extends ChangeNotifier {
         }
 
         if (printerConfig.autoPrintInvoice) {
+          // #539 S1.3 (AC-3): same configuration warning as the reprint path.
+          final checkoutAuthNumber = printerConfig.dgiAuthorizationCode;
+          if (checkoutAuthNumber == null ||
+              checkoutAuthNumber.trim().isEmpty) {
+            _fiscalConfigWarning =
+                'Falta el Código / Resolución de Autorización DGI (CAFD). '
+                'Configúrelo en Perfil de Negocio → AUTORIZACIÓN Y RANGO FISCAL '
+                'DGI (Disposición 09-2007).';
+          } else {
+            _fiscalConfigWarning = null;
+          }
           final printResult = await activePrinterPort.printInvoice(
             invoiceToPrint,
             items: items,
@@ -2350,7 +2377,7 @@ class SaleViewModel extends ChangeNotifier {
             isTaxExempt: _isGlobalTaxExempt,
             paperWidthMm: printerConfig.paperWidthMm,
             loyaltyFeedback: _lastPostPaidFeedback,
-            fiscalAuthorizationNumber: printerConfig.dgiAuthorizationCode,
+            fiscalAuthorizationNumber: checkoutAuthNumber,
           );
 
           if (!printResult.isSuccess) {
@@ -2546,6 +2573,23 @@ class SaleViewModel extends ChangeNotifier {
         }
         effectiveRegime = _companyTaxRegime!;
       }
+      // #539 S1.3 (AC-3): a blank authorization number must never pass
+      // silently — the operator sees the configuration warning (the print
+      // itself still proceeds: the sale is committed and offline-first).
+      final fiscalAuthorizationNumber = fromSnapshot
+          ? fiscalHeader['fiscalAuthorizationNumber']?.toString()
+          : config.dgiAuthorizationCode;
+      if (fiscalAuthorizationNumber == null ||
+          fiscalAuthorizationNumber.trim().isEmpty) {
+        _fiscalConfigWarning =
+            'Falta el Código / Resolución de Autorización DGI (CAFD). '
+            'Configúrelo en Perfil de Negocio → AUTORIZACIÓN Y RANGO FISCAL '
+            'DGI (Disposición 09-2007).';
+      } else {
+        _fiscalConfigWarning = null;
+      }
+      notifyListeners();
+
       final res = await activePrinterPort.printInvoice(
         invoice,
         items: domainItems,
@@ -2563,9 +2607,7 @@ class SaleViewModel extends ChangeNotifier {
         taxRegime: effectiveRegime,
         isTaxExempt: invoice.globalTaxOverride,
         paperWidthMm: config.paperWidthMm,
-        fiscalAuthorizationNumber: fromSnapshot
-            ? fiscalHeader['fiscalAuthorizationNumber']
-            : config.dgiAuthorizationCode,
+        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
         isReprint: isReprint,
         reprintAt: reprintAt,
         originDocumentReference: originDocumentReference,
