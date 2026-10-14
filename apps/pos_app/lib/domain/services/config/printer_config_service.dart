@@ -345,6 +345,24 @@ class PrinterConfigService {
     _configStreamController.add(config);
   }
 
+  /// Company identity parity P4 (S7/L4): the ONLY write path for adopting
+  /// the company logo derived from the cloud original. Writes exactly ONE
+  /// key — [logoBase64Key] — so the operator's local tuning (width/height/
+  /// enabled) and every other setting are untouched by adoption, and a
+  /// failed write (any exception) leaves the previous raster byte-identical:
+  /// a single-key SQLite replace is atomic, never partial.
+  ///
+  /// The adopted value is the SAME artifact shape the manual upload path
+  /// stores (the processor's optimized PNG, or a raw 1-bit bitmap when no
+  /// PNG was produced), read by the unchanged printing path.
+  Future<void> adoptCompanyLogoRaster(String base64Raster) async {
+    await _configDao.saveConfig(LocalConfigEntity(
+      key: logoBase64Key,
+      value: base64Raster,
+      description: 'Monochrome 1-bit logo raster bytes (Base64)',
+    ));
+  }
+
   String _driverCode(PrinterDriverType driverType) {
     switch (driverType) {
       case PrinterDriverType.mock:

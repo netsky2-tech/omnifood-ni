@@ -526,6 +526,16 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'OnboardingSessionController', transport: 'human' },
   { controller: 'TerminalPrimingController', transport: 'human' },
   { controller: 'FiscalSetupController', transport: 'human' },
+  // Company identity parity P3/P4: the dashboard logo read/upload is a human
+  // surface (OWNER/MANAGER session); it was served but never declared when
+  // slice 1 landed, which left the registry red on HEAD.
+  { controller: 'CompanyLogoController', transport: 'human' },
+  // P4 (identidad-empresa-paridad.md, L4): the terminal fetches the logo
+  // ORIGINAL bytes to derive its raster on explicit human adoption. The
+  // dashboard route is human transport, useless to an offline-PIN terminal,
+  // so the read rides the device channel behind SyncTransportGuard with the
+  // `sync:pull` scope — same class as InboundSyncController.
+  { controller: 'CompanyLogoDeviceController', transport: 'device' },
   { controller: 'ActivationController', transport: 'human' },
   {
     controller: 'DeviceLinkingController',

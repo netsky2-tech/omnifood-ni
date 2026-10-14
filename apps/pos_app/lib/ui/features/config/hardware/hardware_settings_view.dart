@@ -562,10 +562,15 @@ class HardwareSettingsView extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Logo de la Empresa (Factura Térmica)',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
+                // Flexible so a long title + the dimensions chip can never
+                // overflow the card on narrow surfaces (the chip only
+                // renders when a logo exists).
+                Expanded(
+                  child: Text(
+                    'Logo de la Empresa (Factura Térmica)',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
                 if (hasLogo)
@@ -593,6 +598,58 @@ class HardwareSettingsView extends StatelessWidget {
               ).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
             ),
             const SizedBox(height: 12),
+            // Company identity parity P4 (S7/L4): the cloud logo adoption
+            // affordance. Shown ONLY when the adoption service is wired AND
+            // the fiscal snapshot declares a cloud logo — a terminal with no
+            // cloud logo (the production tenant today) renders nothing here
+            // and nothing is ever written without an explicit human tap.
+            if (viewModel.canAdoptCompanyLogo) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.cloud_done_outlined,
+                            size: 18, color: Colors.blue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'La empresa tiene un logo configurado en la nube.',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Al aplicarlo se descarga el original, se convierte con el mismo ' 
+                      'procesador térmico de esta pantalla y reemplaza SOLO el gráfico: '
+                      'tu ancho, alto y switch de impresión locales se conservan.',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.download),
+                      label: const Text('Aplicar logo de la empresa'),
+                      onPressed: viewModel.isLoading
+                          ? null
+                          : () => viewModel.adoptCompanyLogo(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (hasLogo) ...[
               SwitchListTile(
                 title: const Text('Imprimir Logo en Cabecera'),
