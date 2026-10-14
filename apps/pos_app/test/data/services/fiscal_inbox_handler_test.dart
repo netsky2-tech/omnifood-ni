@@ -231,6 +231,134 @@ void main() {
       expect(fx, isNull);
     });
 
+    group('Company identity parity P2: address/phone/email projection', () {
+      test('S1: snapshot identity is projected into the local keys the printed header falls back to', () async {
+        final envelope = {
+          ...sampleEnvelope,
+          'address': 'Km 12 Carretera a Masaya',
+          'phone': '505 8888 7777',
+          'email': 'hola@cafetin.ni',
+        };
+
+        final outcome = await handler.handleFiscalEnvelope(envelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        // These are the exact keys printer_config_service reads as the
+        // `printer_header_address ?? address` fallback (and the reprint
+        // snapshot re-copies in sales_repository_impl).
+        final address = await database.localConfigDao.getConfigByKey('address');
+        expect(address?.value, 'Km 12 Carretera a Masaya');
+        final phone = await database.localConfigDao.getConfigByKey('phone');
+        expect(phone?.value, '505 8888 7777');
+        final email = await database.localConfigDao.getConfigByKey('email');
+        expect(email?.value, 'hola@cafetin.ni');
+      });
+
+      test('S3: null identity in a newer revision CLEARS previously projected values and replays as a true no-op', () async {
+        // Seed a pre-existing local identity (locally entered or from an
+        // earlier snapshot) so the clearing revision has something real to
+        // clear — otherwise the test would pass vacuously.
+        for (final key in ['address', 'phone', 'email']) {
+          await database.localConfigDao.saveConfig(LocalConfigEntity(
+            key: key,
+            value: 'VIEJO $key',
+            description: 'Seeded stale identity',
+          ));
+        }
+
+        final rev1 = {
+          ...sampleEnvelope,
+          'address': 'Dirección vieja',
+          'phone': '505 0000 0000',
+          'email': 'vieja@cafetin.ni',
+        };
+        await handler.handleFiscalEnvelope(rev1);
+        // The mirror was really rewritten by rev1 (set over a stale value).
+        expect((await database.localConfigDao.getConfigByKey('address'))?.value,
+            'Dirección vieja');
+
+        // The P1 snapshot builder always sends the keys (null = the cloud
+        // cleared / never configured them), so a clearing revision can be
+        // distinguished from a pre-P1 omission.
+        final rev2 = {
+          ...sampleEnvelope,
+          'address': null,
+          'phone': null,
+          'email': null,
+          'configVersion': {
+            'revision': 2,
+            'fingerprint':
+                'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+          },
+        };
+        final outcome = await handler.handleFiscalEnvelope(rev2);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        // A cloud-cleared value must never survive locally: the printed
+        // header fallback would otherwise resurrect a stale identity.
+        expect(await database.localConfigDao.getConfigByKey('address'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('phone'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('email'), isNull);
+
+        // Completeness holds with the keys cleared: the replay is a true
+        // no-op, not an infinite repair loop.
+        final replay = await handler.handleFiscalEnvelope(rev2);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+
+      test('blank identity strings clear the local keys (backend writer maps blank to NULL)', () async {
+        for (final key in ['address', 'phone', 'email']) {
+          await database.localConfigDao.saveConfig(LocalConfigEntity(
+            key: key,
+            value: 'VIEJO $key',
+            description: 'Seeded stale identity',
+          ));
+        }
+
+        final rev2 = {
+          ...sampleEnvelope,
+          'address': '   ',
+          'phone': '',
+          'email': null,
+          'configVersion': {
+            'revision': 2,
+            'fingerprint':
+                'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+          },
+        };
+        final outcome = await handler.handleFiscalEnvelope(rev2);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(await database.localConfigDao.getConfigByKey('address'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('phone'), isNull);
+        expect(await database.localConfigDao.getConfigByKey('email'), isNull);
+      });
+
+      test('S3: identity keys absent from the payload (pre-P1 builder) are a NO-OP: locally entered values survive', () async {
+        // Locally entered from the POS business profile (the offline master
+        // for a terminal that has never seen these keys in a snapshot).
+        await database.localConfigDao.saveConfig(LocalConfigEntity(
+          key: 'address',
+          value: 'Ingresada localmente',
+          description: 'Local entry',
+        ));
+
+        // sampleEnvelope carries NO address/phone/email keys at all.
+        final outcome = await handler.handleFiscalEnvelope(sampleEnvelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        // Omitted = no-op (backend writer contract): the projection must not
+        // delete a value the snapshot said nothing about.
+        final address = await database.localConfigDao.getConfigByKey('address');
+        expect(address?.value, 'Ingresada localmente');
+
+        // Absence imposes no completeness constraint: the replay is a no-op,
+        // not an endless repair that rewrites nothing.
+        final replay = await handler.handleFiscalEnvelope(sampleEnvelope);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+    });
+
     group('D-21 (U2 #554): DGI authorization projection', () {
       test('projects dgiAuthorizationCode/IssuedAt/ExpiresAt into local_configs', () async {
         final envelope = {

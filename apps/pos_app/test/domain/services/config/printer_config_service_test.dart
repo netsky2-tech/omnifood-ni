@@ -139,6 +139,42 @@ void main() {
       expect(savedRucWrites, isEmpty);
     });
 
+    group('Company identity parity P2 (S6): header identity fallback precedence', () {
+      test('a projected snapshot address/phone feeds the header fallback', () async {
+        // Simulates the local_configs state after a priming that carried the
+        // company identity (FiscalProjectionKeys.businessAddress/businessPhone).
+        when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+        when(mockDao.getConfigByKey('address')).thenAnswer(
+            (_) async => LocalConfigEntity(key: 'address', value: 'Km 12 Carretera a Masaya'));
+        when(mockDao.getConfigByKey('phone')).thenAnswer(
+            (_) async => LocalConfigEntity(key: 'phone', value: '505 8888 7777'));
+
+        final config = await service.getPrinterConfig();
+
+        expect(config.headerAddress, 'Km 12 Carretera a Masaya');
+        expect(config.headerPhone, '505 8888 7777');
+      });
+
+      test('an explicit printer_header_* override still wins over the projected identity', () async {
+        when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);
+        when(mockDao.getConfigByKey('address')).thenAnswer(
+            (_) async => LocalConfigEntity(key: 'address', value: 'Km 12 Carretera a Masaya'));
+        when(mockDao.getConfigByKey('phone')).thenAnswer(
+            (_) async => LocalConfigEntity(key: 'phone', value: '505 8888 7777'));
+        when(mockDao.getConfigByKey(PrinterConfigService.headerAddressKey)).thenAnswer(
+            (_) async => LocalConfigEntity(
+                key: PrinterConfigService.headerAddressKey, value: 'Overrida localmente'));
+        when(mockDao.getConfigByKey(PrinterConfigService.headerPhoneKey)).thenAnswer(
+            (_) async => LocalConfigEntity(
+                key: PrinterConfigService.headerPhoneKey, value: '505 1111 2222'));
+
+        final config = await service.getPrinterConfig();
+
+        expect(config.headerAddress, 'Overrida localmente');
+        expect(config.headerPhone, '505 1111 2222');
+      });
+    });
+
     group('D-21 consolidation (#551): legacy D-17 backing pair removed', () {
       test('getPrinterConfig still reads the authorization code key', () async {
         when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);

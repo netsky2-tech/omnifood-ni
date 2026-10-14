@@ -80,6 +80,29 @@ class FiscalProjectionKeys {
   static const String tenantId = 'tenant_id';
   static const String taxRegime = 'tax_regime';
   static const String ruc = 'ruc';
+
+  /// Company identity parity P2: contact identity mirrors projected from the
+  /// fiscal snapshot into the SAME local keys the printed header falls back
+  /// to (`printer_header_address ?? address` / `printer_header_phone ??
+  /// phone` in printer_config_service, re-copied for reprints in
+  /// sales_repository_impl), so a ticket printed after a priming carries the
+  /// identity the cloud holds (S1). `email` has no printed consumer yet but
+  /// rides the same shape for parity.
+  ///
+  /// S6: these are the FALLBACK values only — the projection never writes the
+  /// `printer_header_*` override keys, so an explicit local override keeps
+  /// winning until the operator clears it.
+  ///
+  /// S3 absence semantics, transposed from the backend writer contract and
+  /// supported by the payload (P1 builder `tenant.x || null`): the snapshot
+  /// ALWAYS sends these keys, so the terminal CAN distinguish omitted from
+  /// null — key present and non-blank -> SET; key present null/blank -> CLEAR
+  /// (delete the local key: a cloud-cleared value must never survive a
+  /// clearing revision); key absent (only possible from a pre-P1 snapshot
+  /// builder) -> NO-OP, never delete, matching "omitted = no-op".
+  static const String businessAddress = 'address';
+  static const String businessPhone = 'phone';
+  static const String businessEmail = 'email';
   static const String commercialExchangeRate = 'commercial_exchange_rate';
   static const String lastAppliedFiscalRevision = 'last_applied_fiscal_revision';
   static const String lastAppliedFiscalFingerprint = 'last_applied_fiscal_fingerprint';
@@ -642,6 +665,33 @@ class FiscalInboxHandler {
       keysToDelete.add(FiscalProjectionKeys.ruc);
     }
 
+    // Company identity parity P2: address/phone/email mirrors, read by the
+    // printed header fallback (`printer_header_address ?? address`, etc.) and
+    // the reprint snapshot (sales_repository_impl). Tri-state, per the S3
+    // contract documented on [FiscalProjectionKeys.businessAddress]: the P1
+    // snapshot builder always sends the keys, so present+non-blank SETS,
+    // present null/blank CLEARS (a cloud-cleared value must never survive
+    // locally), and absent (pre-P1 builder only) is a NO-OP that preserves
+    // locally entered values instead of deleting them.
+    const identityMirrorEnvelopeKeys = <String, String>{
+      FiscalProjectionKeys.businessAddress: 'address',
+      FiscalProjectionKeys.businessPhone: 'phone',
+      FiscalProjectionKeys.businessEmail: 'email',
+    };
+    identityMirrorEnvelopeKeys.forEach((localKey, envelopeKey) {
+      if (!rawEnvelope.containsKey(envelopeKey)) return; // omitted = no-op
+      final value = rawEnvelope[envelopeKey]?.toString().trim() ?? '';
+      if (value.isEmpty) {
+        keysToDelete.add(localKey); // null/blank = clear
+      } else {
+        projections.add(LocalConfigEntity(
+          key: localKey,
+          value: value,
+          description: 'Projected company identity from fiscal snapshot',
+        ));
+      }
+    });
+
     // Optional commercialFxSpread: project if present, delete key atomically if absent
     final fxSpread = rawEnvelope['commercialFxSpread'];
     if (fxSpread != null) {
@@ -876,6 +926,38 @@ class FiscalInboxHandler {
       rucMatches = localRuc == null;
     }
 
+    // 6b. Company identity mirrors (parity P2): tri-state, same semantics as
+    // the projection. Key present in the payload -> the local key must exist
+    // and match (non-blank) or MUST NOT exist (null/blank: a cleared value
+    // must not survive its clearing revision). Key absent (pre-P1 builder
+    // only) -> NO constraint: the projection is a no-op for that key, so
+    // demanding absence here would make repair loop forever writing nothing.
+    Future<bool> identityMirrorMatches(String envelopeKey, String localKey) async {
+      if (!rawEnvelope.containsKey(envelopeKey)) return true; // absent = no-op
+      final raw = rawEnvelope[envelopeKey];
+      final String? value;
+      if (raw is String) {
+        value = raw.trim();
+      } else if (raw == null) {
+        value = null;
+      } else {
+        value = raw.toString().trim();
+      }
+      final hasValue = value != null && value.isNotEmpty;
+      final localEntity = await _database.localConfigDao.getConfigByKey(localKey);
+      if (hasValue) {
+        return localEntity != null && localEntity.value.trim() == value;
+      }
+      return localEntity == null;
+    }
+
+    final addressMatches = await identityMirrorMatches(
+        'address', FiscalProjectionKeys.businessAddress);
+    final phoneMatches = await identityMirrorMatches(
+        'phone', FiscalProjectionKeys.businessPhone);
+    final emailMatches = await identityMirrorMatches(
+        'email', FiscalProjectionKeys.businessEmail);
+
     // 7. commercial_exchange_rate is OPTIONAL:
     // If present in payload -> local must exist and match.
     // If absent in payload -> local MUST NOT exist (stale key check).
@@ -966,6 +1048,9 @@ class FiscalInboxHandler {
         regimeMatches &&
         pricesIncludeTaxMatches &&
         rucMatches &&
+        addressMatches &&
+        phoneMatches &&
+        emailMatches &&
         fxMatches &&
         amountCapMatches &&
         percentCapMatches &&
@@ -977,7 +1062,9 @@ class FiscalInboxHandler {
       'fingerprint_match=$fingerprintMatches tenant_match=$tenantMatches '
       'business_match=$businessMatches tenant_name_match=$tenantNameMatches '
       'regime_match=$regimeMatches prices_include_tax_match=$pricesIncludeTaxMatches '
-      'ruc_match=$rucMatches fx_match=$fxMatches '
+      'ruc_match=$rucMatches address_match=$addressMatches '
+      'phone_match=$phoneMatches email_match=$emailMatches '
+      'fx_match=$fxMatches '
       'amount_cap_match=$amountCapMatches percent_cap_match=$percentCapMatches '
       'tax_match=$taxMatches',
       name: 'FiscalInboxHandler',
