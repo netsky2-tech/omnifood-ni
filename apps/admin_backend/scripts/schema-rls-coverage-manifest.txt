@@ -95,6 +95,7 @@ inventory_purchase_documents|direct:SIUD
 inventory_remediation_receipts|direct:SI
 inventory_sync_outbox|direct:SIU
 inventory_sync_receipts|direct:SIUD
+insumo_market_prices|direct:SIUD
 insumos|direct:SIUD
 invoice_items|direct:SIUD
 invoices|direct:SIUD

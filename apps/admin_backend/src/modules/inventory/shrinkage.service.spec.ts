@@ -11,6 +11,7 @@ import {
   InventoryMovement,
   MovementType,
 } from './entities/inventory-movement.entity';
+import { Shrinkage } from './entities/shrinkage.entity';
 import { ForensicAlertService } from './forensic-alert.service';
 import { Product } from './entities/product.entity';
 import { RecipeService } from './recipe.service';
@@ -21,6 +22,8 @@ type TransactionManager = {
   save: jest.Mock;
   create: jest.Mock;
   query: jest.Mock;
+  // R13: the outflow now resolves the Batch repository through the manager.
+  getRepository: jest.Mock;
 };
 
 describe('ShrinkageService', () => {
@@ -32,6 +35,13 @@ describe('ShrinkageService', () => {
   const findOne = jest.fn();
   const create = jest.fn();
   const query = jest.fn();
+  // R13: reports NO batches, which is the honest fixture for a non
+  // batch-managed insumo — `drawBatchOutflow` returns early and every
+  // assertion in this suite keeps asserting exactly what it asserted before.
+  const getRepository = jest.fn(() => ({
+    find: jest.fn().mockResolvedValue([]),
+    save: jest.fn(),
+  }));
   const transaction = jest.fn();
   const forensicAlertService = { create: jest.fn() };
   const productRepo = {};
@@ -45,7 +55,7 @@ describe('ShrinkageService', () => {
     jest.clearAllMocks();
     transaction.mockImplementation(
       (cb: (manager: TransactionManager) => Promise<unknown>) =>
-        cb({ findOne, save, create, query }),
+        cb({ findOne, save, create, query, getRepository }),
     );
     create.mockImplementation((_entity: unknown, payload: unknown) => payload);
 
@@ -114,6 +124,12 @@ describe('ShrinkageService', () => {
       'Batch spoiled during prep',
     );
 
+    // R20: this assertion used to require `reason` and `observation` on the
+    // LEDGER row, and it was pinning a NO-OP — coverage of the mock instead of
+    // of the code. `reason` is a getter/setter ALIAS for `sourceDocumentId` (the
+    // same column, so the id below would overwrite it) and `observation` has no
+    // column on this entity at all, so TypeORM dropped it without a word. What
+    // the row must carry is its IDENTITY.
     expect(create).toHaveBeenCalledWith(
       InventoryMovement,
       expect.objectContaining({
@@ -121,7 +137,18 @@ describe('ShrinkageService', () => {
         unitCostNio: 800,
         totalCostNio: 1876.48,
         averageCostAfterNio: 800,
-        reason: 'DESECHO_COCINA',
+        sourceDocumentType: 'SHRINKAGE',
+        sourceDocumentId: expect.any(String),
+      }),
+    );
+
+    // The motive travels on the DOCUMENT that row points at: the taxonomy in
+    // `shrinkage_type` (its NOT NULL column) and the observation in the column
+    // it finally has. This is what makes the reason recoverable.
+    expect(create).toHaveBeenCalledWith(
+      Shrinkage,
+      expect.objectContaining({
+        shrinkage_type: 'DESECHO_COCINA',
         observation: 'Batch spoiled during prep',
       }),
     );

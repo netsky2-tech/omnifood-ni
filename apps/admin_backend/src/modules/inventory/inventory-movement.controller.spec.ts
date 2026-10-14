@@ -24,7 +24,6 @@ import {
 import { SYNC_SCOPES_KEY } from '../identity/decorators/sync-scopes.decorator';
 import { ROLES_KEY } from '../../core/decorators/roles.decorator';
 import { InventoryMovementController } from './inventory-movement.controller';
-import { InventoryService } from './inventory.service';
 import { ShrinkageService } from './shrinkage.service';
 import { FxRateResolverService } from './fx-rate-resolver.service';
 import { InventoryPurchaseService } from './inventory-purchase.service';
@@ -34,7 +33,6 @@ import { ProductionService } from './production.service';
 import { InventoryReportsService } from './services/inventory-reports.service';
 import { UserRole } from '../identity/entities/user.entity';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
-import type { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { ManualPurchaseDto } from './dto/purchase-manual.dto';
@@ -81,7 +79,6 @@ const callRecordShrinkage = (
 
 describe('InventoryMovementController device transport routes', () => {
   let controller: InventoryMovementController;
-  const inventoryService = { syncMovements: jest.fn() };
   const countSessionService = { replayCountSession: jest.fn() };
   const productionService = { replayProductionClose: jest.fn() };
   const shrinkageService = {
@@ -96,7 +93,6 @@ describe('InventoryMovementController device transport routes', () => {
         { provide: FxRateResolverService, useValue: {} },
         { provide: InventoryPurchaseService, useValue: {} },
         { provide: ShrinkageService, useValue: shrinkageService },
-        { provide: InventoryService, useValue: inventoryService },
         { provide: RecipeService, useValue: {} },
         { provide: CountSessionService, useValue: countSessionService },
         { provide: ProductionService, useValue: productionService },
@@ -152,7 +148,6 @@ describe('InventoryMovementController device transport routes', () => {
   });
 
   describe.each([
-    ['POST inventory/movements/sync', 'syncMovements'],
     ['POST inventory/shrinkage', 'recordShrinkage'],
     ['POST inventory/purchases', 'recordPurchase'],
     ['POST inventory/recipes/versions', 'ingestRecipeVersion'],
@@ -734,28 +729,6 @@ describe('InventoryMovementController device transport routes', () => {
       expect(result.correctionDocument.unit_cost_nio).toBe(350.25);
       expect(result.correctionDocument.projected_cpp_nio).toBe(0);
       expect(typeof result.correctionDocument.projected_cpp_nio).toBe('number');
-    });
-  });
-
-  describe('syncMovements', () => {
-    it('delegates the movement batch with the device principal tenant', async () => {
-      const dto = { movements: [] } as unknown as SyncMovementsDto;
-
-      await controller.syncMovements(dto, 'tenant-123');
-
-      expect(inventoryService.syncMovements).toHaveBeenCalledWith(
-        dto.movements,
-        'tenant-123',
-      );
-    });
-
-    it('fails closed when no tenant context is bound', async () => {
-      const dto = { movements: [] } as unknown as SyncMovementsDto;
-
-      await expect(controller.syncMovements(dto, undefined)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      expect(inventoryService.syncMovements).not.toHaveBeenCalled();
     });
   });
 

@@ -24,6 +24,11 @@ import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-out
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
+import { drawBatchOutflow } from '../../inventory/batch-allocation';
+import {
+  toCalendarDay,
+  todayCalendarDay,
+} from '../../../core/database/calendar-day';
 import { RecipePublicationState } from '../../inventory/entities/recipe-version.entity';
 import {
   Insumo,
@@ -1874,6 +1879,23 @@ export class InvoicesService {
       insumo.averageCost = averageCostAfterNio;
       await manager.save(Insumo, insumo);
 
+      if (delta < 0) {
+        // R13: an OUTFLOW leaves the aggregate, so the BATCH balances have to
+        // leave with it or FEFO keeps reading a balance that is no longer real.
+        // A POSITIVE delta means stock appearing with no known lot, and
+        // `batches.expiration_date` is NOT NULL, so there is no batch to draw
+        // from: that case is open and documented, never approximated here.
+        await drawBatchOutflow({
+          manager,
+          tenantId,
+          insumoId: movement.insumoId,
+          quantity: Math.abs(delta),
+          operationDay: record.invoice
+            ? toCalendarDay(record.invoice.createdAt)
+            : todayCalendarDay(),
+        });
+      }
+
       await manager.save(
         this.movementRepository.create({
           tenant_id: tenantId,
@@ -1890,6 +1912,17 @@ export class InvoicesService {
           sourceSequence: String(record.sourceSequence),
           reason: record.invoice?.id ?? record.idempotencyKey,
           sourceDocumentType: record.documentType,
+          // The kardex `source_document_id` column is NOT NULL and this insert
+          // used to omit it, so EVERY sync batch carrying `movements[]` was
+          // rejected with a NOT NULL violation and no delta ever reached the
+          // ledger. The document identity is the one this code already treats
+          // as the source reference: the invoice it belongs to, prefixed with
+          // the house convention (see INVOICE_SOURCE_DOCUMENT_PREFIX), or the
+          // sync record's own idempotency key when the delta carries no
+          // invoice.
+          sourceDocumentId: record.invoice
+            ? `${INVOICE_SOURCE_DOCUMENT_PREFIX}${record.invoice.id}`
+            : record.idempotencyKey,
           // AG-02: when the sync record carries an invoice, anchor the
           // movement to its business timestamp. Inventory-flow records
           // without an invoice have no business timestamp available; they

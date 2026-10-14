@@ -37,7 +37,6 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     'inventory/production-orders/close',
     'inventory/count-sessions',
     'inventory/regularization/sync',
-    'inventory/movements/sync',
     'sales/shifts/sync',
     'sales/invoices/sync',
     // S1a (backlog #68): dedicated payment-level transport for card/voucher

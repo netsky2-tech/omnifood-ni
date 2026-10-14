@@ -6,6 +6,7 @@ This document provides essential context and instructions for AI agents working 
 
 - **Offline-First or Muerte**: The system must be fully operational without internet connectivity. Local SQLite is the **Source of Truth**; the cloud is an eventually consistent mirror.
 - **DGI Compliance (Nicaragua)**: Strict adherence to Disposición Técnica 09-2007. Invoices **MUST NOT** be deleted; only cancellations (`is_canceled`) are allowed. Sequential numbering is mandatory.
+- **Inventory — normative compliance is mandatory**: anything touching supplies, costs, valuation, lots/batches, counts, shrinkage or inventory reporting **MUST comply with** `docs/inventario_marco_normativo.md` (Nicaragua Ley 822 art. 44, its Reglamento art. 33, NIC 2 §23-25). That document separates **NORMA** (binding), **PRACTICE** and **OUR DECISION**, and lists the binding requirements `R-01`..`R-07` with verbatim sources. Any change in those areas **declares which `R-nn` it touches and how it complies**; if it does not comply, it **opens a task** instead of silently ignoring the gap. Notably: valuation must never exceed the **lower of cost or market**, a valuation-method change requires **written DGI authorization recorded as evidence**, and year-end physical inventory must produce **lists signed and dated per page by the people who counted**.
 - **Multi-Tenant Scalability**: Backend data isolation using PostgreSQL Row-Level Security (RLS) based on `tenant_id`.
 
 ---

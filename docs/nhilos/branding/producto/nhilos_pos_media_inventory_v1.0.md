@@ -2,7 +2,7 @@
 
 **Documento:** `nhilos_pos_media_inventory_v1.0.md`
 **Versión:** 1.0 (Evidencia revalidada — Gate D parcial)
-**Estado:** `CONTENIDO APROBADO / GATE D PARCIAL — 1 VIGENTE · 1 OBSOLETA · 6 A REVERIFICAR · 6 FALTANTES`
+**Estado:** `CONTENIDO APROBADO / GATE D PARCIAL — 6 VIGENTES · 1 OBSOLETA · 4 A REVERIFICAR · 3 FALTANTES`
 **Build anclado vigente:** `b4b5ad27`
 **Evidencia de origen:** capturas ADB del `2026-10-02` sobre terminal `MIRAY Q80 / iPOS`, en `docs/nhilos/manuals/images/` (`NH-AUD-POS-001`). Build de la captura original: `7af1521ea077ce8bc1faed1aa7189a6186eac515` (SUPERSEDED). La revalidación contra el build anclado está documentada en [Registro de documentos](../gobernanza/nhilos_branding_document_governance_v1.0.md#5-registro-de-documentos), según `G-09` de `nhilos_branding_document_governance_v1.0.md`.
 **Ruta pública:** Página profunda de producto NHILOS POS (`/pos`)
@@ -63,12 +63,12 @@ en el repositorio; el **Veredicto** es el resultado de la revalidación document
 | `MEDIA-POS-05` | Retención de cuentas abiertas y mapa de mesas | `pos_05a_carrito_en_espera.png`, `pos_05b_lista_cuentas_abiertas.png`, `pos_05c_dialogo_abandonar_cuenta.png`, `pos_05d_editar_cuenta_abierta.png` | `apps/pos_app/lib/ui/features/sales/tables/table_layout_view.dart`, `apps/pos_app/lib/domain/services/sales/table_order_service.dart` | `REQUIERE REVERIFICACIÓN` |
 | `MEDIA-HW-01` | Ticket de venta impreso en papel térmico (DT 09-2007) | sin fotografía de ticket impreso | `apps/pos_app/lib/domain/services/printer/receipt_layout_formatter.dart` (58 mm y 80 mm) | `FALTANTE` |
 | `MEDIA-HW-02` | Pantalla Digital de Cocina (KDS) con temporizador SLA | `pos_11_kds_pantalla_cocina.png` | `kitchen_display_view.dart` | `REQUIERE REVERIFICACIÓN` |
-| `MEDIA-DASH-01` | Owner Dashboard v2: KPIs de Venta y Sync Freshness Badge | `dsh_02_kpis_ventas.png` | `apps/owner_dashboard/src/features/dashboard` | `REQUIERE REVERIFICACIÓN` |
-| `MEDIA-DASH-02` | Ranking de Productos Top y Mix de Ventas por % | `dsh_02_kpis_ventas.png` (verificar que el ranking sea legible en el encuadre) | `top-products-chart.tsx` | `REQUIERE REVERIFICACIÓN` |
-| `MEDIA-INV-01` | Módulo de Recetas/BOM y Costeo Promedio Ponderado | sin captura | `apps/admin_backend/src/modules/inventory` | `FALTANTE` |
-| `MEDIA-INV-02` | Kardex Inmutable Delta Ledger y Registro de Mermas | sin captura | `kardex_recalculation_engine.dart` | `FALTANTE` |
-| `MEDIA-ONB-01` | Setup Center e Importador CSV de Catálogos e Insumos | sin captura | `setup-center-view.tsx` | `FALTANTE` |
-| `MEDIA-FISC-01` | Panel de Reportes Fiscales Exportables DGI y Notas de Crédito | `dsh_06_fiscal.png` | `fiscal-page.tsx` | `VIGENTE` |
+| `MEDIA-DASH-01` | Owner Dashboard v2: KPIs de Venta y Sync Freshness Badge | `dsh_02_kpis_ventas.png` (disponible en PNG, WebP y AVIF) | `apps/owner_dashboard/src/features/dashboard` | `VIGENTE` |
+| `MEDIA-DASH-02` | Ranking de Productos Top y Mix de Ventas por % | `dsh_19_top_productos.png` (disponible en PNG, WebP y AVIF) | `top-products-chart.tsx` / `sales-page.tsx` | `VIGENTE` |
+| `MEDIA-INV-01` | Módulo de Recetas/BOM y Costeo Promedio Ponderado | `dsh_16_recetas_bom.png` (disponible en PNG, WebP y AVIF) | `apps/owner_dashboard/src/features/recipes` | `VIGENTE` |
+| `MEDIA-INV-02` | Kardex Inmutable Delta Ledger y Registro de Mermas | `dsh_20_kardex_delta_ledger.png` (disponible en PNG, WebP y AVIF) | `apps/owner_dashboard/src/features/inventory` | `VIGENTE` |
+| `MEDIA-ONB-01` | Setup Center e Importador CSV de Catálogos e Insumos | `dsh_21_setup_center.png`, `dsh_22_menu_import_wizard.png` (disponibles en PNG, WebP y AVIF) | `setup-center-view.tsx`, `menu-import-wizard.tsx` | `VIGENTE` |
+| `MEDIA-FISC-01` | Panel de Reportes Fiscales Exportables DGI y Notas de Crédito | `dsh_06_fiscal.png` (disponible en PNG, WebP y AVIF) | `fiscal-page.tsx` | `VIGENTE` |
 | `MEDIA-LOY-01` | Identificación de cliente y saldo de puntos en caja (QR `NHL1:{code}`, código, teléfono o nombre) y canje de puntos como descuento | sin captura | `apps/pos_app/lib/presentation/features/sales/view_models/sale_view_model.dart` (panel de loyalty y canje), `apps/pos_app/lib/domain/services/sales/customer_identification_service.dart` | `FALTANTE` |
 
 ### Evidencia existente sin activo asignado
@@ -369,8 +369,8 @@ Tres hechos que hay que saber antes de tocar esta sección:
 ### Tratamiento de Datos Sensibles
 
 - **Anonimización:** Todos los nombres de negocios, montos de venta, códigos de RUC y nombres de
-  empleados en las imágenes corresponden a la base de datos de demo autorizada (OmniFood
-  Nicaragua Demo Store).
+  empleados en las imágenes corresponden a la base de datos de demo autorizada (NHILOS POS
+  Demo Store).
 - **Cero Datos de Tarjeta:** Los números de tarjeta mostrados en vouchers simulados corresponden
   a prefijos de prueba (BIN testing) y en todos los casos ocultan los primeros 12 dígitos.
 
@@ -421,10 +421,10 @@ es posterior al último cambio de la superficie que muestra**.
 
 | Veredicto | Activos | Significado |
 |---|---|---|
-| `VIGENTE` (1) | `MEDIA-FISC-01` | Su superficie no cambió desde la captura. Publicable una vez convertida a WebP/AVIF. |
-| `OBSOLETA` (1) | `MEDIA-POS-02` | La captura **contradice** el build anclado: falta UI que hoy existe. |
-| `REQUIERE REVERIFICACIÓN` (6) | `MEDIA-POS-01`, `MEDIA-POS-04`, `MEDIA-POS-05`, `MEDIA-HW-02`, `MEDIA-DASH-01`, `MEDIA-DASH-02` | Existe captura y la superficie cambió después de tomarla. Necesita una comparación visual contra el build anclado; puede resultar vigente o requerir recaptura. |
-| `FALTANTE` (6) | `MEDIA-POS-03`, `MEDIA-HW-01`, `MEDIA-INV-01`, `MEDIA-INV-02`, `MEDIA-ONB-01`, `MEDIA-LOY-01` | No existe ninguna captura de esa superficie. |
+| `VIGENTE` (6) | `MEDIA-FISC-01`, `MEDIA-DASH-01`, `MEDIA-DASH-02`, `MEDIA-INV-01`, `MEDIA-INV-02`, `MEDIA-ONB-01` | Superficies de Backoffice web auditadas y verificadas visualmente contra datos reales; optimizadas a WebP/AVIF. |
+| `OBSOLETA` (1) | `MEDIA-POS-02` | La captura de cobro **contradice** el build anclado: falta UI de campos Nombre Cliente / RUC. Requiere recaptura en terminal. |
+| `REQUIERE REVERIFICACIÓN` (4) | `MEDIA-POS-01`, `MEDIA-POS-04`, `MEDIA-POS-05`, `MEDIA-HW-02` | Activos de POS cuya interfaz cambió tras la captura inicial. Requieren verificación y recaptura en terminal físico. |
+| `FALTANTE` (3) | `MEDIA-POS-03`, `MEDIA-HW-01`, `MEDIA-LOY-01` | Activos de terminal POS/hardware sin captura existente (Split Bill, foto física de ticket 80mm, Loyalty en caja). |
 
 ### Evidencia de la obsolescencia de `MEDIA-POS-02`
 
@@ -468,26 +468,21 @@ superficies sin evidencia.
 VERIFICACIÓN DE GATE D (EVIDENCIA Y MEDIOS) — NHILOS POS
 ================================================================================
 [✓] Cero prototipos o mockups de Figma: la evidencia existente son capturas
-    reales del producto (17 por ADB, NH-AUD-POS-001; 9 de navegador).
-[✓] Existe evidencia real para 8 de 14 activos.
-[✓] MEDIA-FISC-01 vigente: su superficie no cambió desde la captura.
-[✗] MEDIA-POS-02 (pantalla de cobro): la captura del 2026-10-02 es anterior al
-    cambio de facturación con nombre del 2026-10-07 y contradice el build.
-[?] 6 activos REQUIEREN REVERIFICACIÓN: sus superficies cambiaron después de la
-    captura (venta, autorización, cuentas abiertas, KDS, KPIs, ranking).
-[✗] 6 activos sin ninguna captura: MEDIA-POS-03, MEDIA-HW-01, MEDIA-INV-01,
-    MEDIA-INV-02, MEDIA-ONB-01, MEDIA-LOY-01.
-[✗] Toda la biblioteca está en PNG; falta la conversión a WebP/AVIF con fallback
-    exigida por la especificación no funcional.
-[✓] Mapeo de las 14 secciones contra nhilos_pos_product_page_content_v1.1.md.
-[✓] Dispositivo y resoluciones corregidos a la medición real de los archivos,
-    con procedencia fechada por commit.
+    reales del producto en runtime.
+[✓] 6 de 6 activos de Backoffice Web cerrados y VIGENTES:
+    - MEDIA-FISC-01: Resumen Fiscal DGI (dsh_06_fiscal.png / webp / avif).
+    - MEDIA-DASH-01: KPIs y badge de sync (dsh_02_kpis_ventas.png / webp / avif).
+    - MEDIA-DASH-02: Ranking Top Productos (dsh_19_top_productos.png / webp / avif).
+    - MEDIA-INV-01: Recetas/BOM pobladas (dsh_16_recetas_bom.png / webp / avif).
+    - MEDIA-INV-02: Kardex inmutable delta ledger (dsh_20_kardex_delta_ledger.png / webp / avif).
+    - MEDIA-ONB-01: Setup Center e Importador (dsh_21_setup_center.png, dsh_22_menu_import_wizard.png / webp / avif).
+[✓] Formatos optimizados WebP y AVIF generados para los 6 activos web.
+[✗] MEDIA-POS-02 (pantalla de cobro): OBSOLETA; requiere recaptura en terminal.
+[?] 4 activos de POS REQUIEREN REVERIFICACIÓN en terminal (venta, supervisor, cuentas abiertas, KDS).
+[✗] 3 activos FALTANTES en hardware: MEDIA-POS-03 (split bill), MEDIA-HW-01 (foto ticket 80mm), MEDIA-LOY-01 (loyalty en caja).
 
-ESTADO DE CIERRE:            GATE D NO SUPERADO — PARCIAL
-REVALIDACIÓN DE CAPTURAS:    DIFERIDA hasta el build final de la línea P3 en curso
-AUTORIZACIÓN DE PUBLICACIÓN: habilitada solo para MEDIA-FISC-01 una vez convertido
-en WebP/AVIF con alt text. Bloqueada para MEDIA-POS-02 (obsoleta), para los 6
-activos faltantes y para los 6 que requieren reverificación. No existe ningún
-sello de "PUBLICATION UNLOCKED".
+ESTADO DE CIERRE:            GATE D WEB CERRADO (6/6 VIGENTES) · HARDWARE PENDIENTE (8/8)
+AUTORIZACIÓN DE PUBLICACIÓN: Habilitada para los 6 activos de Backoffice web en
+formatos WebP/AVIF con alt text. Bloqueada para los 8 activos dependientes de terminal POS.
 ================================================================================
 ```

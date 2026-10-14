@@ -26,6 +26,10 @@ import {
   bindTenantContext,
   runInTenantTransaction,
 } from '../../core/database/tenant-transaction';
+import {
+  toCalendarDay,
+  todayCalendarDay,
+} from '../../core/database/calendar-day';
 
 export const CURRENCY = {
   NIO: 'NIO',
@@ -405,7 +409,7 @@ export class InventoryPurchaseService {
           }
 
           const entryTimestamp = new Date(input.entryTimestamp);
-          const entryDate = new Date(input.entryTimestamp.split('T')[0]);
+          const entryDate = toCalendarDay(input.entryTimestamp);
           const purchaseDocument = manager.create(PurchaseDocument, {
             id: input.id,
             tenant_id: tenantId,
@@ -414,7 +418,7 @@ export class InventoryPurchaseService {
             invoice_number: invoiceNumber,
             fiscal_authorization_code:
               input.fiscalAuthorizationCode?.trim() || null,
-            invoice_date: new Date(input.invoiceDate),
+            invoice_date: toCalendarDay(input.invoiceDate),
             entry_date: entryDate,
             entry_timestamp: entryTimestamp,
             quantity: round4(input.quantity),
@@ -425,10 +429,10 @@ export class InventoryPurchaseService {
             projected_cpp_nio: preview.projectedCppNio,
             lot_code: input.lotCode ?? null,
             received_date: input.receivedDate
-              ? new Date(input.receivedDate)
+              ? toCalendarDay(input.receivedDate)
               : null,
             expiration_date: input.expirationDate
-              ? new Date(input.expirationDate)
+              ? toCalendarDay(input.expirationDate)
               : null,
           });
           await manager.save(PurchaseDocument, purchaseDocument);
@@ -459,8 +463,8 @@ export class InventoryPurchaseService {
               tenant_id: tenantId,
               insumo_id: insumo.id,
               batch_number: input.lotCode,
-              received_date: new Date(input.receivedDate),
-              expiration_date: new Date(input.expirationDate),
+              received_date: toCalendarDay(input.receivedDate),
+              expiration_date: toCalendarDay(input.expirationDate),
               remaining_stock: round4(input.quantity),
               cost: preview.unitCostNio,
             });
@@ -594,7 +598,7 @@ export class InventoryPurchaseService {
             fiscal_authorization_code:
               originalDocument.fiscal_authorization_code,
             invoice_date: originalDocument.invoice_date,
-            entry_date: new Date(),
+            entry_date: todayCalendarDay(),
             entry_timestamp: new Date(),
             quantity: correctedQuantity,
             unit_cost: Number(originalDocument.unit_cost),
