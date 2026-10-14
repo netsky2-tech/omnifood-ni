@@ -843,6 +843,13 @@ class InvoiceDetailsPanel extends StatelessWidget {
             // as defense-in-depth. Cross-day corrections are emitted in the
             // POS again, but each note stays a local fiscal document pending
             // upstream acceptance until DSI-6 lands.
+            // #553 reconciliation (2026-10-11): D-14's V1 block was
+            // superseded by DEC-1/DEC-3 (odd/tasks/go-live-decisions.md,
+            // 2026-09-29/30): the POS keeps issuing notes during the
+            // mono-terminal pilot and the outbound CREDIT_NOTE sync hold is
+            // deliberate (DSI-6 pending, sync_service.dart outbound
+            // filter). In exchange, every success path must disclose the
+            // pilot scope — never a silent local-only note.
             if (context.watch<SaleViewModel>().canIssueCreditNote) ...[
               SizedBox(
                 width: double.infinity,
@@ -1124,6 +1131,14 @@ class InvoiceDetailsPanel extends StatelessWidget {
                 'La compensación es permanente: la nota de crédito queda '
                 'registrada y no puede eliminarse (normativa DGI).',
               ),
+              const SizedBox(height: 8),
+              // DEC-3 pilot disclosure: the note is issued at the register
+              // and is deliberately NOT synced to the cloud during the
+              // pilot (DSI-6 pending). No silent local-only documents.
+              const Text(
+                'Durante el piloto, la nota queda registrada en este '
+                'terminal: no se envía al cloud.',
+              ),
               const SizedBox(height: 16),
               TextField(
                 key: const Key('credit_note_reason_field'),
@@ -1166,10 +1181,16 @@ class InvoiceDetailsPanel extends StatelessWidget {
                               SnackBar(
                                 content: Text(
                                   printed
-                                      ? 'Nota de crédito emitida. Copia fiscal impresa.'
+                                      ? 'Nota de crédito emitida. Copia fiscal '
+                                          'impresa. Durante el piloto, la '
+                                          'nota queda registrada en este '
+                                          'terminal: no se envía al cloud.'
                                       : 'Nota de crédito emitida. No se pudo '
                                           'imprimir la copia fiscal; use '
-                                          'REIMPRIMIR para reintentarlo.',
+                                          'REIMPRIMIR para reintentarlo. '
+                                          'Durante el piloto, la nota queda '
+                                          'registrada en este terminal: no '
+                                          'se envía al cloud.',
                                 ),
                               ),
                             );

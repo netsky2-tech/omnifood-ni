@@ -17,6 +17,14 @@ import 'sale_view_security_flows_test.mocks.dart';
 /// preserved: the success copy never claims upstream acceptance and now
 /// splits issuance from print outcome — the POS can only honestly claim a
 /// LOCAL issuance plus the observed print result (H8).
+///
+/// #553 reconciliation (2026-10-11): D-14's "block the POS flow" was
+/// SUPERSEDED by the recorded decisions DEC-1/DEC-3
+/// (odd/tasks/go-live-decisions.md, 2026-09-29/30): the POS keeps issuing
+/// notes during the mono-terminal pilot and the outbound sync hold is
+/// deliberate (DSI-6 pending). The #553 honesty core therefore lands as
+/// pilot-scope disclosure: every success path names that the note stays
+/// on the terminal and is not sent to the cloud.
 void main() {
   late MockSaleViewModel mockSaleViewModel;
   late _FakeSalesHistoryViewModel fakeHistoryViewModel;
@@ -113,11 +121,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // §23.1: object (origin invoice number), scope, consequence,
-      // irreversibility.
+      // irreversibility; plus the DEC-3 pilot disclosure: the note stays
+      // on this terminal and is not sent to the cloud during the pilot.
       expect(find.text('Factura afectada: 001-001-01-00000001'),
           findsOneWidget);
       expect(find.textContaining('todos los artículos'), findsOneWidget);
       expect(find.textContaining('permanente'), findsOneWidget);
+      expect(find.textContaining('no se envía al cloud'), findsOneWidget);
 
       // §23.3: the confirm button is the explicit verb, disabled until the
       // mandatory reason is typed (the reason is persisted audit metadata —
@@ -160,10 +170,17 @@ void main() {
         '001-001-01-00000001',
         'Cliente desiste de la compra',
       )).called(1);
-      // §19.2/§31 + H8 honesty split: LOCAL issuance claimed, print observed.
-      expect(find.text('Nota de crédito emitida. Copia fiscal impresa.'),
+      // §19.2/§31 + H8 honesty split: LOCAL issuance claimed, print
+      // observed, and the DEC-3 pilot scope named (no cloud sync during
+      // the pilot — #553 honesty ceiling reconciled with the decision log).
+      expect(
+          find.text(
+              'Nota de crédito emitida. Copia fiscal impresa. Durante el '
+              'piloto, la nota queda registrada en este terminal: no se '
+              'envía al cloud.'),
           findsOneWidget);
       expect(find.textContaining('emitida correctamente'), findsNothing);
+      expect(find.textContaining('no se envía al cloud'), findsOneWidget);
       // The list reloads: a credit note is a new fiscal document.
       expect(fakeHistoryViewModel.loadInvoicesCalls, 1);
     });
@@ -188,6 +205,8 @@ void main() {
       expect(find.textContaining('Nota de crédito emitida'), findsOneWidget);
       expect(find.textContaining('No se pudo imprimir la copia fiscal'),
           findsOneWidget);
+      // DEC-3 pilot scope: never a silent local-only note.
+      expect(find.textContaining('no se envía al cloud'), findsOneWidget);
       expect(fakeHistoryViewModel.loadInvoicesCalls, 1);
     });
 
