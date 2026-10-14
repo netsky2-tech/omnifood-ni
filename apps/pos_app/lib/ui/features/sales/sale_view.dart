@@ -20,7 +20,11 @@ import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
+import 'widgets/category_filter_bar.dart';
+import 'widgets/product_grid_skeleton.dart';
+import 'widgets/product_card.dart';
 import 'widgets/product_card_thumbnail.dart';
+import 'widgets/product_grid_geometry.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
@@ -227,6 +231,11 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   /// read a refusal. While the sheet is open its own banner owns the message.
   bool _isCartSheetOpen = false;
   bool _loyaltyWarningPresentationScheduled = false;
+
+  /// Category currently filtered in the catalog, or null for "Todas".
+  /// Search lives in the view model because it is shared with the scanner
+  /// flow; the category is presentation state and lives with the screen (§14).
+  String? _selectedCategory;
   ModalRoute<void>? _modalRoute;
 
   @override
@@ -358,26 +367,8 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
     final hasActiveSession = viewModel.activeSession != null;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
 
-    final productContent = viewModel.isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : viewModel.filteredProducts.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.search_off, size: 64, color: colorScheme.outline),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No se encontraron productos',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyLarge
-                          ?.copyWith(color: colorScheme.outline),
-                    ),
-                  ],
-                ),
-              )
-            : ProductGrid(products: viewModel.filteredProducts);
+    final productContent = _catalogContent(viewModel);
+    final catalogCategories = _catalogCategories(viewModel);
 
     return Scaffold(
       appBar: AppBar(
@@ -573,6 +564,12 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
           ? Column(
               children: [
                 const InventoryEnrichmentWarningBanner(),
+                if (catalogCategories.isNotEmpty)
+                  CategoryFilterBar(
+                    categories: catalogCategories,
+                    selected: _selectedCategory,
+                    onSelected: _onCategorySelected,
+                  ),
                 Expanded(
                   child: isHandheld
                       ? Stack(
@@ -625,6 +622,114 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
             ],
           )
           : const BoxOpeningContent(),
+    );
+  }
+
+  /// Categories configured in the loaded catalog, deduplicated and ordered.
+  /// It is derived from the products themselves, so the row never offers a
+  /// category that has nothing behind it.
+  List<String> _catalogCategories(SaleViewModel viewModel) {
+    final seen = <String>{};
+    for (final product in viewModel.products) {
+      final category = product.category?.trim();
+      if (category != null && category.isNotEmpty) {
+        seen.add(category);
+      }
+    }
+    return seen.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  }
+
+  /// Products left after the screen's own category filter.
+  List<Product> _visibleProducts(SaleViewModel viewModel) {
+    final category = _selectedCategory;
+    final products = viewModel.filteredProducts;
+    if (category == null) return products;
+    return products
+        .where((product) => product.category?.trim() == category)
+        .toList();
+  }
+
+  void _onCategorySelected(String? category) {
+    setState(() => _selectedCategory = category);
+  }
+
+  void _clearCatalogFilters() {
+    setState(() => _selectedCategory = null);
+    _viewModel.setSearchQuery('');
+  }
+
+  /// Catalog body of the sales surface.
+  ///
+  /// The catalog is read from local SQLite, so the loading state is a light
+  /// skeleton instead of a full-page loader (§28.1, §47). An empty catalog is
+  /// told apart from an empty search because they need different copy and
+  /// different recovery: resync versus clear the filter (§13.2, §29).
+  Widget _catalogContent(SaleViewModel viewModel) {
+    if (viewModel.isLoading) return const ProductGridSkeleton();
+
+    final visible = _visibleProducts(viewModel);
+
+    if (visible.isNotEmpty) {
+      return ProductGrid(
+        products: visible,
+        promotions: viewModel.promotions,
+        onProductTap: _openProduct,
+      );
+    }
+
+    if (viewModel.products.isEmpty) {
+      return DsEmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'Todavía no hay productos',
+        description:
+            'Cuando el catálogo se sincronice, los productos van a aparecer acá.',
+        actionLabel: 'Recargar catálogo',
+        actionIcon: Icons.refresh,
+        onAction: () => _viewModel.loadProducts(),
+      );
+    }
+
+    final query = viewModel.searchQuery;
+    final category = _selectedCategory;
+    final String description;
+    if (category != null && query.isNotEmpty) {
+      description =
+          'No hay productos de «$category» que coincidan con «$query».';
+    } else if (category != null) {
+      description =
+          'No hay productos de «$category» que coincidan con la búsqueda.';
+    } else if (query.isNotEmpty) {
+      description =
+          'No hay productos que coincidan con «$query». Probá con otro nombre o SKU.';
+    } else {
+      description = 'No hay productos que coincidan con el filtro elegido.';
+    }
+
+    return DsEmptyState(
+      icon: Icons.search_off,
+      title: 'Sin resultados',
+      description: description,
+      actionLabel: 'Limpiar filtros',
+      actionIcon: Icons.close,
+      onAction: _clearCatalogFilters,
+    );
+  }
+
+  /// Adds a product with no options straight to the cart; a product with
+  /// variants or modifiers opens its options dialog first, so an
+  /// under-specified line never reaches the ticket.
+  void _openProduct(Product product) {
+    if (product.variants.isEmpty &&
+        product.availableModifiers.isEmpty &&
+        product.availableModifierGroups.isEmpty) {
+      _viewModel.addToCart(product);
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => ProductOptionsDialog(product: product),
     );
   }
 
@@ -871,7 +976,14 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
           _controller.clear();
         },
         decoration: InputDecoration(
-          hintText: isHandheld ? 'Buscar...' : 'Buscar por SKU o Nombre...',
+          hintText: isHandheld
+              // §13.1: the hint names what the operator can search by, and it
+              // has to FIT: on the 384 dp terminal the field leaves ~85 dp for
+              // text, so the verb stays in the magnifier icon and both keys
+              // (name, SKU) are spelled out. A longer hint is ellipsised and
+              // hides the SKU capability.
+              ? 'Nombre o SKU'
+              : 'Buscar por nombre o SKU...',
           hintStyle: TextStyle(fontSize: isHandheld ? 12 : 14),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -880,6 +992,15 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(vertical: 8),
           prefixIcon: Icon(Icons.search, size: 20, color: colorScheme.primary),
+          // §42.6/§43: on the 384 dp terminal the field is 150 dp wide and
+          // Flutter's default 48 dp minimum prefix box left 72 dp for the hint,
+          // which ellipsised "Nombre o SKU" into "Nombre o S...". The magnifier
+          // is decorative — not a tap target — so its box shrinks and the
+          // operator gets to read what the field accepts.
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 34,
+            minHeight: 34,
+          ),
           suffixIcon: viewModel.searchQuery.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.clear, size: 18),
@@ -1063,132 +1184,65 @@ class CartSheetErrorBanner extends StatelessWidget {
 }
 
 class ProductGrid extends StatelessWidget {
+  const ProductGrid({
+    super.key,
+    required this.products,
+    this.promotions = const [],
+    this.onProductTap,
+  });
+
   final List<Product> products;
-  const ProductGrid({super.key, required this.products});
+
+  /// Promotions of the tenant. The grid renders only the active ones that
+  /// target a visible product; the label copy is unchanged (2x1 / -10% /
+  /// PROMO) so the badge keeps meaning the same thing on every surface.
+  final List<Promotion> promotions;
+
+  /// Catalog tap handler. The grid never adds to the cart by itself: a product
+  /// with variants or modifiers has to be configured first.
+  final ValueChanged<Product>? onProductTap;
 
   @override
   Widget build(BuildContext context) {
-    final isHandheld = ResponsiveBreakpoints.isHandheld(context);
-    final colorScheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final geometry = ProductGridGeometry(
+          viewportWidth: constraints.maxWidth,
+          devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+        );
 
-    final viewModel = context.watch<SaleViewModel>();
-
-    return GridView.builder(
-      padding: EdgeInsets.all(isHandheld ? 10 : 16),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: isHandheld ? 180 : 200,
-        childAspectRatio: isHandheld ? 0.82 : 0.84,
-        crossAxisSpacing: isHandheld ? 8 : 12,
-        mainAxisSpacing: isHandheld ? 8 : 12,
-      ),
-      itemCount: products.length,
-      itemBuilder: (context, index) {
-        final product = products[index];
-        final promo = viewModel.promotions
-            .where((p) => p.isActive && p.targetProductId == product.id)
-            .firstOrNull;
-
-        return InkWell(
-          onTap: () => _showProductOptions(context, product),
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: NhilosRadii.cardRadius,
-              side: BorderSide(
-                color: promo != null
-                    ? Colors.deepOrange
-                    : colorScheme.outlineVariant,
-                width: promo != null ? 1.5 : 1,
-              ),
-            ),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ProductCardThumbnail(
-                        imageUrl: product.imageUrl,
-                        category: product.category,
-                        productName: product.name,
-                        size: isHandheld ? 36 : 46,
-                        color: promo != null ? Colors.deepOrange : colorScheme.primary,
-                      ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                        child: Text(
-                          product.name,
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: isHandheld ? 12 : 13,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'C\$ ${product.sellPrice.toStringAsFixed(2)}',
-                        textAlign: TextAlign.center,
-                        style: NhilosTextStyles.tabular(
-                          base: TextStyle(
-                            color: promo != null ? Colors.deepOrange : colorScheme.primary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: isHandheld ? 13 : 15,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (promo != null)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(
-                        color: Colors.deepOrange,
-                        borderRadius: NhilosRadii.badgeRadius,
-                      ),
-                      child: Text(
-                        promo.type == PromotionType.buyXGetYFree
-                            ? '2x1'
-                            : (promo.type == PromotionType.percentageDiscount
-                                ? '-${promo.discountValue.toStringAsFixed(0)}%'
-                                : 'PROMO'),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+        return GridView.builder(
+          padding: EdgeInsets.all(geometry.horizontalPadding),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: geometry.columns,
+            childAspectRatio: geometry.childAspectRatio,
+            crossAxisSpacing: geometry.crossAxisSpacing,
+            mainAxisSpacing: geometry.mainAxisSpacing,
           ),
+          itemCount: products.length,
+          itemBuilder: (context, index) {
+            final product = products[index];
+            final promo = promotions
+                .where((p) => p.isActive && p.targetProductId == product.id)
+                .firstOrNull;
+
+            return ProductCard(
+              product: product,
+              promoLabel: promo == null ? null : _promoLabel(promo),
+              onTap: () => onProductTap?.call(product),
+            );
+          },
         );
       },
     );
   }
 
-  void _showProductOptions(BuildContext context, Product product) {
-    if (product.variants.isEmpty &&
-        product.availableModifiers.isEmpty &&
-        product.availableModifierGroups.isEmpty) {
-      context.read<SaleViewModel>().addToCart(product);
-      return;
+  static String _promoLabel(Promotion promo) {
+    if (promo.type == PromotionType.buyXGetYFree) return '2x1';
+    if (promo.type == PromotionType.percentageDiscount) {
+      return '-${promo.discountValue.toStringAsFixed(0)}%';
     }
-
-    showDialog(
-      context: context,
-      builder: (context) => ProductOptionsDialog(product: product),
-    );
+    return 'PROMO';
   }
 }
 
@@ -1707,7 +1761,11 @@ class MobileFloatingCartBar extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${viewModel.cart.length} productos agregados',
+                  // §39: the badge and this line count the same thing (units),
+                  // and the copy agrees with the number it shows.
+                  totalItems == 1
+                      ? '1 producto agregado'
+                      : '$totalItems productos agregados',
                   style: TextStyle(
                     fontSize: 11,
                     color: colorScheme.onPrimaryContainer.withAlpha(200),
@@ -1781,11 +1839,28 @@ class CartSidebar extends StatelessWidget {
               if (viewModel.cart.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24.0),
-                  child: Center(
-                    child: Text(
-                      'Carrito vacío',
-                      style: TextStyle(color: colorScheme.outline),
-                    ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 40,
+                        color: colorScheme.outline,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Carrito vacío',
+                        style: TextStyle(color: colorScheme.outline),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tocá un producto del catálogo para agregarlo.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.outline,
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
@@ -1840,7 +1915,16 @@ class CartSidebar extends StatelessWidget {
                         ),
                       ],
                     ),
-                    trailing: Text('C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    trailing: Text(
+                      'C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        // §34.1: line totals keep tabular figures, exactly like
+                        // the totals below them.
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ).copyWith(color: colorScheme.onSurface),
+                    ),
                     onLongPress: () => viewModel.removeFromCart(
                       item.productId,
                       variantId: item.variantId,

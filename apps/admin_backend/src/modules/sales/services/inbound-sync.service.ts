@@ -554,6 +554,7 @@ export class InboundSyncService {
       }
     }
     const categoryIdByCode = new Map<string, string>();
+    const categoryNameByCode = new Map<string, string>();
     if (categoryCodes.size > 0) {
       const categoryRows = await entityManager
         .getRepository(CatalogValue)
@@ -595,6 +596,7 @@ export class InboundSyncService {
         });
         if (chosen) {
           categoryIdByCode.set(code, chosen.id);
+          categoryNameByCode.set(code, chosen.name);
         }
       }
     }
@@ -617,6 +619,13 @@ export class InboundSyncService {
         isPerishable: p.is_perishable,
         categoryId: p.category_code?.trim()
           ? (categoryIdByCode.get(p.category_code.trim()) ?? null)
+          : null,
+        // The terminal needs the human label, not only the opaque catalog id:
+        // it renders the category in the sales catalog filter and uses it for
+        // the §12.6 glyph fallback. Omitting it left every synced product with
+        // an empty category, so both surfaces were dead on the device.
+        category: p.category_code?.trim()
+          ? (categoryNameByCode.get(p.category_code.trim()) ?? null)
           : null,
         warehouseId: p.warehouse_id ?? null,
         productType: p.product_type,

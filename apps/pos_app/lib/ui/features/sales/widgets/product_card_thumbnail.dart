@@ -130,13 +130,30 @@ class ProductVisualResolver {
   }
 }
 
+/// Renders the product identity: the stored 1:1 photo when there is one, or
+/// the two-level fallback of §12.6 (category glyph, then typographic
+/// monogram) when there is not.
+///
+/// [size] is the historical square shorthand. [width]/[height] size the box
+/// explicitly for the full-width catalog photo, and every fallback scales with
+/// the box, so the glyph is not lost inside a large tile.
 class ProductCardThumbnail extends StatelessWidget {
   final String? imageUrl;
   final String? category;
   final String productName;
   final double size;
+  final double? width;
+  final double? height;
+  final BorderRadius? borderRadius;
+  final bool showBorder;
   final Color? color;
   final Color? backgroundColor;
+
+  /// Share of the box the category glyph occupies.
+  static const double _iconRatio = 0.36;
+
+  /// Share of the box the typographic monogram occupies.
+  static const double _monogramRatio = 0.28;
 
   const ProductCardThumbnail({
     super.key,
@@ -144,6 +161,10 @@ class ProductCardThumbnail extends StatelessWidget {
     this.category,
     required this.productName,
     this.size = 40,
+    this.width,
+    this.height,
+    this.borderRadius,
+    this.showBorder = true,
     this.color,
     this.backgroundColor,
   });
@@ -160,37 +181,34 @@ class ProductCardThumbnail extends StatelessWidget {
     }
   }
 
-  Widget _buildFallback(ProductVisualResult visual, Color resolvedColor) {
-    if (visual.icon != null) {
-      return Icon(
-        visual.icon,
-        size: size,
-        color: resolvedColor,
-      );
-    }
-
-    final bg = backgroundColor ?? NhilosColors.brandTealLight;
-    final monogramSize = size * 0.42;
-
-    return Center(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(size * 0.25),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          visual.monogram ?? 'N',
-          style: TextStyle(
-            color: resolvedColor,
-            fontWeight: FontWeight.w700,
-            fontSize: monogramSize.clamp(10, 18),
-            letterSpacing: 0.5,
-          ),
-        ),
-      ),
+  /// Fills the whole box: a pastel surface carrying the category glyph or the
+  /// product monogram. Neither the glyph nor the monogram keeps a fixed size,
+  /// so the fallback stays intentional at any tile size (§12.6).
+  Widget _buildFallback(
+    ProductVisualResult visual,
+    Color resolvedColor,
+    double box,
+  ) {
+    return Container(
+      width: box,
+      height: box,
+      color: backgroundColor ?? NhilosColors.brandTealLight,
+      alignment: Alignment.center,
+      child: visual.icon != null
+          ? Icon(
+              visual.icon,
+              size: box * _iconRatio,
+              color: resolvedColor,
+            )
+          : Text(
+              visual.monogram ?? 'N',
+              style: TextStyle(
+                color: resolvedColor,
+                fontWeight: FontWeight.w700,
+                fontSize: (box * _monogramRatio).clamp(10.0, 96.0),
+                letterSpacing: 0.5,
+              ),
+            ),
     );
   }
 
@@ -202,69 +220,59 @@ class ProductCardThumbnail extends StatelessWidget {
     );
 
     final resolvedColor = color ?? NhilosColors.brandPrimary;
+    final boxWidth = width ?? size;
+    final boxHeight = height ?? size;
+    final box = boxWidth < boxHeight ? boxWidth : boxHeight;
+    final radius = borderRadius ?? BorderRadius.circular(size * 0.22);
 
-    if (imageUrl != null && imageUrl!.trim().isNotEmpty) {
-      final cleanUrl = imageUrl!.trim();
-      final borderRadius = BorderRadius.circular(size * 0.22);
+    Widget? photo;
+    final cleanUrl = imageUrl?.trim() ?? '';
 
-      // 1. Data URL (client-compressed WebP/JPEG, 100% offline-first)
-      if (cleanUrl.startsWith('data:image/')) {
-        final bytes = _tryDecodeBase64DataUrl(cleanUrl);
-        if (bytes != null && bytes.isNotEmpty) {
-          return Center(
-            child: Container(
-              width: size,
-              height: size,
-              decoration: BoxDecoration(
-                borderRadius: borderRadius,
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.6),
-                  width: 0.8,
-                ),
-              ),
-              child: ClipRRect(
-                borderRadius: borderRadius,
-                child: Image.memory(
-                  bytes,
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      _buildFallback(visual, resolvedColor),
-                ),
-              ),
-            ),
-          );
-        }
-      } else if (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://')) {
-        // 2. HTTP network URL
-        return Center(
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              borderRadius: borderRadius,
-              border: Border.all(
-                color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.6),
-                width: 0.8,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: borderRadius,
-              child: Image.network(
-                cleanUrl,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _buildFallback(visual, resolvedColor),
-              ),
-            ),
-          ),
+    // 1. Data URL (client-compressed WebP/JPEG, 100% offline-first)
+    if (cleanUrl.startsWith('data:image/')) {
+      final bytes = _tryDecodeBase64DataUrl(cleanUrl);
+      if (bytes != null && bytes.isNotEmpty) {
+        photo = Image.memory(
+          bytes,
+          width: boxWidth,
+          height: boxHeight,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) =>
+              _buildFallback(visual, resolvedColor, box),
         );
       }
+      // 2. HTTP network URL
+    } else if (cleanUrl.startsWith('http://') ||
+        cleanUrl.startsWith('https://')) {
+      photo = Image.network(
+        cleanUrl,
+        width: boxWidth,
+        height: boxHeight,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            _buildFallback(visual, resolvedColor, box),
+      );
     }
 
-    return _buildFallback(visual, resolvedColor);
+    return Container(
+      width: boxWidth,
+      height: boxHeight,
+      decoration: showBorder
+          ? BoxDecoration(
+              borderRadius: radius,
+              border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .outlineVariant
+                    .withValues(alpha: 0.6),
+                width: 0.8,
+              ),
+            )
+          : null,
+      child: ClipRRect(
+        borderRadius: radius,
+        child: photo ?? _buildFallback(visual, resolvedColor, box),
+      ),
+    );
   }
 }

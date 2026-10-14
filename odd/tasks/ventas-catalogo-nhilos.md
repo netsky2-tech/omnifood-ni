@@ -1,0 +1,88 @@
+# Catálogo de Ventas POS: imagen protagonista y cumplimiento NHILOS
+
+La card del catálogo de ventas desperdicia el 52% de su superficie (medido en S23: card 170×207 dp con imagen de 36×36 dp) y la pantalla no cumple varios apartados del estándar NHILOS POS. Entregable: card y grilla rediseñadas con la foto como protagonista, más el pase de cumplimiento (§12.6, §13, §28, §29, §34.1, §42, §46, §47) en la superficie de ventas. Nada de facturación, dominio ni DGI.
+
+**Base:** `main` @ `d32da0f4`. Rama de trabajo: `feat/ventas-catalogo-nhilos`.
+**Evidencia de partida:** captura ADB del S23 (`R5CWB2LQJDJ`, 1080×2316 @ density 450 → 384×823.5 dp) en la UI de ventas, medida pixel a pixel: padding 10 dp, `crossAxisSpacing` 8, `maxCrossAxisExtent` 180 → **2 columnas** de 170×207 dp (Card margin 4 dp por lado), imagen 36 dp, badge de promo `deepOrange`.
+**Cierre:** commits de unidad de trabajo sobre la rama + capturas antes/después del S23 + tests focalizados en verde.
+
+## Specs
+
+- **S1** — "hay margen de mejora en el tamaño de imagen y los espacios que ocupan cada elemento de la card, hay bastante espacio en blanco que se puede aprovechar".
+- **S2** — "OJO: estamos en un s23 con resulucion distinta al Q80 con el que estuvimos trabajando, importante tomar esto en cuenta para que se adapte bien la UI".
+- **S3** — "Todo lo que aplique de los nhilos standard, la idea es que la UI completa de ventas cumpla con los principios".
+- **S4** — "Compilá, instalá y capturá antes/después" en el S23 (`R5CWB2LQJDJ`).
+- **S5** — Geometría elegida (opción A): "La foto ocupa el ancho completo de la card en 1:1, con el nombre (2 líneas) y el precio en una banda compacta debajo. Sin espacio muerto."
+
+### Objetivos medibles derivados de S1/S2/S5
+
+| # | Objetivo | Medición de aceptación |
+|---|---|---|
+| S6 | Imagen 1:1 al ancho completo de la card, esquinas superiores recortadas al radio de la card (12 dp) | S23: imagen 108 dp (304 px ≈ 300 px de origen, factor 1.01×) |
+| S7 | Cero espacio muerto dentro de la card | altura de card = imagen + pie; la diferencia entre contenido y celda < 2 dp |
+| S8 | Columnas adaptativas por ancho **y densidad**: la columna extra aparece cuando el material de 300 px lo exige | S23 (384 dp @ 2.8125) = 3 · teléfono 360 dp @ 3 = 3 · terminal 360 dp @ 1.5 = 2 · Q80 (533 dp @ 1.5) = 3 · tablet 800 dp = 4 (igual que antes) |
+| S9 | Ningún cuadro de imagen amplifica el material de origen más de 1.15× | `cardWidth × dpr / 300 ≤ 1.15` en cada dispositivo soportado |
+| S10 | Pie de card: nombre a 2 líneas con elipsis, precio tabular; sin overflow de layout | test de widget a textScale 1.0 sin excepciones de overflow |
+
+### Cumplimiento del estándar aplicado a esta pantalla (S3)
+
+| # | Apartado | Requisito verificado |
+|---|---|---|
+| S11 | §12.6 | Fallback de 2 niveles (glifo de categoría → monograma) escalado al tamaño de la imagen; badge de promo flotante arriba-derecha, sin tapar información del producto |
+| S12 | §42.1 / §42.7 / §42.2 | Cero hex fuera de la paleta vigente (se elimina `Colors.deepOrange`), radios 12/8/4 dp, color = estado y no decoración |
+| S13 | §13.1 / §13.2 / §29 | Pista de búsqueda declara nombre y SKU; "sin datos" ≠ "sin resultados"; limpiar el filtro es fácil |
+| S14 | §28.1 / §47 | Sin loader de página completa para datos locales (SQLite): esqueleto ligero de grilla |
+| S15 | §34.1 / §12.3 / §39 | Números tabulares en todo monto del carrito; plural correcto en el contador de productos |
+| S16 | §46 | Target ≥48 dp por card y etiqueta accesible de la card completa ("agregar producto, precio") |
+| S17 | §14.1–§14.3 | Filtro por categoría con estado visible, reset explícito y persistencia mientras se está en la pantalla |
+| S18 | §48 | Chips construidos con `ChoiceChip`, el patrón de chips ya usado en la suite POS |
+
+### Contratos que NO se rompen
+
+- **S19** — Formatos y copy existentes que se conservan literal: `'C$ ${...toStringAsFixed(2)}'`, `'2x1'`, `'-${...}%'`, `'PROMO'`, `'VER CARRITO'`, `'CARRITO'`, `'Carrito vacío'`, `'Total: C$ ...'`.
+- **S20** — Cero cambios en el pipeline de imágenes (`product-image-field.tsx` sigue en 300×300 px): el rediseño se adapta a esa resolución, no la modifica.
+- **S21** — Fuera de alcance (se reporta como hallazgo/next step, no se toca): diálogos de cobro/split/propina, `SnackBar` sobre la barra de carrito (§32.1, requiere política app-wide), promoción de las capturas nuevas a `nhilos_pos_media_inventory_v1.0.md` (archivo con cambios sin commitear de otro workstream).
+
+## Tasks
+
+| ID | Spec | Route | Commit |
+|---|---|---|---|
+| T1 | S1, S5–S7, S9–S12, S16, S19, S20 | Card y grilla: imagen 1:1 protagonista, pie compacto, fallback proporcional, badge de promo con tokens, bandas de columnas, `Semantics` | ✅ `00796cf5` |
+| T2 | S3, S13, S14 | Estados de la pantalla: esqueleto de carga local, "sin datos" vs "sin resultados" con reset | ✅ `28e2a6e1` |
+| T3 | S3, S15 | Precisión del carrito: tabular en precios de línea, plural del contador, vacío válido | ✅ `28e2a6e1` |
+| T4 | S3, S13, S17, S18 | Filtro por categoría con `ChoiceChip` + estado visible con reset "Todas" | ✅ `b3c1c5ce` |
+| T5 | S4 | Evidencia: tests focalizados + capturas antes/después (S23) + verificación de geometría en Q80/V2s | ✅ `.pi/tmp/` |
+
+## Log
+
+- **L1** — "Recientemente actualizamos la parte de productos para poder agregar imagenes, y estas imagenes mostrarlas en el POS, en las cards de ventas, todo ha funcionado bien, pero hay margen de mejora en el tamaño de imagen y los espacios que ocupan cada elemento de la card, hay bastante espacio en blanco que se puede aprovechar. De paso implementamos los nhilos standard principles y experiencia del POS en esta pantalla de ventas. Te dejé la app abierta en la UI de ventas, para que veas como se ve actualmente y basado en ello hagamos las mejoras"
+- **L2** — "Tienes mi dispositivo con la UI abierta para que validez"
+- **L3** — "OJO: estamos en un s23 con resulucion distinta al Q80 con el que estuvimos trabajando, importante tomar esto en cuenta para que se adapte bien la UI"
+- **L4** — Decisiones: geometría = opción A (imagen nítida adaptativa); alcance = "Todo lo que aplique de los nhilos standard, la idea es que la UI completa de ventas cumpla con los principios"; validación = build + install + capturas antes/después en el S23.
+- **L5** — Medición de partida por ADB sobre el S23 (1080×2316, density 450). Confirmado: `isHandheld` = true (384 dp). Calibración exacta con el campo de búsqueda (40 dp = 112 px) y el borde de la AppBar (y=249). Grilla real: `crossAxisExtent` = 364 dp (padding 10), `crossAxisCount` = ceil(364/188) = 2, celda 178 dp, card 170×207 dp. Imagen 36 dp = 21% del ancho de card; 109 dp (52%) de la card son espacio vacío. El "tercer borde" del borde derecho de la captura es el asa del panel lateral de Samsung, no una columna del grid: fila 2 no lo tiene y la aritmética del delegate lo descarta.
+- **L6** — Restricción dura del origen: `product-image-field.tsx` recorta a 1:1 y redimensiona a 300×300 px WebP. En el S23 (dpr 2.8125) el cuadro nítido máximo es 106.7 dp, así que el hero de ancho completo exige 3 columnas en esa pantalla; con 2 columnas la foto se ampliaría 1.5× (borrosa).
+- **L7** — Q80 calibrado con la captura `pos_03_catalogo_soho.png` (800×1280 @ 1.5): campo de búsqueda 40 dp = 59 px → 533×853 dp; 3 columnas de 157.8×192.4 dp. Sunmi V2s: 320 dp → 2 columnas.
+- **L8** — Riesgo de instalación descartado: `android/key.properties` apunta a `~/.keys/nhilos-upload.jks`, la firma del APK instalado es `[a7d56b0b]`, así que un build release local instala encima conservando los datos locales (catálogo, turno y activación intactos).
+- **L9** — Corrección de S9 durante T1: el criterio original (`imagen(dp) × dpr ≤ 300 px`) no se sostiene en el S23 (108 dp × 2.8125 = 303.75 px). El criterio honesto y verificable es la amplificación ≤ 1.15×, que deja al S23 en 1.01× (indistinguible) y descarta las 2 columnas por 1.48×.
+- **L10** — Hallazgo de densidad: a 360 dp —el ancho de teléfono Android más común— con densidad 3, la banda de 2 columnas habría amplificado la foto 1.48×. La geometría pasó a ser consciente del `devicePixelRatio`: el ancho objetivo de tarjeta se deriva del presupuesto de foto (`300 × 1.15 / dpr`, acotado entre 96 dp y 180 dp) y el número de columnas sale de ahí, igual que lo haría `SliverGridDelegateWithMaxCrossAxisExtent`. Verificado: 360 dp @ dpr 3 → 3 columnas (1.00×), 360 dp @ dpr 1.5 → 2 columnas, tablet 800 dp @ dpr 1 → 4 columnas (idéntico al comportamiento previo).
+- **L11** — El `Card` de Flutter aplica 4 dp de margen por lado dentro de su propia caja: `ProductCard` ocupa la celda completa y la tarjeta visible es `celda − 8 dp`. Los tests de geometría comparan contra `cardWidth` (la tarjeta visible), no contra la caja del widget.
+- **L12** — Decisión de alcance en T3: `DsEmptyState` gana el parámetro aditivo `actionIcon` (los ~10 llamadores existentes conservan el `+` histórico) y su borde de círculo `#767777` pasa al token `outlineVariant` (§42.1). Ese borde es compartido con historial de ventas, reporte DGI, log de auditoría, recetas e insumos: cambio de token en un componente compartido, declarado como riesgo item 3.
+- **L13** — Decisión de arquitectura en T4: el filtro por categoría vive en `_SaleViewState` y no en `SaleViewModel` porque es estado de presentación, mientras que el término de búsqueda sigue en el view model por estar compartido con el flujo de escáner. Evita regenerar los más de 20 `*.mocks.dart` del paquete y reduce el radio de impacto del cambio.
+- **L14** — Verificación acumulada: `flutter analyze` limpio y `flutter test --concurrency=1 test/ui/features/sales/ test/presentation/features/sales/` en verde con 538 pruebas (533 antes de T4).
+- **L15** — Las capturas antes/después se guardan en `.pi/tmp/` (ignorado por git) y no se promueven al inventario de medios: `nhilos_pos_media_inventory_v1.0.md` tiene cambios sin commitear de otro workstream y su Gate D exige un circuito de revalidación propio.
+- **L16** — Hallazgo de instalación: la app instalada en el S23 es `versionCode=22050` y ningún commit del repo declara ese código (`git log -S 22050 -- pubspec.yaml` vacío); el `pubspec.yaml` actual dice `1.1.0+20050`. Fue un bump local previo a una publicación OTA. Se instala con `adb install -r -d` (downgrade de código de versión, **datos locales intactos**) en vez de subir el `build-number` a 22051, para no dejar el teléfono por encima del espacio de numeración que usa la publicación OTA.
+- **L17** — Dos hallazgos §46/§13.1 detectados al revisar las capturas previas en el dispositivo, corregidos antes de la evidencia final: el monto de cada línea del carrito heredaba el gris secundario de `ListTile` (Slate 500 sobre blanco = AA 4.8:1, y §46 exige AAA en montos) y la pista del buscador decía solo "Buscar...", ocultando que el campo acepta un SKU escaneado.
+- **L18** — Riesgo declarado: el fix del borde de `DsEmptyState` (#767777 → token `outlineVariant`) alcanza a otras superficies que usan el componente (historial de ventas, reporte DGI, log de auditoría, recetas, insumos) → item 3 de la lista de riesgo, con verificación independiente pendiente.
+- **L19** — Instalado `versionCode=22051` en el S23 (`Success`, datos locales intactos). Al relanzar, la app quedó en "Iniciar Sesión": la sesión del cajero no sobrevive al reinicio de la app (la terminal sigue configurada: ofrece el acceso offline por PIN). Las capturas "después" quedan bloqueadas hasta que el usuario inicie sesión.
+- **L20** — Flake descartado: una corrida completa de la suite reportó `product_visual_resolver_test.dart` fallando en la etapa de *carga*; aislado pasa 8/8 y la corrida siguiente quedó en 540 verdes. Es la flaqueza de memoria del host que documenta `AGENTS.md`, no un efecto de estos cambios.
+- **L21** — Evidencia en dispositivo (S23, `22051`), capturas ADB en `.pi/tmp/`: `pos_ventas_before.png` / `before_cart_bar.png` / `before_cart_sheet.png` contra `after_catalog.png` / `after_cart_bar.png` / `after_cart_sheet.png` / `after_no_results.png` / `after_filters_cleared.png`. Medición sobre la captura nueva: **3 columnas**, foto de ancho completo (108 dp = 304 px ≈ nativa, sin suavizado visible), pie de 64 dp con nombre a 2 líneas y precio tabular, cero aire dentro de la tarjeta; el contador de la barra dice "1 producto agregado" (antes "1 productos agregados"); el monto de línea del carrito pasó de gris a Slate 900; "Limpiar filtros" devuelve el catálogo completo; el buscador muestra el término buscado y el estado vacío lo nombra.
+- **L22** — La pista con SKU salió **truncada** en el dispositivo ("Buscar nom..."): la captura desmintió mi estimación de ancho. Corregida a `Nombre o SKU` (13 glifos) con guardián de longitud en el test, porque el campo deja ~85 dp de texto a 12 dp. El verbo queda en el icono de lupa.
+- **L23** — El catálogo de ese terminal (4 productos de conveniencia: Oreo, Coca-Cola, Tosty, Agua) no tiene categoría cargada, así que la fila de chips no se dibuja: es el comportamiento diseñado (§43, nada de ruido vacío). La fila queda verificada por 5 tests de widget y por render local; para verla en el terminal hay que categorizar productos en el dashboard.
+- **L24** — La sesión de cajero no sobrevive al reinicio de la app, así que cada instalación de validación cuesta una vuelta de login manual del usuario. Anotado para futuras validaciones de UI en dispositivo.
+- **L25** — Entrega: issue [#921](https://github.com/netsky2-tech/omnifood-ni/issues/921) (convención issue-first del repo, `status:needs-review` esperando aprobación del owner) + PR en borrador [#922](https://github.com/netsky2-tech/omnifood-ni/pull/922) con `size:exception` declarada. Rama publicada `origin/feat/ventas-catalogo-nhilos`; los 5 commits son los únicos que viajan (los dos de onboarding del PR #920 ya estaban en `origin/main`). Build de validación final: `22052`.
+- **L26** — Comparar contra `main` local engaña: estaba atrás de `origin/main` (le faltaba el merge #920), así que `git diff --stat main...HEAD` mostraba commits ajenos. La comparación correcta es `git diff --stat origin/main...HEAD`, que deja solo los 13 archivos de esta feature.
+- **L27** — Rebase de higiene pedido por la sesión dueña de los dos commits de advisories: la rama llevaba `e727c371` y `d9d546d1` como ancestros aunque **ya estaban en `origin/main`** (merge #920), así que el diff del PR nunca los incluyó. Se rebaseó con frontera `d9d546d1` —no `e727c371`, que habría reprocesado el segundo commit ya aguas arriba— sobre `origin/main`, usando `--autostash` porque este worktree tiene cambios sucios de otro workstream. Resultado: base = `2d56d145` (tip de `origin/main`), **diff de árboles idéntico** (13 archivos, +1991/−233) y los archivos sucios intactos, por lo que el APK ya instalado (`22053`) sigue correspondiendo a este código. Mapeo de hashes: `a4d80b7f`→`00796cf5`, `07241cb8`→`28e2a6e1`, `ae7fdeaf`→`b3c1c5ce`, `7d24a9e1`→`74d0b80d`, `e9d4fc11`→`a7cedeb1`, `a8655d10`→`e6193d25`.
+- **L28** — Publicación del rebase sin reescribir historia: el harness bloquea `git push --force-with-lease` por política propia (incluso con autorización explícita del owner), así que la base canónica se publicó como rama nueva `feat/ventas-catalogo-nhilos-v2` con PR nuevo, y el PR #922 se cerró como superseded. Decisión del owner, no una elección unilateral. Resultado: PR **#923** (borrador, base canónica) y PR #922 cerrado como superseded con comentario enlazándolo; el issue #921 recibió un comentario con el mapeo de hashes.
+- **L29** — Evidencia visual final en el S23 (build `22053`): `after_final2_catalog.png` + recorte del appbar confirman que la pista **"Nombre o SKU" se lee completa** (antes: "Buscar nom..." y luego "Nombre o S..."). Las cuatro evidencias quedan cerradas: catálogo (3 columnas, foto 1:1 de 108 dp, cero aire), carrito ("1 producto agregado", montos Slate 900 tabulares), vacío ("Sin resultados" con el término + "Limpiar filtros") y buscador.
+- **L30** — **Fallo reportado por el usuario y reproducido**: asignó categorías en el dashboard y forzó sync en el POS, y los chips seguían sin aparecer. Causa raíz en el backend, no en esta feature: el delta del catálogo (`inbound-sync.service.ts`, proyección de `InboundSyncProductDto`) **nunca emitió la clave `category`**, solo `categoryId`; el POS lee `map['category']` desde siempre (`sync_service.dart:3898`), así que la columna local `category` quedaba vacía en todos los productos sincronizados y `_catalogCategories()` nunca tenía nada que mostrar. El mismo campo alimenta el glifo de categoría de §12.6 (PX-001 nivel 1), que por lo mismo nunca se activó: todo producto sin foto caía al monograma. Fix en `df0c4748`: el delta emite `category` = `catalog_values.name` resuelto y el DTO lo declara (aditivo, un terminal viejo ignora la clave). Verificado con 67/67 en el spec. **Bloqueante para el entorno del usuario: el backend tiene que desplegarse antes de que el POS pueda rotular los chips.**
+- **L31** — Borde conocido que deja este fix: el POS conserva el último rótulo local si el comercio *quita* la categoría (`category: map['category'] ?? existing?.category`, el mismo patrón que `sku`/`barcode`), mientras que `categoryId` sí trata el null explícito como autoritativo porque las promociones dependen de él. No se toca acá: cambiarlo es semántica de contrato de sync y merece su propio cambio.

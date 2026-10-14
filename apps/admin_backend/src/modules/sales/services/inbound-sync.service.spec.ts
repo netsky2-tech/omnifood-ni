@@ -363,6 +363,7 @@ describe('InboundSyncService', () => {
       isActive: true,
       isPerishable: true,
       categoryId: null,
+      category: null,
       warehouseId: 'wh-1',
       productType: ProductType.SIMPLE,
       mappingVersionId: null,
@@ -1990,7 +1991,7 @@ describe('InboundSyncService', () => {
       );
     }
 
-    it('emits the resolved catalog_values.id for a resolvable category_code', async () => {
+    it('emits the resolved catalog_values.id and its display name for a resolvable category_code', async () => {
       productQb.getMany.mockResolvedValue([
         buildProductRow({ id: 'prod-a', category_code: 'BEBIDAS' }),
       ]);
@@ -2013,6 +2014,7 @@ describe('InboundSyncService', () => {
 
       expect(response.deltas.products).toHaveLength(1);
       expect(response.deltas.products[0].categoryId).toBe('cat-uuid-bebidas');
+      expect(response.deltas.products[0].category).toBe('Bebidas');
       const categoryQb = categoryRepo.createQueryBuilder.mock.results[0].value;
       expect(categoryQb.where).toHaveBeenCalledWith(
         'catalog.tenant_id = :tenantId',
@@ -2046,6 +2048,7 @@ describe('InboundSyncService', () => {
       );
 
       expect(response.deltas.products[0].categoryId).toBeNull();
+      expect(response.deltas.products[0].category).toBeNull();
     });
 
     it('emits null for null or empty category_code and skips the catalog read entirely', async () => {

@@ -85,6 +85,14 @@ export interface InboundSyncProductDto {
    * the POS matches promotions by this identity, never by free-text names.
    */
   categoryId: string | null;
+  /**
+   * Display name of the resolved category (`catalog_values.name`), shipped so
+   * the terminal can label the category without resolving the opaque id: the
+   * POS renders it in its catalog filter and uses it for the glyph fallback of
+   * the terminal experience standard §12.6. Null under the same conditions as
+   * `categoryId`.
+   */
+  category: string | null;
   warehouseId?: string | null;
   productType?: string;
   mappingVersionId?: string | null;
