@@ -20,6 +20,7 @@ import '../../features/identity/supervisor_override_modal.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
+import 'widgets/product_grid_skeleton.dart';
 import 'widgets/product_card.dart';
 import 'widgets/product_card_thumbnail.dart';
 import 'widgets/product_grid_geometry.dart';
@@ -360,30 +361,7 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
     final hasActiveSession = viewModel.activeSession != null;
     final isHandheld = ResponsiveBreakpoints.isHandheld(context);
 
-    final productContent = viewModel.isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : viewModel.filteredProducts.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.search_off, size: 64, color: colorScheme.outline),
-                    const SizedBox(height: 16),
-                    Text(
-                      'No se encontraron productos',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyLarge
-                          ?.copyWith(color: colorScheme.outline),
-                    ),
-                  ],
-                ),
-              )
-            : ProductGrid(
-                products: viewModel.filteredProducts,
-                promotions: viewModel.promotions,
-                onProductTap: _openProduct,
-              );
+    final productContent = _catalogContent(viewModel);
 
     return Scaffold(
       appBar: AppBar(
@@ -631,6 +609,48 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
             ],
           )
           : const BoxOpeningContent(),
+    );
+  }
+
+  /// Catalog body of the sales surface.
+  ///
+  /// The catalog is read from local SQLite, so the loading state is a light
+  /// skeleton instead of a full-page loader (§28.1, §47). An empty catalog is
+  /// told apart from an empty search because they need different copy and
+  /// different recovery: resync versus clear the filter (§13.2, §29).
+  Widget _catalogContent(SaleViewModel viewModel) {
+    if (viewModel.isLoading) return const ProductGridSkeleton();
+
+    if (viewModel.filteredProducts.isNotEmpty) {
+      return ProductGrid(
+        products: viewModel.filteredProducts,
+        promotions: viewModel.promotions,
+        onProductTap: _openProduct,
+      );
+    }
+
+    if (viewModel.products.isEmpty) {
+      return DsEmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: 'Todavía no hay productos',
+        description:
+            'Cuando el catálogo se sincronice, los productos van a aparecer acá.',
+        actionLabel: 'Recargar catálogo',
+        actionIcon: Icons.refresh,
+        onAction: () => _viewModel.loadProducts(),
+      );
+    }
+
+    final query = viewModel.searchQuery;
+    return DsEmptyState(
+      icon: Icons.search_off,
+      title: 'Sin resultados',
+      description: query.isEmpty
+          ? 'No hay productos que coincidan con el filtro elegido.'
+          : 'No hay productos que coincidan con «$query». Probá con otro nombre o SKU.',
+      actionLabel: 'Limpiar búsqueda',
+      actionIcon: Icons.close,
+      onAction: () => _viewModel.setSearchQuery(''),
     );
   }
 
@@ -1663,7 +1683,11 @@ class MobileFloatingCartBar extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${viewModel.cart.length} productos agregados',
+                  // §39: the badge and this line count the same thing (units),
+                  // and the copy agrees with the number it shows.
+                  totalItems == 1
+                      ? '1 producto agregado'
+                      : '$totalItems productos agregados',
                   style: TextStyle(
                     fontSize: 11,
                     color: colorScheme.onPrimaryContainer.withAlpha(200),
@@ -1737,11 +1761,28 @@ class CartSidebar extends StatelessWidget {
               if (viewModel.cart.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24.0),
-                  child: Center(
-                    child: Text(
-                      'Carrito vacío',
-                      style: TextStyle(color: colorScheme.outline),
-                    ),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 40,
+                        color: colorScheme.outline,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Carrito vacío',
+                        style: TextStyle(color: colorScheme.outline),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Tocá un producto del catálogo para agregarlo.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colorScheme.outline,
+                        ),
+                      ),
+                    ],
                   ),
                 )
               else
@@ -1796,7 +1837,16 @@ class CartSidebar extends StatelessWidget {
                         ),
                       ],
                     ),
-                    trailing: Text('C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    trailing: Text(
+                      'C\$ ${(item.subtotal + item.modifiersTotal).toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        // §34.1: line totals keep tabular figures, exactly like
+                        // the totals below them.
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
                     onLongPress: () => viewModel.removeFromCart(
                       item.productId,
                       variantId: item.variantId,
