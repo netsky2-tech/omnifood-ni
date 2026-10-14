@@ -9,6 +9,7 @@ class DsEmptyState extends StatelessWidget {
     required this.title,
     this.description,
     this.actionLabel,
+    this.actionIcon = Icons.add,
     this.onAction,
   });
 
@@ -16,6 +17,11 @@ class DsEmptyState extends StatelessWidget {
   final String title;
   final String? description;
   final String? actionLabel;
+
+  /// Icon of the recovery action. Defaults to the historical `+`, and every
+  /// caller can name the action it actually offers (§43: the icon has to
+  /// describe the action, not decorate it).
+  final IconData actionIcon;
   final VoidCallback? onAction;
 
   @override
@@ -35,7 +41,7 @@ class DsEmptyState extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: colorScheme.surfaceContainerHigh,
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF767777), width: 1),
+                  border: Border.all(color: colorScheme.outlineVariant, width: 1),
                 ),
                 child: Icon(icon, size: 40, color: colorScheme.outline),
               ),
@@ -61,7 +67,7 @@ class DsEmptyState extends StatelessWidget {
                 const SizedBox(height: 20),
                 DsSecondaryButton(
                   label: actionLabel!,
-                  icon: Icons.add,
+                  icon: actionIcon,
                   onPressed: onAction,
                   expand: true,
                 ),
