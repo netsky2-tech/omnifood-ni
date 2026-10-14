@@ -522,7 +522,7 @@ class Receipt58mmFormatter {
         .fontSize(EscPosFontSize.doubleWidth)
         .textLine('ETIQUETA PRODUCCION')
         .fontSize(EscPosFontSize.normal)
-        .textLine('CONTROL FIFO / BOH')
+        .textLine('CONTROL FIFO / INOCUIDAD')
         .textLine(divider('='))
         .fontSize(EscPosFontSize.doubleSize)
         .textLine(productName)
