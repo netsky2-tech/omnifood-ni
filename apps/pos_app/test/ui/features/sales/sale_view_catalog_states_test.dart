@@ -126,6 +126,19 @@ void main() {
       );
     });
 
+    testWidgets('el buscador declara que acepta nombre y SKU (§13.1)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2316);
+      tester.view.devicePixelRatio = 2.8125;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Buscar nombre o SKU'), findsOneWidget);
+    });
+
     testWidgets('catálogo vacío no es "sin resultados": lo dice y ofrece '
         'recargar (§13.2, §29)', (tester) async {
       await tester.pumpWidget(buildTestApp());

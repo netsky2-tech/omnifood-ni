@@ -136,6 +136,18 @@ void main() {
   });
 
   group('ProductCard — accesibilidad y estado (S11, S12, S16)', () {
+    testWidgets('con el texto ampliado la tarjeta no desborda el layout', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await _pumpCard(tester, product: _withPhoto, cardWidth: 108);
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Galletas Oreo 6pk'), findsOneWidget);
+    });
+
     testWidgets('la tarjeta es un botón con nombre y precio accesibles', (
       tester,
     ) async {

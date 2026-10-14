@@ -6,6 +6,7 @@ import 'package:mockito/mockito.dart';
 import 'package:pos_app/domain/models/config/tenant_config.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart';
+import 'package:pos_app/ui/design_system/nhilos_tokens.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
 import 'package:provider/provider.dart';
@@ -59,7 +60,18 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<SaleViewModel>.value(
         value: mockViewModel,
-        child: MaterialApp(home: Scaffold(body: child)),
+        child: MaterialApp(
+          // Same onSurface contract the app installs in main.dart, so the
+          // amount colours asserted below are the product tokens.
+          theme: ThemeData(
+            useMaterial3: true,
+            colorScheme: const ColorScheme.light(
+              primary: NhilosColors.brandPrimary,
+              onSurface: NhilosColors.textPrimary,
+            ),
+          ),
+          home: Scaffold(body: child),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -115,6 +127,10 @@ void main() {
         contains(const FontFeature.tabularFigures()),
         reason: 'los montos del carrito no bailan al cambiar cantidades',
       );
+      // §46: amounts are critical operation text, so they need the AAA-level
+      // primary colour, not ListTile's default secondary grey (Slate 500 on
+      // white is AA only).
+      expect(lineTotal.style?.color, NhilosColors.textPrimary);
     });
 
     testWidgets('el carrito vacío orienta al siguiente paso', (tester) async {

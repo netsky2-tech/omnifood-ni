@@ -976,7 +976,11 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
           _controller.clear();
         },
         decoration: InputDecoration(
-          hintText: isHandheld ? 'Buscar...' : 'Buscar por SKU o Nombre...',
+          hintText: isHandheld
+              // §13.1: the hint names what the operator can search by. On the
+              // terminal this field also accepts a scanned or typed SKU.
+              ? 'Buscar nombre o SKU'
+              : 'Buscar por nombre o SKU...',
           hintStyle: TextStyle(fontSize: isHandheld ? 12 : 14),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
@@ -1907,7 +1911,7 @@ class CartSidebar extends StatelessWidget {
                         // §34.1: line totals keep tabular figures, exactly like
                         // the totals below them.
                         fontFeatures: [FontFeature.tabularFigures()],
-                      ),
+                      ).copyWith(color: colorScheme.onSurface),
                     ),
                     onLongPress: () => viewModel.removeFromCart(
                       item.productId,
