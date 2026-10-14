@@ -98,3 +98,8 @@ exceptions (e.g. operational stock min/max) deferred to a future issue.
   acceptance criteria met: no BOH-local catalog edits, dashboard-only catalog
   persistence (upstream gate + terminal origin skip), RED overwrite reproduction,
   NHilos POS copy standard. Exceptions deferred to #909.
+- L8 (owner decisions, advisory close-out): (1) evaluator FX gate = fail-closed
+  uniform (absent flag blocks like explicit false); (2) provision.ts seed outcome
+  = hard verification (0 seeded values fails the provision); (3) #909 CLOSED —
+  no terminal catalog-field exceptions for now, strict read-only permanent until
+  a new decision.

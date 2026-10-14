@@ -388,6 +388,70 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     );
   });
 
+  it('treats an absent commercialFxSpreadConfigured flag as unconfigured — fail-closed symmetry with the operation-mode gate (review R2-fx-gate-absence-asymmetry)', async () => {
+    // The adapter's fail-closed error path returns a fiscal result without
+    // the newer fields. Absence must block exactly like an explicit false:
+    // "I cannot prove it is configured" gates activation the same way
+    // "it is not configured" does.
+    identityPort.evaluateIdentityReadiness.mockResolvedValue({
+      tenantExists: true,
+      initialOwnerExists: true,
+      ownerCanAuthenticate: true,
+      tenantContextValid: true,
+    });
+    fiscalPort.evaluateFiscalReadiness.mockResolvedValue({
+      minimumConfigurationValid: true,
+      operationMode: 'RESTAURANT',
+      // commercialFxSpreadConfigured deliberately ABSENT.
+    });
+    catalogPort.evaluateCatalogReadiness.mockResolvedValue({
+      sellableProductCount: 2,
+      hasSellableProduct: true,
+    });
+    inventoryPort.evaluateInventoryReadiness.mockResolvedValue({
+      inventoryReady: true,
+      scope: 'BASIC',
+      warehouseCount: 1,
+      trackedProductCount: 2,
+      trackedInsumoCount: 0,
+      itemsWithStockCount: 2,
+      hasDefaultWarehouse: true,
+      notes: [],
+    });
+    costingPort.evaluateCostingReadiness.mockResolvedValue({
+      costingReady: true,
+      totalProducts: 2,
+      knownCostCount: 2,
+      pendingCostCount: 0,
+      notApplicableCount: 0,
+      items: [],
+    });
+    operationsPort.evaluateOperationsReadiness.mockResolvedValue({
+      operationsReady: true,
+      staffCount: 2,
+      additionalStaffCount: 1,
+      publishedRecipeCount: 1,
+      supplierCount: 1,
+      categoryCount: 2,
+      details: {
+        hasAdditionalStaff: true,
+        hasPublishedRecipes: true,
+        hasSuppliers: true,
+        hasCategories: true,
+      },
+      notes: [],
+    });
+
+    const snapshot = await evaluator.evaluate('tenant-absent-fx-flag');
+
+    expect(snapshot.saleReady).toBe(false);
+    expect(snapshot.blockers).toContain('FISCAL_FX_RATE_NOT_CONFIGURED');
+    expect(snapshot.blockers).not.toContain(
+      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
+    );
+    expect(snapshot.blockers).not.toContain('FISCAL_CONFIGURATION_INCOMPLETE');
+  });
+
   it('blocks saleReady with only FISCAL_OPERATION_MODE_NOT_CONFIGURED when the FX rate is configured but the operation mode is not', async () => {
     identityPort.evaluateIdentityReadiness.mockResolvedValue({
       tenantExists: true,

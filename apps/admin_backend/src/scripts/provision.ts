@@ -12,6 +12,24 @@ import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 
 /**
+ * Review R3-1 hardening (owner decision: hard verification): a provisioned
+ * tenant whose catalog seeding wrote ZERO values is not a successful
+ * provision — the terminal would be born without master catalogs (the exact
+ * #903 defect). seedDefaults is idempotent and a fresh provision must seed
+ * the full default set, so a zero result means the write silently did
+ * nothing. Throwing routes through the script's existing failed/exit-code
+ * handling instead of reporting a green provision.
+ */
+export function assertSeedOutcome(tenantId: string, seeded: number): void {
+  if (!Number.isFinite(seeded) || seeded <= 0) {
+    throw new Error(
+      `Catalog seeding wrote ${seeded} values for tenant ${tenantId} — refusing to report the provision as successful.`,
+    );
+  }
+}
+
+
+/**
  * MASS PROVISIONING SCRIPT
  *
  * This script allows for the manual creation of a new Tenant and its initial Owner.
@@ -86,6 +104,7 @@ async function provision() {
     // button in the insumo form.
     const catalogService = app.get(CatalogService);
     const seeded = await catalogService.seedDefaults(tenantId);
+    assertSeedOutcome(tenantId, seeded);
     console.log(`✅ Catálogos por defecto sembrados: ${seeded} valores`);
 
     console.log('--- Provisión completada exitosamente ---');

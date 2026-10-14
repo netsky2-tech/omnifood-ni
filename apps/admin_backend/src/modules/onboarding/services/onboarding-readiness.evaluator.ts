@@ -92,7 +92,11 @@ export class OnboardingReadinessEvaluator {
     // (they gate saleReady), not warnings — the read model distinguishes
     // "never configured" from "configured with the POS default" so the
     // canonical 36.5 fallback value alone cannot satisfy the gate.
-    if (fiscal.commercialFxSpreadConfigured === false) {
+    // Fail-closed symmetry with the operation-mode gate (review
+    // R2-fx-gate-absence-asymmetry): an ABSENT flag (older payload shape,
+    // adapter fail-closed error path) gates exactly like an explicit false —
+    // "I cannot prove it is configured" blocks the same as "not configured".
+    if (fiscal.commercialFxSpreadConfigured !== true) {
       blockers.push('FISCAL_FX_RATE_NOT_CONFIGURED');
     }
     if (fiscal.operationMode == null) {
