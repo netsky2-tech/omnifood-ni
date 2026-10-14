@@ -27,6 +27,23 @@ POS keeps issuing locally during the pilot; cloud-issued NCs use `CREDIT_NOTE_SE
 
 Non-goals: DSI-6 device-transport authorization (openspec BLOCKED, DSI-7 prerequisite); backend print/PDF surface; fiscal authorization-number storage (gap 6); inventory compensation for cloud-issued NCs (#519, by design).
 
+### T3 design (2026-10-14, post-exploration of the merged main)
+
+**T3a — backend (`inbound-sync.service.ts` + `dto/inbound-sync.dto.ts`):**
+
+- New optional domain `creditNotes?: InboundSyncCreditNoteDto[]` in `InboundSyncDeltasDto`, following the documented `alerts` precedent: optional in the type (older envelope literals predate it), ALWAYS populated by the service (empty when not requested).
+- Gate: `requestedTypes.has('creditnotes')` (plus `credit_notes` alias).
+- `fetchCreditNoteDeltas(tenantId, sinceDate, entityManager)`: `invoices WHERE type = 'creditNote' AND updated_at >= sinceDate` (the entity has an `UpdateDateColumn` at invoice.entity.ts:191 — the cursor field), tenant-scoped through the bound manager like the other tenant-protected reads. Every credit note that reached the backend is deliverable: POS-issued ones never arrive (DEC-3 outbound filter), so the table only holds backoffice-issued rows.
+- DTO fields are STORED FACTS ONLY (S9): id, number (CREDIT_NOTE_SERIES), origin_invoice_id, origin_invoice_number, subtotal/total_tax/total, refund_reason_code, refund_reason_policy, authorized_by_user_id, authorized_by_role, fiscal_authorization_code, is_canceled, created_at, updated_at. Nothing recomputed.
+
+**T3b — POS (`sync_service.dart`):**
+
+- `_pullInboundDeltas` adds `creditnotes` to the requested types.
+- New apply branch maps each received NC into the local read model as a RECEIVED document: `type: creditNote`, `sync_status: 'synced'`, backend-issued provenance. It NEVER touches the local DGI cursor (DEC-1: the received number comes from CREDIT_NOTE_SERIES — a distinct format, accepted for the pilot) and never mutates local rows.
+- Sales history lists received NCs read-only, honestly labeled as emitted from the backoffice. Printing/voiding a cloud-issued NC stays out of scope.
+
+**Tests:** backend — inbound-sync service spec (domain gated by requestedTypes, cursor honored, stored-facts shape) + controller/transport registry if required by the route test; POS — sync_service apply-branch test (received NC lands as synced read-model, cursor advances, DGI cursor untouched).
+
 ## Log
 
 - L1: (2026-10-14) User: "Necesito vayamos viendo estas issues, para ir limpiando gaps y problemas en el proyecto" — session opens the issue backlog; #553 flagged as top priority by the audit.
