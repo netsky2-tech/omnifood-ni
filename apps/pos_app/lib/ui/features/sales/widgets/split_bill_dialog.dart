@@ -10,6 +10,11 @@ class SplitBillDialog extends StatefulWidget {
   final List<CartItem> cart;
   final double commercialRate;
   final TaxRegime? taxRegime;
+
+  /// #543: the fiscal snapshot's pricesIncludeTax projection — when true
+  /// under Régimen General the catalog prices ALREADY include the IVA, so
+  /// every tax recomputation here EXTRACTS it instead of adding on top.
+  final bool pricesIncludeTax;
   final void Function(SplitBillShare share)? onPayShare;
 
   const SplitBillDialog({
@@ -17,6 +22,7 @@ class SplitBillDialog extends StatefulWidget {
     required this.cart,
     this.commercialRate = 36.50,
     this.taxRegime,
+    this.pricesIncludeTax = false,
     this.onPayShare,
   });
 
@@ -51,6 +57,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
         taxRegime: widget.taxRegime,
         netBase: lineBase,
         itemTaxRate: item.taxRate,
+        pricesIncludeTax: widget.pricesIncludeTax,
       );
       return sum + lineTax.taxAmount;
     });
@@ -94,6 +101,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
           tipType: _tipType,
           customTipPercentage: _customTipPercentage,
           fixedTipAmount: _fixedTipAmount,
+          pricesIncludeTax: widget.pricesIncludeTax,
         ),
       );
     }
@@ -102,6 +110,7 @@ class _SplitBillDialogState extends State<SplitBillDialog> {
       shares: shareInputs,
       commercialRate: widget.commercialRate,
       taxRegime: widget.taxRegime,
+      pricesIncludeTax: widget.pricesIncludeTax,
     );
   }
 

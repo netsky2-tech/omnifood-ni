@@ -1631,4 +1631,77 @@ void main() {
       expect(text, isNot(contains('AUT-DGI')));
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // #543: pricesIncludeTax — the catalog price IS the final price. The IVA is
+  // EXTRACTED from it, never added on top. Two hard limits (owner 2026-10-14):
+  // the flag NEVER overrides the fiscal regime (Cuota Fija collects no IVA —
+  // the extraction is regime-gated), and flag=false keeps the legacy
+  // add-on math byte-for-byte.
+  // ---------------------------------------------------------------------------
+  group('#543: pricesIncludeTax extraction (Régimen General only)', () {
+    test(
+      'Régimen General + flag: 1 Espresso @ 50.00 → base 43.48, IVA 6.52, '
+      'lineTotal 50.00 (the price IS the final)',
+      () {
+        const cart = [
+          CartItem(
+            productId: 'esp-01',
+            productName: 'Café Espresso',
+            quantity: 1,
+            unitPrice: 50.00,
+            taxRate: 0.15,
+          ),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.regimenGeneral,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
+          pricesIncludeTax: true,
+        );
+
+        final line = result.lines.single;
+        expect(line.taxableBase, equals(43.48));
+        expect(line.taxAmount, equals(6.52));
+        expect(line.lineSubtotal, equals(43.48));
+        expect(line.lineTotal, equals(50.00));
+        expect(result.subtotal, equals(43.48));
+        expect(result.taxableSubtotal, equals(43.48));
+        expect(result.totalTax, equals(6.52));
+        expect(result.total, equals(50.00));
+        // base + tax reassembles the charged price EXACTLY.
+        expect(result.subtotal + result.totalTax, equals(50.00));
+      },
+    );
+
+    test(
+      'Cuota Fija + flag: the flag NEVER overrides the regime — 1 Latte @ '
+      '110.00 stays total = 110.00, tax = 0.00 (no extraction, no IVA)',
+      () {
+        const cart = [
+          CartItem(
+            productId: 'lat-01',
+            productName: 'Café Latte',
+            quantity: 1,
+            unitPrice: 110.00,
+            taxRate: 0.15,
+          ),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.cuotaFija,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
+          pricesIncludeTax: true,
+        );
+
+        expect(result.totalTax, equals(0.00));
+        expect(result.subtotal, equals(110.00));
+        expect(result.total, equals(110.00));
+      },
+    );
+  });
 }

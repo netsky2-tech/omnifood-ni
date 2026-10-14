@@ -51,6 +51,10 @@ class ItemizedShareInput {
   final double customTipPercentage;
   final double fixedTipAmount;
 
+  /// #543: prices-include-tax extraction flag (Régimen General only) —
+  /// threaded so share-level tax recomputations match the checkout math.
+  final bool pricesIncludeTax;
+
   const ItemizedShareInput({
     required this.shareIndex,
     required this.label,
@@ -58,6 +62,7 @@ class ItemizedShareInput {
     this.tipType = TipType.none,
     this.customTipPercentage = 0.0,
     this.fixedTipAmount = 0.0,
+    this.pricesIncludeTax = false,
   });
 }
 
@@ -165,6 +170,7 @@ class SplitBillEngine {
     required List<ItemizedShareInput> shares,
     required double commercialRate,
     TaxRegime? taxRegime,
+    bool pricesIncludeTax = false,
   }) {
     if (shares.isEmpty) {
       throw ArgumentError.value(
@@ -192,6 +198,7 @@ class SplitBillEngine {
                 taxRegime: taxRegime,
                 netBase: lineBase,
                 itemTaxRate: item.taxRate,
+                pricesIncludeTax: pricesIncludeTax,
               ).taxAmount;
         shareTax += lineTax;
       }
