@@ -18,6 +18,11 @@ export enum MovementType {
   CREDIT_NOTE_RESTOCK = 'CREDIT_NOTE_RESTOCK',
   ADJUSTMENT = 'ADJUSTMENT',
   REVERSAL = 'REVERSAL',
+  // S9 (L33) / R-01: a lower-of-cost-or-market writedown is a VALUATION act,
+  // not a quantity adjustment. The row carries `quantity = 0` with a negative
+  // value, because the whole point is that no quantity moved. It needs its own
+  // type so nobody ever reads it as a stock adjustment.
+  VALUATION_WRITEDOWN = 'VALUATION_WRITEDOWN',
   /** Seed-time baseline stock entry (src/scripts/seed-test-data.ts). */
   INITIAL_STOCK = 'INITIAL_STOCK',
 }
@@ -114,6 +119,14 @@ export class InventoryMovement {
 
   @Column({ nullable: true, name: 'origin_invoice_item_id' })
   originInvoiceItemId: string | null;
+
+  // S9 (L33) / R-01: the valuation reference a writedown used. It is the only
+  // record of WHICH variant resolved it (a defined market price, or the
+  // declared last-purchase-cost fallback), with the reference's date and
+  // origin — so no report can present an approximation as a market price.
+  // Only VALUATION_WRITEDOWN rows carry one.
+  @Column({ nullable: true, name: 'valuation_basis' })
+  valuationBasis: string | null;
 
   @Column({ nullable: true, name: 'refund_reason_policy' })
   refundReasonPolicy: string | null;

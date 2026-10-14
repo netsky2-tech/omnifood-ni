@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Insumo } from './entities/insumo.entity';
+import { InsumoMarketPrice } from './entities/insumo-market-price.entity';
 import { Product } from './entities/product.entity';
 import { Recipe } from './entities/recipe.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
@@ -59,6 +60,7 @@ import { KardexRegularizationService } from './services/kardex-regularization.se
 import { RegularizationController } from './controllers/regularization.controller';
 import { RemediationController } from './controllers/remediation.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { InventoryValuationService } from './inventory-valuation.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
 import { AuditModule } from '../audit/audit.module';
 
@@ -69,6 +71,10 @@ import { AuditModule } from '../audit/audit.module';
     DeviceSyncModule,
     TypeOrmModule.forFeature([
       Insumo,
+      // S9 (L33) / R-01: the client's own market price, with its date. Without
+      // this in forFeature the valuation service cannot read it, and the
+      // reference would silently stay on the purchase-cost fallback forever.
+      InsumoMarketPrice,
       Product,
       Recipe,
       InventoryMovement,
@@ -120,6 +126,8 @@ import { AuditModule } from '../audit/audit.module';
     GovernanceApprovalService,
     KardexRegularizationService,
     InventoryReportsService,
+    // S9 (L33) / R-01: lower-of-cost-or-market writedowns.
+    InventoryValuationService,
     UomConversionCalculator,
     FxRateResolverService,
     ProductService,
