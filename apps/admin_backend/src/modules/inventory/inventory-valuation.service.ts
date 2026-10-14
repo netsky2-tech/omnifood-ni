@@ -5,10 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource, type EntityManager } from 'typeorm';
-import {
-  isCalendarDay,
-  toCalendarDay,
-} from '../../core/database/calendar-day';
+import { isCalendarDay, toCalendarDay } from '../../core/database/calendar-day';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
 import { InsumoMarketPrice } from './entities/insumo-market-price.entity';
@@ -55,8 +52,49 @@ import {
 
 /** The variant that resolved a reference. Persisted; never inferred later. */
 export type ValuationReferenceVariant =
-  | 'MARKET_PRICE'
-  | 'LAST_PURCHASE_COST_FALLBACK';
+  'MARKET_PRICE' | 'LAST_PURCHASE_COST_FALLBACK';
+
+/**
+ * Raw row shapes for the raw queries below. The pg driver hands numerics
+ * (`numeric`) back as strings and integers as numbers, so money columns are
+ * `number | string` and the coercions at the use sites stay honest instead
+ * of asserting a shape the driver did not promise.
+ */
+
+/** Raw `INSERT … RETURNING` row from `insumo_market_prices` (S8 upsert). */
+interface UpsertedMarketPriceRow {
+  id: string;
+  tenant_id: string;
+  insumo_id: string;
+  market_price_nio: number | string;
+  effective_date: string;
+  source_note: string | null;
+  created_by_user_id: string | null;
+  created_at: Date;
+}
+
+/** Raw reference row from the S9 market-price variant query. */
+interface MarketPriceReferenceRow {
+  id: string;
+  market_price_nio: number | string;
+  /** `to_char(…)` output — already an ISO calendar day. */
+  effective_date: string;
+}
+
+/** Raw reference row from the S9 last-purchase-cost variant query. */
+interface PurchaseCostReferenceRow {
+  id: string;
+  unit_cost_nio: number | string;
+  /** `to_char(… AT TIME ZONE 'UTC', …)` output — an ISO calendar day. */
+  purchase_day: string;
+}
+
+/** Raw candidate row from the writedown scan of `insumos`. */
+interface InsumoCostCandidateRow {
+  id: string;
+  stock: number;
+  costo_promedio_nio: number | string | null;
+}
 
 export interface ValuationReference {
   variant: ValuationReferenceVariant;
@@ -159,17 +197,20 @@ export class InventoryValuationService {
 
     const effectiveDate = toCalendarDay(input.effectiveDate);
 
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const insumo = await manager.getRepository(Insumo).findOne({
-        where: { id: insumoId, tenant_id: tenantId },
-        select: ['id'],
-      });
-      if (!insumo) {
-        throw new NotFoundException(`Insumo ${insumoId} not found`);
-      }
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const insumo = await manager.getRepository(Insumo).findOne({
+          where: { id: insumoId, tenant_id: tenantId },
+          select: ['id'],
+        });
+        if (!insumo) {
+          throw new NotFoundException(`Insumo ${insumoId} not found`);
+        }
 
-      const rows = (await manager.query(
-        `INSERT INTO insumo_market_prices
+        const rows = await manager.query<UpsertedMarketPriceRow[]>(
+          `INSERT INTO insumo_market_prices
            (tenant_id, insumo_id, market_price_nio, effective_date, source_note, created_by_user_id)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (tenant_id, insumo_id, effective_date)
@@ -178,28 +219,29 @@ export class InventoryValuationService {
                        created_by_user_id = EXCLUDED.created_by_user_id
          RETURNING id, tenant_id, insumo_id, market_price_nio, effective_date,
                    source_note, created_by_user_id, created_at`,
-        [
-          tenantId,
-          insumoId,
-          marketPriceNio,
-          effectiveDate,
-          input.sourceNote ?? null,
-          input.createdByUserId ?? null,
-        ],
-      )) as Array<Record<string, unknown>>;
+          [
+            tenantId,
+            insumoId,
+            marketPriceNio,
+            effectiveDate,
+            input.sourceNote ?? null,
+            input.createdByUserId ?? null,
+          ],
+        );
 
-      const row = rows[0];
-      return {
-        id: String(row.id),
-        tenant_id: String(row.tenant_id),
-        insumo_id: String(row.insumo_id),
-        market_price_nio: Number(row.market_price_nio),
-        effective_date: String(row.effective_date),
-        source_note: (row.source_note as string | null) ?? null,
-        created_by_user_id: (row.created_by_user_id as string | null) ?? null,
-        created_at: row.created_at as Date,
-      } as InsumoMarketPrice;
-    });
+        const row = rows[0];
+        return {
+          id: String(row.id),
+          tenant_id: String(row.tenant_id),
+          insumo_id: String(row.insumo_id),
+          market_price_nio: Number(row.market_price_nio),
+          effective_date: String(row.effective_date),
+          source_note: row.source_note ?? null,
+          created_by_user_id: row.created_by_user_id ?? null,
+          created_at: row.created_at,
+        } as InsumoMarketPrice;
+      },
+    );
   }
 
   /**
@@ -227,7 +269,7 @@ export class InventoryValuationService {
       // back a JS Date and `String(date)` yields "Thu Oct 15 2026 00:00:00
       // GMT-0600" — a locale string that is neither the day the client typed
       // nor comparable to one. The spec caught exactly this.
-      const market = (await manager.query(
+      const market = await manager.query<MarketPriceReferenceRow[]>(
         `SELECT id, market_price_nio,
                 to_char(effective_date, 'YYYY-MM-DD') AS effective_date
            FROM insumo_market_prices
@@ -235,7 +277,7 @@ export class InventoryValuationService {
           ORDER BY effective_date DESC, created_at DESC
           LIMIT 1`,
         [tenantId, insumoId, asOfDate],
-      )) as Array<Record<string, unknown>>;
+      );
 
       if (market.length > 0) {
         return {
@@ -250,7 +292,7 @@ export class InventoryValuationService {
       // ledger. The day is derived with an explicit zone (UTC) because a
       // timestamptz is an instant and this is a calendar day; picking the zone
       // silently is how one-day shifts happen.
-      const purchase = (await manager.query(
+      const purchase = await manager.query<PurchaseCostReferenceRow[]>(
         `SELECT id, unit_cost_nio,
                 to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS purchase_day
            FROM inventory_kardex
@@ -261,7 +303,7 @@ export class InventoryValuationService {
           ORDER BY occurred_at DESC, id DESC
           LIMIT 1`,
         [tenantId, insumoId, closingInstantUtc(asOfDate)],
-      )) as Array<Record<string, unknown>>;
+      );
 
       if (purchase.length > 0) {
         return {
@@ -301,142 +343,152 @@ export class InventoryValuationService {
     }
     const asOfDate = toCalendarDay(params.asOfDate);
 
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const candidates = (await manager.query(
-        `SELECT id, stock, costo_promedio_nio
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const candidates = await manager.query<InsumoCostCandidateRow[]>(
+          `SELECT id, stock, costo_promedio_nio
            FROM insumos
           WHERE tenant_id = $1 AND stock > 0
           ORDER BY id`,
-        [tenantId],
-      )) as Array<Record<string, unknown>>;
+          [tenantId],
+        );
 
-      const result: WritedownResult = {
-        asOfDate,
-        lines: [],
-        totalWritedownNio: 0,
-        skippedExisting: [],
-        notAboveReference: [],
-        withoutReference: [],
-      };
-
-      for (const row of candidates) {
-        const insumoId = String(row.id);
-        const stock = round4(Number(row.stock));
-        const costBefore = round4(Number(row.costo_promedio_nio ?? 0));
-        const documentId = InventoryValuationService.writedownDocumentId(
+        const result: WritedownResult = {
           asOfDate,
-          insumoId,
-        );
+          lines: [],
+          totalWritedownNio: 0,
+          skippedExisting: [],
+          notAboveReference: [],
+          withoutReference: [],
+        };
 
-        const existing = await manager.getRepository(InventoryMovement).findOne({
-          where: { sourceDocumentId: documentId },
-          select: ['id'],
-        });
-        if (existing) {
-          result.skippedExisting.push(insumoId);
-          continue;
-        }
+        for (const row of candidates) {
+          const insumoId = String(row.id);
+          const stock = round4(Number(row.stock));
+          const costBefore = round4(Number(row.costo_promedio_nio ?? 0));
+          const documentId = InventoryValuationService.writedownDocumentId(
+            asOfDate,
+            insumoId,
+          );
 
-        const reference = await this.resolveValuationReference(
-          tenantId,
-          insumoId,
-          asOfDate,
-          manager,
-        );
-        if (!reference) {
-          result.withoutReference.push(insumoId);
-          continue;
-        }
+          const existing = await manager
+            .getRepository(InventoryMovement)
+            .findOne({
+              where: { sourceDocumentId: documentId },
+              select: ['id'],
+            });
+          if (existing) {
+            result.skippedExisting.push(insumoId);
+            continue;
+          }
 
-        if (costBefore <= reference.referenceNio) {
-          result.notAboveReference.push(insumoId);
-          continue;
-        }
+          const reference = await this.resolveValuationReference(
+            tenantId,
+            insumoId,
+            asOfDate,
+            manager,
+          );
+          if (!reference) {
+            result.withoutReference.push(insumoId);
+            continue;
+          }
 
-        const writedownNio = round4(
-          stock * (costBefore - reference.referenceNio),
-        );
-        if (writedownNio <= 0) {
-          result.notAboveReference.push(insumoId);
-          continue;
-        }
+          if (costBefore <= reference.referenceNio) {
+            result.notAboveReference.push(insumoId);
+            continue;
+          }
 
-        const basis = JSON.stringify({
-          variant: reference.variant,
-          referenceNio: reference.referenceNio,
-          referenceDate: reference.referenceDate,
-          originId: reference.originId,
-          closingDate: asOfDate,
-          stock,
-          costBefore,
-          writedownNio,
-        });
+          const writedownNio = round4(
+            stock * (costBefore - reference.referenceNio),
+          );
+          if (writedownNio <= 0) {
+            result.notAboveReference.push(insumoId);
+            continue;
+          }
 
-        const movement = manager.create(InventoryMovement, {
-          tenant_id: tenantId,
-          // NOT `insumo_id`: this entity names the reference `insumoId` while
-          // its tenant column stays `tenant_id`. A wrong property name is not
-          // an error TypeORM reports — it silently drops the column and the
-          // insert fails on NOT NULL, which is how a whole afternoon goes.
-          insumoId,
-          // A valuation act, never a quantity adjustment: `quantity = 0` and a
-          // negative value are the point, not an oversight.
-          type: MovementType.VALUATION_WRITEDOWN,
-          quantity: 0,
-          unitCostNio: reference.referenceNio,
-          totalCostNio: -writedownNio,
-          // The entity calls the running-balance columns previousStock /
-          // newStock while the columns are stock_before / stock_after.
-          previousStock: stock,
-          newStock: stock,
-          averageCostAfterNio: reference.referenceNio,
-          sourceDocumentType: MovementType.VALUATION_WRITEDOWN,
-          sourceDocumentId: documentId,
-          // The entity calls this `timestamp` (a @CreateDateColumn mapped to
-          // occurred_at), NOT `occurredAt`: an unmatched key is dropped without
-          // a word, so the name has to be right as well as the value.
-          timestamp: new Date(closingInstantUtc(asOfDate)),
-          valuationBasis: basis,
-        });
-        const saved = await manager.getRepository(InventoryMovement).save(movement);
+          const basis = JSON.stringify({
+            variant: reference.variant,
+            referenceNio: reference.referenceNio,
+            referenceDate: reference.referenceDate,
+            originId: reference.originId,
+            closingDate: asOfDate,
+            stock,
+            costBefore,
+            writedownNio,
+          });
 
-        // NOTE: there is no second chance to stamp this row. `inventory_kardex`
-        // is append-only BY TRIGGER — an UPDATE is rejected with
-        // "inventory_kardex is append-only and cannot be updated or deleted" —
-        // so `occurred_at` is right at insert time or it is wrong forever. A
-        // first version of this code tried to enforce it with a follow-up
-        // UPDATE and was refused by the ledger itself, which is the ledger
-        // doing exactly what it was built to do. The spec asserts the closing
-        // instant rather than trusting the decorator.
+          const movement = manager.create(InventoryMovement, {
+            tenant_id: tenantId,
+            // NOT `insumo_id`: this entity names the reference `insumoId` while
+            // its tenant column stays `tenant_id`. A wrong property name is not
+            // an error TypeORM reports — it silently drops the column and the
+            // insert fails on NOT NULL, which is how a whole afternoon goes.
+            insumoId,
+            // A valuation act, never a quantity adjustment: `quantity = 0` and a
+            // negative value are the point, not an oversight.
+            type: MovementType.VALUATION_WRITEDOWN,
+            quantity: 0,
+            unitCostNio: reference.referenceNio,
+            totalCostNio: -writedownNio,
+            // The entity calls the running-balance columns previousStock /
+            // newStock while the columns are stock_before / stock_after.
+            previousStock: stock,
+            newStock: stock,
+            averageCostAfterNio: reference.referenceNio,
+            sourceDocumentType: MovementType.VALUATION_WRITEDOWN,
+            sourceDocumentId: documentId,
+            // The entity calls this `timestamp` (a @CreateDateColumn mapped to
+            // occurred_at), NOT `occurredAt`: an unmatched key is dropped without
+            // a word, so the name has to be right as well as the value.
+            timestamp: new Date(closingInstantUtc(asOfDate)),
+            valuationBasis: basis,
+          });
+          const saved = await manager
+            .getRepository(InventoryMovement)
+            .save(movement);
 
-        // The projection has to move with the ledger, or the valuation report
-        // (`stock x averageCost`) would keep reporting the pre-writedown value.
-        await manager.query(
-          `UPDATE insumos
+          // NOTE: there is no second chance to stamp this row. `inventory_kardex`
+          // is append-only BY TRIGGER — an UPDATE is rejected with
+          // "inventory_kardex is append-only and cannot be updated or deleted" —
+          // so `occurred_at` is right at insert time or it is wrong forever. A
+          // first version of this code tried to enforce it with a follow-up
+          // UPDATE and was refused by the ledger itself, which is the ledger
+          // doing exactly what it was built to do. The spec asserts the closing
+          // instant rather than trusting the decorator.
+
+          // The projection has to move with the ledger, or the valuation report
+          // (`stock x averageCost`) would keep reporting the pre-writedown value.
+          await manager.query(
+            `UPDATE insumos
               SET costo_promedio_nio = $1, updated_at = now()
             WHERE tenant_id = $2 AND id = $3`,
-          [reference.referenceNio, tenantId, insumoId],
+            [reference.referenceNio, tenantId, insumoId],
+          );
+
+          result.lines.push({
+            insumoId,
+            stock,
+            costBefore,
+            referenceNio: reference.referenceNio,
+            variant: reference.variant,
+            referenceDate: reference.referenceDate,
+            originId: reference.originId,
+            writedownNio,
+            movementId: String(saved.id),
+          });
+          result.totalWritedownNio = round4(
+            result.totalWritedownNio + writedownNio,
+          );
+        }
+
+        this.logger.log(
+          `lower-of-cost writedown as of ${asOfDate}: ${result.lines.length} insumo(s), ${result.totalWritedownNio} NIO, ${result.skippedExisting.length} already applied, ${result.withoutReference.length} without reference`,
         );
 
-        result.lines.push({
-          insumoId,
-          stock,
-          costBefore,
-          referenceNio: reference.referenceNio,
-          variant: reference.variant,
-          referenceDate: reference.referenceDate,
-          originId: reference.originId,
-          writedownNio,
-          movementId: String(saved.id),
-        });
-        result.totalWritedownNio = round4(result.totalWritedownNio + writedownNio);
-      }
-
-      this.logger.log(
-        `lower-of-cost writedown as of ${asOfDate}: ${result.lines.length} insumo(s), ${result.totalWritedownNio} NIO, ${result.skippedExisting.length} already applied, ${result.withoutReference.length} without reference`,
-      );
-
-      return result;
-    });
+        return result;
+      },
+    );
   }
 }
