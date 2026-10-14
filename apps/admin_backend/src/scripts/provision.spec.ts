@@ -1,4 +1,4 @@
-import { assertSeedOutcome } from './provision';
+import { assertSeedOutcome } from './provision-seed-guard';
 
 /**
  * Review R3-1 hardening (owner decision: hard verification). A provisioned
