@@ -15,9 +15,7 @@ import {
 import { Request } from 'express';
 import { randomUUID } from 'crypto';
 import { ShrinkageService } from './shrinkage.service';
-import { InventoryService } from './inventory.service';
 import { RecipeService } from './recipe.service';
-import { SyncMovementsDto } from './dto/create-inventory-movement.dto';
 import {
   PurchaseCorrectionDto,
   PurchaseDocumentDto,
@@ -121,7 +119,6 @@ export class InventoryMovementController {
     private readonly fxRateResolverService: FxRateResolverService,
     private readonly purchaseService: InventoryPurchaseService,
     private readonly shrinkageService: ShrinkageService,
-    private readonly inventoryService: InventoryService,
     private readonly recipeService: RecipeService,
     private readonly countSessionService: CountSessionService,
     private readonly productionService: ProductionService,
@@ -145,19 +142,6 @@ export class InventoryMovementController {
   // model cannot consume; forensic alerts now reach terminals only through
   // the device-authenticated `/v1/sync/inbound/deltas` projection. The
   // distinct `/inventory/reports/alerts` report surface remains intact.
-
-  @Post('movements/sync')
-  @UseGuards(SyncTransportGuard)
-  @RequireSyncScopes('sync:push')
-  async syncMovements(
-    @Body() syncDto: SyncMovementsDto,
-    @GetTenantId() tenantId: string | undefined,
-  ) {
-    return this.inventoryService.syncMovements(
-      syncDto.movements,
-      this.requireTenant(tenantId),
-    );
-  }
 
   @Post('purchase')
   @UseGuards(AuthGuard, RolesGuard)

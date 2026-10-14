@@ -27,12 +27,9 @@ import { ProductInventoryMappingVersion } from './entities/product-inventory-map
 import { InventoryRemediationReceipt } from './entities/inventory-remediation-receipt.entity';
 import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 import { SaleInventoryRemediationService } from './services/sale-inventory-remediation.service';
-import { InventoryService } from './inventory.service';
-import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { CostCalculatorService } from './cost-calculator.service';
 import { InventoryMovementController } from './inventory-movement.controller';
-import { InventoryMovementService } from './inventory-movement.service';
 import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
 import { RecipeController } from './recipe.controller';
@@ -46,7 +43,6 @@ import { RecipeService } from './recipe.service';
 import { BomExplosionService } from './bom-explosion.service';
 import { ProductionService } from './production.service';
 import { BatchCostingService } from './batch-costing.service';
-import { InventoryAdjustmentService } from './inventory-adjustment.service';
 import {
   FORENSIC_ALERT_DISPATCHER,
   ForensicAlertService,
@@ -110,17 +106,13 @@ import { AuditModule } from '../audit/audit.module';
     InsumoController,
   ],
   providers: [
-    InventoryService,
-    InventoryMovementService,
     InventoryPurchaseService,
     RecipeService,
     BomExplosionService,
     BatchCostingService,
     ProductionService,
-    PurchaseService,
     ShrinkageService,
     CostCalculatorService,
-    InventoryAdjustmentService,
     CountSessionService,
     ForensicAlertService,
     GovernanceApprovalService,
@@ -146,17 +138,13 @@ import { AuditModule } from '../audit/audit.module';
   ],
   exports: [
     TypeOrmModule,
-    InventoryService,
-    InventoryMovementService,
     InventoryPurchaseService,
     RecipeService,
     BomExplosionService,
     BatchCostingService,
     ProductionService,
-    PurchaseService,
     ShrinkageService,
     CostCalculatorService,
-    InventoryAdjustmentService,
     CountSessionService,
     ForensicAlertService,
     GovernanceApprovalService,
