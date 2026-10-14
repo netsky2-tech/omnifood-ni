@@ -1,0 +1,52 @@
+# Identidad de empresa POS ↔ web — una sola fuente para reportes y tickets
+
+Cierra la brecha que hoy hace que la nube **no pueda imprimir una identidad completa** en ningún documento: el logo vive sólo en cada terminal y tres campos de empresa se pierden entre las dos aplicaciones.
+
+**Rama:** `feat/company-identity-parity` (a abrir) · **Origen:** `odd/tasks/nucleo-inventario-conteo-persistente.md` L6, L7 · **Bloquea:** T3 de R19 (el PDF de la lista de conteo).
+
+## Specs
+
+- **S1** — **La nube es la dueña de la identidad que imprimen los reportes y los tickets.** La terminal la **recibe**; no mantiene una copia divergente. Precedente interno exacto: para la política de asignación la regla de la casa quedó fijada como *la política vive en el servidor y viaja a la terminal* (`nucleo-inventario-paridad-contrato.md` L21), por la misma razón: dos ajustes locales reintroducen la divergencia.
+- **S2** — La identidad viaja por el **canal que ya existe y está versionado**: se **extiende** el snapshot fiscal (`GET /onboarding/terminals/priming` → `FiscalInboxHandler` → `fiscal_config_revisions.payload jsonb`). **No se agrega un segundo mecanismo de sincronización.**
+- **S3** — **Disciplina de ausencia, en un solo lugar.** Un campo no guardado se **declara**; nunca se imprime `null`, `undefined` ni `""`. Es la misma costura que S15 de R19: la identidad se resuelve en un punto y los consumidores no deciden caso por caso.
+- **S4** — **El reporte consume la interfaz, no la tabla.** T3 (el PDF) lee la identidad resuelta; no consulta `tenants` por su cuenta. Si el PDF leyera la tabla, las dos features vuelven a acoplarse y el próximo campo nuevo rompe el documento en dos lugares.
+- **S5** — **El logo es una decisión, no un supuesto.** Qué artefacto (el **raster 1-bit** que la terminal deriva para la impresora térmica, o un **original** pensado para documentos) y dónde se guarda. No se decide en este documento: se abre con sus opciones y su evidencia.
+- **S6** — **Excepción local declarada.** Hoy la terminal puede sobreescribir lo que imprime (`printer_header_* ?? business_*`). Esa precedencia se conserva **explícita y documentada**, no como un ajuste escondido: si el snapshot manda, se dice por qué la terminal puede ganarle.
+
+## Evidencia verificada (no re-derivar)
+
+| Campo | POS | Web | ¿Viaja? |
+|---|---|---|---|
+| nombre | sí | sí (`tenant.name`) | ↓ sí |
+| RUC | sí | sí (`tenant.ruc`, `tenant.entity.ts:30`) | ↓ sí |
+| dirección | sí (`printer_config_service.dart:111`) | **muerto**: `fiscal-setup.dto.ts:193`, el servicio nunca lo persiste | no |
+| teléfono | sí (`:113`) | **muerto**: `:189` | no |
+| email | no | no | no |
+| logo (b64 + w/h/enabled) | sí (`printer_config_service.dart:43-46`) | ausente | no |
+
+- **El canal descendente existe y está versionado**: `terminal-priming.controller.ts:47,53` → `fiscal_inbox_handler.dart:142` → `fiscal_config_revisions.payload jsonb` (`fiscal-config-revision.entity.ts:26`). El snapshot hoy lleva `businessName, ruc, fiscalRegime, taxRate, pricesIncludeTax, commercialFxSpread, operationMode, checkoutFxMode, dgi*, maxDiscount*` y **ninguno** de address/phone/email/logo.
+- **La UI web ya sabe que los pierde**: etiqueta dirección y teléfono como *"No persistido fiscalmente"* (`fiscal-setup-form.tsx:507,525`) y los manda **en blanco** (`:74,96`).
+- **El logo del POS es un derivado, no un original**: rasterización 1-bit hecha en el cliente para la térmica (`hardware_settings_view_model.uploadAndProcessLogo:164-202`). Un PDF formal con ese artefacto imprimiría un logo tramado.
+- **Almacenamiento disponible**: **no** hay multer, staging ni `bytea` en el repo (0 coincidencias); `R2StorageService` existe pero hoy **sólo para artefactos de release**; las configs de tenant son `jsonb`.
+
+## Tareas
+
+| id | Tarea | Estado |
+|---|---|---|
+| **P1** | **Persistir dirección, teléfono y email** en la web (tenant / fiscal setup) y **exponerlos en el snapshot fiscal**. Sin logo. Es el recorte que **desbloquea T3**. | — |
+| **P2** | **Aplicarlos en el POS** desde el snapshot, con la precedencia local (`printer_header_* ?? business_*`) declarada y probada. | — |
+| **P3** | **Logo**: decisión del artefacto (1-bit de la térmica vs original para documentos) y del almacenamiento (param `jsonb` / columna nueva / R2 + referencia), más la subida y su caso ausente. | — |
+| **P4** | **Retomar T3 de R19**: el PDF consume la identidad resuelta (S4) y enriquece el encabezado **sin tocar el renderer**. | — |
+| **P5** | Verificación de punta a punta: se edita en la web → la terminal lo recibe → el reporte imprime **los mismos valores**. | — |
+
+## Trampas verificadas
+
+- **Un cambio de snapshot es un contrato entre dos aplicaciones.** Si se extiende el snapshot y el POS no se actualiza, las terminales **ignoran los campos nuevos en silencio** (no fallan). P1 y P2 van juntos o la feature miente.
+- **No confiar en el DTO**: dirección y teléfono **parecen** existir en `fiscal-setup.dto.ts`. La prueba es el servicio, que nunca los lee.
+- **`fiscal_config_revisions` es versionado**: agregar campos implica una revisión nueva y que la terminal la aplique.
+- **El logo no tiene dónde irse hoy**: no hay multer, ni staging, ni `bytea`. Cualquier opción de P3 es trabajo real, no configuración.
+- **La trampa de entidad no registrada** sigue vigente para cualquier tabla nueva (specs que la ejercen + `forFeature` + el manifiesto RLS si es tabla).
+
+## Log
+
+- **L1** 2026-10-14 — Feature abierta por decisión del owner: *"hay que ajustarlo para que la información esté sincronizada y utilizar eso para los reportes"*, y ante la elección de orden, **la paridad primero y T3 después**. Arranca con dos reconocimientos ya hechos (la validación de la creencia del logo y el mapa de brechas), así que **no hay fase de descubrimiento pendiente**: se sabe qué falta, dónde vive y por dónde viaja. El recorte P1/P2/P3 existe para que T3 no espere al logo: **los campos desbloquean el documento, el logo lo embellece.**
