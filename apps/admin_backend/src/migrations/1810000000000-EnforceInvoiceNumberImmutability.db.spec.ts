@@ -82,26 +82,48 @@ describe('EnforceInvoiceNumberImmutability1810000000000 (db)', () => {
 
   const buildSchema = async (queryRunner: QueryRunner): Promise<void> => {
     // The bootstrap migrations guard their enum creation against the
-    // `public` schema by name; on a dev database public already has the
-    // types, so the guarded CREATEs are skipped and this isolated schema
-    // would lack them. Pre-create the full enum set here for the harness
-    // (duplicate-safe — PostgreSQL has no CREATE TYPE IF NOT EXISTS).
+    // `public` schema BY NAME: they create the type only when public lacks
+    // it. Two environments, one shim:
+    //   - local dev: public HAS the types (full schema) → the migration
+    //     skips them → this harness must provide them in the isolated
+    //     schema, or the tables fail to build.
+    //   - CI service container: public is EMPTY → the migration creates
+    //     them itself → pre-creating here would collide (duplicate_object).
+    // So each type is created only when public HAS it and the current
+    // schema does not — exactly the local-dev gap, never the CI case.
     await queryRunner.query(`
       DO $$ BEGIN
-        CREATE TYPE users_role_enum AS ENUM ('OWNER', 'MANAGER', 'CASHIER', 'WAITER');
-      EXCEPTION WHEN duplicate_object THEN null; END $$;
-      DO $$ BEGIN
-        CREATE TYPE recipe_ingredient_type_enum AS ENUM ('INSUMO', 'PRODUCT');
-      EXCEPTION WHEN duplicate_object THEN null; END $$;
-      DO $$ BEGIN
-        CREATE TYPE cash_shift_session_status_enum AS ENUM ('OPEN', 'CLOSED');
-      EXCEPTION WHEN duplicate_object THEN null; END $$;
-      DO $$ BEGIN
-        CREATE TYPE cash_movement_type_enum AS ENUM ('CASH_IN', 'CASH_OUT', 'PETTY_CASH', 'SAFE_DROP');
-      EXCEPTION WHEN duplicate_object THEN null; END $$;
-      DO $$ BEGIN
-        CREATE TYPE products_product_type_enum AS ENUM ('SIMPLE', 'COMPOUND', 'PREPARED', 'VARIANT_PARENT');
-      EXCEPTION WHEN duplicate_object THEN null; END $$;
+        IF EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'users_role_enum' AND n.nspname = 'public')
+           AND NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'users_role_enum' AND n.nspname = current_schema()) THEN
+          CREATE TYPE users_role_enum AS ENUM ('OWNER', 'MANAGER', 'CASHIER', 'WAITER');
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'recipe_ingredient_type_enum' AND n.nspname = 'public')
+           AND NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'recipe_ingredient_type_enum' AND n.nspname = current_schema()) THEN
+          CREATE TYPE recipe_ingredient_type_enum AS ENUM ('INSUMO', 'PRODUCT');
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'cash_shift_session_status_enum' AND n.nspname = 'public')
+           AND NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'cash_shift_session_status_enum' AND n.nspname = current_schema()) THEN
+          CREATE TYPE cash_shift_session_status_enum AS ENUM ('OPEN', 'CLOSED');
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'cash_movement_type_enum' AND n.nspname = 'public')
+           AND NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'cash_movement_type_enum' AND n.nspname = current_schema()) THEN
+          CREATE TYPE cash_movement_type_enum AS ENUM ('CASH_IN', 'CASH_OUT', 'PETTY_CASH', 'SAFE_DROP');
+        END IF;
+        IF EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'products_product_type_enum' AND n.nspname = 'public')
+           AND NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+                   WHERE t.typname = 'products_product_type_enum' AND n.nspname = current_schema()) THEN
+          CREATE TYPE products_product_type_enum AS ENUM ('SIMPLE', 'COMPOUND', 'PREPARED', 'VARIANT_PARENT');
+        END IF;
+      END $$;
     `);
     await new CreateBootstrapIdentityTables1759000000001().up(queryRunner);
     await new CreateBootstrapInventorySalesTables1759000000002().up(
