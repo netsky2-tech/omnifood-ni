@@ -181,7 +181,7 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
       [supplierAId, tenantAId, supplierBId, tenantBId],
     );
     await admin.query(
-      `INSERT INTO shrinkages (id, tenant_id, shrinkage_type) VALUES ($1, $2, 'SPOILAGE'), ($3, $4, 'SPOILAGE')`,
+      `INSERT INTO shrinkages (id, tenant_id, shrinkage_type, observation) VALUES ($1, $2, 'SPOILAGE', 'Seed RLS: merma registrada A'), ($3, $4, 'SPOILAGE', 'Seed RLS: merma registrada B')`,
       [shrinkageAId, tenantAId, shrinkageBId, tenantBId],
     );
     await admin.query(
@@ -349,8 +349,8 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
 
       const insertedShrinkage = returningRows(
         await runner.query(
-          `INSERT INTO shrinkages (tenant_id, shrinkage_type)
-           VALUES ($1, 'DAMAGE') RETURNING id, tenant_id`,
+          `INSERT INTO shrinkages (tenant_id, shrinkage_type, observation)
+           VALUES ($1, 'DAMAGE', 'Seed RLS: daño registrado C') RETURNING id, tenant_id`,
           [tenantCId],
         ),
       );
@@ -399,8 +399,8 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
     await asRuntimeRole(runtime, tenantCId, async (runner) => {
       await expect(
         runner.query(
-          `INSERT INTO shrinkages (tenant_id, shrinkage_type)
-           VALUES ($1, 'DAMAGE') RETURNING id`,
+          `INSERT INTO shrinkages (tenant_id, shrinkage_type, observation)
+           VALUES ($1, 'DAMAGE', 'Seed RLS: daño foraneo rechazado') RETURNING id`,
           [tenantDId],
         ),
       ).rejects.toThrow(/row-level security/i);
@@ -490,8 +490,8 @@ describe('inventory tenant RLS (Real PostgreSQL DB, migration-built schema)', ()
 
       const throwawayShrinkage = returningRows(
         await runner.query(
-          `INSERT INTO shrinkages (tenant_id, shrinkage_type)
-           VALUES ($1, 'SPOILAGE') RETURNING id`,
+          `INSERT INTO shrinkages (tenant_id, shrinkage_type, observation)
+           VALUES ($1, 'SPOILAGE', 'Seed RLS: mermá descartable') RETURNING id`,
           [tenantAId],
         ),
       );

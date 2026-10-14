@@ -28,7 +28,6 @@ import {
 } from '../../src/modules/inventory/entities/inventory-movement.entity';
 import { Supplier } from '../../src/modules/inventory/entities/supplier.entity';
 import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
-import { InventoryService } from '../../src/modules/inventory/inventory.service';
 import { ProductionService } from '../../src/modules/inventory/production.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ShrinkageService } from '../../src/modules/inventory/shrinkage.service';
@@ -272,12 +271,6 @@ describe('Inventory purchase routes (integration)', () => {
           provide: ShrinkageService,
           useValue: {
             recordShrinkage: jest.fn(),
-          },
-        },
-        {
-          provide: InventoryService,
-          useValue: {
-            syncMovements: jest.fn(),
           },
         },
         {
@@ -777,8 +770,11 @@ describe('Inventory purchase routes (integration)', () => {
         supplier_id: validPurchasePayload.supplierId,
         invoice_number: validPurchasePayload.invoiceNumber,
         fiscal_authorization_code: validPurchasePayload.fiscalAuthorizationCode,
-        invoice_date: new Date(validPurchasePayload.invoiceDate).toJSON(),
-        entry_date: new Date(validPurchasePayload.invoiceDate).toJSON(),
+        // Calendar days travel as 'YYYY-MM-DD' strings on the wire (the
+        // entity types date columns as strings — src/core/database/
+        // calendar-day.ts); do not re-serialize through Date.
+        invoice_date: validPurchasePayload.invoiceDate,
+        entry_date: validPurchasePayload.invoiceDate,
         entry_timestamp: new Date(validPurchasePayload.entryTimestamp).toJSON(),
         quantity: validPurchasePayload.quantity,
         unit_cost: validPurchasePayload.unitCost,
@@ -846,8 +842,8 @@ describe('Inventory purchase routes (integration)', () => {
       invoice_number: officialModePurchasePayload.invoiceNumber,
       fiscal_authorization_code:
         officialModePurchasePayload.fiscalAuthorizationCode,
-      invoice_date: new Date(officialModePurchasePayload.invoiceDate).toJSON(),
-      entry_date: new Date(officialModePurchasePayload.invoiceDate).toJSON(),
+      invoice_date: officialModePurchasePayload.invoiceDate,
+      entry_date: officialModePurchasePayload.invoiceDate,
       entry_timestamp: new Date(
         officialModePurchasePayload.entryTimestamp,
       ).toJSON(),

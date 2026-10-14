@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { Insumo } from './entities/insumo.entity';
+import { Batch } from './entities/batch.entity';
 import {
   InventoryMovement,
   MovementType,
@@ -51,6 +52,12 @@ describe('CountSessionService', () => {
         getRepository: (entity: unknown) => {
           if (entity === Insumo) return { findOne, save };
           if (entity === InventoryMovement) return { create, findOneBy, save };
+          // R13: a negative count variance now draws the outflow from the
+          // batch balances, so the service resolves this repository too. The
+          // stub reports no batches, which is the honest fixture for a
+          // non batch-managed insumo: `drawBatchOutflow` returns early and this
+          // spec keeps asserting exactly what it asserted before.
+          if (entity === Batch) return { find: jest.fn().mockResolvedValue([]), save };
           throw new Error('Unexpected repository');
         },
       }),

@@ -81,11 +81,14 @@ export class PurchaseDocument {
   })
   fiscal_authorization_code: string | null;
 
+  // Calendar days (PostgreSQL `date`), kept as ISO day strings — see
+  // src/core/database/calendar-day.ts. `entry_timestamp` below IS an instant
+  // and stays a `Date`.
   @Column({ type: 'date' })
-  invoice_date: Date;
+  invoice_date: string;
 
   @Column({ type: 'date' })
-  entry_date: Date;
+  entry_date: string;
 
   @Column({ type: 'timestamptz' })
   entry_timestamp: Date;
@@ -115,11 +118,12 @@ export class PurchaseDocument {
   @Column({ type: 'varchar', nullable: true, name: 'lot_code' })
   lot_code: string | null;
 
+  // Calendar days (PostgreSQL `date`) — see src/core/database/calendar-day.ts.
   @Column({ type: 'date', nullable: true, name: 'received_date' })
-  received_date: Date | null;
+  received_date: string | null;
 
   @Column({ type: 'date', nullable: true, name: 'expiration_date' })
-  expiration_date: Date | null;
+  expiration_date: string | null;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;

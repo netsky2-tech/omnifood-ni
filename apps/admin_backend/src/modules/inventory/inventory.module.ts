@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Insumo } from './entities/insumo.entity';
+import { InsumoMarketPrice } from './entities/insumo-market-price.entity';
 import { Product } from './entities/product.entity';
 import { Recipe } from './entities/recipe.entity';
 import { InventoryMovement } from './entities/inventory-movement.entity';
@@ -26,12 +27,9 @@ import { ProductInventoryMappingVersion } from './entities/product-inventory-map
 import { InventoryRemediationReceipt } from './entities/inventory-remediation-receipt.entity';
 import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 import { SaleInventoryRemediationService } from './services/sale-inventory-remediation.service';
-import { InventoryService } from './inventory.service';
-import { PurchaseService } from './purchase.service';
 import { ShrinkageService } from './shrinkage.service';
 import { CostCalculatorService } from './cost-calculator.service';
 import { InventoryMovementController } from './inventory-movement.controller';
-import { InventoryMovementService } from './inventory-movement.service';
 import { ProductService } from './product.service';
 import { ProductController } from './product.controller';
 import { RecipeController } from './recipe.controller';
@@ -45,7 +43,6 @@ import { RecipeService } from './recipe.service';
 import { BomExplosionService } from './bom-explosion.service';
 import { ProductionService } from './production.service';
 import { BatchCostingService } from './batch-costing.service';
-import { InventoryAdjustmentService } from './inventory-adjustment.service';
 import {
   FORENSIC_ALERT_DISPATCHER,
   ForensicAlertService,
@@ -59,6 +56,7 @@ import { KardexRegularizationService } from './services/kardex-regularization.se
 import { RegularizationController } from './controllers/regularization.controller';
 import { RemediationController } from './controllers/remediation.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { InventoryValuationService } from './inventory-valuation.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
 import { AuditModule } from '../audit/audit.module';
 
@@ -69,6 +67,10 @@ import { AuditModule } from '../audit/audit.module';
     DeviceSyncModule,
     TypeOrmModule.forFeature([
       Insumo,
+      // S9 (L33) / R-01: the client's own market price, with its date. Without
+      // this in forFeature the valuation service cannot read it, and the
+      // reference would silently stay on the purchase-cost fallback forever.
+      InsumoMarketPrice,
       Product,
       Recipe,
       InventoryMovement,
@@ -104,22 +106,20 @@ import { AuditModule } from '../audit/audit.module';
     InsumoController,
   ],
   providers: [
-    InventoryService,
-    InventoryMovementService,
     InventoryPurchaseService,
     RecipeService,
     BomExplosionService,
     BatchCostingService,
     ProductionService,
-    PurchaseService,
     ShrinkageService,
     CostCalculatorService,
-    InventoryAdjustmentService,
     CountSessionService,
     ForensicAlertService,
     GovernanceApprovalService,
     KardexRegularizationService,
     InventoryReportsService,
+    // S9 (L33) / R-01: lower-of-cost-or-market writedowns.
+    InventoryValuationService,
     UomConversionCalculator,
     FxRateResolverService,
     ProductService,
@@ -138,17 +138,13 @@ import { AuditModule } from '../audit/audit.module';
   ],
   exports: [
     TypeOrmModule,
-    InventoryService,
-    InventoryMovementService,
     InventoryPurchaseService,
     RecipeService,
     BomExplosionService,
     BatchCostingService,
     ProductionService,
-    PurchaseService,
     ShrinkageService,
     CostCalculatorService,
-    InventoryAdjustmentService,
     CountSessionService,
     ForensicAlertService,
     GovernanceApprovalService,

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { Batch } from '../../inventory/entities/batch.entity';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -125,6 +126,14 @@ describe('InvoicesService', () => {
         if (target === User) return userRepo;
         if (target === InventorySyncReceipt) return receiptRepo;
         if (target === InventorySyncOutbox) return outboxRepo;
+        // R13: the delta branch now draws the outflow from the batch balances,
+        // so it resolves this repository too. Reporting NO batches is the
+        // honest fixture here: the insumo of this suite is not batch-managed,
+        // `drawBatchOutflow` returns early, and the assertions on the kardex
+        // rows stay exactly as they were.
+        if (target === Batch) {
+          return { find: jest.fn().mockResolvedValue([]), save: jest.fn() };
+        }
         return undefined;
       }),
       createQueryBuilder: jest

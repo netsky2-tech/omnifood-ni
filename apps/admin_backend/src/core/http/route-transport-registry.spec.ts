@@ -40,13 +40,6 @@ describe('route transport registry (AppModule route table)', () => {
     expect(batch?.controller).toBe('SyncBatchController');
     expect(batch?.guards).toContain('SyncTransportGuard');
 
-    const movementsSync = routes.find(
-      (record) =>
-        record.route === '/inventory/movements/sync' &&
-        record.httpMethod === 'POST',
-    );
-    expect(movementsSync?.guards).toContain('SyncTransportGuard');
-
     const shrinkage = routes.find(
       (record) =>
         record.route === '/inventory/shrinkage' && record.httpMethod === 'POST',

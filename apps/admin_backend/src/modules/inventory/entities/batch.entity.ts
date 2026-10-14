@@ -32,11 +32,15 @@ export class Batch {
   @Column()
   batch_number: string;
 
+  // Calendar days, not instants: the column is a PostgreSQL `date`, so the
+  // only faithful representation is the ISO day string the database stores.
+  // See src/core/database/calendar-day.ts before changing these back to
+  // `Date` — that typing produced both a crash and a silent one-day shift.
   @Column({ type: 'date', name: 'received_date' })
-  received_date: Date;
+  received_date: string;
 
   @Column({ type: 'date' })
-  expiration_date: Date;
+  expiration_date: string;
 
   @Column('decimal', { precision: 14, scale: 4 })
   remaining_stock: number;

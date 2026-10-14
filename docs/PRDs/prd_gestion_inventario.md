@@ -2,6 +2,8 @@
 
 Este PRD define el comportamiento, la arquitectura lógica, las estructuras de datos y las reglas de negocio para el control de inventarios, costeo y producción de OmniPos. Está diseñado para integrarse nativamente con el módulo FOH (Front of House), garantizando consistencia en tiempo real en negocios con infraestructura completa o resiliencia en dispositivos autónomos y simplificados.
 
+> **Cumplimiento normativo obligatorio.** Este PRD se lee junto con **`docs/inventario_marco_normativo.md`**, que fija la base legal y normativa del inventario (Ley 822 de Nicaragua art. 44, su Reglamento art. 33, NIC 2 §23-25) con **texto literal**, separa explícitamente **NORMA / PRÁCTICA / DECISIÓN NUESTRA**, y lista los requisitos obligatorios **`R-01`..`R-07`** con las brechas conocidas contra cada uno. Ninguna implementación de este módulo se aprueba sin declarar **qué `R-nn` toca y cómo lo cumple**; una brecha se registra como tarea, **no se ignora en silencio**.
+
 ## 1. Arquitectura de Operación y Topologías de Sincronización
 
 El inventario de un restaurante o comercio se ve afectado directamente por las ventas del FOH. Dependiendo del escenario de hardware del cliente, el descuento de existencias e insumos se procesa bajo dos topologías de sincronización:
