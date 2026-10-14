@@ -47,10 +47,10 @@ La card del catálogo de ventas desperdicia el 52% de su superficie (medido en S
 
 | ID | Spec | Route | Commit |
 |---|---|---|---|
-| T1 | S1, S5–S7, S9–S12, S16, S19, S20 | Card y grilla: imagen 1:1 protagonista, pie compacto, fallback proporcional, badge de promo con tokens, bandas de columnas, `Semantics` | ✅ `a4d80b7f` |
-| T2 | S3, S13, S14 | Estados de la pantalla: esqueleto de carga local, "sin datos" vs "sin resultados" con reset | ✅ `07241cb8` |
-| T3 | S3, S15 | Precisión del carrito: tabular en precios de línea, plural del contador, vacío válido | ✅ `07241cb8` |
-| T4 | S3, S13, S17, S18 | Filtro por categoría con `ChoiceChip` + estado visible con reset "Todas" | ✅ `ae7fdeaf` |
+| T1 | S1, S5–S7, S9–S12, S16, S19, S20 | Card y grilla: imagen 1:1 protagonista, pie compacto, fallback proporcional, badge de promo con tokens, bandas de columnas, `Semantics` | ✅ `00796cf5` |
+| T2 | S3, S13, S14 | Estados de la pantalla: esqueleto de carga local, "sin datos" vs "sin resultados" con reset | ✅ `28e2a6e1` |
+| T3 | S3, S15 | Precisión del carrito: tabular en precios de línea, plural del contador, vacío válido | ✅ `28e2a6e1` |
+| T4 | S3, S13, S17, S18 | Filtro por categoría con `ChoiceChip` + estado visible con reset "Todas" | ✅ `b3c1c5ce` |
 | T5 | S4 | Evidencia: tests focalizados + capturas antes/después (S23) + verificación de geometría en Q80/V2s | ✅ `.pi/tmp/` |
 
 ## Log
@@ -81,3 +81,4 @@ La card del catálogo de ventas desperdicia el 52% de su superficie (medido en S
 - **L24** — La sesión de cajero no sobrevive al reinicio de la app, así que cada instalación de validación cuesta una vuelta de login manual del usuario. Anotado para futuras validaciones de UI en dispositivo.
 - **L25** — Entrega: issue [#921](https://github.com/netsky2-tech/omnifood-ni/issues/921) (convención issue-first del repo, `status:needs-review` esperando aprobación del owner) + PR en borrador [#922](https://github.com/netsky2-tech/omnifood-ni/pull/922) con `size:exception` declarada. Rama publicada `origin/feat/ventas-catalogo-nhilos`; los 5 commits son los únicos que viajan (los dos de onboarding del PR #920 ya estaban en `origin/main`). Build de validación final: `22052`.
 - **L26** — Comparar contra `main` local engaña: estaba atrás de `origin/main` (le faltaba el merge #920), así que `git diff --stat main...HEAD` mostraba commits ajenos. La comparación correcta es `git diff --stat origin/main...HEAD`, que deja solo los 13 archivos de esta feature.
+- **L27** — Rebase de higiene pedido por la sesión dueña de los dos commits de advisories: la rama llevaba `e727c371` y `d9d546d1` como ancestros aunque **ya estaban en `origin/main`** (merge #920), así que el diff del PR nunca los incluyó. Se rebaseó con frontera `d9d546d1` —no `e727c371`, que habría reprocesado el segundo commit ya aguas arriba— sobre `origin/main`, usando `--autostash` porque este worktree tiene cambios sucios de otro workstream. Resultado: base = `2d56d145` (tip de `origin/main`), **diff de árboles idéntico** (13 archivos, +1991/−233) y los archivos sucios intactos, por lo que el APK ya instalado (`22053`) sigue correspondiendo a este código. Mapeo de hashes: `a4d80b7f`→`00796cf5`, `07241cb8`→`28e2a6e1`, `ae7fdeaf`→`b3c1c5ce`, `7d24a9e1`→`74d0b80d`, `e9d4fc11`→`a7cedeb1`, `a8655d10`→`e6193d25`.
