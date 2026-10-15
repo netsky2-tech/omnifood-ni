@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { Batch } from './entities/batch.entity';
+import { BatchOutflowTrace } from './entities/batch-outflow-trace.entity';
 import {
   BatchCostingService,
   type BatchCandidate,
@@ -60,6 +61,13 @@ export const drawBatchOutflow = async (input: {
   quantity: number;
   /** ISO calendar day (`YYYY-MM-DD`) used for the FEFO / soft-expiry ordering. */
   operationDay: string;
+  /**
+   * The Kardex movement this outflow belongs to. When present, the exact
+   * (batch, quantity) pairs drawn are recorded in `batch_outflow_traces` so a
+   * later cancellation can restore them (R3). Movable callers that save the
+   * movement AFTER drawing simply omit it.
+   */
+  movementId?: string;
 }): Promise<void> => {
   const required = round4(input.quantity);
   if (required <= 0) {
@@ -114,6 +122,71 @@ export const drawBatchOutflow = async (input: {
     batch.remaining_stock = round4(
       Number(batch.remaining_stock) - consumed.consumedQuantity,
     );
+    await batchRepo.save(batch);
+  }
+
+  if (input.movementId) {
+    const traceRepo = input.manager.getRepository(BatchOutflowTrace);
+    for (const consumed of trace) {
+      await traceRepo.save(
+        traceRepo.create({
+          tenant_id: input.tenantId,
+          movement_id: input.movementId,
+          batch_id: consumed.batchId,
+          quantity: round4(consumed.consumedQuantity),
+        }),
+      );
+    }
+  }
+};
+
+/**
+ * Reverses ONE outflow: returns the traced quantities to the SAME batches the
+ * original movement drew from.
+ *
+ * Why an inflow cannot be approximated instead: a POSITIVE movement has no
+ * known lot, and `batches.expiration_date` is NOT NULL, so no batch can be
+ * invented. The only faithful reversal is the recorded trace. A movement with
+ * no trace (a pre-R3 sale, or a non batch-managed insumo) restores nothing.
+ */
+export const restoreBatchInflow = async (input: {
+  manager: EntityManager;
+  tenantId: string;
+  /** The movement whose outflow is being reversed. */
+  movementId: string;
+}): Promise<void> => {
+  const traceRepo = input.manager.getRepository(BatchOutflowTrace);
+  const traces = await traceRepo.find({
+    where: { tenant_id: input.tenantId, movement_id: input.movementId },
+  });
+
+  if (traces.length === 0) {
+    return;
+  }
+
+  const batchRepo = input.manager.getRepository(Batch);
+  const restored = new Map<string, Batch>();
+
+  for (const trace of traces) {
+    let batch = restored.get(trace.batch_id);
+    if (!batch) {
+      batch = await batchRepo.findOne({
+        where: { id: trace.batch_id, tenant_id: input.tenantId },
+      });
+      if (!batch) {
+        throw new ConflictException(
+          `Batch trace referenced an unknown batch: ${trace.batch_id}`,
+        );
+      }
+      restored.set(trace.batch_id, batch);
+    }
+
+    batch.remaining_stock = round4(
+      Number(batch.remaining_stock) + Number(trace.quantity),
+    );
+  }
+
+  for (const batch of restored.values()) {
     await batchRepo.save(batch);
   }
 };

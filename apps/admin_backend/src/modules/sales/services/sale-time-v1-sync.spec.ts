@@ -17,6 +17,8 @@ import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-out
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
+import { Batch } from '../../inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
@@ -96,6 +98,19 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
         // the fall-through hands back an object without those methods.
         if (entity === InvoiceItemModifier) {
           return { delete: jest.fn(), insert: jest.fn() };
+        }
+        // R3: the sale path draws the batch outflow and records its trace.
+        // No batches / no traces keeps both the draw and the restore as
+        // no-ops, exactly like a non batch-managed insumo.
+        if (entity === Batch) {
+          return { find: jest.fn(async () => []), save: jest.fn() };
+        }
+        if (entity === BatchOutflowTrace) {
+          return {
+            find: jest.fn(async () => []),
+            save: jest.fn(),
+            create: jest.fn((d: any) => d),
+          };
         }
         if (entity === Invoice) {
           return {

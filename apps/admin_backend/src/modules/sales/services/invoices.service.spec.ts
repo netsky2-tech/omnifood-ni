@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Batch } from '../../inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -112,7 +113,9 @@ describe('InvoicesService', () => {
     };
     txManager = {
       query: jest.fn<Promise<unknown>, unknown[]>().mockResolvedValue([]),
-      save: jest.fn<Promise<unknown>, unknown[]>(),
+      save: jest.fn<Promise<unknown>, unknown[]>(
+        async (...args: unknown[]) => (args.length >= 2 ? args[1] : args[0]),
+      ),
       // By default, return the injected (standalone) repositories so the
       // existing syncBatch tests that assert on `invoiceRepo.upsert` keep
       // working. Individual tests override this to return distinct
@@ -132,6 +135,11 @@ describe('InvoicesService', () => {
         // `drawBatchOutflow` returns early, and the assertions on the kardex
         // rows stay exactly as they were.
         if (target === Batch) {
+          return { find: jest.fn().mockResolvedValue([]), save: jest.fn() };
+        }
+        // R3: the sale-cancellation restore reads the outflow trace. Reporting
+        // no traces lets the restore return early, exactly like a pre-R3 sale.
+        if (target === BatchOutflowTrace) {
           return { find: jest.fn().mockResolvedValue([]), save: jest.fn() };
         }
         return undefined;

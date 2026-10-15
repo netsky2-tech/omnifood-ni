@@ -26,7 +26,7 @@ import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-out
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
-import { drawBatchOutflow } from '../../inventory/batch-allocation';
+import { drawBatchOutflow, restoreBatchInflow } from '../../inventory/batch-allocation';
 import {
   toCalendarDay,
   todayCalendarDay,
@@ -1847,7 +1847,7 @@ export class InvoicesService {
               )
             : null;
 
-        await manager.save(
+        const savedMovement = await manager.save(
           this.movementRepository.create({
             tenant_id: tenantId,
             insumoId,
@@ -1875,6 +1875,26 @@ export class InvoicesService {
             user_id: invoice.userId,
           }),
         );
+
+        // R3 (S6): the legacy no-flowType branch gets the same batch
+        // discipline as the live branch, so both keep the aggregate and the
+        // batch balances in step.
+        if (movementType === MovementType.SALE) {
+          await drawBatchOutflow({
+            manager,
+            tenantId,
+            insumoId,
+            quantity: Math.abs(normalizedQuantity),
+            operationDay: toCalendarDay(invoice.createdAt),
+            movementId: String(savedMovement.id),
+          });
+        } else if (compensationForKardexId) {
+          await restoreBatchInflow({
+            manager,
+            tenantId,
+            movementId: String(compensationForKardexId),
+          });
+        }
       }
     }
   }
@@ -2219,7 +2239,7 @@ export class InvoicesService {
           )
         : null;
 
-    await manager.save(
+    const savedMovement = await manager.save(
       this.movementRepository.create({
         tenant_id: tenantId,
         insumoId: binding.insumoId,
@@ -2246,6 +2266,26 @@ export class InvoicesService {
         user_id: invoice.userId,
       }),
     );
+
+    // R3 (S6): keep `insumos.stock` and the batch balances in step. A SALE
+    // draws the outflow by FEFO and records the trace; a SALE_CANCEL restores
+    // the SAME lots from the trace of the movement it compensates.
+    if (movementType === MovementType.SALE) {
+      await drawBatchOutflow({
+        manager,
+        tenantId,
+        insumoId: binding.insumoId,
+        quantity: Math.abs(normalizedQuantity),
+        operationDay: toCalendarDay(invoice.createdAt),
+        movementId: String(savedMovement.id),
+      });
+    } else if (compensationForKardexId) {
+      await restoreBatchInflow({
+        manager,
+        tenantId,
+        movementId: String(compensationForKardexId),
+      });
+    }
   }
 
   /// Resolves the Invoice repository bound to [manager] when running

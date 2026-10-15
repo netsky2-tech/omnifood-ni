@@ -13,6 +13,8 @@ import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
+import { Batch } from '../../inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
 
 describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', () => {
   let service: InvoicesService, outcomeService: SaleInventoryOutcomeService, mockTxManager: any;
@@ -58,6 +60,17 @@ describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', (
       // transaction (delete-then-insert). The mock must expose that repo or
       // `getRepository` hands back `{}` and the whole record is rejected.
       [InvoiceItemModifier, { delete: jest.fn(), insert: jest.fn() }],
+      // R3: the sale path draws the batch outflow and records its trace. No
+      // batches / no traces keeps both as no-ops for these scenarios.
+      [Batch, { find: jest.fn(async () => []), save: jest.fn() }],
+      [
+        BatchOutflowTrace,
+        {
+          find: jest.fn(async () => []),
+          save: jest.fn(),
+          create: jest.fn((d: any) => d),
+        },
+      ],
     ]);
     mockTxManager = {
       query: jest.fn(async () => []),
