@@ -1011,6 +1011,90 @@ describe('InventoryPurchaseService', () => {
     );
   });
 
+  it('keeps the correction document in INVOICE units and the movement in CONSUMPTION units (R10)', async () => {
+    const originalDocument: Partial<PurchaseDocument> = {
+      id: 'purchase-doc-units-1',
+      tenant_id: 'tenant-A',
+      insumo_id: 'ins-1',
+      supplier_id: 'sup-1',
+      invoice_number: 'INV-UNITS-1',
+      fiscal_authorization_code: null,
+      invoice_date: '2026-01-03',
+      entry_date: '2026-01-03',
+      entry_timestamp: new Date('2026-01-03T08:15:00.000Z'),
+      // The invoice line is 10 lb …
+      quantity: 10,
+      unit_cost: 100,
+      currency: CURRENCY.NIO,
+      bcn_rate: 1,
+      unit_cost_nio: 100,
+      projected_cpp_nio: 220.4586,
+      lot_code: 'LOT-UNITS',
+      received_date: '2026-01-03',
+      expiration_date: '2026-02-03',
+    };
+    const originalMovement: Partial<InventoryMovement> = {
+      id: '9101',
+      tenant_id: 'tenant-A',
+      insumoId: 'ins-1',
+      type: 'ENTRADA_COMPRA' as InventoryMovement['type'],
+      // … but the valued movement is 4.5360 kg of consumption.
+      quantity: 4.536,
+      previousStock: 0,
+      newStock: 4.536,
+      averageCostAfterNio: 220.4586,
+      unitCostNio: 220.4586,
+      totalCostNio: 1000,
+      sourceDocumentId: 'purchase-doc-units-1',
+      sourceDocumentType: 'PURCHASE',
+      compensationForKardexId: null,
+    };
+
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      stock: 4.536,
+      existenciaActual: 4.536,
+      averageCost: 220.4586,
+      is_perishable: false,
+    });
+    manager.findOne.mockImplementation((entity: unknown, options?: unknown) => {
+      if (entity === PurchaseDocument) {
+        const where = (options as { where?: Record<string, unknown> })?.where;
+        if (where?.id === 'purchase-doc-units-1') {
+          return Promise.resolve(originalDocument);
+        }
+        if (
+          where?.correction_for_purchase_document_id === 'purchase-doc-units-1'
+        ) {
+          return Promise.resolve(null);
+        }
+      }
+      if (entity === InventoryMovement) {
+        return Promise.resolve(originalMovement);
+      }
+      return Promise.resolve(null);
+    });
+
+    await service.correctPurchase({
+      tenantId: 'tenant-A',
+      purchaseDocumentId: 'purchase-doc-units-1',
+      reason: 'Wrong invoice entered',
+    });
+
+    const saveCalls = manager.save.mock.calls as Array<[unknown, unknown]>;
+    const savedCorrectionDocument = saveCalls.find(
+      ([entity]) => entity === PurchaseDocument,
+    )?.[1] as Partial<PurchaseDocument> | undefined;
+    const savedMovement = saveCalls.find(
+      ([entity]) => entity === InventoryMovement,
+    )?.[1] as Partial<InventoryMovement> | undefined;
+
+    // The document stays an invoice record (-10 lb); the movement reverses the
+    // valued stock (-4.5360 kg).
+    expect(savedCorrectionDocument?.quantity).toBe(-10);
+    expect(savedMovement?.quantity).toBe(-4.536);
+  });
+
   it('does not correct a purchase document outside the requested tenant scope', async () => {
     manager.findOne.mockImplementation((entity: unknown) => {
       if (entity === PurchaseDocument) {

@@ -578,7 +578,13 @@ export class InventoryPurchaseService {
 
           const previousStock = round4(Number(insumo.stock));
           const previousCppNio = round4(Number(insumo.averageCost));
+          // R10: the valued movement is in CONSUMPTION units while the purchase
+          // document is an invoice record in INVOICE units. They only coincide
+          // when the insumo's conversion factor is 1.
           const correctedQuantity = round4(-Number(originalMovement.quantity));
+          const correctedDocumentQuantity = round4(
+            -Number(originalDocument.quantity),
+          );
           const correctedTotalCostNio = round4(
             -Number(originalMovement.totalCostNio),
           );
@@ -606,7 +612,7 @@ export class InventoryPurchaseService {
             invoice_date: originalDocument.invoice_date,
             entry_date: todayCalendarDay(),
             entry_timestamp: new Date(),
-            quantity: correctedQuantity,
+            quantity: correctedDocumentQuantity,
             unit_cost: Number(originalDocument.unit_cost),
             currency: originalDocument.currency,
             bcn_rate: Number(originalDocument.bcn_rate),
