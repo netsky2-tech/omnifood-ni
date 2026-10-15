@@ -29,7 +29,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R5** | S8 | **Producción: el producido no queda en CPP 0** (V4-3), adjudicado en V7 | ✅ Cerrada (L11) |
 | **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | — |
 | **R7** | S1 | **Merma/conteo: el umbral forense debe NOTIFICAR de verdad y cubrir el conteo** (H7) | ✅ Cerrada (L17) |
-| **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ (`GET /inventory/reports/dish-margins` y `theoretical-cost?productId=`); falta la superficie del dashboard | 🟡 Backend medido (L19) |
+| **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ (`GET /inventory/reports/dish-margins` y `theoretical-cost?productId=`); **la superficie del dashboard se hace dentro de V10** (decisión del owner, L20) | 🟡 Backend medido (L19) |
 | **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | — |
 | **R10** | S4, S9 | **Corrección de compra: no mezclar unidades** — el documento de corrección toma `correctedQuantity` del movimiento (unidad de **consumo**) y lo escribe junto a un `unit_cost` de **factura**; para factor ≠ 1 son unidades distintas | ✅ Cerrada (L13) |
 | **R11** | S7 | **Venta camino vivo: `SaleInventoryOutcomeService` debe expandir el `SUB_RECIPE`** — hoy **rechaza la venta** con `insumoId '…' not found` | ✅ Cerrada (L12) |
@@ -102,3 +102,4 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Medido en el rig**: producto `d178eff3` (receta que consume 2 × CPP 50) → `unitTheoreticalCostNio **100**`, `grossMarginNio 20`, `grossMarginPct 16.6667`, con el desglose por componente (`costPercentage 100`). `dish-margins` devolvió **1 plato** (`ZZ TEST Pan de Lote`, costo 100, precio 120, margen 20) y **2 skipped con razón explícita** (una receta que referencia un insumo inexistente y una sub-receta sin receta activa — datos de prueba previos del rig, no un fallo del servicio).
   - **Falta**: la **superficie del dashboard** que muestre esto (la mitad humana de H8). R8 queda **abierto** hasta entonces.
   - **Evidencia**: **563/563** inventario (5 tests del servicio + 3 del controller).
+- **L20** 2026-10-15 — **Decisión del owner: la superficie del dashboard de R8 se hace DENTRO de V10.** Razon de eficiencia: V10 ya levanta el dashboard y corre Playwright live sobre los formularios reales, así que la superficie de costo teórico/margen por plato se construye y se verifica ahí, en un solo esfuerzo. **R8 queda abierto** (backend hecho) hasta que V10 entregue la UI.
