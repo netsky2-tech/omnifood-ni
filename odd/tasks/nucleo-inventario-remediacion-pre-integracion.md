@@ -23,7 +23,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | ID | Spec | Tarea | Estado |
 |---|---|---|---|
 | **R1** | S1, S3, S4, S9 | **UOM: validar al crear/editar (H2) y convertir al comprar (H1)** — son un mismo agujero visto de dos lados | ✅ Cerrada (L6) |
-| **R2** | S5 | **Venta: enlazar la compensación de la anulación en el camino con `flowType`** (H4) | — |
+| **R2** | S5 | **Venta: enlazar la compensación de la anulación en el camino con `flowType`** (H4) | ✅ Cerrada (L7) |
 | **R3** | S6 | **Venta y anulación: descontar lotes con `drawBatchOutflow`** (H6/R13) | — |
 | **R4** | S7 | **Receta: cablear la explosión multi-nivel en los caminos vivos** (H5) | — |
 | **R5** | S8 | **Producción: el producido no queda en CPP 0** (V4-3), adjudicado en V7 | — |
@@ -45,3 +45,9 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **H1 (conversión)**: compra real de **10 lb a C$100/lb** (NIO) sobre un insumo nuevo `lb→kg` → `insumos.stock = **4.5360**`, `costo_promedio_nio = **220.4586**`, kardex `ENTRADA_COMPRA 4.5360 @ 220.4586 = 1000.0002`, lote `remaining_stock 4.5360, cost 220.4586`. **Antes del arreglo el mismo caso daba `stock 10.0000` y `CPP 100.0000`** (V2-2). El `+0.0002` sobre C$1000 es el redondeo a 4 decimales de cantidad y costo, y mantiene la identidad `quantity × unitCostNio = totalCostNio`.
   - **Hallazgo de la propia remediación (no estaba en la verificación)**: la guarda exigía el ancla con tolerancia **1e-6**, pero `insumos.conversionFactor` es **`numeric(12,4)`**. El valor que la guarda manda a cargar (`0.45359237`) se **almacena como `0.4536`**, así que el insumo recién creado **fallaba al revalidarse** en el próximo edit que tocara una UOM. Medido en el rig: `PUT` con las UOM iguales daba **400 antes** del ajuste y **200 después**; `PUT` con factor 1 sigue dando **400**. Tolerancia atada a la precisión de la columna (`1e-4`, `ANCHOR_FACTOR_TOLERANCE`), con test que fija el round-trip de 4 decimales (también para `oz→g = 28.3495`).
   - **R10 queda abierta** (unidades en el documento de corrección). **Evidencia**: **523/523** specs de inventario en verde; sin código de producto fuera de la remediación.
+- **L7** 2026-10-15 — **R2 CERRADA, y con una causa raíz más profunda que la que reportó la verificación.**
+  - **Lo que faltaba**: `appendV1Movement` (`invoices.service.ts:2084`), el camino que el POS usa cuando el record trae `flowType`, no resolvía la compensación. Se agregó la resolución (la misma que ya existía en `appendFohMovements`).
+  - **Lo que apareció al medir**: la anulación **falló en el rig** con `BUSINESS_RULE_VALIDATION — Property "reason" was not found in "InventoryMovement"`. `resolveCompensatedMovementId` (`:1940`) filtraba por `reason`, que en la entidad es un **getter sobre `sourceDocumentId`, NO una columna**. O sea: **la compensación legacy (`appendFohMovements`) tampoco funcionaba** — su camino es inalcanzable en producción (sólo se toma si ningún record trae `flowType`), así que el error nunca se manifestó. Corregido a `sourceDocumentId`, la columna real.
+  - **Medido en el rig**: venta kardex **53** y anulación kardex **54** con `compensation_for_kardex_id = 53` → **ENLAZADA ok**. `stock 6` / `lotes 6` vuelven a la línea base.
+  - **Pin contra la trampa del mock**: el test unitario mockea `manager.findOne` y **no podía ver** el error de TypeORM. Se agregó un test de metadatos que verifica que `reason` **no** es columna y `sourceDocumentId` sí, que es lo que habría atrapado la regresión.
+  - **Evidencia**: **604/604** specs de ventas en verde.
