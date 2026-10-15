@@ -424,6 +424,137 @@ void main() {
       });
     });
 
+    group('Company identity parity: ruc rides the managed-keys marker (option B)', () {
+      const rucRev2Fp =
+          'rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr';
+
+      test('S3 retraction: a later ruc:null CLEARS the previously asserted ruc and drops it from the marker', () async {
+        // Rev 1 asserts a non-blank ruc: the key must join the marker (the
+        // SET half of the option-B contract).
+        await handler.handleFiscalEnvelope(sampleEnvelope);
+        expect(
+            (await database.localConfigDao.getConfigByKey('ruc'))?.value,
+            'J0310000000001');
+        final markerAfterSet = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(markerAfterSet!.value.split(','), contains('ruc'),
+            reason: 'a SET must record the assertion so a later null is a '
+                'genuine retraction, not a cloud-with-no-opinion');
+
+        // Rev 2 retracts it: the stale mirror must not survive (S3).
+        final rev2 = {
+          ...sampleEnvelope,
+          'ruc': null,
+          'configVersion': {
+            'revision': 2,
+            'fingerprint': rucRev2Fp,
+          },
+        };
+        final outcome = await handler.handleFiscalEnvelope(rev2);
+        expect(outcome.status, FiscalInboxStatus.applied);
+        expect(await database.localConfigDao.getConfigByKey('ruc'), isNull,
+            reason: 'the cloud retracted a ruc it previously asserted');
+        final marker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(marker!.value.split(','), isNot(contains('ruc')),
+            reason: 'the retraction must un-assert ruc so a LATER null can '
+                'never delete a freshly operator-entered value');
+      });
+
+      test('absent ruc key in a later revision is a NO-OP: a previously asserted ruc is NOT cleared', () async {
+        await handler.handleFiscalEnvelope(sampleEnvelope);
+
+        // The P1 builder always sends the key; an ABSENT key is the legacy
+        // shape and must mean "no opinion", never "clear".
+        final rev2 = {
+          ...sampleEnvelope,
+          'configVersion': {
+            'revision': 2,
+            'fingerprint': rucRev2Fp,
+          },
+        }..remove('ruc');
+        final outcome = await handler.handleFiscalEnvelope(rev2);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(
+            (await database.localConfigDao.getConfigByKey('ruc'))?.value,
+            'J0310000000001',
+            reason: 'omitted = no-op: the snapshot said nothing about ruc, '
+                'so the local key must survive');
+      });
+
+      test('pre-P2 defect (task 31): ruc:null from a cloud that never asserted a ruc PRESERVES the operator-entered ruc and replays as a true no-op', () async {
+        // What every production terminal looks like today: the operator
+        // typed the RUC into the business profile and the snapshot (post-P1
+        // builder: `tenant.ruc || null`) carries ruc:null with NO prior
+        // assertion. The old unconditional delete destroyed exactly this
+        // value — and it is printed on fiscal documents.
+        await database.localConfigDao.saveConfig(LocalConfigEntity(
+          key: 'ruc',
+          value: 'X0110000000000',
+          description: 'RUC entered by the operator in the business profile',
+        ));
+
+        final rev1 = {
+          ...sampleEnvelope,
+          'ruc': null,
+        };
+        final outcome = await handler.handleFiscalEnvelope(rev1);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(
+            (await database.localConfigDao.getConfigByKey('ruc'))?.value,
+            'X0110000000000',
+            reason: 'never asserted -> NO-OP, never delete an '
+                'operator-entered value');
+
+        // No constraint imposed -> complete, and the replay is a true
+        // no-op, not an endless repair loop.
+        expect(await handler.isProjectionComplete(rev1, tenantId), isTrue);
+        final replay = await handler.handleFiscalEnvelope(rev1);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+
+      test('completeness: TRUE once a genuine retraction is applied and TRUE when the key is omitted', () async {
+        // Retraction applied: local ruc cleared, marker un-asserted.
+        await handler.handleFiscalEnvelope(sampleEnvelope);
+        final rev2 = {
+          ...sampleEnvelope,
+          'ruc': null,
+          'configVersion': {
+            'revision': 2,
+            'fingerprint': rucRev2Fp,
+          },
+        };
+        await handler.handleFiscalEnvelope(rev2);
+        expect(await handler.isProjectionComplete(rev2, tenantId), isTrue);
+
+        // Key omitted entirely (legacy builder shape) on a fresh terminal:
+        // absence imposes no completeness constraint.
+        const omittedTenant = 'tenant-ruc-omitted';
+        final omittedEnvelope = {
+          'tenantId': omittedTenant,
+          'businessName': 'Negocio Sin Clave RUC',
+          'fiscalRegime': 'CUOTA_FIJA',
+          'taxRate': 0.0,
+          'pricesIncludeTax': true,
+          'commercialFxSpread': 36.5,
+          'configVersion': {
+            'revision': 1,
+            'fingerprint':
+                'uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu',
+          },
+        };
+        final outcome = await handler.handleFiscalEnvelope(omittedEnvelope);
+        expect(outcome.status, FiscalInboxStatus.applied);
+        expect(
+            await handler.isProjectionComplete(omittedEnvelope, omittedTenant),
+            isTrue);
+        final replay = await handler.handleFiscalEnvelope(omittedEnvelope);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
+      });
+    });
+
     group('D-21 (U2 #554): DGI authorization projection', () {
       test('projects dgiAuthorizationCode/IssuedAt/ExpiresAt into local_configs', () async {
         final envelope = {
@@ -1594,7 +1725,7 @@ void main() {
     group('Payload transitions & stale optional mirrors (Finding A)', () {
       const transitionTenant = 'tenant-transition-1';
 
-      test('absence of optional ruc and commercialFxSpread in newer snapshot atomically removes stale legacy keys', () async {
+      test('a newer snapshot retracting ruc and commercialFxSpread it asserted atomically removes those legacy keys', () async {
         final rev1Envelope = {
           'tenantId': transitionTenant,
           'businessName': 'Restaurante El Lago',
@@ -1650,21 +1781,51 @@ void main() {
 
         // Optional fields MUST BE REMOVED atomically
         final ruc2 = await database.localConfigDao.getConfigByKey('ruc');
-        expect(ruc2, isNull, reason: 'Stale RUC key must be removed when absent in newer snapshot');
+        expect(ruc2, isNull,
+            reason:
+                'The cloud retracted the ruc it asserted in rev 1: a stale '
+                'issuer key must not survive its clearing revision');
         final fx2 = await database.localConfigDao.getConfigByKey('commercial_exchange_rate');
         expect(fx2, isNull, reason: 'Stale commercialFxSpread key must be removed when absent in newer snapshot');
 
         // Completeness evaluates to true
         expect(await handler.isProjectionComplete(rev2Envelope, transitionTenant), isTrue);
 
-        // If a stale optional key is manually re-inserted, completeness detects it and returns false
+        // SUPERSESSION DECLARED (odd/tasks/identidad-empresa-paridad.md
+        // S1/S3/S6, task 31): the previous expectation here — isFalse,
+        // "Completeness must detect stale optional keys that should be
+        // absent" — encoded the pre-option-B rule "the cloud's snapshot is
+        // complete, so a ruc not in it must not exist locally". That rule
+        // silently destroyed operator-entered rucs on a ruc:null snapshot,
+        // and the destruction was NOT spared by the print path: the invoice
+        // RUC printed by sale_view_model.dart:2389 is
+        // `printerConfig.fiscalRuc` — the PLAIN `ruc` key, not
+        // `printer_header_ruc` (address/phone/businessName use the header*
+        // variants; ruc does not) — so it could print a fiscal invoice with
+        // NO issuer RUC (DGI Disposición Técnica 09-2007). The current
+        // option-B contract: after the cloud retracts a ruc it previously
+        // asserted, the clearing revision DROPS the key from
+        // business_profile_managed_keys, so a later local ruc is
+        // operator-entered by contract and must be preserved.
+        final markerAfterRetraction = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(markerAfterRetraction?.value.split(',') ?? const <String>[],
+            isNot(contains('ruc')),
+            reason: 'the retraction un-asserted ruc: the marker no longer '
+                'names it (rev 2 asserts nothing else, so the marker row is '
+                'removed entirely — absence looks like absence), which is '
+                'exactly WHY a later local ruc is operator-entered and '
+                'completeness imposes no constraint on it');
         await database.localConfigDao.saveConfig(
-          LocalConfigEntity(key: 'ruc', value: 'stale-ruc-value'),
+          LocalConfigEntity(key: 'ruc', value: 'ruc re-entered by the operator'),
         );
         expect(
           await handler.isProjectionComplete(rev2Envelope, transitionTenant),
-          isFalse,
-          reason: 'Completeness must detect stale optional keys that should be absent',
+          isTrue,
+          reason: 'after a genuine retraction the marker no longer names '
+              'ruc, so a later local ruc is operator-entered by contract '
+              'and must be preserved — never treated as a stale key to '
+              'detect and delete',
         );
       });
     });

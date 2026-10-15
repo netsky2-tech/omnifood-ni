@@ -32,6 +32,7 @@ pantalla no expone un valor, leerlo directamente de `local_configs`
 | `printer_header_phone`        | ______ | **Idéntico** |
 | `address` (perfil del negocio)| ______ | **Idéntico** |
 | `phone` (perfil del negocio)  | ______ | **Idéntico** |
+| `ruc` (perfil del negocio / emisor fiscal) | ______ | **Idéntico**, salvo la única excepción legítima: la nube **retira** un ruc que había afirmado antes (revisión que manda `ruc: null` después de haber proyectado un ruc no vacío) — idéntico en todo lo demás, incluida la llegada de un snapshot con `ruc: null` que **nunca** afirmó un ruc |
 
 Notas de registro:
 - `printer_logo_base64` es largo; no hace falta copiar el string completo,
@@ -41,6 +42,13 @@ Notas de registro:
   negocio: `printer_header_address ?? address`). Registrar **también** la
   ausencia — la precedencia local explícita (`printer_header_* ?? business_*`)
   es S6 y no cambia en esta verificación.
+- La clave `ruc` (sin prefijo) es la que **imprimen** las rutas de venta y
+  reimpresión (`fiscalRuc` en printer_config.dart); `printer_header_ruc` es
+  decorativa y no la pisa. Con el arreglo option-B del ruc (tarea 31, que
+  reusa el marcador de P2), la proyección escribe `ruc`
+  sólo cuando el snapshot lo afirma, y una retracción (`ruc: null` tras
+  haberlo afirmado) es el **único** escritor legítimo de un cambio — todo
+  otro cambio de `ruc` sin intervención del operador es **fallo**.
 
 ## Paso 1 — Ticket de caracterización ANTES
 

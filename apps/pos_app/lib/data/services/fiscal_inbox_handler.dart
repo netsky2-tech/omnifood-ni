@@ -157,9 +157,10 @@ class FiscalProjectionKeys {
   /// never validated by [FiscalInboxHandler.isProjectionComplete].
   ///
   /// Since the P2 option-B fix this ALSO names the identity mirrors
-  /// (`address`, `phone`, `email`) whenever the snapshot carries a non-blank
-  /// value for them. Membership is the assertion record that makes a later
-  /// null/blank a CLEAR for those keys; a clearing revision drops the key.
+  /// (`address`, `phone`, `email`) and the `ruc` issuer key whenever the
+  /// snapshot carries a non-blank value for them. Membership is the
+  /// assertion record that makes a later null/blank a CLEAR for those keys;
+  /// a clearing revision drops the key.
   static const String businessProfileManagedKeys = 'business_profile_managed_keys';
 }
 
@@ -673,7 +674,46 @@ class FiscalInboxHandler {
 
     final keysToDelete = <String>[];
 
-    // Optional RUC: project if non-blank, delete key atomically if absent/empty
+    // Company identity parity P2: address/phone/email mirrors (and, since
+    // the ruc option-B fix, the `ruc` issuer key), read by the printed
+    // header fallback and the reprint snapshot (sales_repository_impl).
+    // Reviewer-authorized option B (S7/L3 + S3): conditional clears riding
+    // the existing [FiscalProjectionKeys.businessProfileManagedKeys] marker
+    // — no new machinery, no payload change. Present and non-blank -> SET
+    // and ASSERT; present null/blank -> CLEAR only when the stored marker
+    // shows the cloud PREVIOUSLY asserted the field; never asserted or
+    // absent -> NO-OP, never delete. See the block comment on
+    // [FiscalProjectionKeys.businessAddress] for the full rationale.
+    //
+    // The marker read below is the PRE-transaction state and MUST precede
+    // the ruc decision, so the ruc rule and the identity mirrors use the
+    // same pre-transaction marker state (a within-transaction write could
+    // never be read back here anyway; the pre-state is the only honest
+    // discriminator).
+    final storedManagedKeys = await _database.localConfigDao
+        .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+    final previousManagedKeys =
+        storedManagedKeys?.value.split(',').toSet() ?? <String>{};
+
+    // D-11/BXW-007/P2-shared assertion record: the ruc key, the identity
+    // mirrors below and the fx/mode mirrors further down all record their
+    // assertion in the SAME marker, written once at the end of this
+    // transaction.
+    final assertedBusinessProfileKeys = <String>[];
+
+    // Optional RUC (option B, same three-way shape as the identity mirrors
+    // below). OPERATOR-FACING CONSEQUENCE (declared): while the cloud
+    // asserts a non-blank ruc, `ruc` is a marker-managed key, and the
+    // marker's only consumer today (business_profile_view_model.dart
+    // saveConfig) SKIPS managed keys — so the operator's ruc edit in the
+    // POS "Perfil del Negocio" form is not persisted on save while the
+    // cloud owns the field. That is the same already-shipped behaviour as
+    // address/phone/email; the view sets readOnly only for the FX fields,
+    // so the field still LOOKS editable. Absent -> NO-OP; non-blank -> SET
+    // + ASSERT; present null/blank -> CLEAR only when previously asserted;
+    // never asserted -> NO-OP, never delete an operator-entered value (the
+    // printed RUC on fiscal documents; the ticket header fallback is why a
+    // wrongful delete never surfaced as a printing failure).
     final ruc = rawEnvelope['ruc']?.toString().trim();
     if (ruc != null && ruc.isNotEmpty) {
       projections.add(LocalConfigEntity(
@@ -681,29 +721,15 @@ class FiscalInboxHandler {
         value: ruc,
         description: 'Projected RUC from fiscal snapshot',
       ));
-    } else {
+      assertedBusinessProfileKeys.add(FiscalProjectionKeys.ruc);
+    } else if (rawEnvelope.containsKey('ruc') &&
+        previousManagedKeys.contains(FiscalProjectionKeys.ruc)) {
+      // The cloud retracts a ruc it previously asserted: the stale issuer
+      // key must not survive its clearing revision (S3). The marker write
+      // below drops the key, so a LATER null can never delete a freshly
+      // operator-entered value.
       keysToDelete.add(FiscalProjectionKeys.ruc);
     }
-
-    // Company identity parity P2: address/phone/email mirrors, read by the
-    // printed header fallback (`printer_header_address ?? address`, etc.) and
-    // the reprint snapshot (sales_repository_impl). Reviewer-authorized
-    // option B (S7/L3 + S3): conditional clears riding the existing
-    // [FiscalProjectionKeys.businessProfileManagedKeys] marker — no new
-    // machinery, no payload change. Present and non-blank -> SET and ASSERT;
-    // present null/blank -> CLEAR only when the stored marker shows the
-    // cloud PREVIOUSLY asserted the field; never asserted or absent ->
-    // NO-OP, never delete. See the block comment on
-    // [FiscalProjectionKeys.businessAddress] for the full rationale.
-    final storedManagedKeys = await _database.localConfigDao
-        .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
-    final previousManagedKeys =
-        storedManagedKeys?.value.split(',').toSet() ?? <String>{};
-
-    // D-11/BXW-007/P2-shared assertion record: the identity mirrors below
-    // and the fx/mode mirrors further down all record their assertion in the
-    // SAME marker, written once at the end of this transaction.
-    final assertedBusinessProfileKeys = <String>[];
 
     const identityMirrorEnvelopeKeys = <String, String>{
       FiscalProjectionKeys.businessAddress: 'address',
@@ -941,38 +967,9 @@ class FiscalInboxHandler {
     final pricesIncludeTaxMatches = localPit != null &&
         localPit.value.trim().toLowerCase() == rawPricesIncludeTax.toString();
 
-    // 6. ruc is OPTIONAL:
-    // If present in payload -> local must exist and match trimmed value.
-    // If absent in payload -> local MUST NOT exist (stale key check).
-    final rawRuc = rawEnvelope['ruc'];
-    final String? ruc;
-    if (rawRuc is String) {
-      ruc = rawRuc.trim();
-    } else if (rawRuc == null) {
-      ruc = null;
-    } else {
-      ruc = rawRuc.toString().trim();
-    }
-    final hasRuc = ruc != null && ruc.isNotEmpty;
-    final localRuc =
-        await _database.localConfigDao.getConfigByKey(FiscalProjectionKeys.ruc);
-    final bool rucMatches;
-    if (hasRuc) {
-      rucMatches = localRuc != null && localRuc.value.trim() == ruc;
-    } else {
-      rucMatches = localRuc == null;
-    }
-
-    // 6b. Company identity mirrors (parity P2, reviewer-authorized option B):
-    // the SAME conditional-clear semantics as the projection. Present and
-    // non-blank -> the local key must exist and match. Present null/blank ->
-    // a CLEAR only when the stored marker shows the cloud previously
-    // asserted the field (then the local key MUST NOT exist); never asserted
-    // or absent (pre-P1 builder only) -> NO constraint: the projection is a
-    // no-op for that key and must never delete a locally entered value, so
-    // demanding absence here would make repair loop forever against a key it
-    // must not touch. The marker read below is the PRE-transaction state,
-    // the same state the projection transaction itself reads.
+    // 6b marker read, lifted ABOVE the ruc check: both the ruc rule and the
+    // identity mirrors must use the PRE-transaction marker state, the same
+    // state the projection transaction itself reads.
     final storedManagedKeys = await _database.localConfigDao
         .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
     final previousManagedKeys =
@@ -1001,6 +998,22 @@ class FiscalInboxHandler {
       return localEntity == null; // previously asserted + null -> must be cleared
     }
 
+    // 6. ruc is OPTIONAL with the SAME conditional-clear semantics as the
+    // identity mirrors (option B): absent -> no constraint; present and
+    // non-blank -> the local key must exist and match; present null/blank
+    // -> a CLEAR only when the marker (read above) shows the cloud
+    // previously asserted the key; never asserted -> NO constraint, because
+    // the projection is a no-op for that key and must never delete an
+    // operator-entered value — the RUC printed on fiscal documents.
+    final rucMatches =
+        await identityMirrorMatches('ruc', FiscalProjectionKeys.ruc);
+
+    // 6b. Company identity mirrors (parity P2, reviewer-authorized option
+    // B): the SAME conditional-clear semantics as the ruc rule above.
+    // Never asserted or absent (pre-P1 builder only) -> NO constraint: the
+    // projection is a no-op for that key and must never delete a locally
+    // entered value, so demanding absence here would make repair loop
+    // forever against a key it must not touch.
     final addressMatches = await identityMirrorMatches(
         'address', FiscalProjectionKeys.businessAddress);
     final phoneMatches = await identityMirrorMatches(

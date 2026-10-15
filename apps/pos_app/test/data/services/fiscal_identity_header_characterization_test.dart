@@ -52,6 +52,7 @@ void main() {
     Object? address = _absent,
     Object? phone = _absent,
     Object? email = _absent,
+    Object? ruc = _absent,
   }) {
     final e = <String, dynamic>{
       'tenantId': tenantId,
@@ -72,6 +73,7 @@ void main() {
     if (!identical(address, _absent)) e['address'] = address;
     if (!identical(phone, _absent)) e['phone'] = phone;
     if (!identical(email, _absent)) e['email'] = email;
+    if (!identical(ruc, _absent)) e['ruc'] = ruc;
     return e;
   }
 
@@ -107,9 +109,16 @@ void main() {
   /// Resolves EXACTLY what a printed ticket header would carry, through the
   /// real read path (printer_config_service.dart:111-114):
   /// `printer_header_address ?? address`, `printer_header_phone ?? phone`.
-  Future<({String? address, String? phone})> resolveHeader() async {
+  /// The printed RUC is `fiscalRuc` — the plain `ruc` key (printer_config.dart:
+  /// "the sale and reprint paths print; [headerRuc] must never shadow it"),
+  /// which the projection writes and the operator may edit.
+  Future<({String? address, String? phone, String? ruc})> resolveHeader() async {
     final config = await printerConfigService.getPrinterConfig();
-    return (address: config.headerAddress, phone: config.headerPhone);
+    return (
+      address: config.headerAddress,
+      phone: config.headerPhone,
+      ruc: config.fiscalRuc,
+    );
   }
 
   group('CHARACTERIZATION: printed header is inert for a cloud with NO identity (S7/L3)', () {
@@ -170,6 +179,43 @@ void main() {
           reason: 'The printed ticket PHONE changed after priming with a '
               'cloud that has NO identity configured — this violates the '
               'owner constraint in S7/L3.');
+    });
+
+    test('legacy terminal WITHOUT printer_header_* override: the RUC typed by '
+        'the operator must survive priming with a cloud that has NO ruc '
+        '(post-P1 builder sends ruc:null) — the plain `ruc` key is what the '
+        'sale and reprint paths print', () async {
+      // Rev 1: the cloud has never asserted a ruc (ruc:null, the P1 builder
+      // shape for a tenant whose `tenant.ruc` column is NULL).
+      await handler.handleFiscalEnvelope(envelope(
+        revision: 1,
+        fingerprint: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ruc: null,
+      ));
+      // The operator typed the RUC into the business profile: the plain
+      // `ruc` key, NO printer_header_ruc override.
+      await database.localConfigDao.saveConfig(LocalConfigEntity(
+        key: 'ruc',
+        value: 'J0310000000001',
+        description: 'RUC entered by the operator in the business profile',
+      ));
+
+      final before = await resolveHeader();
+      expect(before.ruc, 'J0310000000001');
+
+      final outcome = await handler.handleFiscalEnvelope(envelope(
+        revision: 2,
+        fingerprint: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+        ruc: null,
+      ));
+      expect(outcome.status, FiscalInboxStatus.applied);
+
+      final after = await resolveHeader();
+      expect(after.ruc, 'J0310000000001',
+          reason: 'The printed RUC changed after priming with a cloud that '
+              'NEVER asserted a ruc — the projection destroyed an '
+              'operator-entered value that fiscal documents print '
+              '(S7/L3 + option B production-safety half).');
     });
 
     test('legacy terminal WITH printer_header_* override: the same priming '
