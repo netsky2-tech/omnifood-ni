@@ -49,6 +49,19 @@ Notas de registro:
   sólo cuando el snapshot lo afirma, y una retracción (`ruc: null` tras
   haberlo afirmado) es el **único** escritor legítimo de un cambio — todo
   otro cambio de `ruc` sin intervención del operador es **fallo**.
+- **Si `ruc` está AUSENTE en el Paso 0**, el código anterior pudo haberlo
+  borrado ya: una revisión con `ruc: null` borraba la clave local. El arreglo
+  es **sólo hacia adelante**, no puede restaurar lo ya borrado: volver a
+  cargar el RUC del emisor (desde la web o desde Perfil del Negocio) **antes**
+  de la comparación, y anotar que el valor se recuperó a mano.
+- **Artefacto entre versiones (declarado).** Una terminal que aplicó un
+  snapshot **anterior al arreglo** con un `ruc` no vacío tiene un marcador que
+  **no** nombra `ruc` (el código viejo nunca lo registraba). Para esa terminal,
+  una revisión posterior con `ruc: null` **conserva** el valor previo en vez de
+  borrarlo: la retracción recién toma efecto cuando la nube vuelve a afirmar un
+  `ruc` no vacío (ahí queda registrado y el `null` siguiente sí borra). Es
+  conservador a propósito — nunca borra de más — y hay que esperarlo, no
+  reportarlo como fallo.
 
 ## Paso 1 — Ticket de caracterización ANTES
 
