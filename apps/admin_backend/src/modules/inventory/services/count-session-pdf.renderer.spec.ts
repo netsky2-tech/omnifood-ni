@@ -1,6 +1,11 @@
 import * as zlib from 'node:zlib';
 import {
+  COUNT_SESSION_PDF_COLUMN_X_RANGES,
+  COUNT_SESSION_PDF_CONTENT_AREA,
+  COUNT_SESSION_PDF_MIN_COLUMN_GAP,
   renderCountSessionPdf,
+  type CountSessionPdfLayoutTrace,
+  type CountSessionPdfTraceElement,
   type CountSessionPrintDocument,
   type CountSessionPrintEntry,
 } from './count-session-pdf.renderer';
@@ -186,6 +191,59 @@ const renderText = async (
   };
 };
 
+/**
+ * LAYOUT BLIND SPOT, closed (S14 fix): content presence could not see two
+ * texts drawn at the same coordinates — that is how a document with notes
+ * printed OVER the table passed. These helpers assert GEOMETRY from the
+ * renderer's own layout trace: page, box and role of every drawn element.
+ */
+
+/** Boxes overlap only if their intersection exceeds the tolerance. */
+const TRACE_EPSILON = 0.25;
+
+const rectsOverlap = (
+  a: Pick<CountSessionPdfTraceElement, 'x' | 'y' | 'width' | 'height'>,
+  b: Pick<CountSessionPdfTraceElement, 'x' | 'y' | 'width' | 'height'>,
+): boolean =>
+  a.x < b.x + b.width - TRACE_EPSILON &&
+  b.x < a.x + a.width - TRACE_EPSILON &&
+  a.y < b.y + b.height - TRACE_EPSILON &&
+  b.y < a.y + a.height - TRACE_EPSILON;
+
+const renderWithTrace = async (
+  document: CountSessionPrintDocument,
+  identity: CompanyIdentity,
+  logo?: Parameters<typeof renderCountSessionPdf>[3],
+): Promise<{
+  buffer: Buffer;
+  text: string;
+  pages: number;
+  trace: CountSessionPdfLayoutTrace;
+}> => {
+  let trace: CountSessionPdfLayoutTrace | undefined;
+  const buffer = await renderCountSessionPdf(
+    document,
+    identity,
+    {
+      compress: false,
+      trace: (received) => {
+        trace = received;
+      },
+    },
+    logo,
+  );
+  // If the renderer stops emitting a trace, every geometric assertion below
+  // would be vacuous — fail loudly instead.
+  expect(trace).toBeDefined();
+  expect(trace.elements.length).toBeGreaterThan(0);
+  return {
+    buffer,
+    text: extractPrintedText(buffer),
+    pages: pageCountOf(buffer),
+    trace: trace,
+  };
+};
+
 describe('count-session-pdf.renderer — the signed count list (R19 T3, S14/S15/S15-bis)', () => {
   it('produces a real PDF whose printed text is extractable (technique guard)', async () => {
     const { buffer, text, pages } = await renderText(
@@ -211,9 +269,11 @@ describe('count-session-pdf.renderer — the signed count list (R19 T3, S14/S15/
     expect(text).toContain('Correo: facturacion@lacasita.ni');
     expect(text).toContain('Sesión: SESS-2026-10-14-0001');
     expect(text).toContain('Depósito: Bodega Central');
-    expect(text).toContain('Fecha del conteo: 2026-10-14');
-    expect(text).toContain('Registrado: 2026-10-14');
-    expect(text).toContain('Estado: POSTED');
+    expect(text).toContain('Fecha del conteo: 14/10/2026');
+    expect(text).toContain('Registrado: 14/10/2026');
+    // S14: the state is a word on paper, not a storage token.
+    expect(text).toContain('Estado: Conciliada');
+    expect(text).not.toContain('Estado: POSTED');
     expect(text).toContain('Entradas registradas: 2');
     // The count table itself.
     expect(text).toContain('Insumo');
@@ -270,7 +330,7 @@ describe('count-session-pdf.renderer — the signed count list (R19 T3, S14/S15/
     // Every page repeats the document identity (session + date), so a loose
     // sheet stays attributable: header block + footer line = twice per page.
     expect(countOccurrences(text, 'SESS-2026-10-14-0001')).toBe(2 * pages);
-    expect(countOccurrences(text, 'Fecha del conteo: 2026-10-14')).toBe(pages);
+    expect(countOccurrences(text, 'Fecha del conteo: 14/10/2026')).toBe(pages);
 
     // Page numbering is complete and consistent: Página 1..N de N.
     const pageNumbers = [...text.matchAll(/Página (\d+) de (\d+)/g)];
@@ -321,10 +381,17 @@ describe('count-session-pdf.renderer — the signed count list (R19 T3, S14/S15/
     expect(text).toContain('kg');
     expect(text).toContain('8.25');
     expect(text).toContain('7.5');
-    expect(text).toContain('2026-10-14 09:35');
+    // S14: dates a person reads (the counted act, Managua local: 09:35Z is
+    // 03:35 in Nicaragua).
+    expect(text).toContain('14/10/2026 03:35');
+    expect(text).not.toContain('2026-10-14 09:35');
     expect(text).toContain('María López');
     expect(text).toContain('DISPUTADA');
-    expect(text).toContain('Notas: Bolsa abierta encontrada en anaquel');
+    // The entry's note is labeled with its insumo — distinguishable from the
+    // session's note — and it is drawn BELOW its row, never over it.
+    expect(text).toContain(
+      'Notas de la entrada "Harina de trigo": Bolsa abierta encontrada en anaquel',
+    );
   });
 
   it('prints declared markers for absent entry evidence, never null', async () => {
@@ -468,6 +535,315 @@ describe('count-session-pdf.renderer — the signed count list (R19 T3, S14/S15/
       const occurrences =
         buffer.toString('latin1').split(idat.toString('latin1')).length - 1;
       expect(occurrences).toBe(1);
+    });
+  });
+
+  /**
+   * THE BLIND SPOT, CLOSED (S14 fix). The structural assertions above
+   * verify that content APPEARS — which is how a document with notes drawn
+   * ON TOP of the table rows and cascading column headers passed. The
+   * renderer now exposes its layout trace (page, box, role of every drawn
+   * element), and these tests assert the GEOMETRY: two texts at the same
+   * coordinates are a defect by itself, whatever they say.
+   */
+  describe('layout trace — geometry the content assertions could not see (S14 fix)', () => {
+    const makeNotedEntries = (count: number): CountSessionPrintEntry[] =>
+      makeEntries(count, 'Artículo').map((entry, i) => ({
+        ...entry,
+        notes:
+          i % 3 === 0
+            ? `Revisión pendiente del lote ${i + 1} en repisa B`
+            : null,
+        isDisputed: i % 5 === 0,
+        isApproved: i % 5 !== 0,
+      }));
+
+    const describeBox = (element: CountSessionPdfTraceElement): string =>
+      `[${element.kind} p${element.page} "${element.text.slice(0, 40)}" @ (${element.x},${element.y}) ${element.width}x${element.height}]`;
+
+    it('no two drawn elements share coordinates — text over text is a defect by itself', async () => {
+      const { trace } = await renderWithTrace(
+        makeDocument(makeNotedEntries(24), {
+          notes: 'Conteo de cierre quincenal con mermas en revisión',
+        }),
+        makeIdentity(0),
+      );
+      const elements = trace.elements;
+      // The scenario must actually exercise the defect class: entries with
+      // notes AND cells on the same pages.
+      expect(elements.some((e) => e.kind === 'entry-note')).toBe(true);
+      expect(elements.some((e) => e.kind === 'cell')).toBe(true);
+
+      for (let i = 0; i < elements.length; i += 1) {
+        for (let j = i + 1; j < elements.length; j += 1) {
+          const a = elements[i];
+          const b = elements[j];
+          if (a.page !== b.page) continue;
+          if (rectsOverlap(a, b)) {
+            throw new Error(
+              `Drawn elements overlap (text over text): ${describeBox(a)} vs ${describeBox(b)}`,
+            );
+          }
+        }
+      }
+    });
+
+    it('column headers sit on ONE row, each aligned with its column', async () => {
+      const { trace } = await renderWithTrace(
+        makeDocument(makeEntries(140, 'Artículo')),
+        makeIdentity(0),
+      );
+      const labels = trace.elements.filter((e) => e.kind === 'column-label');
+      const EXPECTED_LABELS = [
+        '#',
+        'Insumo',
+        'UM',
+        'Teórico',
+        'Contado',
+        'Fecha',
+        'Contó',
+      ];
+      // The seven labels appear once per page, in column order.
+      const labelPages = [...new Set(labels.map((l) => l.page))].sort(
+        (a, b) => a - b,
+      );
+      expect(labelPages.length).toBeGreaterThan(1);
+      expect(labels.length).toBe(EXPECTED_LABELS.length * labelPages.length);
+      for (const page of labelPages) {
+        expect(
+          labels.filter((l) => l.page === page).map((l) => l.text),
+        ).toEqual(EXPECTED_LABELS);
+      }
+
+      // On EVERY page the seven labels share one y (a cascade — each header
+      // inheriting the previous header's cursor advance — shifts them down).
+      for (const page of labelPages) {
+        const pageLabels = labels.filter((l) => l.page === page);
+        const ys = pageLabels.map((l) => l.y);
+        expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(
+          TRACE_EPSILON,
+        );
+      }
+
+      // And each label sits INSIDE its own column's x range, so a reader can
+      // map header to column.
+      const LABEL_TO_COLUMN = {
+        '#': 'position',
+        Insumo: 'insumo',
+        UM: 'uom',
+        Teórico: 'theoretical',
+        Contado: 'counted',
+        Fecha: 'countedAt',
+        Contó: 'actor',
+      } as const;
+      for (const label of labels) {
+        const column =
+          COUNT_SESSION_PDF_COLUMN_X_RANGES[
+            LABEL_TO_COLUMN[label.text as keyof typeof LABEL_TO_COLUMN]
+          ];
+        expect(column).toBeDefined();
+        expect(label.x).toBeGreaterThanOrEqual(column.x - TRACE_EPSILON);
+        expect(label.x + label.width).toBeLessThanOrEqual(
+          column.x + column.width + TRACE_EPSILON,
+        );
+      }
+    });
+
+    it('entry notes sit strictly BELOW their row band, labeled with their insumo', async () => {
+      const { trace } = await renderWithTrace(
+        makeDocument(makeNotedEntries(30)),
+        makeIdentity(0),
+      );
+      const cells = trace.elements.filter((e) => e.kind === 'cell');
+      const notes = trace.elements.filter((e) => e.kind === 'entry-note');
+      expect(notes.length).toBeGreaterThanOrEqual(10);
+
+      for (const note of notes) {
+        // The note is a labeled sentence naming its entry — never a run-on
+        // string a reader cannot attribute.
+        expect(note.text).toMatch(/^Notas de la entrada "/);
+
+        const cellsAbove = cells.filter(
+          (c) => c.page === note.page && c.y < note.y - TRACE_EPSILON,
+        );
+        expect(cellsAbove.length).toBeGreaterThan(0);
+        // The nearest row above: its band bottom must be at or above the
+        // note's top. A note drawn ON its row (the shipped defect) puts the
+        // row's cells at note.y and fails the strict-below assertion.
+        const nearestRowTop = Math.max(...cellsAbove.map((c) => c.y));
+        const bandBottom = Math.max(
+          ...cellsAbove
+            .filter((c) => Math.abs(c.y - nearestRowTop) <= TRACE_EPSILON)
+            .map((c) => c.y + c.height),
+        );
+        expect(note.y).toBeGreaterThanOrEqual(bandBottom - TRACE_EPSILON);
+      }
+    });
+
+    it('row bands are monotonic and every element stays inside the content area, above the signature footer', async () => {
+      const { trace, pages } = await renderWithTrace(
+        makeDocument(makeNotedEntries(140), {
+          notes: 'Conteo de cierre trimestral',
+        }),
+        makeIdentity(0),
+      );
+      expect(pages).toBeGreaterThan(1);
+
+      const cells = trace.elements.filter((e) => e.kind === 'cell');
+      // Group cells into rows per page (same y within tolerance).
+      for (const page of new Set(cells.map((c) => c.page))) {
+        const pageCells = cells.filter((c) => c.page === page);
+        const rowTops = [
+          ...new Set(pageCells.map((c) => Math.round(c.y * 4) / 4)),
+        ].sort((a, b) => a - b);
+        // Monotonic: each row starts strictly below the previous one — no
+        // duplicated or reordered entries.
+        for (let i = 1; i < rowTops.length; i += 1) {
+          expect(rowTops[i]).toBeGreaterThan(rowTops[i - 1]);
+        }
+        // Every band bottom stays inside the printable area: a row clipped
+        // into the footer zone (the capture's clipped last row) fails here.
+        for (const cell of pageCells) {
+          expect(cell.y + cell.height).toBeLessThanOrEqual(
+            COUNT_SESSION_PDF_CONTENT_AREA.bottom + TRACE_EPSILON,
+          );
+        }
+      }
+
+      // Every drawn element respects the page's horizontal margins.
+      for (const element of trace.elements) {
+        expect(element.x).toBeGreaterThanOrEqual(
+          COUNT_SESSION_PDF_CONTENT_AREA.x - TRACE_EPSILON,
+        );
+        expect(element.x + element.width).toBeLessThanOrEqual(
+          COUNT_SESSION_PDF_CONTENT_AREA.x +
+            COUNT_SESSION_PDF_CONTENT_AREA.width +
+            TRACE_EPSILON,
+        );
+      }
+    });
+
+    /**
+     * SPACING invariant (the `7.514/10/2026` defect): two values sharing a
+     * line must be separated by at least the declared minimum, so the paper
+     * can never read them as one token. Overlap alone does not catch this —
+     * two glyph boxes 2pt apart PASS an overlap check while concatenating
+     * on paper — which is why the gap, not the intersection, is asserted.
+     */
+    it('values sharing a line keep at least the declared minimum gap', async () => {
+      const { trace } = await renderWithTrace(
+        makeDocument(makeNotedEntries(24), {
+          notes: 'Conteo de cierre quincenal',
+        }),
+        makeIdentity(0),
+      );
+      const elements = trace.elements;
+      expect(elements.filter((e) => e.kind === 'cell').length).toBeGreaterThan(
+        10,
+      );
+
+      for (let i = 0; i < elements.length; i += 1) {
+        for (let j = i + 1; j < elements.length; j += 1) {
+          const a = elements[i];
+          const b = elements[j];
+          if (a.page !== b.page) continue;
+          const verticalOverlap =
+            Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+          if (verticalOverlap <= TRACE_EPSILON) continue;
+          const gap = a.x < b.x ? b.x - (a.x + a.width) : a.x - (b.x + b.width);
+          if (gap < COUNT_SESSION_PDF_MIN_COLUMN_GAP - TRACE_EPSILON) {
+            throw new Error(
+              `Values sharing a line are only ${gap.toFixed(2)}pt apart (minimum ${COUNT_SESSION_PDF_MIN_COLUMN_GAP}pt) and can read as one token: ${describeBox(a)} vs ${describeBox(b)}`,
+            );
+          }
+        }
+      }
+    });
+
+    /**
+     * BAND COMPOSITION invariant: the logo and the company-data block share
+     * ONE header band — the logo vertically inside the data block's band and
+     * strictly to its left — not two stacked rows.
+     */
+    it('the logo and the company-data block share one header band, logo left of the data', async () => {
+      const { trace, pages } = await renderWithTrace(
+        makeDocument(makeEntries(60, 'Artículo')),
+        makeIdentity(0),
+        {
+          present: true,
+          bytes: buildTestPng(10, 20),
+          contentType: 'image/png',
+        },
+      );
+      expect(pages).toBeGreaterThan(1);
+
+      for (const page of new Set(trace.elements.map((e) => e.page))) {
+        const logo = trace.elements.find(
+          (e) => e.page === page && e.kind === 'logo',
+        );
+        const data = trace.elements.filter(
+          (e) =>
+            e.page === page &&
+            (e.kind === 'company-name' || e.kind === 'company-identity'),
+        );
+        expect(data.length).toBeGreaterThan(0);
+        if (!logo) continue; // a skipped logo is S15 absence, not a band defect
+
+        const dataTop = Math.min(...data.map((e) => e.y));
+        const dataBottom = Math.max(...data.map((e) => e.y + e.height));
+        const dataLeft = Math.min(...data.map((e) => e.x));
+        // Vertically INSIDE the data band (same band, not stacked above it).
+        if (
+          logo.y < dataTop - TRACE_EPSILON ||
+          logo.y + logo.height > dataBottom + TRACE_EPSILON
+        ) {
+          throw new Error(
+            `The logo is NOT in the company-data band: logo spans y ${logo.y}..${logo.y + logo.height}, data band spans y ${dataTop}..${dataBottom} on page ${page}`,
+          );
+        }
+        // And strictly LEFT of the data, by the declared minimum gap.
+        const gapToData = dataLeft - (logo.x + logo.width);
+        if (gapToData < COUNT_SESSION_PDF_MIN_COLUMN_GAP - TRACE_EPSILON) {
+          throw new Error(
+            `The logo is not left of the company data by the minimum gap: ${gapToData.toFixed(2)}pt on page ${page}`,
+          );
+        }
+      }
+    });
+
+    /**
+     * CENTRING invariant: the metadata block (like the title) is centred on
+     * the page — the block's glyph extents bracket the page centre within a
+     * declared tolerance.
+     */
+    it('the metadata block is centred on the page, like the title', async () => {
+      const CENTRING_TOLERANCE_PTS = 6;
+      const { trace } = await renderWithTrace(
+        makeDocument(makeEntries(3, 'Artículo')),
+        makeIdentity(0),
+      );
+      const metaByPage = new Map<number, CountSessionPdfTraceElement[]>();
+      for (const element of trace.elements) {
+        if (element.kind !== 'session-meta') continue;
+        const list = metaByPage.get(element.page) ?? [];
+        list.push(element);
+        metaByPage.set(element.page, list);
+      }
+      expect(metaByPage.size).toBeGreaterThan(0);
+
+      for (const [page, meta] of metaByPage) {
+        const blockLeft = Math.min(...meta.map((e) => e.x));
+        const blockRight = Math.max(...meta.map((e) => e.x + e.width));
+        const blockCentre = (blockLeft + blockRight) / 2;
+        if (
+          Math.abs(blockCentre - COUNT_SESSION_PDF_CONTENT_AREA.centreX) >
+          CENTRING_TOLERANCE_PTS
+        ) {
+          throw new Error(
+            `The metadata block is not centred on page ${page}: block centre ${blockCentre.toFixed(2)}pt, page centre ${COUNT_SESSION_PDF_CONTENT_AREA.centreX}pt (tolerance ${CENTRING_TOLERANCE_PTS}pt)`,
+          );
+        }
+      }
     });
   });
 });

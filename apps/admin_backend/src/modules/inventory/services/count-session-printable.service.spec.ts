@@ -127,7 +127,10 @@ describe('CountSessionPrintableService', () => {
     expect(text).toContain('RUC: No registrado');
     expect(text).toContain('Harina de trigo');
     expect(text).toContain('7.5');
-    expect(text).toContain('2026-10-14 09:35');
+    // The stored instant is 2026-10-14T09:35:00.000Z (UTC). The document
+    // renders evidence in the repo's local convention (America/Managua,
+    // UTC-6): the paper shows that instant's local wall clock, 03:35.
+    expect(text).toContain('14/10/2026 03:35');
     expect(pageCountOf(result.buffer)).toBe(1);
   });
 
