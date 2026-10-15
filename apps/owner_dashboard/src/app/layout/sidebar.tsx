@@ -70,10 +70,10 @@ export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const logout = useLogout();
 
-  // Auto-close mobile drawer when navigating
+  // Auto-close mobile drawer when navigating (#509: location.key captures query/hash navigations too)
   useEffect(() => {
     closeMobileSidebar();
-  }, [location.pathname, closeMobileSidebar]);
+  }, [location.key, closeMobileSidebar]);
 
   // Lock body scroll on mobile when drawer is open
   useEffect(() => {
