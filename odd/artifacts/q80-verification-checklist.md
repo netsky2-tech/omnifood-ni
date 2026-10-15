@@ -1,130 +1,47 @@
-# Q80 — Verificación de caracterización de impresión (post company-identity parity)
+# Q80 — SUPERADO: no ejecutable (terminal en producción, en casa del cliente)
 
-Terminal objetivo: **Q80 en producción** (`printer_driver = IPOS_Q80`).
-Cambio bajo verificación: company-identity parity S5/S7
-(`odd/tasks/identidad-empresa-paridad.md`) — el sync trae una **referencia**
-(sha256) del logo de la empresa y la terminal ofrece **adoptarlo**; el camino
-de impresión del ticket **nunca** depende de la nube.
+**Estado: NO EJECUTABLE (2026-10-15).** Reemplazado por
+`odd/artifacts/s23-device-verification-checklist.md`. Se conserva este archivo para
+no perder **qué** se pretendía verificar acá y **qué queda sin verificar** por no poder
+hacerlo.
 
-Regla de oro (S7, verbatim del owner): **el ticket no puede cambiar**. Un
-terminal con logo local y sin logo en la nube imprime **exactamente lo mismo**
-que antes del cambio. "Que se vea igual" no es verificable: esta lista sí.
+## Por qué no puede correrse
 
----
+La terminal objetivo es el **Q80 en producción**, y está **en el sitio del cliente**.
+El owner no tiene acceso para hacer una pasada de verificación, y **no se interfiere la
+operación de un cliente que está vendiendo**. La instrucción es explícita: toda prueba
+se hace en el **S23 Ultra** del owner, que es su dispositivo personal de pruebas.
 
-## Paso 0 — Registrar el estado ANTES (obligatorio, no opcional)
+## Qué verificaba este instrumento, y qué queda descubierto
 
-En la terminal Q80, abrir la pantalla de configuración de hardware
-(ajustes → impresora/hardware) y registrar en la tabla de abajo el valor
-**actual** de cada clave del almacenamiento local (`local_configs`). Si la
-pantalla no expone un valor, leerlo directamente de `local_configs`
-(los nombres de clave son exactos, tal como están en la base local).
+Pretendía caracterizar la **impresión física**: tomar el ticket de una venta fija
+**antes** y **después** de la paridad, sobre papel real, y exigir que saliera *idéntico*
+salvo el logo adoptado — la mitad de "el ticket no puede cambiar" del S7.
 
-| Clave (exacta)                | Valor ANTES (copiar completo) | Debe ser DESPUÉS |
-|-------------------------------|-------------------------------|------------------|
-| `printer_logo_base64`         | ☐ presente / ☐ ausente — si presente, registrar la **longitud** del string: ______ | **Idéntico** (mismo presente/ausente y misma longitud) salvo adopción del logo |
-| `printer_logo_width`          | ______ | **Idéntico** |
-| `printer_logo_height`         | ______ | **Idéntico** |
-| `printer_logo_enabled`        | ______ | **Idéntico** |
-| `printer_header_business_name`| ______ | **Idéntico** |
-| `printer_header_ruc`          | ______ | **Idéntico** |
-| `printer_header_address`      | ______ | **Idéntico** |
-| `printer_header_phone`        | ______ | **Idéntico** |
-| `address` (perfil del negocio)| ______ | **Idéntico** |
-| `phone` (perfil del negocio)  | ______ | **Idéntico** |
-| `ruc` (perfil del negocio / emisor fiscal) | ______ | **Idéntico**, salvo la única excepción legítima: la nube **retira** un ruc que había afirmado antes (revisión que manda `ruc: null` después de haber proyectado un ruc no vacío) — idéntico en todo lo demás, incluida la llegada de un snapshot con `ruc: null` que **nunca** afirmó un ruc |
+Eso **no se puede verificar hoy en ningún aparato accesible**:
 
-Notas de registro:
-- `printer_logo_base64` es largo; no hace falta copiar el string completo,
-  **sí** su presencia y longitud exacta (esa longitud es la huella con la que
-  se compara después).
-- Las claves `printer_header_*` pueden no existir (caen al perfil del
-  negocio: `printer_header_address ?? address`). Registrar **también** la
-  ausencia — la precedencia local explícita (`printer_header_* ?? business_*`)
-  es S6 y no cambia en esta verificación.
-- La clave `ruc` (sin prefijo) es la que **imprimen** las rutas de venta y
-  reimpresión (`fiscalRuc` en printer_config.dart); `printer_header_ruc` es
-  decorativa y no la pisa. Con el arreglo option-B del ruc (tarea 31, que
-  reusa el marcador de P2), la proyección escribe `ruc`
-  sólo cuando el snapshot lo afirma, y una retracción (`ruc: null` tras
-  haberlo afirmado) es el **único** escritor legítimo de un cambio — todo
-  otro cambio de `ruc` sin intervención del operador es **fallo**.
-- **Si `ruc` está AUSENTE en el Paso 0**, el código anterior pudo haberlo
-  borrado ya: una revisión con `ruc: null` borraba la clave local. El arreglo
-  es **sólo hacia adelante**, no puede restaurar lo ya borrado: volver a
-  cargar el RUC del emisor (desde la web o desde Perfil del Negocio) **antes**
-  de la comparación, y anotar que el valor se recuperó a mano.
-- **Artefacto entre versiones (declarado).** Una terminal que aplicó un
-  snapshot **anterior al arreglo** con un `ruc` no vacío tiene un marcador que
-  **no** nombra `ruc` (el código viejo nunca lo registraba). Para esa terminal,
-  una revisión posterior con `ruc: null` **conserva** el valor previo en vez de
-  borrarlo: la retracción recién toma efecto cuando la nube vuelve a afirmar un
-  `ruc` no vacío (ahí queda registrado y el `null` siguiente sí borra). Es
-  conservador a propósito — nunca borra de más — y hay que esperarlo, no
-  reportarlo como fallo.
+- el Q80 que sí imprime está en producción y no se toca;
+- el **S23 Ultra tiene driver de impresión simulado**: no imprime, y el adaptador
+  reporta éxito igual (el propio resolver lo advierte: *"Never route this driver to the
+  mock (it reports false successes)"*), así que un "imprimir bien" en el S23 sería un
+  falso verde.
 
-## Paso 1 — Ticket de caracterización ANTES
+**Consecuencia declarada: la mitad física de S7 queda PENDIENTE.** El S23 verifica la
+otra mitad —el conjunto exacto de claves y valores que el camino de impresión consume—,
+que es el *fallback* ya previsto en `identidad-empresa-paridad.md` L4. Se declara cuál
+de las dos cosas se probó; no se presenta una como la otra.
 
-Imprimir un ticket de prueba en la Q80 con una venta de productos fijos
-(mismos productos y cantidades que se usarán después) y **conservar el papel
-físico**. Alternativa reproducible: capturar la salida de impresión si el
-entorno de verificación lo permite. Anotar:
+## Cómo se cierra este hueco
 
-- ☐ Encabezado impreso (nombre, dirección, teléfono, RUC tal como salen)
-- ☐ ¿Aparece logo? sí/no — si sí, cómo se ve
-- ☐ Ítems, totales, pies (IVA, condición fiscal)
-- Guardar (foto o papel) como **referencia de comparación**.
+En el momento en que se pueda tocar **una terminal con impresora térmica real** (el Q80
+del cliente en una ventana acordada, o cualquier otro equipo con el driver correcto):
+tomar el ticket antes/después y comparar el papel. Hasta entonces, cualquier afirmación
+sobre el papel impreso en producción es **no verificada**.
 
-## Paso 2 — No adoptar el logo (control negativo)
+## Lo que sí se conserva de este documento
 
-Sin tocar nada del logo, **sincronizar la terminal** (para que llegue el
-snapshot fiscal con la referencia `logoSha256`) y esperar al menos un ciclo
-de sincronía. Luego:
-
-1. Verificar que las claves de la tabla del Paso 0 **siguen idénticas**
-   (releer y comparar longitudes).
-2. Imprimir el **mismo** ticket de prueba del Paso 1.
-3. Comparar contra la referencia: encabezado, logo, ítems y pies deben ser
-   **idénticos**. La llegada de la referencia en la nube **no debe escribir
-   ni un byte local** (la lectura del sha256 es de solo lectura; sin
-   adopción explícita no se escribe nada).
-
-✅ Si todo coincide y nada cambió: **el camino S7 está verificado**; el Paso 3
-es la parte deliberada y puede hacerse aparte.
-
-## Paso 3 (deliberado, sólo si el operador decide adoptar el logo de la empresa)
-
-1. En la pantalla de hardware, tocar **"Aplicar logo de la empresa"**.
-2. Si la adopción falla (sin conexión, bytes corruptos, derivación fallida):
-   la app lo declara en el mensaje de estado y **no se escribió nada** —
-   repetir la tabla del Paso 0 para confirmarlo y terminar aquí.
-3. Si tiene éxito ("Logo de la empresa aplicado…"), verificar en la tabla
-   del Paso 0:
-   - ÚNICO cambio permitido: `printer_logo_base64` cambia (raster 1-bit
-     derivado del original de la nube, por el MISMO rasterizador del camino
-     manual). Registrar la nueva longitud: ______
-   - `printer_logo_width`, `printer_logo_height`, `printer_logo_enabled`:
-     **idénticos** (la adopción nunca toca el ajuste del operador).
-   - Todas las demás claves: **idénticas**.
-4. Imprimir el ticket de prueba y confirmar que el ticket es el mismo del
-   Paso 1 **salvo el logo**, que ahora es el de la empresa.
-5. Marcar visualmente (✔) que el logo impreso corresponde al de la empresa.
-
-## Cómo deshacer la adopción
-
-El camino de carga manual **no fue tocado**: en la pantalla de hardware,
-volver a subir el logo anterior con la carga manual de imagen
-(`uploadAndProcessLogo` — el mismo flujo de siempre, PNG local → raster
-térmico). Eso reescribe `printer_logo_base64` con el raster del logo manual y
-restaura el estado previo a la adopción. `width/height/enabled` vuelven a
-quedar como estén en la pantalla (la carga manual conserva el mismo trato).
-
-## Qué falla y qué significa
-
-- Cualquier clave de la tabla que cambie **sin** haber tocado "Aplicar logo":
-  **fallo** — hay un escritor que no debe existir (S5: la adopción es el único
-  escritor de `printer_logo_*` en esta feature).
-- Ticket distinto en el Paso 2: **fallo** — el camino de impresión está
-  dependiendo de la nube (S7 violado).
-- Ticket distinto en el Paso 3 más allá del logo: **fallo** — la adopción
-  alteró algo más que el raster.
+Las claves que este instrumento mandaba registrar —incluida la fila **`ruc`** y las
+notas de los advisories **A3** (artefacto entre versiones: un marcador previo conserva
+el valor ante una retracción hasta que la nube reafirme un `ruc`) y **A4** (el arreglo
+es sólo hacia adelante: un `ruc` ya borrado no se recupera y se recarga a mano)—
+**están todas** en el checklist del S23, que es el instrumento vigente.
