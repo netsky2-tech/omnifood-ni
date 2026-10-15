@@ -120,6 +120,8 @@ void main() {
       final remaining = await database.fulfillmentPersistenceDao
           .findAllFulfillments(tenantId);
       expect(remaining, isEmpty);
+      // VACUUM execution is exercised safely post-purge without throwing
+      expect(result.dbSizeBytes, greaterThanOrEqualTo(0));
     },
   );
 

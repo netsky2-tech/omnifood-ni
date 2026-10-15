@@ -48,6 +48,16 @@ class RetentionMaintenance {
       cutoff: cutoff,
     );
 
+    // #528: if records were purged, compact the SQLite file to return allocated pages to disk
+    if (purge.purgedFulfillments > 0) {
+      try {
+        await _database.database.rawQuery('VACUUM');
+        developer.log('[RETENTION] vacuum executed after purge', name: 'RetentionMaintenance');
+      } catch (e) {
+        developer.log('[RETENTION] vacuum failed: $e', name: 'RetentionMaintenance');
+      }
+    }
+
     // R1: the daily lifecycle measurement.
     final invoiceCount = await _count('invoices');
     final auditLogCount = await _count('audit_logs');
