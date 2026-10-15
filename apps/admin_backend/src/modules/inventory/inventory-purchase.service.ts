@@ -81,6 +81,10 @@ export interface PurchasePreview {
   bcnRate: number;
   bcnRateSource: string;
   unitCostNio: number;
+  /** NIO per INVOICE unit — the value the purchase document freezes. */
+  invoiceUnitCostNio: number;
+  /** Quantity added to stock, expressed in the insumo's CONSUMPTION unit. */
+  entryQuantityConsumption: number;
   previousCppNio: number;
   projectedCppNio: number;
   previousStock: number;
@@ -425,7 +429,7 @@ export class InventoryPurchaseService {
             unit_cost: round4(input.unitCost),
             currency: input.currency,
             bcn_rate: preview.bcnRate,
-            unit_cost_nio: preview.unitCostNio,
+            unit_cost_nio: preview.invoiceUnitCostNio,
             projected_cpp_nio: preview.projectedCppNio,
             lot_code: input.lotCode ?? null,
             received_date: input.receivedDate
@@ -446,12 +450,14 @@ export class InventoryPurchaseService {
             tenant_id: tenantId,
             insumoId: insumo.id,
             type: MovementType.ENTRADA_COMPRA,
-            quantity: round4(input.quantity),
+            quantity: preview.entryQuantityConsumption,
             previousStock: preview.previousStock,
             newStock: preview.projectedStock,
             averageCostAfterNio: preview.projectedCppNio,
             unitCostNio: preview.unitCostNio,
-            totalCostNio: round4(input.quantity * preview.unitCostNio),
+            totalCostNio: round4(
+              preview.entryQuantityConsumption * preview.unitCostNio,
+            ),
             sourceDocumentId: purchaseDocument.id,
             sourceDocumentType: 'PURCHASE',
           });
@@ -465,7 +471,7 @@ export class InventoryPurchaseService {
               batch_number: input.lotCode,
               received_date: toCalendarDay(input.receivedDate),
               expiration_date: toCalendarDay(input.expirationDate),
-              remaining_stock: round4(input.quantity),
+              remaining_stock: preview.entryQuantityConsumption,
               cost: preview.unitCostNio,
             });
             await manager.save(Batch, batch);
@@ -721,11 +727,31 @@ export class InventoryPurchaseService {
       fxRateMode: input.fxRateMode,
       bcnRate: input.bcnRate,
     });
+
+    // S4 (H1): the insumo declares how many CONSUMPTION units one PURCHASE
+    // unit yields. Stock and CPP live in the consumption unit, so both the
+    // quantity and the unit cost are converted before they reach the cost
+    // calculator — the invoice keeps its own unit and NIO cost untouched.
+    const conversionFactor = Number(insumo.conversionFactor ?? 1);
+    if (!(conversionFactor > 0)) {
+      throw new BadRequestException(
+        `Insumo ${insumo.id} has an invalid conversion factor (${insumo.conversionFactor}); expected a positive number of consumption units per purchase unit`,
+      );
+    }
+    const entryQuantityConsumption = round4(
+      input.quantity * conversionFactor,
+    );
+    const entryUnitCostConsumption = input.unitCost / conversionFactor;
+    const invoiceUnitCostNio = round4(
+      input.currency === CURRENCY.NIO
+        ? input.unitCost
+        : input.unitCost * rateResolution.bcnRate,
+    );
     const cpp = this.costCalculator.calculatePurchaseCpp({
       currentStock: Number(insumo.stock),
       currentCppNio: Number(insumo.averageCost),
-      entryQuantity: input.quantity,
-      entryUnitCost: input.unitCost,
+      entryQuantity: entryQuantityConsumption,
+      entryUnitCost: entryUnitCostConsumption,
       currency: input.currency,
       bcnRateNio: rateResolution.bcnRate,
     });
@@ -736,6 +762,8 @@ export class InventoryPurchaseService {
       bcnRate: rateResolution.bcnRate,
       bcnRateSource: rateResolution.bcnRateSource,
       unitCostNio: cpp.unitCostNio,
+      invoiceUnitCostNio,
+      entryQuantityConsumption,
       previousCppNio: cpp.previousCppNio,
       projectedCppNio: cpp.projectedCppNio,
       previousStock: cpp.previousStock,

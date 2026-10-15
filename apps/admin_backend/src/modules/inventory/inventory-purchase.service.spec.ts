@@ -262,6 +262,106 @@ describe('InventoryPurchaseService', () => {
     expect(preview.unitCostNio).toBe(10.1235);
   });
 
+  // S4 (H1): the conversion factor was ignored, so a purchase measured the
+  // purchase UOM as if it were the consumption UOM. 10 lb at C$100/lb is
+  // 4.5360 kg at C$220.4586/kg, not 10 kg at C$100.
+  it('converts the purchase quantity and unit cost by the insumo factor (H1)', async () => {
+    const conversionInsumo = {
+      ...perishableInsumo,
+      purchaseUom: 'lb',
+      consumptionUom: 'kg',
+      conversionFactor: 0.4536,
+      stock: 0,
+      averageCost: 0,
+      is_perishable: false,
+    };
+    manager.findOne.mockImplementation((entity: unknown) =>
+      entity === Insumo
+        ? Promise.resolve(conversionInsumo)
+        : Promise.resolve(null),
+    );
+
+    const preview = await service.previewPurchase({
+      id: 'preview-conv-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-CONV-1',
+      quantity: 10,
+      unitCost: 100,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-02',
+      entryTimestamp: '2026-01-02T08:00:00.000Z',
+    });
+
+    expect(preview.projectedStock).toBe(4.536);
+    expect(preview.unitCostNio).toBe(220.4586);
+    expect(preview.projectedCppNio).toBe(220.4586);
+    expect(preview.entryQuantityConsumption).toBe(4.536);
+    // The purchase document stays an invoice record: NIO per INVOICE unit.
+    expect(preview.invoiceUnitCostNio).toBe(100);
+  });
+
+  it('records the converted consumption quantity on the movement and the batch (H1)', async () => {
+    const conversionInsumo = {
+      ...perishableInsumo,
+      purchaseUom: 'lb',
+      consumptionUom: 'kg',
+      conversionFactor: 0.4536,
+      stock: 0,
+      averageCost: 0,
+      is_perishable: true,
+    };
+    queryBuilder.getOne.mockResolvedValue(conversionInsumo);
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) return Promise.resolve(supplier);
+      if (entity === PurchaseDocument) return Promise.resolve(null);
+      if (entity === Insumo) return Promise.resolve(conversionInsumo);
+      return Promise.resolve(null);
+    });
+
+    await service.recordPurchase({
+      id: 'purchase-conv-1',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-CONV-2',
+      quantity: 10,
+      unitCost: 100,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T08:00:00.000Z',
+      lotCode: 'LOT-CONV',
+      receivedDate: '2026-01-03',
+      expirationDate: '2026-02-03',
+    });
+
+    expect(manager.save).toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.objectContaining({
+        quantity: 4.536,
+        unitCostNio: 220.4586,
+      }),
+    );
+    expect(manager.save).toHaveBeenCalledWith(
+      Batch,
+      expect.objectContaining({
+        batch_number: 'LOT-CONV',
+        remaining_stock: 4.536,
+        cost: 220.4586,
+      }),
+    );
+    // The document keeps the invoice unit and its NIO cost per invoice unit.
+    expect(manager.save).toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.objectContaining({
+        quantity: 10,
+        unit_cost: 100,
+        unit_cost_nio: 100,
+      }),
+    );
+  });
+
   it('persists a batch for perishable purchases during posting', async () => {
     const result = await service.recordPurchase({
       id: 'purchase-doc-1',
