@@ -71,6 +71,16 @@ Cada fila es un objetivo de re-chequeo. **Ninguna se da por arreglada sin medirl
 | Transporte de escritura | **`SyncTransportGuard`**: casi todo el núcleo exige **credencial de dispositivo**, no token de usuario. Su emisión es T1b de la v1 |
 | **Lección de la v1 que hay que respetar** | **`/tmp` se barrió a mitad de sesión** y borró el secreto de la credencial. **No dependas de `/tmp` entre pasos**, y reemití el token en línea (TTL corto) en cada comando que lo use |
 
+## Hallazgos (medidos en el candidato)
+
+Cada fila es una medición sobre el candidato, con su estado real. **Un hallazgo abierto no se arregla acá** (S6): se registra con su evidencia.
+
+| # | Hallazgo | Estado en la v1 | Estado en la v2 (medido) | Evidencia | Impacto |
+|---|---|---|---|---|---|
+| **V2-1** (H2) | Un **insumo incoherente** se acepta y se persiste: `purchaseUom=lb`, `consumptionUom=kg`, `conversionFactor=1` (dos unidades distintas con factor 1 = conversión no configurada) | CONFIRMADO: entró con **201** | ⛔ **SIGUE ROTO**: `POST /api/insumos` → **HTTP 201** y fila persistida `V2-H2-lb-kg-factor1-1792086162` con `lb / 1.0000 / kg` | La guarda **existe** (`validateInsumoConversion`, `uom-catalog.ts:299`) pero tiene **un único llamador en producción: `src/scripts/seed-soho-catalog.ts:835`**, un **script de seed**. La ruta viva (`insumo.controller.ts:76`) va derecho a la transacción y guarda **sin validar** | Un insumo así se compra **sin conversión**: el costo unitario entra crudo y el **CPP nace mal desde la primera compra**, en silencio. Es exactamente lo que impide "garantizar un control de inventario y costos reales" (S11) |
+
+**Corrección de la causa raíz respecto de la v1, y importa para no arreglar lo que no es:** la v1 ubicaba la guarda en `PurchaseService`, "servicio sin consumidores". Ese servicio **ya no existe** —la limpieza del código muerto lo borró—, pero **la guarda nunca estuvo en el camino vivo**: ahora vive como función pura con **un solo llamador, el seed**. O sea: no es una regresión de la limpieza, y **tampoco** quedó cubierta al eliminar el código muerto. El arreglo no es "reconectar un servicio": es **invocar la validación en la ruta que crea el insumo**.
+
 ## Tasks
 
 | ID | Spec | Tarea | Estado |
