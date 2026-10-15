@@ -139,3 +139,23 @@ test("the purchase form previews the CONVERTED CPP (R1 via the UI)", async () =>
     sharedPage.getByTestId("purchases-preview-projected"),
   ).toContainText("C$220.46", { timeout: 15_000 });
 });
+
+test("the product form creates a product against the live rig", async () => {
+  await sharedPage.goto(`${BASE}/products`);
+  await sharedPage
+    .getByRole("button", { name: /Nuevo Producto/ })
+    .click();
+  await sharedPage
+    .getByPlaceholder("Ej: Taza de Capuccino")
+    .fill(`E2E Producto ${Date.now()}`);
+  // Unit of measure is a native select fed by the tenant catalog; option 0
+  // is the 'Seleccionar UOM' placeholder.
+  await sharedPage.locator("select").first().selectOption({ index: 1 });
+  // The submit stays disabled until the type question is answered.
+  await sharedPage.getByRole("radio").first().check();
+  await sharedPage.getByRole("button", { name: "Crear", exact: true }).click();
+
+  await expect(
+    sharedPage.getByPlaceholder("Ej: Taza de Capuccino"),
+  ).toBeHidden({ timeout: 15_000 });
+});
