@@ -240,6 +240,57 @@ describe('RecipeService', () => {
     );
   });
 
+  // R14 (V3): the cycle guard lived only in the POS ingest path, so the
+  // dashboard route persisted A -> B -> A and the failure only surfaced at
+  // consumption time (measured: 2x 201, then 400 circular on close).
+  it('rejects a sub-recipe cycle at creation (R14)', async () => {
+    recipeVersionRepo.findOne.mockResolvedValue(null);
+    recipeVersionRepo.create.mockImplementation((value: unknown) => value);
+    recipeVersionRepo.save.mockResolvedValue({
+      id: 'rv-new',
+      version_number: 1,
+      is_active: true,
+    });
+    recipeDetailRepo.create.mockImplementation((value: unknown) => value);
+    recipeDetailRepo.save.mockResolvedValue([]);
+
+    // assertNoCircularDependency walks the ACTIVE PUBLISHED recipes of the
+    // referenced product through manager.findOne(RecipeVersion) and
+    // manager.find(RecipeDetail). The referenced product already references
+    // us: manager.findOne returns its active version and manager.find
+    // returns a SUB_RECIPE detail pointing back at prod-1.
+    manager.findOne.mockResolvedValue({
+      id: 'rv-of-sub',
+      product_id: 'prod-sub',
+      is_active: true,
+    });
+    manager.find.mockResolvedValue([
+      {
+        insumo_id: 'prod-1',
+        ingredient_type: 'SUB_RECIPE',
+      },
+    ]);
+
+    await expect(
+      service.createNewVersion({
+        tenantId: 'tenant-A',
+        productId: 'prod-1',
+        components: [
+          {
+            insumoId: 'prod-sub',
+            grossQuantity: 1,
+            technicalShrinkPct: 0,
+            ingredientType: 'SUB_RECIPE',
+          },
+        ],
+        yieldQuantity: 1,
+        technicalShrinkPct: 0,
+      }),
+    ).rejects.toThrow(/Dependencia circular/);
+
+    expect(recipeDetailRepo.save).not.toHaveBeenCalled();
+  });
+
   it('persists ingredient type, component unit and sub-recipe reference (R6)', async () => {
     recipeVersionRepo.findOne.mockResolvedValue(null);
     recipeVersionRepo.create.mockImplementation((value: unknown) => value);
@@ -250,6 +301,10 @@ describe('RecipeService', () => {
     });
     recipeDetailRepo.create.mockImplementation((value: unknown) => value);
     recipeDetailRepo.save.mockResolvedValue([]);
+    // R14's guard walks the referenced product's active recipes through
+    // manager.findOne / manager.find; no cycle here, so they report none.
+    manager.findOne.mockResolvedValue(null);
+    manager.find.mockResolvedValue([]);
 
     await service.createNewVersion({
       tenantId: 'tenant-A',

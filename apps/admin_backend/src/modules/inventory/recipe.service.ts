@@ -140,6 +140,21 @@ export class RecipeService {
           input.productId,
         );
 
+        // R14 (V3): the cycle guard lived only in the POS ingest path, so the
+        // dashboard route persisted A -> B -> A (2x 201) and the failure only
+        // surfaced at consumption time. Same guard, same transaction, before
+        // any write.
+        for (const component of input.components) {
+          if (component.ingredientType === 'SUB_RECIPE') {
+            await this.assertNoCircularDependency(
+              manager,
+              input.tenantId,
+              input.productId,
+              component.insumoId,
+            );
+          }
+        }
+
         const activeVersion = await recipeVersionRepo.findOne({
           where: {
             tenant_id: input.tenantId,
