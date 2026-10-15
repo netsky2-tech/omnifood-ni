@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { InventoryReportsController } from './inventory-reports.controller';
 import { InventoryReportsService } from '../services/inventory-reports.service';
 import { CountSessionPrintableService } from '../services/count-session-printable.service';
+import { InventoryValuationService } from '../inventory-valuation.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
@@ -13,6 +14,7 @@ import { RolesGuard } from '../../identity/guards/roles.guard';
 describe('InventoryReportsController', () => {
   let controller: InventoryReportsController;
   let service: jest.Mocked<InventoryReportsService>;
+  let valuationService: jest.Mocked<InventoryValuationService>;
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
 
   beforeEach(async () => {
@@ -27,6 +29,11 @@ describe('InventoryReportsController', () => {
       buildPrintableCountList: jest.fn(),
     } as unknown as jest.Mocked<CountSessionPrintableService>;
 
+    valuationService = {
+      setMarketPrice: jest.fn(),
+      applyLowerOfCostWritedown: jest.fn(),
+    } as unknown as jest.Mocked<InventoryValuationService>;
+
     const module: TestingModule = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: jwtSecret })],
       controllers: [InventoryReportsController],
@@ -38,6 +45,10 @@ describe('InventoryReportsController', () => {
         {
           provide: CountSessionPrintableService,
           useValue: printableService,
+        },
+        {
+          provide: InventoryValuationService,
+          useValue: valuationService,
         },
         {
           provide: ConfigService,
@@ -211,5 +222,68 @@ describe('InventoryReportsController', () => {
 
     expect(service.getAlertsSummaryReport).toHaveBeenCalledWith('tenant-1');
     expect(result).toBe(mockAlerts);
+  });
+
+  it('delegates the market-price upsert to InventoryValuationService (R12)', async () => {
+    const saved = {
+      id: 'mp-1',
+      insumo_id: 'ins-1',
+      market_price_nio: 250,
+    };
+    valuationService.setMarketPrice.mockResolvedValue(saved as never);
+
+    const result = await controller.setMarketPrice('tenant-1', {
+      insumoId: 'ins-1',
+      marketPriceNio: 250,
+      effectiveDate: '2026-10-15',
+      sourceNote: 'proveedor',
+    });
+
+    expect(valuationService.setMarketPrice).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      insumoId: 'ins-1',
+      marketPriceNio: 250,
+      effectiveDate: '2026-10-15',
+      sourceNote: 'proveedor',
+    });
+    expect(result).toBe(saved);
+  });
+
+  it('defaults the market-price note to null when omitted (R12)', async () => {
+    valuationService.setMarketPrice.mockResolvedValue({} as never);
+
+    await controller.setMarketPrice('tenant-1', {
+      insumoId: 'ins-1',
+      marketPriceNio: 10,
+      effectiveDate: '2026-10-15',
+    });
+
+    expect(valuationService.setMarketPrice).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceNote: null }),
+    );
+  });
+
+  it('delegates the lower-of-cost writedown to InventoryValuationService (R12)', async () => {
+    const writedown = {
+      asOfDate: '2026-10-31',
+      lines: [],
+      totalWritedownNio: 0,
+      skippedExisting: [],
+      notAboveReference: [],
+      withoutReference: [],
+    };
+    valuationService.applyLowerOfCostWritedown.mockResolvedValue(
+      writedown as never,
+    );
+
+    const returned = await controller.applyValuationWritedown('tenant-1', {
+      asOfDate: '2026-10-31',
+    });
+
+    expect(valuationService.applyLowerOfCostWritedown).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      asOfDate: '2026-10-31',
+    });
+    expect(returned).toBe(writedown);
   });
 });

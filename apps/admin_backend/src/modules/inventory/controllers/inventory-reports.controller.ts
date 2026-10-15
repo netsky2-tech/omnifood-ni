@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
+  Post,
   Query,
   Res,
   UseGuards,
@@ -9,6 +11,11 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { InventoryReportsService } from '../services/inventory-reports.service';
+import { InventoryValuationService } from '../inventory-valuation.service';
+import {
+  ApplyValuationWritedownDto,
+  SetMarketPriceDto,
+} from '../dto/valuation.dto';
 import { CountSessionPrintableService } from '../services/count-session-printable.service';
 import { GetTenantId } from '../../../core/decorators/tenant.decorator';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
@@ -31,6 +38,7 @@ export class InventoryReportsController {
   constructor(
     private readonly reportsService: InventoryReportsService,
     private readonly countSessionPrintableService: CountSessionPrintableService,
+    private readonly valuationService: InventoryValuationService,
   ) {}
 
   @Get('valuation')
@@ -39,6 +47,39 @@ export class InventoryReportsController {
     @GetTenantId() tenantId: string,
   ): Promise<InventoryValuationReportDto> {
     return this.reportsService.getValuationReport(tenantId);
+  }
+
+  /**
+   * R12 (S11): the live entry point the lower-of-cost-or-market capability
+   * never had. `setMarketPrice` and `applyLowerOfCostWritedown` were
+   * implemented and tested, with no route invoking them, so R-01 (Ley 822
+   * art. 44) was not actually delivered by the system.
+   */
+  @Post('valuation/market-price')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async setMarketPrice(
+    @GetTenantId() tenantId: string,
+    @Body() dto: SetMarketPriceDto,
+  ): Promise<unknown> {
+    return this.valuationService.setMarketPrice({
+      tenantId,
+      insumoId: dto.insumoId,
+      marketPriceNio: dto.marketPriceNio,
+      effectiveDate: dto.effectiveDate,
+      sourceNote: dto.sourceNote ?? null,
+    });
+  }
+
+  @Post('valuation/writedown')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async applyValuationWritedown(
+    @GetTenantId() tenantId: string,
+    @Body() dto: ApplyValuationWritedownDto,
+  ): Promise<unknown> {
+    return this.valuationService.applyLowerOfCostWritedown({
+      tenantId,
+      asOfDate: dto.asOfDate,
+    });
   }
 
   @Get('cogs')
