@@ -73,3 +73,24 @@ Registro consolidado de decisiones de producto ya tomadas en conversación con e
   - `apps/pos_app/lib/data/services/terminal_identity_service.dart` — la identidad sí persiste y sobrevive a un update de APK.
   - `scripts/build_pos_apk.sh` — comentario de flota "provisioned at runtime" y `API_URL_BINDING`.
 - **Revisar antes de**: construir el canal OTA de Fase 2, o despachar terminales a un segundo entorno.
+
+## DEC-7 — Semántica de modifiers y variantes: discriminador explícito (`kind: PRICE_ONLY | INGREDIENT_BUNDLE`)
+
+- **Fecha**: 2026-10-15
+- **Decisión**: Los modifiers y variantes adoptan un **discriminador explícito `kind`** con dos valores canónicos:
+  1. `PRICE_ONLY` (default por compatibilidad histórica): modifica únicamente el precio de venta (o C$0.00, p. ej. "Para llevar", "Sin hielo", "Bien cocido"). **Produce exactamente 0 movimientos de inventario** — ni en venta ni en reversión/void.
+  2. `INGREDIENT_BUNDLE`: porta una lista de componentes (`insumoId`, `quantity`, `uom`), análoga a los componentes de receta. Participa en la explosión de BOM en la venta (`SaleInventoryLine`) y en la reversión por anulación, bajo el mismo contrato de determinismo (`intentKey`/`occurrenceSeq`).
+- **Rationale**:
+  - Resuelve el issue **#527 (M1)**: hoy el modelo es silenciosamente sólo ajuste de precio (`{id, name, extraPrice}`), lo que causa ceguera de COGS y deriva de inventario en recetas ("Extra shot" cobra C$15 pero consume 0g de café).
+  - Un valor `unset` o nulo **NUNCA** debe significar silenciosamente `PRICE_ONLY` ni `INGREDIENT_BUNDLE` sin declarar; la migración backfillea los existentes a `PRICE_ONLY` con registro explícito.
+  - La semántica aplica simétricamente a los tres modelos de modifiers que coexisten: el legacy `product_modifiers` (POS local), la entidad `modifier_options` (sistema de grupos de modificadores BOH/cloud), y el snapshot denormalizado de venta `invoice_item_modifiers`.
+- **Consecuencia conocida**:
+  - M2–M4 (#527) quedan formalmente desbloqueados: migración de schema para añadir `kind` y la tabla de componentes de modifier (`modifier_option_components` / `product_modifier_components`), más extensión de la explosión de BOM.
+  - El piloto actual (SOHO mono-terminal, productos simples/café) opera inicialmente con los modifiers existentes clasificados como `PRICE_ONLY` hasta que se carguen los componentes del bundle vía dashboard.
+- **Anclas de evidencia**:
+  - `apps/pos_app/lib/domain/models/inventory/product.dart:67-72` — modelo legacy `Modifier` sin componentes.
+  - `apps/admin_backend/src/modules/modifiers/entities/modifier-option.entity.ts` — entidad cloud de opciones de modificadores.
+  - `apps/pos_app/lib/domain/usecases/inventory/checkout_inventory_preparation_service.dart` — servicio que hoy ignora modifiers en el BOM.
+  - Issue `#527` (criterio AC-4).
+- **Revisar si**: se requiere un tercer tipo (p. ej. `VARIANT_SUBRECIPE` — modifier que apunta a un producto `PREPARED` en vez de insumos crudos).
+
