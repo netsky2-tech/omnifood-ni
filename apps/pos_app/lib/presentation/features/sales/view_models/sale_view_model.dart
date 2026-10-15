@@ -1,4 +1,6 @@
 import 'dart:developer' as developer;
+import 'package:pos_app/data/services/fiscal_inbox_handler.dart'
+    show FiscalProjectionKeys;
 import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -841,6 +843,14 @@ class SaleViewModel extends ChangeNotifier {
   TaxRegime? _companyTaxRegime;
   TaxRegime? get companyTaxRegime => _companyTaxRegime;
 
+  /// #543: the fiscal snapshot's pricesIncludeTax projection — when true
+  /// under Régimen General, catalog prices ALREADY include the IVA and the
+  /// calculator EXTRACTS it instead of adding it on top. Cuota Fija ignores
+  /// this flag entirely (it collects no IVA — the flag never overrides the
+  /// regime).
+  bool _pricesIncludeTax = false;
+  bool get pricesIncludeTax => _pricesIncludeTax;
+
   bool _taxRegimeOverrideActive = false;
 
   void setCompanyTaxRegime(TaxRegime? regime) {
@@ -860,6 +870,13 @@ class SaleViewModel extends ChangeNotifier {
       } else {
         _companyTaxRegime = null;
       }
+      // #543: the fiscal snapshot projects the flag alongside the regime —
+      // missing row = false (legacy add-on math), never an assumption.
+      final pricesEntity = await _database.localConfigDao.getConfigByKey(
+        FiscalProjectionKeys.pricesIncludeTax,
+      );
+      _pricesIncludeTax =
+          pricesEntity?.value.trim().toLowerCase() == 'true';
       notifyListeners();
     } catch (_) {
       // Non-blocking fallback
@@ -1204,6 +1221,7 @@ class SaleViewModel extends ChangeNotifier {
         cart: _cart,
         taxRegime: _companyTaxRegime,
         isGlobalTaxExempt: _isGlobalTaxExempt,
+        pricesIncludeTax: _pricesIncludeTax,
         totalDiscounts: totalDiscounts,
         // T2b/#67: the fiscal snapshot must carry the conversion actually
         // APPLIED at checkout. In BCN_OFFICIAL mode that is the BCN rate, so

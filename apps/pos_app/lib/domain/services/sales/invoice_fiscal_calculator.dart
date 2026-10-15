@@ -126,6 +126,7 @@ class InvoiceFiscalCalculator {
     required double netBase,
     required double itemTaxRate,
     bool isGlobalTaxExempt = false,
+    bool pricesIncludeTax = false,
   }) {
     if (taxRegime == null || taxRegime.isCuotaFija) {
       return (taxAmount: 0.0, appliedRate: 0.0);
@@ -135,6 +136,12 @@ class InvoiceFiscalCalculator {
       return (taxAmount: 0.0, appliedRate: 0.0);
     }
     final rate = itemTaxRate;
+    if (pricesIncludeTax) {
+      // #543: the catalog price IS the final price — extract the IVA from
+      // it. Base + tax reassembles the charged price exactly.
+      final base = _round(netBase / (1 + rate));
+      return (taxAmount: _round(netBase - base), appliedRate: rate);
+    }
     return (taxAmount: _round(netBase * rate), appliedRate: rate);
   }
 
@@ -156,12 +163,19 @@ class InvoiceFiscalCalculator {
     required double commercialRate,
     required double bcnOfficialRate,
 
+    /// #543: when the catalog prices ALREADY include the IVA (Régimen
+    /// General, taxable lines only), the charged price is the FINAL price:
+    /// the tax is EXTRACTED from it, never added on top. Cuota Fija ignores
+    /// this flag entirely — it collects no IVA and the flag never overrides
+    /// the regime.
+
     /// #67/T2a: production callers keep the default (true) — a non-positive
     /// rate is a configuration error, never a fabricable default. The sale
     /// view model's cart PREVIEW passes false: an unknown rate withholds the
     /// USD block (totalUsd 0.0) instead of throwing, while every NIO figure
     /// (tax included — the DGI tax base never uses a rate) stays exact.
     bool requireFiscalRates = true,
+    bool pricesIncludeTax = false,
   }) {
     if (taxRegime == null) {
       throw const FiscalConfigurationException(
@@ -301,14 +315,31 @@ class InvoiceFiscalCalculator {
         } else {
           // Producto gravado
           appliedRate = item.taxRate;
-          lineTaxableBase = netBase;
-          lineExemptBase = 0.0;
-          lineTax = _round(lineTaxableBase * appliedRate);
+          if (pricesIncludeTax) {
+            // #543: the catalog price IS the final price — extract the IVA
+            // from it. The base is what remains; base + tax reassembles the
+            // charged price exactly.
+            lineTaxableBase = _round(netBase / (1 + appliedRate));
+            lineTax = _round(netBase - lineTaxableBase);
+            lineExemptBase = 0.0;
+          } else {
+            lineTaxableBase = netBase;
+            lineExemptBase = 0.0;
+            lineTax = _round(lineTaxableBase * appliedRate);
+          }
         }
       }
 
-      final lineSubtotal = netBase;
-      final lineTotal = _round(netBase + lineTax);
+      // #543: with the price-inclusive extraction the SUBTOTAL is the base
+      // remaining after the IVA and the line total IS the charged price.
+      // Every other branch (Cuota Fija, exempt, flag off) keeps the legacy
+      // net-base + added-tax composition.
+      final bool extracted = pricesIncludeTax &&
+          !taxRegime.isCuotaFija &&
+          appliedRate > 0 &&
+          !isGlobalTaxExempt;
+      final lineSubtotal = extracted ? lineTaxableBase : netBase;
+      final lineTotal = extracted ? netBase : _round(netBase + lineTax);
 
       lines.add(
         FiscalLineCalculation(

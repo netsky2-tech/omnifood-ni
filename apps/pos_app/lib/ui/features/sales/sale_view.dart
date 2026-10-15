@@ -2295,6 +2295,7 @@ class CartSummary extends StatelessWidget {
         cart: vm.cart,
         commercialRate: vm.activeCheckoutRate,
         taxRegime: vm.companyTaxRegime,
+        pricesIncludeTax: vm.pricesIncludeTax,
         onPayShare: (share) {
           Navigator.of(context).pop();
           _showCheckoutDialog(context);

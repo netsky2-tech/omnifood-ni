@@ -51,6 +51,10 @@ class ItemizedShareInput {
   final double customTipPercentage;
   final double fixedTipAmount;
 
+  /// #543: prices-include-tax extraction flag (Régimen General only) —
+  /// threaded so share-level tax recomputations match the checkout math.
+  final bool pricesIncludeTax;
+
   const ItemizedShareInput({
     required this.shareIndex,
     required this.label,
@@ -58,6 +62,7 @@ class ItemizedShareInput {
     this.tipType = TipType.none,
     this.customTipPercentage = 0.0,
     this.fixedTipAmount = 0.0,
+    this.pricesIncludeTax = false,
   });
 }
 
@@ -165,6 +170,7 @@ class SplitBillEngine {
     required List<ItemizedShareInput> shares,
     required double commercialRate,
     TaxRegime? taxRegime,
+    bool pricesIncludeTax = false,
   }) {
     if (shares.isEmpty) {
       throw ArgumentError.value(
@@ -183,7 +189,6 @@ class SplitBillEngine {
 
       for (final item in input.items) {
         final lineBase = item.subtotal + item.modifiersTotal;
-        shareSubtotal += lineBase;
         // Preserve legacy cart tax when no fiscal regime is supplied;
         // explicit regimes recalculate from the authoritative rate.
         final lineTax = taxRegime == null
@@ -192,7 +197,17 @@ class SplitBillEngine {
                 taxRegime: taxRegime,
                 netBase: lineBase,
                 itemTaxRate: item.taxRate,
+                pricesIncludeTax: pricesIncludeTax,
               ).taxAmount;
+        // R3-001 (#543): with the prices-include extraction the tax came OUT
+        // of the charged line — the share subtotal must accumulate the BASE
+        // (lineBase - lineTax), never the full price on top of its own IVA
+        // (that inflated every share total by the extracted amount).
+        final bool extracted = pricesIncludeTax &&
+            taxRegime != null &&
+            !taxRegime.isCuotaFija &&
+            item.taxRate > 0;
+        shareSubtotal += extracted ? lineBase - lineTax : lineBase;
         shareTax += lineTax;
       }
 
