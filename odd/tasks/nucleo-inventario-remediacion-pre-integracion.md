@@ -1,0 +1,38 @@
+# Remediación pre-integración del núcleo de inventario
+
+Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rotos sobre el candidato (`feat/inventory-count-session-persistence`). La verificación (`odd/tasks/nucleo-inventario-verificacion-pre-integracion.md`) dejó de ser el eje: ahora es el **instrumento** que da la evidencia; el eje es el arreglo. **Ningún defecto confirmado se integra como deuda declarada.**
+
+**Regla que la verificación imponía y acá se invierte:** su S6 decía *"No hay commit de código de producto… no se arregla dentro de la verificación"*. Esa regla rigió la verificación y termina acá: los defectos que ésta midió se arreglan en esta feature, con su evidencia como spec.
+
+## Specs
+
+- **S1** — Instrucción del owner (verbatim): *"Se cierra antes de integrar, no dejemos deudas tecnicas en el camino"*. Se registra también el pedido anterior que sigue vigente (verbatim): *"Que esa valuación sea correcta y podamos garantizar un control de inventario y costos reales a nuestros clientes."*
+- **S2** — **Ningún arreglo se da por bueno por leerlo.** Cada defecto se cierra con (a) una prueba determinista que primero falla (RED) y después pasa (GREEN), y (b) una re-medición contra el rig y el backend vivo, sobre **entidades nuevas** (regla V1-1 de la verificación). Sin las dos, el defecto sigue abierto.
+- **S3** — **H2 — la conversión se valida al crear/editar el insumo.** `POST /api/insumos` y `PUT /api/insumos/:id` **deben rechazar** una conversión incoherente usando `validateInsumoConversion` (`src/modules/inventory/uom-catalog.ts:299`): dos unidades distintas del catálogo con factor `1` (el default nunca editado para pares no universales), la misma unidad con factor ≠ 1, un factor ≤ 0, o una UOM fuera del catálogo. Hoy la guarda tiene **un único llamador productivo: `src/scripts/seed-soho-catalog.ts:835`**, y la ruta viva (`insumo.controller.ts:76,118`) guarda sin validar. El rechazo debe ser un **4xx con mensaje de negocio**, no un 500.
+- **S4** — **H1 — la compra aplica el factor.** Al registrar una compra de `q` unidades de **compra** a `c` por unidad de compra, el sistema debe incorporar **`q × factor`** a la existencia en unidad de **consumo** y valuar a **`c ÷ factor`** por unidad de consumo (con la tasa FX aplicada sobre `c`). Medido en la verificación: insumo `lb → kg` factor `0.4536`, compra `10 lb a C$100/lb` quedó en `stock 10.0000` y `CPP 100.0000`; **lo correcto es `4.5360 kg` a `C$220.4586`**. `factor` es la cantidad de unidades de consumo por unidad de compra.
+- **S5** — **H4 — la anulación enlaza la compensación en el camino vivo.** Un `SALE_CANCEL` debe dejar `compensation_for_kardex_id` apuntando al asiento `SALE` original, **también cuando el record trae `flowType`** (que es lo que manda el POS). Hoy sólo lo hace `appendFohMovements` (`invoices.service.ts:1729`), alcanzable únicamente desde `syncLegacyBatch`, que se toma **sólo si ningún record trae `flowType`** (`:636`); el camino vivo (`appendV1Movement`, `:2084`) lo deja en NULL. Medido: kardex 50 `SALE` y 51 `SALE_CANCEL`, ambos con compensación NULL.
+- **S6** — **H6/R13 — la venta descuenta de los lotes.** `SALE` y `SALE_CANCEL` deben llamar a `drawBatchOutflow` (`src/modules/inventory/batch-allocation.ts:55`), como ya hacen merma (`shrinkage.service.ts:116,276`) y conteo (`count-session.service.ts:202`), para que `insumos.stock` y `SUM(batches.remaining_stock)` no diverjan. Medido: la venta bajó `stock 6→4` y dejó el lote `V4-LOT-1` en `6.0000`.
+- **S7** — **H5 — el multi-nivel se invoca o se declara.** `explodeRecursive` (`bom-explosion.service.ts:44`) debe ser alcanzable desde los caminos vivos de consumo, o declararse explícitamente como no soportado con su razón. Hoy tiene **cero llamadores productivos** mientras una receta de dos niveles se descarga sólo hasta el primer nivel, en silencio.
+- **S8** — **V4-3 — el cierre de producción no deja el producido en CPP 0.** Hoy entran `2.0000 kg` a `C$100/kg` y `insumos.costo_promedio_nio` queda en `0.0000`, mientras el reporte de valuación lee `stock × averageCost` (`inventory-valuation.service.ts:42`). Se adjudica dentro de la matriz de valuación (V7): o se recalcula el promedio del producido, o se declara la fuente de verdad del batch con su razón.
+- **S9** — **Sin regresiones.** Cada arreglo agrega una prueba que fija el comportamiento pedido **y** conserva las pruebas del comportamiento existente que toca. Lo que hoy funciona —FX oficial por fecha, vencimiento exacto en compra y producción, `explode()` single-level— no puede romperse.
+- **S10** — **H-RLS y tenant.** Los arreglos viajan por los caminos ya tenant-bound (`runInTenantTransaction`); ninguna consulta nueva puede saltear el binding.
+
+## Tasks
+
+| ID | Spec | Tarea | Estado |
+|---|---|---|---|
+| **R1** | S1, S3, S4, S9 | **UOM: validar al crear/editar (H2) y convertir al comprar (H1)** — son un mismo agujero visto de dos lados | — |
+| **R2** | S5 | **Venta: enlazar la compensación de la anulación en el camino con `flowType`** (H4) | — |
+| **R3** | S6 | **Venta y anulación: descontar lotes con `drawBatchOutflow`** (H6/R13) | — |
+| **R4** | S7 | **Receta: cablear la explosión multi-nivel en los caminos vivos** (H5) | — |
+| **R5** | S8 | **Producción: el producido no queda en CPP 0** (V4-3), adjudicado en V7 | — |
+| **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | — |
+| **R7** | S1 | **Merma/conteo: el umbral forense >C$1.500 notifica** (H7) — depende de V8 | — |
+| **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — depende de V9 | — |
+| **R9** | S1 | **Celda IVA: decidir costo neto o bruto y quién lo garantiza** — **decisión del owner**, no del agente | — |
+
+## Log
+
+- **L1** 2026-10-15 — **Decisión del owner (verbatim)**: *"Se cierra antes de integrar, no dejemos deudas tecnicas en el camino"*. Responde a la pregunta abierta de la verificación: *"¿Se integra con la brecha declarada o se cierra antes?"*. Cambia el plan de la rama: la verificación pasa a ser el instrumento de evidencia y la remediación el trabajo.
+- **L2** 2026-10-15 — **Alcance y criterio de aceptación.** Los defectos a cerrar son los que la verificación **midió** en el candidato: H1, H2, H4, H5, H6/R13, V4-3, y los que quedan por medir en V3 (H3), V7–V13. Cada uno se cierra con RED→GREEN y re-medición en el rig (S2). Los defectos H1, H2, H4 y H6 están **preexistentes en `origin/main`** (verificado: `resolveCompensatedMovementId` y `drawBatchOutflow` ya están en `main`; no los introdujo esta rama), así que arreglarlos corrige también a `main`.
+- **L3** 2026-10-15 — **R9 queda bloqueada por el owner, no por el agente.** La celda de IVA no es un defecto: `pricesIncludeTax` nunca llega al costeo del inventario y el marco normativo del proyecto no trata el IVA en el costo, así que **no hay una regla contra la que medirlo**. Es una convención de negocio: si el operador carga el precio **con IVA incluido**, el inventario se **sobrevalúa 15%** (NIC 2 §23-25 excluye del costo los impuestos recuperables). Se resuelve con la decisión del owner, no con código a ciegas.
