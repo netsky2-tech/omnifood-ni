@@ -424,6 +424,35 @@ export class RecipeService {
   }
 
   /**
+   * R4 (S7): the components of a product's active PUBLISHED recipe, which is
+   * what the recursive BOM explosion needs to descend through a SUB_RECIPE
+   * component (a component whose `insumo_id` is another product's id).
+   *
+   * A missing active recipe is a DATA error, not an empty recipe: the parent
+   * recipe references a product that cannot be consumed. Throwing names it
+   * instead of silently dropping the sub-recipe's ingredients.
+   */
+  async getComponentsForActiveProduct(
+    tenantId: string,
+    productId: string,
+  ): Promise<RecipeDetail[]> {
+    const version = await this.findActiveVersion(tenantId, productId);
+    if (!version) {
+      throw new NotFoundException(
+        `Product ${productId} does not have an active published recipe required by a SUB_RECIPE component`,
+      );
+    }
+
+    const { components } = await this.getSnapshot(
+      version.id,
+      tenantId,
+      productId,
+    );
+
+    return components;
+  }
+
+  /**
    * Ingest a POS recipe-version document posted to
    * `POST /inventory/recipes/versions`.
    *

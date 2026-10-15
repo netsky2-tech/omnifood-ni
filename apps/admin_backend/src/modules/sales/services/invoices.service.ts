@@ -25,7 +25,10 @@ import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-re
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { RecipeService } from '../../inventory/recipe.service';
-import { BomExplosionService } from '../../inventory/bom-explosion.service';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from '../../inventory/bom-explosion.service';
 import { drawBatchOutflow, restoreBatchInflow } from '../../inventory/batch-allocation';
 import {
   toCalendarDay,
@@ -2095,9 +2098,22 @@ export class InvoicesService {
         tenantId,
         productId,
       );
-      return this.bomExplosionService.explode({
-        snapshotComponents: snapshot.components,
+      if (!hasSubRecipeComponent(snapshot.components)) {
+        return this.bomExplosionService.explode({
+          snapshotComponents: snapshot.components,
+          orderQuantity,
+        });
+      }
+
+      return this.bomExplosionService.explodeWithSubRecipes({
+        rootProductId: productId,
+        rootComponents: snapshot.components,
         orderQuantity,
+        resolveSubRecipeComponents: (subRecipeProductId) =>
+          this.recipeService.getComponentsForActiveProduct(
+            tenantId,
+            subRecipeProductId,
+          ),
       });
     } catch (error) {
       if (error instanceof NotFoundException) {

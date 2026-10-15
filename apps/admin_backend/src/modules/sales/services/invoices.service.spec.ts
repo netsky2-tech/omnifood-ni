@@ -44,8 +44,15 @@ describe('InvoicesService', () => {
     save: jest.Mock;
     delete: jest.Mock;
   };
-  let recipeService: { findActiveVersion: jest.Mock; getSnapshot: jest.Mock };
-  let bomExplosionService: { explode: jest.Mock };
+  let recipeService: {
+    findActiveVersion: jest.Mock;
+    getSnapshot: jest.Mock;
+    getComponentsForActiveProduct: jest.Mock;
+  };
+  let bomExplosionService: {
+    explode: jest.Mock;
+    explodeWithSubRecipes: jest.Mock;
+  };
   let dataSource: { transaction: jest.Mock };
   let txManager: {
     query: jest.Mock<Promise<unknown>, unknown[]>;
@@ -103,8 +110,12 @@ describe('InvoicesService', () => {
     recipeService = {
       findActiveVersion: jest.fn(),
       getSnapshot: jest.fn(),
+      getComponentsForActiveProduct: jest.fn(),
     };
-    bomExplosionService = { explode: jest.fn() };
+    bomExplosionService = {
+      explode: jest.fn(),
+      explodeWithSubRecipes: jest.fn(),
+    };
     const qb = {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -2171,6 +2182,65 @@ describe('InvoicesService', () => {
           quantity: -1.5,
           timestamp: new Date(fohBusinessCreatedAt),
         }),
+      );
+    });
+
+    it('descends through a SUB_RECIPE component to the leaf insumo (R4)', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-sub' });
+      recipeService.getSnapshot.mockResolvedValue({
+        recipeVersion: { id: 'rv-sub' },
+        components: [
+          { insumo_id: 'ins-1', ingredient_type: 'INSUMO', quantity: 2 },
+          {
+            insumo_id: 'prod-sub',
+            ingredient_type: 'SUB_RECIPE',
+            quantity: 1,
+          },
+        ],
+      });
+      recipeService.getComponentsForActiveProduct.mockResolvedValue([
+        { insumo_id: 'ins-leaf', ingredient_type: 'INSUMO', quantity: 3 },
+      ]);
+      bomExplosionService.explodeWithSubRecipes.mockResolvedValue(
+        new Map<string, number>([
+          ['ins-1', 2],
+          ['ins-leaf', 3],
+        ]),
+      );
+      txManager
+        .createQueryBuilder()
+        .getOne.mockResolvedValueOnce({
+          id: 'ins-1',
+          stock: 20,
+          averageCost: 3,
+          tenant_id: 'tenant-1',
+        })
+        .mockResolvedValueOnce({
+          id: 'ins-leaf',
+          stock: 15,
+          averageCost: 2,
+          tenant_id: 'tenant-1',
+        });
+
+      await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'bom-sub-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 3,
+          documentType: 'SALE',
+          invoice: { ...baseInvoice },
+        },
+      ]);
+
+      // A SUB_RECIPE component routes to the recursive path; the flat path is
+      // never taken for it.
+      expect(bomExplosionService.explodeWithSubRecipes).toHaveBeenCalledWith(
+        expect.objectContaining({ rootProductId: 'prod-1' }),
+      );
+      expect(bomExplosionService.explode).not.toHaveBeenCalled();
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ insumoId: 'ins-leaf', quantity: -3 }),
       );
     });
 

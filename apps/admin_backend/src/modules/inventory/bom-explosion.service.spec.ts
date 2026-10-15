@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { BomExplosionService } from './bom-explosion.service';
+import { BomExplosionService, hasSubRecipeComponent } from './bom-explosion.service';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 
 describe('BomExplosionService', () => {
@@ -176,6 +176,72 @@ describe('BomExplosionService', () => {
           getRecipeComponents: async (id) => deepDb.get(id) ?? [],
         }),
       ).rejects.toThrow('Profundidad máxima de BOM excedida');
+    });
+  });
+
+  describe('explodeWithSubRecipes (R4 wiring)', () => {
+    it('uses rootComponents for the root and resolves each sub-recipe from the live recipe', async () => {
+      const rootComponents = [
+        { insumo_id: 'ins-pasta', ingredient_type: 'INSUMO', quantity: 0.2 },
+        {
+          insumo_id: 'prod-salsa',
+          ingredient_type: 'SUB_RECIPE',
+          quantity: 0.3,
+        },
+      ] as RecipeDetail[];
+      const subComponents = [
+        { insumo_id: 'ins-carne', ingredient_type: 'INSUMO', quantity: 0.5 },
+      ] as RecipeDetail[];
+      const resolveSubRecipeComponents = jest.fn(
+        async (productId: string) =>
+          productId === 'prod-salsa' ? subComponents : [],
+      );
+
+      const totals = await service.explodeWithSubRecipes({
+        rootProductId: 'prod-lasagna',
+        orderQuantity: 2,
+        rootComponents,
+        resolveSubRecipeComponents,
+      });
+
+      // The root is never re-fetched; only the sub-recipe is resolved.
+      expect(resolveSubRecipeComponents).toHaveBeenCalledTimes(1);
+      expect(resolveSubRecipeComponents).toHaveBeenCalledWith('prod-salsa');
+      expect(totals.get('ins-pasta')).toBe(0.4);
+      expect(totals.get('ins-carne')).toBe(0.3);
+    });
+
+    it('matches single-level explode exactly when the recipe has no sub-recipe', async () => {
+      const rootComponents = [
+        { insumo_id: 'ins-a', ingredient_type: 'INSUMO', quantity: 2 },
+        { insumo_id: 'ins-b', ingredient_type: 'INSUMO', quantity: 0.25 },
+      ] as RecipeDetail[];
+      const resolver = jest.fn();
+
+      const recursive = await service.explodeWithSubRecipes({
+        rootProductId: 'prod-a',
+        orderQuantity: 3,
+        rootComponents,
+        resolveSubRecipeComponents: resolver,
+      });
+      const single = service.explode({
+        snapshotComponents: rootComponents,
+        orderQuantity: 3,
+      });
+
+      expect([...recursive.entries()]).toEqual([...single.entries()]);
+      expect(resolver).not.toHaveBeenCalled();
+    });
+
+    it('detects whether a recipe needs the recursive path at all', () => {
+      expect(
+        hasSubRecipeComponent([
+          { ingredient_type: 'SUB_RECIPE' } as RecipeDetail,
+        ]),
+      ).toBe(true);
+      expect(
+        hasSubRecipeComponent([{ ingredient_type: 'INSUMO' } as RecipeDetail]),
+      ).toBe(false);
     });
   });
 });

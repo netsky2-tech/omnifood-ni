@@ -12,7 +12,10 @@ import {
   InventoryMovement,
   MovementType,
 } from './entities/inventory-movement.entity';
-import { BomExplosionService } from './bom-explosion.service';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from './bom-explosion.service';
 import {
   BatchCandidate,
   BatchConsumptionTrace,
@@ -259,13 +262,25 @@ export class ProductionService {
       input.document.recipeVersionId,
       input.tenantId,
     );
-    const exploded = this.bomExplosionService.explode({
-      snapshotComponents: snapshot.components,
-      orderQuantity:
-        input.document.outcome === PRODUCTION_CLOSE_OUTCOME.COMPLETED
-          ? input.document.actualQuantity
-          : input.document.plannedQuantity,
-    });
+    const productionOrderQuantity =
+      input.document.outcome === PRODUCTION_CLOSE_OUTCOME.COMPLETED
+        ? input.document.actualQuantity
+        : input.document.plannedQuantity;
+    const exploded = hasSubRecipeComponent(snapshot.components)
+      ? await this.bomExplosionService.explodeWithSubRecipes({
+          rootProductId: snapshot.recipeVersion.product_id,
+          rootComponents: snapshot.components,
+          orderQuantity: productionOrderQuantity,
+          resolveSubRecipeComponents: (subRecipeProductId) =>
+            this.recipeService.getComponentsForActiveProduct(
+              input.tenantId,
+              subRecipeProductId,
+            ),
+        })
+      : this.bomExplosionService.explode({
+          snapshotComponents: snapshot.components,
+          orderQuantity: productionOrderQuantity,
+        });
     const valuationTraceability: Record<string, BatchConsumptionTrace[]> = {};
     let totalConsumedValueNio = 0;
     const batchRepo = manager.getRepository(Batch);
