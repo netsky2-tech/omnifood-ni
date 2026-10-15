@@ -203,6 +203,26 @@ describe('ProductController', () => {
     await controller.deactivate('p1', 'tenant-A');
     expect(service.deactivate.mock.calls[0]).toEqual(['p1', 'tenant-A']);
   });
+
+  it('PUT /products/:id/inventory-mapping delegates to service.updateInventoryMapping', async () => {
+    service.updateInventoryMapping = jest.fn().mockResolvedValue({
+      id: 'map-1',
+      product_id: 'p1',
+      insumo_id: 'ins-1',
+    });
+    const dto = { insumoId: 'ins-1' };
+    const res = await controller.updateInventoryMapping('p1', dto, 'tenant-A');
+    expect(service.updateInventoryMapping).toHaveBeenCalledWith(
+      'p1',
+      'tenant-A',
+      dto,
+    );
+    expect(res).toEqual({
+      id: 'map-1',
+      product_id: 'p1',
+      insumo_id: 'ins-1',
+    });
+  });
 });
 
 describe('ProductController HTTP guards and route precedence', () => {

@@ -1,10 +1,16 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { DataSource, Repository } from 'typeorm';
 import { Product, ProductType } from './entities/product.entity';
+import { Insumo } from './entities/insumo.entity';
+import { Recipe } from './entities/recipe.entity';
+import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
+import { ProductInventoryMappingVersion } from './entities/product-inventory-mapping-version.entity';
+import { UpdateProductInventoryMappingDto } from './dto/update-product-inventory-mapping.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ChangeLogService } from '../audit/change-log.service';
@@ -45,6 +51,7 @@ export class ProductService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly changeLogService: ChangeLogService,
+    private readonly mappingService?: ProductInventoryMappingService,
   ) {}
 
   private requireTenant(tenantId: string): string {
@@ -346,5 +353,82 @@ export class ProductService {
         targetId: id,
       });
     }
+  }
+
+  /**
+   * #518 R1: Wire the create/supersede path for resale inventory mapping.
+   * Validates:
+   * 1. Product exists under tenant.
+   * 2. Insumo exists under tenant.
+   * 3. Product is not a recipe-bearing type (COMPOUND, PREPARED) and has no active recipe.
+   * Then calls ProductInventoryMappingService.supersede().
+   */
+  async updateInventoryMapping(
+    productId: string,
+    tenantId: string,
+    dto: UpdateProductInventoryMappingDto,
+  ): Promise<ProductInventoryMappingVersion> {
+    const normalizedTenant = this.requireTenant(tenantId);
+    const normalizedInsumoId = dto.insumoId?.trim();
+
+    return await this.withTenantContext(
+      normalizedTenant,
+      async (productRepo) => {
+        const product = await productRepo.findOne({
+          where: { id: productId, tenant_id: normalizedTenant },
+        });
+        if (!product) {
+          throw new NotFoundException(`Product ${productId} not found`);
+        }
+
+        if (
+          product.product_type === ProductType.COMPOUND ||
+          product.product_type === ProductType.PREPARED
+        ) {
+          throw new BadRequestException(
+            `Cannot map insumo to product of type ${product.product_type}: recipe-bearing products use BOMs, not direct resale mappings`,
+          );
+        }
+
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        try {
+          const insumoRepo = queryRunner.manager.getRepository(Insumo);
+          const insumo = await insumoRepo.findOne({
+            where: { id: normalizedInsumoId, tenant_id: normalizedTenant },
+          });
+          if (!insumo) {
+            throw new NotFoundException(
+              `Insumo ${normalizedInsumoId} not found under tenant ${normalizedTenant}`,
+            );
+          }
+
+          const recipeRepo = queryRunner.manager.getRepository(Recipe);
+          const existingRecipe = await recipeRepo.findOne({
+            where: { productId: productId, tenant_id: normalizedTenant },
+          });
+          if (existingRecipe) {
+            throw new BadRequestException(
+              `Product ${productId} already has an associated recipe; cannot create direct resale mapping`,
+            );
+          }
+        } finally {
+          await queryRunner.release();
+        }
+
+        if (!this.mappingService) {
+          throw new BadRequestException(
+            'ProductInventoryMappingService is not available',
+          );
+        }
+
+        return await this.mappingService.supersede({
+          tenantId: normalizedTenant,
+          productId,
+          insumoId: normalizedInsumoId,
+          effectiveAt: new Date(),
+        });
+      },
+    );
   }
 }

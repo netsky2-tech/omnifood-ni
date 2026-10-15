@@ -4,6 +4,7 @@ import { ProductService, normalizeSearchTerm } from './product.service';
 import { Product, ProductType } from './entities/product.entity';
 import { NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ChangeLogService } from '../audit/change-log.service';
+import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 
 describe('ProductService', () => {
   let service: ProductService;
@@ -63,6 +64,13 @@ describe('ProductService', () => {
             log: jest.fn(),
             findByTarget: jest.fn(),
             findByTenant: jest.fn(),
+          },
+        },
+        {
+          provide: ProductInventoryMappingService,
+          useValue: {
+            findEffective: jest.fn(),
+            supersede: jest.fn(),
           },
         },
       ],
@@ -579,6 +587,93 @@ describe('ProductService', () => {
     });
   });
 
+  // ── #518 R1: Resale mapping ──────────────────────────────────────────
+
+  describe('updateInventoryMapping (#518)', () => {
+    let mappingService: jest.Mocked<ProductInventoryMappingService>;
+
+    beforeEach(() => {
+      mappingService = (service as any).mappingService;
+    });
+
+    it('rejects mapping for recipe-bearing product types (COMPOUND, PREPARED)', async () => {
+      repo.findOne.mockResolvedValue(
+        makeProduct({ id: 'p-comp', product_type: ProductType.COMPOUND }),
+      );
+
+      await expect(
+        service.updateInventoryMapping('p-comp', 'tenant-A', {
+          insumoId: 'ins-1',
+        }),
+      ).rejects.toThrow(/Cannot map insumo to product of type COMPOUND/);
+    });
+
+    it('rejects when product is not found', async () => {
+      repo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.updateInventoryMapping('p-missing', 'tenant-A', {
+          insumoId: 'ins-1',
+        }),
+      ).rejects.toThrow(/Product p-missing not found/);
+    });
+
+    it('successfully validates and delegates to mappingService.supersede() for SIMPLE product', async () => {
+      const product = makeProduct({
+        id: 'p-resale',
+        product_type: ProductType.SIMPLE,
+      });
+      repo.findOne.mockResolvedValue(product);
+
+      const fakeInsumo = { id: 'ins-1', name: 'Agua Embotellada' };
+      const insumoRepoMock = {
+        findOne: jest.fn().mockResolvedValue(fakeInsumo),
+      };
+      const recipeRepoMock = { findOne: jest.fn().mockResolvedValue(null) };
+
+      const queryRunnerMock = {
+        connect: jest.fn(),
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn(),
+        rollbackTransaction: jest.fn(),
+        release: jest.fn(),
+        query: jest.fn(),
+        manager: {
+          getRepository: jest.fn((entity) => {
+            if (entity.name === 'Product') return repo;
+            if (entity.name === 'Insumo') return insumoRepoMock;
+            if (entity.name === 'Recipe') return recipeRepoMock;
+            return repo;
+          }),
+        },
+      };
+      (service as any).dataSource.createQueryRunner = jest.fn(
+        () => queryRunnerMock,
+      );
+
+      const expectedMapping = {
+        id: 'map-new-1',
+        tenant_id: 'tenant-A',
+        product_id: 'p-resale',
+        insumo_id: 'ins-1',
+      };
+      mappingService.supersede.mockResolvedValue(expectedMapping as any);
+
+      const res = await service.updateInventoryMapping('p-resale', 'tenant-A', {
+        insumoId: 'ins-1',
+      });
+
+      expect(res).toEqual(expectedMapping);
+      expect(mappingService.supersede).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-A',
+          productId: 'p-resale',
+          insumoId: 'ins-1',
+        }),
+      );
+    });
+  });
+
   // ── RLS context ──────────────────────────────────────────────────────
 
   describe('RLS context', () => {
@@ -603,6 +698,10 @@ describe('ProductService', () => {
           ProductService,
           { provide: DataSource, useValue: ds },
           { provide: ChangeLogService, useValue: { log: jest.fn() } },
+          {
+            provide: ProductInventoryMappingService,
+            useValue: { findEffective: jest.fn(), supersede: jest.fn() },
+          },
         ],
       }).compile();
 
@@ -637,6 +736,10 @@ describe('ProductService', () => {
           ProductService,
           { provide: DataSource, useValue: ds },
           { provide: ChangeLogService, useValue: { log: jest.fn() } },
+          {
+            provide: ProductInventoryMappingService,
+            useValue: { findEffective: jest.fn(), supersede: jest.fn() },
+          },
         ],
       }).compile();
 
@@ -675,6 +778,10 @@ describe('ProductService', () => {
           ProductService,
           { provide: DataSource, useValue: ds },
           { provide: ChangeLogService, useValue: { log: jest.fn() } },
+          {
+            provide: ProductInventoryMappingService,
+            useValue: { findEffective: jest.fn(), supersede: jest.fn() },
+          },
         ],
       }).compile();
 
