@@ -210,6 +210,11 @@ export class RecipeController {
         insumoId: c.ingredientId,
         grossQuantity: c.grossQuantity,
         technicalShrinkPct: c.technicalShrinkPct,
+        // R6 (H3): these three were dropped here, so the detail was always
+        // saved as INSUMO with no unit and no sub-recipe reference.
+        ingredientType: c.ingredientType,
+        componentUom: c.componentUom ?? null,
+        referenceVersionId: c.referenceVersionId ?? null,
       })),
       yieldQuantity: dto.yieldQuantity,
       technicalShrinkPct: dto.technicalShrinkPct,

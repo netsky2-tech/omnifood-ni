@@ -240,6 +240,44 @@ describe('RecipeService', () => {
     );
   });
 
+  it('persists ingredient type, component unit and sub-recipe reference (R6)', async () => {
+    recipeVersionRepo.findOne.mockResolvedValue(null);
+    recipeVersionRepo.create.mockImplementation((value: unknown) => value);
+    recipeVersionRepo.save.mockResolvedValue({
+      id: 'rv-sub',
+      version_number: 1,
+      is_active: true,
+    });
+    recipeDetailRepo.create.mockImplementation((value: unknown) => value);
+    recipeDetailRepo.save.mockResolvedValue([]);
+
+    await service.createNewVersion({
+      tenantId: 'tenant-A',
+      productId: 'prod-1',
+      components: [
+        {
+          insumoId: 'prod-sub',
+          grossQuantity: 0.5,
+          technicalShrinkPct: 0,
+          ingredientType: 'SUB_RECIPE',
+          componentUom: 'kg',
+          referenceVersionId: 'rv-ref',
+        },
+      ],
+      yieldQuantity: 1,
+      technicalShrinkPct: 0,
+    });
+
+    expect(recipeDetailRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        insumo_id: 'prod-sub',
+        ingredient_type: 'SUB_RECIPE',
+        component_uom: 'kg',
+        reference_version_id: 'rv-ref',
+      }),
+    );
+  });
+
   it('rejects a yield that becomes nonpositive at persistence precision', async () => {
     await expect(
       service.createNewVersion({

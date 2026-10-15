@@ -49,6 +49,15 @@ export interface RecipeComponentInput {
   insumoId: string;
   grossQuantity: number;
   technicalShrinkPct: number;
+  /**
+   * R6 (H3): the dashboard sends the component's type, unit and sub-recipe
+   * reference; the route used to drop all three, so every component was
+   * persisted as INSUMO with a NULL component_uom and a sub-recipe became an
+   * insumo that the live sale path could not consume.
+   */
+  ingredientType?: 'INSUMO' | 'SUB_RECIPE';
+  componentUom?: string | null;
+  referenceVersionId?: string | null;
 }
 
 export interface IngestPosVersionInput {
@@ -178,6 +187,9 @@ export class RecipeService {
             gross_quantity: round4(component.grossQuantity),
             technical_shrink_pct: round4(component.technicalShrinkPct),
             quantity: netUsableQuantity,
+            ingredient_type: component.ingredientType ?? 'INSUMO',
+            component_uom: component.componentUom ?? null,
+            reference_version_id: component.referenceVersionId ?? null,
           });
         });
 
