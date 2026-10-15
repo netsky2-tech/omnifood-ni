@@ -51,6 +51,7 @@ export const ROUTE_ROLE_PERMISSIONS: Record<string, UserRole[]> = {
   "/cash": ["OWNER", "MANAGER"],
   "/audit": ["OWNER", "MANAGER"],
   "/inventory": ["OWNER", "MANAGER"],
+  "/dish-margins": ["OWNER", "MANAGER"],
   "/fiscal": ["OWNER", "MANAGER"],
   "/catalog": ["OWNER", "MANAGER"],
   "/products": ["OWNER", "MANAGER"],

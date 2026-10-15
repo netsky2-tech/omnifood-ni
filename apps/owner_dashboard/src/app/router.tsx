@@ -25,6 +25,9 @@ const KardexPage = lazyWithRetry(() =>
 const InventoryPage = lazyWithRetry(() =>
   import("@/features/inventory/inventory-page").then((m) => ({ default: m.InventoryPage })),
 );
+const DishMarginsPage = lazyWithRetry(() =>
+  import("@/features/inventory/dish-margins-page").then((m) => ({ default: m.DishMarginsPage })),
+);
 const FiscalPage = lazyWithRetry(() =>
   import("@/features/fiscal/fiscal-page").then((m) => ({ default: m.FiscalPage })),
 );
@@ -136,6 +139,18 @@ export const router = createBrowserRouter([
           <ProtectedRoute requiredRoles={ROUTE_ROLE_PERMISSIONS["/inventory"]}>
             <SuspenseWrapper>
               <InventoryPage />
+            </SuspenseWrapper>
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "dish-margins",
+        element: (
+          <ProtectedRoute
+            requiredRoles={ROUTE_ROLE_PERMISSIONS["/dish-margins"]}
+          >
+            <SuspenseWrapper>
+              <DishMarginsPage />
             </SuspenseWrapper>
           </ProtectedRoute>
         ),

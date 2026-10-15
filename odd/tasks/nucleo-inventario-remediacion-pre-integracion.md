@@ -29,7 +29,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R5** | S8 | **Producción: el producido no queda en CPP 0** (V4-3), adjudicado en V7 | ✅ Cerrada (L11) |
 | **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | ✅ Cerrada (L22) |
 | **R7** | S1 | **Merma/conteo: el umbral forense debe NOTIFICAR de verdad y cubrir el conteo** (H7) | ✅ Cerrada (L17) |
-| **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ (`GET /inventory/reports/dish-margins` y `theoretical-cost?productId=`); **la superficie del dashboard se hace dentro de V10** (decisión del owner, L20) | 🟡 Backend medido (L19) |
+| **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ y **superficie del dashboard entregada en V10** | ✅ Cerrada (L19 + L23) |
 | **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | — |
 | **R10** | S4, S9 | **Corrección de compra: no mezclar unidades** — el documento de corrección toma `correctedQuantity` del movimiento (unidad de **consumo**) y lo escribe junto a un `unit_cost` de **factura**; para factor ≠ 1 son unidades distintas | ✅ Cerrada (L13) |
 | **R11** | S7 | **Venta camino vivo: `SaleInventoryOutcomeService` debe expandir el `SUB_RECIPE`** — hoy **rechaza la venta** con `insumoId '…' not found` | ✅ Cerrada (L12) |
@@ -114,3 +114,8 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Arreglo**: `RecipeComponentInput` acepta los tres campos, `createNewVersion` persiste `ingredient_type`, `component_uom` y `reference_version_id`, y la ruta los propaga.
   - **RED→GREEN**: sin el arreglo el spec nuevo **no compila** (`RecipeComponentInput` no tenía `ingredientType` — la capacidad no existía); con el arreglo, **30/30** receta y **547/547** inventario.
   - **Medido en el rig por la API viva** (`POST /recipes/products/:productId/versions`, el mismo camino que usa el formulario): componente `SUB_RECIPE` con `componentUom "kg"` y `referenceVersionId` → persistido **`SUB_RECIPE | kg | 7e12e4b7…`** (antes: `INSUMO | NULL | NULL`).
+- **L23** 2026-10-15 — **R8 CERRADA: la superficie de costo y margen por plato existe y está medida en el navegador real.**
+  - **UI**: página `/dish-margins` (`dish-margins-page.tsx` + `dish-margins.ts` + `use-dish-margins.ts`), ruta registrada, `RBAC` (`OWNER`/`MANAGER`) y entrada de menú “Costo por plato”. Muestra **costo unitario, precio, margen Nio y margen %** por plato, y lista los **no valuados con su razón** (nunca un guion que esconda la brecha).
+  - **Medido con Playwright live contra el rig** (dashboard del worktree en `:5174`, backend en `:3100`): login → `/dish-margins` → heading visible y la fila **`ZZ TEST Pan de Lote`** (el plato que el backend valuó en `L19`). **3/3** specs live.
+  - **Unitario**: `dish-margins-page.test.tsx` (**2/2**), fetch mockeado con el hook y la página reales bajo un QueryClient real.
+  - **Evidencia**: typecheck del dashboard limpio; `vitest` 2/2; Playwright live 3/3.

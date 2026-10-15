@@ -47,3 +47,18 @@ test("the recipes surface loads against the live rig", async ({ page }) => {
   await expect(page).toHaveURL(/\/recipes/);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 });
+
+test("the dish-margins surface prices a dish against the live rig", async ({
+  page,
+}) => {
+  await login(page);
+  await page.goto(`${BASE}/dish-margins`);
+  await expect(page).toHaveURL(/\/dish-margins/);
+  await expect(
+    page.getByRole("heading", { name: "Costo y margen por plato" }),
+  ).toBeVisible();
+  // The rig has at least one priced COMPOUND dish with an active recipe.
+  await expect(
+    page.getByRole("cell", { name: "ZZ TEST Pan de Lote" }),
+  ).toBeVisible();
+});
