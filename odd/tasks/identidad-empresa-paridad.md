@@ -69,3 +69,24 @@ Cierra la brecha que hoy hace que la nube **no pueda imprimir una identidad comp
 - **L4** 2026-10-14 — **Adopción elegida por el owner:** "Que el operador lo adopte a mano". Queda **inerte por defecto y adoptado a mano**, que es la forma más segura para un cliente que ya está vendiendo: nada que haga la nube cambia lo que se imprime sin que una persona lo decida en esa terminal.
   - **Criterio de aceptación de este recorte, y es uno solo:** una **prueba de caracterización** que capture lo que imprime hoy una terminal con logo local y sin logo en la nube, y exija que siga **idéntico** después del cambio. Si no se puede capturar la salida impresa, se caracteriza el conjunto exacto de claves y valores que el impresor lee, y se declara cuál de las dos cosas se probó.
   - **Pieza que el recorte necesita y hay que nombrar:** la terminal tiene que poder **bajar los bytes** del original, y la ruta que existe hoy es del dashboard (transporte humano). El recorte incluye entonces una ruta de **dispositivo** para leer el activo, con su guarda y su declaración en el registro de transporte de rutas. Es trabajo real, no configuración.
+- **L5** 2026-10-15 — **Rebase sobre el `main` nuevo, contabilidad de AC-05 (task 34) y mapa de identidades.**
+  - La rama se rebaseó sobre `origin/main` = `c95cfd86` (PR #934). **`c6f224d9` quedó saltado por ya aplicado** (patch-id idéntico): no fueron tres como se anticipó, porque los otros dos candidatos ya habían salido antes. Los shas de **toda** la rama cambiaron; el mapa de los que citan L1–L4 está al final de esta entrada.
+  - **Dos conflictos, y ninguno fue un merge real: los dos eran superación por `main`.**
+    - `1a635c1e` (sembrar `shrinkages.observation`) → **superado por `e8f08028` de main**, que hizo la misma reparación con el mismo texto `'Seed RLS:'`. Se tomó el lado de main. El único resto útil era la **sangría de una línea** que prettier reclama en main — y es el *único* defecto de prettier en esos dos archivos, verificado con `prettier --check --config .prettierrc`, no supuesto. Conservada como `8a0712f4`.
+    - `47533a2f` (hacer correr las e2e de conteo) → **merge mixto**. Main ya traía el stub de `Batch` de R13 y el arreglo de forma de fecha (`invoice_date: validPurchasePayload.invoiceDate`, equivalente al literal `'2026-01-03'` que usaba la rama **y sin duplicar el literal**). De la rama quedan las **entidades nuevas** (`CountSession`/`CountSessionEntry` en imports, `ALL_ENTITIES` y `RLS_ROLE_TABLES`, más su `GRANT INSERT`), los stubs `create`/`save` del manager y sus **dos aserciones agregadas**, y dos correcciones de prettier que main tampoco tiene. Reescrito como `6a808a1d`.
+  - **Trampa confirmada (tercera vez en este proyecto): un auto-merge sin conflicto no es un auto-merge correcto.** `count-session-tenant-binding.db.e2e-spec.ts` mergeó "limpio" **con duplicados**: `Batch` dos veces en imports y en `ALL_ENTITIES`, `'batches'` dos veces en `RLS_ROLE_TABLES`. Corregidos a mano y verificados **por conteo**, no por lectura rápida.
+  - **Verificación post-rebase, sobre la rama entera y no sobre un subconjunto**: build 0, **suite DB 78 suites / 405 tests verde**, **e2e 85 suites / 748 tests verde**. Las cifras crecieron respecto del handoff anterior (76/399 y 84/742) porque `main` sumó specs.
+  - **Task 34 (contabilidad)**: se reescribió el comentario obsoleto de `fiscal-setup.service.spec.ts` —afirmaba que el servicio nunca lee `phone`/`address`, y sobrevivió al arreglo de P1 que lo volvió falso, justo encima de la suite que lo desmiente— y se tildaron las casillas **2.1/2.2** de `openspec/changes/onboarding-ac05-identity-parity-supersession/tasks.md`, que ya estaban hechas por el commit de documentos `153e07cf` (antes `950c62b4`): el PRD §AC-05 con el criterio revisado y la nota de superación, y el label del roadmap.
+  - **Mapa de identidades pre-rebase → post-rebase.** Los shas citados en L1–L4 ya no resuelven en la rama; los conserva `backup/r19-pre-rebase-20261015-0922`.
+    ```
+    74a31955 -> 23c7fa94      d3d09008 -> 81e9bcb4      4c4a2fbe -> 507afb0b
+    d8407f6b -> e60309ea      dbbee2ab -> b9d096b8      fcd42542 -> ed343490
+    8ae586fa -> 9fb7fc1f      c3c78d1c -> 4f2a52ed      a4519642 -> 2f23aef3
+    fab6f86f -> d5950a58      2073b338 -> d4a943f1      ec8ead77 -> 21dd55f1
+    e6f9f903 -> d4147e87      34eaee29 -> 5a7c4582      2b5ba6ed -> 2ec0a76f
+    637e4020 -> 2b164e8b      006d8080 -> 5d3c2d5c      ffc3ced9 -> 6a6d6d7b
+    4d4126da -> 9c21b7fe      78d0eaa9 -> 7825df0b      083e658c -> 6890b743
+    23f4bc20 -> 799e81ee      950c62b4 -> 153e07cf
+    c6f224d9 -> (saltado: ya aplicado en main)
+    1a635c1e -> 8a0712f4 (reescrito: sólo la sangría)   47533a2f -> 6a808a1d (reescrito)
+    ```

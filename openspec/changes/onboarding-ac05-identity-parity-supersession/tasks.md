@@ -9,8 +9,8 @@
 
 ## 2. Out-of-surface follow-ups (owner, not this change)
 
-- [ ] 2.1 Update `docs/onboarding/prd_onboarding_v2_approved.md` §AC-05 to the revised criterion.
-- [ ] 2.2 Update `docs/onboarding/onboarding_execution_roadmap.md` label "AC-05 Campo no persistido".
+- [x] 2.1 Update `docs/onboarding/prd_onboarding_v2_approved.md` §AC-05 to the revised criterion.
+- [x] 2.2 Update `docs/onboarding/onboarding_execution_roadmap.md` label "AC-05 Campo no persistido".
 
 ## 3. Verification
 

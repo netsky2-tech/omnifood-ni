@@ -552,10 +552,11 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
   });
 
-  // Company identity parity P1: phone/address arrive in the DTO today but the
-  // service never reads them — dead fields the web labels "No persistido
-  // fiscalmente". These tests pin the round trip: persist on the tenant,
-  // expose in the GET and POST responses.
+  // Company identity parity P1: phone/address/email are persisted on the
+  // tenant and echoed back in the GET and POST responses. Before P1 the DTO
+  // declared phone/address while the service never read them — dead fields
+  // the web labelled "No persistido fiscalmente" — and email did not exist at
+  // all, so these tests pin the round trip that closed that gap.
   describe('configureFiscalSetup (company identity parity P1)', () => {
     it('persists phone, address and email on the tenant and echoes them back in the POST response (round trip)', async () => {
       mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
