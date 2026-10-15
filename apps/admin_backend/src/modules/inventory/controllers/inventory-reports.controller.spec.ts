@@ -3,6 +3,7 @@ import { InventoryReportsController } from './inventory-reports.controller';
 import { InventoryReportsService } from '../services/inventory-reports.service';
 import { CountSessionPrintableService } from '../services/count-session-printable.service';
 import { InventoryValuationService } from '../inventory-valuation.service';
+import { TheoreticalCostService } from '../services/theoretical-cost.service';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
@@ -15,6 +16,7 @@ describe('InventoryReportsController', () => {
   let controller: InventoryReportsController;
   let service: jest.Mocked<InventoryReportsService>;
   let valuationService: jest.Mocked<InventoryValuationService>;
+  let theoreticalCostService: jest.Mocked<TheoreticalCostService>;
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
 
   beforeEach(async () => {
@@ -34,6 +36,11 @@ describe('InventoryReportsController', () => {
       applyLowerOfCostWritedown: jest.fn(),
     } as unknown as jest.Mocked<InventoryValuationService>;
 
+    theoreticalCostService = {
+      getProductTheoreticalCost: jest.fn(),
+      listDishMargins: jest.fn(),
+    } as unknown as jest.Mocked<TheoreticalCostService>;
+
     const module: TestingModule = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: jwtSecret })],
       controllers: [InventoryReportsController],
@@ -49,6 +56,10 @@ describe('InventoryReportsController', () => {
         {
           provide: InventoryValuationService,
           useValue: valuationService,
+        },
+        {
+          provide: TheoreticalCostService,
+          useValue: theoreticalCostService,
         },
         {
           provide: ConfigService,
@@ -285,5 +296,32 @@ describe('InventoryReportsController', () => {
       asOfDate: '2026-10-31',
     });
     expect(returned).toBe(writedown);
+  });
+
+  it('delegates the per-dish margins list to TheoreticalCostService (R8)', async () => {
+    const margins = { dishes: [], skipped: [] };
+    theoreticalCostService.listDishMargins.mockResolvedValue(margins as never);
+
+    const result = await controller.getDishMargins('tenant-1');
+
+    expect(theoreticalCostService.listDishMargins).toHaveBeenCalledWith(
+      'tenant-1',
+    );
+    expect(result).toBe(margins);
+  });
+
+  it('delegates one product theoretical cost to TheoreticalCostService (R8)', async () => {
+    const margin = { productId: 'prod-1', unitTheoreticalCostNio: 12 };
+    theoreticalCostService.getProductTheoreticalCost.mockResolvedValue(
+      margin as never,
+    );
+
+    const result = await controller.getTheoreticalCost('tenant-1', 'prod-1');
+
+    expect(theoreticalCostService.getProductTheoreticalCost).toHaveBeenCalledWith(
+      'tenant-1',
+      'prod-1',
+    );
+    expect(result).toBe(margin);
   });
 });

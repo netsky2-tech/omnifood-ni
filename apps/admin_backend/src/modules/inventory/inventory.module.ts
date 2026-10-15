@@ -62,6 +62,7 @@ import { KardexRegularizationService } from './services/kardex-regularization.se
 import { RegularizationController } from './controllers/regularization.controller';
 import { RemediationController } from './controllers/remediation.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { TheoreticalCostService } from './services/theoretical-cost.service';
 import { InventoryValuationService } from './inventory-valuation.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
 import { AuditModule } from '../audit/audit.module';
@@ -137,6 +138,7 @@ import { AuditModule } from '../audit/audit.module';
     GovernanceApprovalService,
     KardexRegularizationService,
     InventoryReportsService,
+    TheoreticalCostService,
     // S9 (L33) / R-01: lower-of-cost-or-market writedowns.
     InventoryValuationService,
     UomConversionCalculator,

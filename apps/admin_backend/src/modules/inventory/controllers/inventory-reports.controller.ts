@@ -12,6 +12,7 @@ import {
 import { Response } from 'express';
 import { InventoryReportsService } from '../services/inventory-reports.service';
 import { InventoryValuationService } from '../inventory-valuation.service';
+import { TheoreticalCostService } from '../services/theoretical-cost.service';
 import {
   ApplyValuationWritedownDto,
   SetMarketPriceDto,
@@ -39,6 +40,7 @@ export class InventoryReportsController {
     private readonly reportsService: InventoryReportsService,
     private readonly countSessionPrintableService: CountSessionPrintableService,
     private readonly valuationService: InventoryValuationService,
+    private readonly theoreticalCostService: TheoreticalCostService,
   ) {}
 
   @Get('valuation')
@@ -47,6 +49,31 @@ export class InventoryReportsController {
     @GetTenantId() tenantId: string,
   ): Promise<InventoryValuationReportDto> {
     return this.reportsService.getValuationReport(tenantId);
+  }
+
+  /**
+   * R8 (H8): the cost/margin surface per dish the theoretical-cost calculator
+   * never had. `GET dish-margins` prices every COMPOUND/PREPARED product with
+   * an active published recipe; `GET theoretical-cost?productId=` prices one.
+   */
+  @Get('dish-margins')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getDishMargins(
+    @GetTenantId() tenantId: string,
+  ): Promise<unknown> {
+    return this.theoreticalCostService.listDishMargins(tenantId);
+  }
+
+  @Get('theoretical-cost')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getTheoreticalCost(
+    @GetTenantId() tenantId: string,
+    @Query('productId') productId: string,
+  ): Promise<unknown> {
+    return this.theoreticalCostService.getProductTheoreticalCost(
+      tenantId,
+      productId,
+    );
   }
 
   /**
