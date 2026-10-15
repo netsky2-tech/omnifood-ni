@@ -17,6 +17,29 @@ Re-ejecutar **desde cero** el flujo real del núcleo de inventario contra el **c
 - **S5** — Toda brecha se **confirma o refuta contra Postgres real y el backend vivo**, no por inspección de código (v1-S8). Y su recíproca, que es el corazón de esta corrida: **un arreglo tampoco se da por bueno por leerlo — se mide.**
 - **S6** — No hay commit de código de producto. Si la verificación destapa un defecto, se **abre una tarea con su evidencia**; no se arregla dentro de la verificación.
 - **S7** — Del checklist del S23 (L9 de `identidad-empresa-paridad.md`): el S23 tiene driver de impresión **simulado**, así que la mitad de papel no se puede cubrir; la pasada del aparato verifica estado, no papel.
+- **S8** — Pedido del owner (verbatim): *"Perfecto, las pruebas deben de ser e2e reales, para no tener sorpresas una vez implementados, que alguno de los formularios falle o algun api. Procede con todos los escenarios posibles, tipos de calculos, mixes y demás. Que esa valuación sea correcta y podamos garantizar un control de inventario y costos reales a nuestros clientes."*
+- **S9** — **Nada de mocks en el camino verificado.** Cada caso se ejerce por el **mismo camino que usa un humano**: el **formulario real** del dashboard (Playwright live: `apps/owner_dashboard/e2e/*.live.spec.ts`, `npm run test:e2e:live`) o la **API viva**, contra Postgres real. Un servicio mockeado **no cuenta** como verificación, y el repo tiene el precedente exacto en contra: los specs del núcleo **mockean `SyncTransportGuard`** y a veces el servicio entero, así que verifican cableado y no comportamiento. El objetivo declarado es que **no haya sorpresas** —que no falle un formulario ni una API— y un mock garantiza exactamente lo contrario.
+- **S10** — **Cobertura completa, no una muestra**: todas las celdas aplicables de la matriz de escenarios de abajo. Una celda **no medida** se declara **no verificada**; nunca se asume por parecido con otra.
+- **S11** — El resultado buscado, en palabras del owner: *"Que esa valuación sea correcta y podamos garantizar un control de inventario y costos reales a nuestros clientes."* La valuación no es un detalle contable: es la promesa que se le hace al cliente.
+
+## Matriz de escenarios (lo que hay que cubrir, no una muestra)
+
+| Eje | Valores a ejercitar |
+|---|---|
+| **Unidad de compra vs consumo** | misma UOM · UOM distintas con `factor = 1` (**debe rechazar**) · `factor ≠ 1` (lb→kg, g→kg, ml→L) · cantidades fraccionarias (0,5 / 0,25 / 0,10) |
+| **Moneda y FX** | NIO · USD con tasa **oficial BCN por fecha** · USD con tasa **comercial** · fecha sin tasa publicada (debe fallar **cerrado**) |
+| **Impuesto** | precio de compra **con IVA incluido** · **sin IVA incluido** |
+| **Componente de receta** | INSUMO simple · **SUB_RECIPE** · SUB_RECIPE **multi-nivel** · **ciclo** (debe detectarse) |
+| **Tipo de producto** | SIMPLE (hoy `noImpact`) · COMPOUND con receta · PREPARED (producción) |
+| **Perecederos** | con vencimiento · sin vencimiento · **lote agotado** · lote **vencido** · FEFO del POS **vs** el orden del cloud |
+| **Producción** | insumo simple · con sub-receta · con componente perecedero · escalado de `plannedQuantity` · costo unitario derivado |
+| **Venta → descargue** | receta de 1 línea · receta multi-insumo · **sin** receta (`noImpact`) · cantidad fraccionaria · **anulación con compensación** · venta que deja stock **negativo** |
+| **Valuación** | CPP resultante · **costo o mercado** (CPP por debajo / por encima de la referencia) · asiento compensatorio de valuación |
+| **Merma y ajuste** | merma de insumo · merma de plato · con lote · ajuste manual · conteo con varianza **positiva** y **negativa** · umbral forense (>C$1.500) |
+| **Camino** | **formulario real** (Playwright live sobre el dashboard) · **API viva** · POS (sync de dispositivo) |
+| **Aislamiento** | las mismas operaciones en **dos tenants**: ninguna fila cruzada (RLS `FORCE`) |
+
+**Regla de la matriz:** cada celda que aplique se **mide**, y el resultado se anota como **correcto**, **roto** o **no alcanzable** — con su `path:line` y su valor observado. Nada se deja en "parece que anda".
 
 ## Lo que la v1 encontró — y lo que esta corrida tiene que mostrar
 
@@ -52,16 +75,19 @@ Cada fila es un objetivo de re-chequeo. **Ninguna se da por arreglada sin medirl
 
 | ID | Spec | Tarea | Estado |
 |---|---|---|---|
-| **V1** | S3, S4 | Línea base del candidato: rig con el esquema del candidato, backend vivo, tenant de prueba, credencial de dispositivo, y snapshot del estado inicial | — |
-| **V2** | S5 | **H1 + H2**: compra con `factor ≠ 1` (¿el CPP cuadra?) y `POST /api/insumos` con factor 1 y UOM distintas (¿rechaza?) | — |
-| **V3** | S5 | **H3 + H5**: sub-receta desde el dashboard (¿qué se persiste?) y multi-nivel (¿es alcanzable?) | — |
-| **V4** | S5 | **T4-1 + T4-2**: cierre de producción consumiendo de lote perecedero (¿cierra?) y `producedExpirationDate` (¿se corre un día?) | — |
-| **V5** | S5 | **H4**: anulación de venta con receta (¿la compensación queda enlazada?) | — |
-| **V6** | S5 | **H6**: mismo insumo perecedero consumido por POS y por cloud (¿valorizan igual?) | — |
-| **V7** | S5 | **H7 + H8**: umbral forense (¿notifica?) y superficies de costo teórico/margen (¿existen?) | — |
-| **V8** | S5 | **Mermas y ajustes** en el candidato: merma de insumo, merma de plato, conteo físico | — |
-| **V9** | S5 | **Lo nuevo de esta rama**: sesión de conteo persistida + lista firmable (R19) e identidad/`ruc` (task 31), ejercitados en el mismo rig | — |
-| **V10** | S3, S6 | Documento de cierre `docs/audits/inventory-core-flow-truth-v2.md`: flujo paso a paso, cada fila de arriba **medida** (arreglada / sigue rota / no alcanzable), `path:line`, y **qué bloquea la integración** | — |
+| **V1** | S3, S4, S9 | Línea base del candidato: rig con el esquema del candidato, **backend vivo**, tenant de prueba, credencial de dispositivo, **dashboard levantado con Playwright live configurado**, y snapshot del estado inicial | — |
+| **V2** | S5, S10 | **Compra, unidades y costo** — matriz de UOM × moneda/FX × IVA incluido. Incluye **H1** (¿el CPP cuadra con `factor ≠ 1`?) y **H2** (¿el `POST /api/insumos` con factor 1 y UOM distintas sigue dando 201?) | — |
+| **V3** | S5, S10 | **Receta** — matriz de componente (INSUMO · SUB_RECIPE · multi-nivel · ciclo). Incluye **H3** (¿qué se persiste al crear una sub-receta desde el formulario?) y **H5** (¿el multi-nivel es alcanzable?) | — |
+| **V4** | S5, S10 | **Producción** — matriz de componente × perecedero × escalado. Incluye **T4-1** (¿el cierre cierra consumiendo de un lote?) y **T4-2** (¿la fecha de vencimiento se corre un día?) | — |
+| **V5** | S5, S10 | **Venta y descargue** — matriz de receta × cantidad fraccionaria × anulación. Incluye **H4** (¿la compensación queda enlazada al asiento original?) y el caso de stock negativo | — |
+| **V6** | S5, S10 | **Perecederos y FEFO** — matriz de vencimiento × lote agotado × vencido. Incluye **H6** (¿valorizan igual el POS y el cloud?) | — |
+| **V7** | S5, S11 | **Valuación** — CPP resultante en los escenarios anteriores, y **costo o mercado**: CPP por debajo y por encima de la referencia, con el asiento compensatorio de valuación registrado. Si el castigo no está implementado, **se declara** | — |
+| **V8** | S5, S10 | **Mermas, ajustes y conteo** — matriz de insumo/plato × con lote × varianza positiva/negativa. Incluye **H7** (¿el umbral forense >C$1.500 notifica o el dispatcher sigue siendo no-op?) | — |
+| **V9** | S5, S11 | **Superficies humanas** — **H8**: ¿existe costo teórico y margen bruto por plato? Si no, se declara con dueño | — |
+| **V10** | **S8, S9** | **Formularios y APIs por el camino real** — Playwright live sobre **cada** formulario que participa (insumo, compra, receta, producto, producción, merma, conteo) + las APIs que consumen: que **ninguno falle** y que **persistan lo que muestran**. Es el pedido explícito del owner | — |
+| **V11** | S5 | **Aislamiento multi-tenant** — las mismas operaciones en dos tenants, sin filas cruzadas (RLS `FORCE`) | — |
+| **V12** | S5 | **Lo nuevo de esta rama en el rig**: sesión de conteo persistida + lista firmable (R19) e identidad/`ruc` (task 31) | — |
+| **V13** | S3, S6 | Documento de cierre `docs/audits/inventory-core-flow-truth-v2.md`: el flujo paso a paso, **cada celda de la matriz medida** (correcto / roto / no alcanzable) con `path:line` y valor observado, y **qué bloquea la integración** | — |
 
 ## Trampas verificadas (de la v1, no re-pisar)
 
@@ -77,3 +103,8 @@ Cada fila es un objetivo de re-chequeo. **Ninguna se da por arreglada sin medirl
 - **L2** 2026-10-15 — **Alcance medido y una corrección de encuadre, dicha de frente.** El rango pedido son **85 commits** (`bcf6f7cf..8e456a36`). **Pero el lote de inventario ya está en `origin/main`**: verificado uno por uno que `c3709c6c` (valuación), `b8b944d2` (escrituras del kardex), `71053b61`, `46734983`, `886fb27a` y `0fc3aec5` son **ancestros de `origin/main`** y que **ninguno** de ellos está entre nuestros 32. Es decir: lo único que le falta a `main` son nuestros 32 commits; el flujo, en cambio, depende de los 85. Por eso la verificación se corre sobre el **candidato entero**.
 - **L3** 2026-10-15 — **El instrumento de la v1 se reusa en vez de reinventarse.** `nucleo-inventario-verificacion.md` tenía specs (S1–S8), 8 hipótesis (H1–H8) y la receta de entorno con sus trampas; su corrida confirmó H1, H2, H3, H5 y H6, dejó **T4 bloqueado** por dos bugs concretos (el 500 de `expirationDate.getTime` y el vencimiento corrido un día) y publicó `docs/audits/inventory-core-flow-truth-v1.md`. Esta corrida **no cambia el método: cambia el candidato**, y su valor está en medir **qué de todo eso quedó realmente arreglado** — porque un arreglo tampoco se da por bueno por leerlo.
 - **L4** 2026-10-15 — **Sin código de producto.** La verificación corre en el rig y en el tenant de prueba (S4); cualquier defecto que aparezca se **abre como tarea con su evidencia**, no se arregla acá (S6).
+- **L5** 2026-10-15 — **Endurecimiento del pedido (verbatim del owner)**: *"Perfecto, las pruebas deben de ser e2e reales, para no tener sorpresas una vez implementados, que alguno de los formularios falle o algun api. Procede con todos los escenarios posibles, tipos de calculos, mixes y demás. Que esa valuación sea correcta y podamos garantizar un control de inventario y costos reales a nuestros clientes."* Esto agrega **S8–S11**, la **matriz de escenarios** y **tres tareas nuevas** (V10 formularios/APIs por el camino real, V11 aislamiento multi-tenant, V13 el cierre), y renumera el plan a 13 tareas.
+  - **Lo que cambia de fondo, y no es cosmético:** la v1 ejercitó el flujo **por la API**, y eso dejó afuera la capa donde el owner espera que aparezcan las sorpresas — **los formularios** ("que alguno de los formularios falle"). Y deja afuera la garantía de "control real": que **dos tenants no se crucen**. Las dos entran como tareas propias.
+  - **La capacidad existe y se verificó, no se supone:** el dashboard tiene **Playwright con config live** (`apps/owner_dashboard/package.json:14-16`, `playwright.live.config.ts`, suites `e2e/*.live.spec.ts` y `src/__tests__/*.live.test.ts`). O sea: los formularios se pueden ejercer en **browser real contra el backend vivo**, que es exactamente "e2e reales".
+  - **La valuación deja de ser un supuesto y pasa a ser una tarea con su matriz**: el owner la nombró aparte ("que esa valuación sea correcta") y es la promesa que se le hace al cliente. V7 mide CPP por debajo y por encima de la referencia y el asiento compensatorio; si el castigo no está implementado, **se declara** en vez de darse por hecho.
+  - **Y la regla que ordena todo**: **un mock no es una verificación.** Cada caso se ejerce por el formulario real o la API viva, contra Postgres real. Una celda no medida se escribe como **no verificada** — nunca se asume por parecido.
