@@ -16,7 +16,7 @@ import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-re
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
-import { DataSource } from 'typeorm';
+import { DataSource, getMetadataArgsStorage } from 'typeorm';
 import {
   Insumo,
   NEGATIVE_STOCK_POLICY,
@@ -210,6 +210,122 @@ describe('InvoicesService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  describe('appendV1Movement compensation link (H4)', () => {
+    let appendQb: {
+      setLock: jest.Mock;
+      where: jest.Mock;
+      andWhere: jest.Mock;
+      getOne: jest.Mock;
+    };
+    const builtBinding = {
+      item: { id: 'item-1' },
+      binding: {
+        bindingOrdinal: 0,
+        insumoId: 'ins-1',
+        quantityPerSaleUnit: 2,
+        saleCorrelationId: 'corr-cancel',
+      },
+      explodedQuantity: 2,
+    };
+    const cancelRecord = {
+      idempotencyKey: 'sales:RIG-TERMINAL-1:cancel',
+      sourceDeviceId: 'RIG-TERMINAL-1',
+      sourceSequence: 5,
+      flowType: 'sales',
+      documentType: 'SALE_CANCEL',
+      invoice: {
+        id: 'inv-1',
+        createdAt: '2026-10-15T18:00:00.000Z',
+        userId: 'user-1',
+      },
+    };
+    const invokeAppendV1Movement = (
+      record: unknown,
+      manager: unknown,
+    ): Promise<void> =>
+      (
+        service as unknown as {
+          appendV1Movement: (
+            tenantId: string,
+            rec: unknown,
+            validated: unknown,
+            mgr: unknown,
+          ) => Promise<void>;
+        }
+      ).appendV1Movement('tenant-1', record, builtBinding, manager);
+
+    beforeEach(() => {
+      appendQb = {
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: 'ins-1',
+          tenant_id: 'tenant-1',
+          stock: 6,
+          averageCost: 50,
+          negativeStockPolicy: 'ALLOW_TEMPORARY',
+        }),
+      };
+      txManager.createQueryBuilder.mockReturnValue(appendQb);
+    });
+
+    it('queries the compensation by the sourceDocumentId COLUMN, never the reason getter', () => {
+      // The regression that this pins: `reason` is a getter over
+      // `sourceDocumentId`, not a @Column, so TypeORM rejects a findOne that
+      // filters on `reason`. The mock in the tests above cannot see that, and
+      // the legacy compensation path was unreachable, so only a real query
+      // exposed it. Assert the entity shape directly.
+      const columnProperties = getMetadataArgsStorage()
+        .columns.filter((column) => column.target === InventoryMovement)
+        .map((column) => column.propertyName);
+
+      expect(columnProperties).toContain('sourceDocumentId');
+      expect(columnProperties).not.toContain('reason');
+    });
+
+    it('links a SALE_CANCEL movement to the original SALE movement of the same invoice', async () => {
+      txManager.findOne.mockResolvedValue({ id: 'kardex-sale-1' });
+
+      await invokeAppendV1Movement(cancelRecord, txManager);
+
+      expect(txManager.findOne).toHaveBeenCalledWith(
+        InventoryMovement,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-1',
+            insumoId: 'ins-1',
+            type: MovementType.SALE,
+            sourceDocumentId: 'invoice:inv-1',
+          }),
+        }),
+      );
+      expect(txManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE_CANCEL,
+          compensationForKardexId: 'kardex-sale-1',
+        }),
+      );
+    });
+
+    it('leaves a SALE movement uncompensated', async () => {
+      await invokeAppendV1Movement(
+        { ...cancelRecord, documentType: 'SALE', sourceSequence: 4 },
+        txManager,
+      );
+
+      const saved = txManager.save.mock.calls.map(
+        ([entity]: [unknown, ...unknown[]]) => entity as Record<string, unknown>,
+      );
+      const movement = saved.find(
+        (entity) => entity?.type === MovementType.SALE,
+      );
+      expect(movement).toBeDefined();
+      expect(movement?.compensationForKardexId).toBeNull();
+      expect(txManager.findOne).not.toHaveBeenCalled();
+    });
   });
 
   describe('syncInvoices', () => {

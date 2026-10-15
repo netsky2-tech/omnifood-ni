@@ -2006,7 +2006,12 @@ export class InvoicesService {
         tenant_id: tenantId,
         insumoId,
         type: MovementType.SALE,
-        reason: `invoice:${invoiceId}`,
+        // The entity exposes `reason` as a getter over `sourceDocumentId`,
+        // NOT as a column, so querying `reason` makes TypeORM throw
+        // "Property 'reason' was not found in 'InventoryMovement'". The
+        // legacy compensation path never reached this line, which is why the
+        // defect stayed hidden until the flowType path called it for real.
+        sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoiceId}`,
       },
       order: { id: 'DESC' },
     });
@@ -2200,6 +2205,20 @@ export class InvoicesService {
     insumo.existenciaActual = newStock;
     await manager.save(Insumo, insumo);
 
+    // S5 (H4): the flowType branch must carry the link to the write-up it
+    // reverses. appendFohMovements did this from the start, but this branch
+    // never did, so a SALE_CANCEL left compensation_for_kardex_id NULL and the
+    // ledger could not show which entry the reversal compensates.
+    const compensationForKardexId =
+      movementType === MovementType.SALE_CANCEL
+        ? await this.resolveCompensatedMovementId(
+            manager,
+            tenantId,
+            binding.insumoId,
+            invoice.id,
+          )
+        : null;
+
     await manager.save(
       this.movementRepository.create({
         tenant_id: tenantId,
@@ -2219,6 +2238,7 @@ export class InvoicesService {
         sourceSequence: String(record.sourceSequence),
         sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
         sourceDocumentType: movementType,
+        compensationForKardexId,
         originInvoiceItemId:
           movementType === MovementType.SALE ? item.id : null,
         // AG-02: business timestamp of the originating sale invoice.
