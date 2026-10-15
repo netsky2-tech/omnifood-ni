@@ -33,7 +33,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | — |
 | **R10** | S4, S9 | **Corrección de compra: no mezclar unidades** — el documento de corrección toma `correctedQuantity` del movimiento (unidad de **consumo**) y lo escribe junto a un `unit_cost` de **factura**; para factor ≠ 1 son unidades distintas | ✅ Cerrada (L13) |
 | **R11** | S7 | **Venta camino vivo: `SaleInventoryOutcomeService` debe expandir el `SUB_RECIPE`** — hoy **rechaza la venta** con `insumoId '…' not found` | ✅ Cerrada (L12) |
-| **R12** | S11 | **Valuación: cablear el menor entre costo y mercado (R-01/Ley 822)** — poder fijar el precio de mercado y disparar el castigo; hoy la capacidad existe y **no la invoca nadie** | — |
+| **R12** | S11 | **Valuación: cablear el menor entre costo y mercado (R-01/Ley 822)** — fijar el precio de mercado y disparar el castigo | ✅ Cerrada (L18) |
 
 ## Log
 
@@ -92,3 +92,8 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Corrección propia**: la merma de **plato** **sí** llamaba al helper (`shrinkage.service.ts:318`); mi hallazgo de V8 decía que no. Corregido en L15.
   - **Medido en el rig**: conteo con varianza de `1831.215` → `movementsCreated 1`, `forensic_alerts` **1 → 2** con `HIGH_VALUE_COUNT_ADJUSTMENT` / `AJUSTE_CONTEO` / `valuationNio 1831.215`, y el dispatcher **envió** (`[STUB EMAIL] To: owner@omnifood.ni`, adaptador de consola; con `EMAIL_PROVIDER=resend` sale por email real).
   - **Evidencia**: **536/536** inventario (2 tests del dispatcher + 2 del conteo).
+- **L18** 2026-10-15 — **R12 CERRADA: el menor entre costo y mercado es alcanzable y está medido.**
+  - **Lo que faltaba**: `setMarketPrice` y `applyLowerOfCostWritedown` estaban implementados y cubiertos por su `.db.spec`, pero **ninguna ruta los invocaba** — la capacidad existía y el camino vivo no la usaba, así que **R-01 (Ley 822 art. 44) no estaba entregado por el sistema**.
+  - **Lo que se cableó**: dos rutas humanas (OWNER/MANAGER) en el controller de reportes — `POST /inventory/reports/valuation/market-price` (fija/actualiza el precio de mercado por insumo y fecha) y `POST /inventory/reports/valuation/writedown` (dispara el castigo a una fecha de cierre). DTOs nuevos con validación (`valuation.dto.ts`).
+  - **Medido en el rig**: insumo `c3954bc0` (stock 6, CPP 350, valor 2100) → precio de mercado C$300 → castigo `total 300`, una línea con variante `MARKET_PRICE`; **CPP 350 → 300** y **valor reportado 2100 → 1800**; asiento `VALUATION_WRITEDOWN` con `quantity 0`, `unit_cost 300`, `total_cost -300` y `valuation_basis` con la evidencia completa (variante, referencia, fecha, origen, stock, costo previo, castigo). **Idempotente**: segundo disparo a la misma fecha → `total 0`, `skipped 1`.
+  - **Evidencia**: **556/556** inventario (3 tests nuevos del controller de valuación).
