@@ -49,6 +49,7 @@ describe('ProductController E2E', () => {
       create: jest.fn(),
       update: jest.fn(),
       deactivate: jest.fn(),
+      updateInventoryMapping: jest.fn(),
     } as unknown as jest.Mocked<ProductService>;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -449,6 +450,69 @@ describe('ProductController E2E', () => {
           `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
         )
         .expect(404);
+    });
+  });
+
+  // ── PUT /products/:id/inventory-mapping (#518 R1) ────────────────────
+
+  describe('PUT /products/:id/inventory-mapping', () => {
+    const validInsumoId = '11111111-1111-4111-8111-111111111111';
+
+    it('rejects without auth token with 401', async () => {
+      await request(app.getHttpServer())
+        .put(`${PRODUCTS_API}/prod-1/inventory-mapping`)
+        .send({ insumoId: validInsumoId })
+        .expect(401);
+    });
+
+    it('rejects CASHIER role with 403', async () => {
+      await request(app.getHttpServer())
+        .put(`${PRODUCTS_API}/prod-1/inventory-mapping`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.CASHIER, tenant_id: 'tenant-e2e' })}`,
+        )
+        .send({ insumoId: validInsumoId })
+        .expect(403);
+    });
+
+    it('rejects invalid uuid in insumoId with 400', async () => {
+      await request(app.getHttpServer())
+        .put(`${PRODUCTS_API}/prod-1/inventory-mapping`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
+        .send({ insumoId: 'not-a-valid-uuid' })
+        .expect(400);
+    });
+
+    it('returns 200 and delegates to service for OWNER', async () => {
+      const expectedMapping = {
+        id: 'map-version-1',
+        tenant_id: 'tenant-e2e',
+        product_id: 'prod-1',
+        insumo_id: validInsumoId,
+      };
+      productService.updateInventoryMapping.mockResolvedValue(
+        expectedMapping as any,
+      );
+
+      const res = await request(app.getHttpServer())
+        .put(`${PRODUCTS_API}/prod-1/inventory-mapping`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken({ role: UserRole.OWNER, tenant_id: 'tenant-e2e' })}`,
+        )
+        .send({ insumoId: validInsumoId })
+        .expect(200);
+
+      expect(res.body).toEqual(expectedMapping);
+      expect(productService.updateInventoryMapping).toHaveBeenCalledWith(
+        'prod-1',
+        'tenant-e2e',
+        { insumoId: validInsumoId },
+      );
     });
   });
 

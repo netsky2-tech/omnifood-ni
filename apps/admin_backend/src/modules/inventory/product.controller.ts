@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UnauthorizedException,
   UseGuards,
@@ -16,6 +17,7 @@ import { serializeProduct, serializeProducts } from './product-response';
 import { ProductType } from './entities/product.entity';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { UpdateProductInventoryMappingDto } from './dto/update-product-inventory-mapping.dto';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
 import {
   CurrentUser,
@@ -138,6 +140,21 @@ export class ProductController {
         dto,
         user ? { userId: user.sub, userEmail: user.email } : undefined,
       ),
+    );
+  }
+
+  @Put(':id/inventory-mapping')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async updateInventoryMapping(
+    @Param('id') id: string,
+    @Body() dto: UpdateProductInventoryMappingDto,
+    @GetTenantId() tenantId?: string,
+  ) {
+    return await this.productService.updateInventoryMapping(
+      id,
+      this.requireTenant(tenantId),
+      dto,
     );
   }
 
