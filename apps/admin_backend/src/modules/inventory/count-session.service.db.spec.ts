@@ -211,7 +211,7 @@ describe('CountSessionService persistence contract (Real PostgreSQL DB, migratio
   });
 
   const buildService = (): CountSessionService =>
-    new CountSessionService(runtime);
+    new CountSessionService(runtime, { create: jest.fn() } as never);
 
   it('S12: persists the session and every counted entry with actor label, counted-at, disputed flag and the FROZEN line identity', async () => {
     const tenantId = await seedTenant('r19-count-session-persist');

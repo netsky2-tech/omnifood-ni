@@ -8,6 +8,10 @@ import { bindTenantContext } from '../../core/database/tenant-transaction';
 import { drawBatchOutflow } from './batch-allocation';
 import { toCalendarDay } from '../../core/database/calendar-day';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
+import {
+  ForensicAlertService,
+  shouldCreateHighValueInventoryAlert,
+} from './forensic-alert.service';
 import { Insumo } from './entities/insumo.entity';
 import { CountSession } from './entities/count-session.entity';
 import { CountSessionEntry } from './entities/count-session-entry.entity';
@@ -34,7 +38,10 @@ export interface ReplayCountSessionResult {
 
 @Injectable()
 export class CountSessionService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly forensicAlertService: ForensicAlertService,
+  ) {}
 
   async replayCountSession(
     input: ReplayCountSessionInput,
@@ -224,8 +231,64 @@ export class CountSessionService {
       });
       await movementRepo.save(movement);
       movementsCreated += 1;
+
+      // R7 (H7): a high-value count adjustment must raise the same forensic
+      // alert the shrinkage paths raise. `AJUSTE_CONTEO` is already in the
+      // qualifying set; this path simply never called the check.
+      await this.createHighValueCountAlertIfNeeded({
+        tenantId,
+        insumoId: line.insumoId,
+        insumoName: insumo.name,
+        quantity: variance,
+        totalCostNio: round4(Math.abs(variance) * previousAverageCostNio),
+        originDocumentRef: sessionId,
+        manager,
+      });
     }
 
     return movementsCreated;
+  }
+
+  private async createHighValueCountAlertIfNeeded(input: {
+    tenantId: string;
+    insumoId: string;
+    insumoName: string;
+    quantity: number;
+    totalCostNio: number;
+    originDocumentRef: string;
+    manager: EntityManager;
+  }): Promise<void> {
+    if (
+      !shouldCreateHighValueInventoryAlert({
+        valuationNio: input.totalCostNio,
+        movementType: MovementType.ADJUSTMENT,
+        sourceDocumentType: COUNT_ADJUSTMENT_DOCUMENT_TYPE,
+      })
+    ) {
+      return;
+    }
+
+    await this.forensicAlertService.create(
+      {
+        tenantId: input.tenantId,
+        alertType: 'HIGH_VALUE_COUNT_ADJUSTMENT',
+        severity: 'HIGH',
+        actorRole: 'ADMIN',
+        message: `High-value count adjustment detected for ${input.insumoName}`,
+        metadata: {
+          movementType: MovementType.ADJUSTMENT,
+          sourceDocumentType: COUNT_ADJUSTMENT_DOCUMENT_TYPE,
+          insumoId: input.insumoId,
+          insumoName: input.insumoName,
+          amount: input.quantity,
+          valuationNio: input.totalCostNio,
+          actorRole: 'OPERATOR',
+          originDocumentRef: input.originDocumentRef,
+          operatorNotice:
+            'Adjustment recorded. Admin has been notified for forensic review.',
+        },
+      },
+      input.manager,
+    );
   }
 }

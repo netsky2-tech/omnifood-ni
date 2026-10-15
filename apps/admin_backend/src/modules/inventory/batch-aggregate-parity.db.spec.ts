@@ -262,7 +262,9 @@ describe('batch balances vs aggregate stock parity (Real PostgreSQL DB, migratio
       unusedRepository, // bomExplosionService (delta path never uses it)
     );
 
-    countSessionService = new CountSessionService(runtime);
+    countSessionService = new CountSessionService(runtime, {
+      create: jest.fn(),
+    } as never);
   });
 
   afterAll(async () => {

@@ -51,6 +51,7 @@ import {
   ForensicAlertService,
 } from './forensic-alert.service';
 import { UomConversionCalculator } from './uom-conversion-calculator';
+import { ForensicAlertEmailDispatcher } from './forensic-alert-email.dispatcher';
 import { IdentityModule } from '../identity/identity.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
 import { TenantModule } from '../tenant/tenant.module';
@@ -145,9 +146,7 @@ import { AuditModule } from '../audit/audit.module';
     SaleInventoryRemediationService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
-      useValue: {
-        dispatchToAdmins: async () => Promise.resolve(),
-      },
+      useClass: ForensicAlertEmailDispatcher,
     },
     {
       provide: FX_RATE_RESOLVER,
