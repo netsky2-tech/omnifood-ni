@@ -1,9 +1,14 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
+import 'package:pos_app/domain/services/fulfillment/durable_print_service.dart';
+import 'package:pos_app/domain/services/fulfillment/retention_maintenance.dart';
 import 'package:pos_app/domain/services/inventory/kardex_recalculation_engine.dart';
 import 'package:pos_app/domain/services/inventory/movement_engine_impl.dart';
 import 'package:pos_app/domain/services/inventory/negative_stock_regularization_service.dart';
@@ -534,6 +539,37 @@ void main() async {
   if (isTerminalLinked) {
     connectivityService.start();
     syncService.start();
+
+    // #528 R1+R2: the retention/lifecycle trigger. The purge existed inside
+    // DurablePrintService but was never invoked (orphan class) and nothing
+    // measured the device lifecycle. Boot + every 24h: purge past the
+    // configurable window (strictly preserving DGI invoices and kardex) and
+    // log the row counts + DB size (the measurement the issue demands
+    // before sizing any threshold). Retention must NEVER block startup —
+    // every failure here is logged and swallowed.
+    try {
+      final retentionPrinterConfig =
+          await activationPrinterConfigService.getPrinterConfig();
+      final durablePrintService = DurablePrintService(
+        database: database,
+        printerPort: PrinterResolver.resolve(retentionPrinterConfig),
+        auditRepository: auditRepository,
+      );
+      final retentionMaintenance = RetentionMaintenance(
+        database: database,
+        durablePrintService: durablePrintService,
+      );
+      unawaited(retentionMaintenance.runOnce(now: DateTime.now()));
+      Timer.periodic(
+        const Duration(hours: 24),
+        (_) => unawaited(retentionMaintenance.runOnce(now: DateTime.now())),
+      );
+    } catch (e) {
+      developer.log(
+        '[RETENTION] wiring skipped: $e',
+        name: 'RetentionMaintenance',
+      );
+    }
   }
 
   // T1 (OTA automatic discovery): build the OTA coordinator at app-root,
