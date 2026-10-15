@@ -1826,7 +1826,7 @@ No separar “models”, “services” y “tests” en commits que individualm
 | AC-02 onboardingStartedAt | ONB1.1 |
 | AC-03 Resume | ONB1.1 + ONB1.2 |
 | AC-04 Fiscal minimum | ONB1.1 + ONB1.5 |
-| AC-05 Campo no persistido | ONB1.5 |
+| AC-05 Identidad de empresa persistida y transportada | ONB1.5 |
 | AC-06 Sellable catalog | ONB1.1 + ONB1.5 |
 | AC-07 BOH no bloquea | ONB1.1 + ONB1.5 + ONB1.9 |
 | AC-08 Unknown cost | ONB1.5 + ONB1.9 |
