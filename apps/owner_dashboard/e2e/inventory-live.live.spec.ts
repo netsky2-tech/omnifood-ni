@@ -110,3 +110,32 @@ test("the insumo form accepts a coherent conversion (R1 via the UI)", async () =
 
   await expect(sharedPage.getByTestId("insumo-form-error")).toBeHidden();
 });
+
+test("the purchase form previews the CONVERTED CPP (R1 via the UI)", async () => {
+  await sharedPage.goto(`${BASE}/inventory`);
+  await sharedPage.getByTestId("inventory-tab-purchases").click();
+  await sharedPage.getByTestId("purchases-register-btn").click();
+
+  await sharedPage.getByTestId("purchases-form-supplier").click();
+  await sharedPage
+    .getByRole("option", { name: /ZZ TEST Proveedor Rig/ })
+    .click();
+
+  // A real lb -> kg insumo (stored factor 0.4536): 10 lb at C$100/lb is
+  // 4.5360 kg at C$220.4586/kg. The preview must show the CONVERTED unit
+  // cost, never the raw 100.
+  await sharedPage.getByTestId("purchases-form-insumo").click();
+  await sharedPage.getByRole("option", { name: /^R10-CONV/ }).click();
+
+  await sharedPage.getByTestId("purchases-form-quantity").fill("10");
+  await sharedPage.getByTestId("purchases-form-unit-cost").fill("100");
+  // The preview also requires the invoice (the form says so explicitly):
+  // proveedor, insumo, cantidad, costo y factura.
+  await sharedPage
+    .getByTestId("purchases-form-invoice-number")
+    .fill(`E2E-R1-${Date.now()}`);
+
+  await expect(
+    sharedPage.getByTestId("purchases-preview-projected"),
+  ).toContainText("C$220.46", { timeout: 15_000 });
+});
