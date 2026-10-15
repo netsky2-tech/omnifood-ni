@@ -306,7 +306,22 @@ void main() {
         expect(replay.status, FiscalInboxStatus.idempotentNoOp);
       });
 
-      test('blank identity strings clear the local keys (backend writer maps blank to NULL)', () async {
+      test('blank identity strings clear the local keys when the cloud previously asserted them (backend writer maps blank to NULL)', () async {
+        // Option-B precondition (forced change): blank is only a CLEAR when
+        // the cloud PREVIOUSLY asserted the field. Rev 1 asserts all three,
+        // exactly like the null-clearing S3 test above; without this, the
+        // blank revision would be a no-op by design (a legacy terminal whose
+        // locally entered values were never cloud-asserted must keep them).
+        final rev1 = {
+          ...sampleEnvelope,
+          'address': 'Dirección vieja',
+          'phone': '505 0000 0000',
+          'email': 'vieja@cafetin.ni',
+        };
+        await handler.handleFiscalEnvelope(rev1);
+
+        // Seed stale values under the asserted mirror so the clearing
+        // revision has something real to clear.
         for (final key in ['address', 'phone', 'email']) {
           await database.localConfigDao.saveConfig(LocalConfigEntity(
             key: key,
@@ -332,6 +347,56 @@ void main() {
         expect(await database.localConfigDao.getConfigByKey('address'), isNull);
         expect(await database.localConfigDao.getConfigByKey('phone'), isNull);
         expect(await database.localConfigDao.getConfigByKey('email'), isNull);
+
+        // The retraction also drops the keys from the marker, so a LATER
+        // null can never delete a freshly operator-entered value.
+        final marker = await database.localConfigDao
+            .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+        expect(marker!.value.split(','), isNot(contains('address')));
+        expect(marker.value.split(','), isNot(contains('phone')));
+        expect(marker.value.split(','), isNot(contains('email')));
+      });
+
+      test('blank/null identity NEVER asserted by the cloud is a NO-OP: locally entered values survive (option-B production-safety half)', () async {
+        // The legacy production shape: operator-entered identity, a snapshot
+        // whose identity keys are PRESENT but blank/null (P1 builder
+        // `tenant.x || null`), and NO prior cloud assertion. This is the
+        // case blank-clearing used to destroy.
+        for (final entry in {
+          'address': 'Ingresada localmente',
+          'phone': '505 8888 7777',
+          'email': 'fritanga@local.ni',
+        }.entries) {
+          await database.localConfigDao.saveConfig(LocalConfigEntity(
+            key: entry.key,
+            value: entry.value,
+            description: 'Local entry',
+          ));
+        }
+
+        final rev1 = {
+          ...sampleEnvelope,
+          'address': '   ',
+          'phone': '',
+          'email': null,
+        };
+        final outcome = await handler.handleFiscalEnvelope(rev1);
+        expect(outcome.status, FiscalInboxStatus.applied);
+
+        expect(
+            (await database.localConfigDao.getConfigByKey('address'))?.value,
+            'Ingresada localmente');
+        expect(
+            (await database.localConfigDao.getConfigByKey('phone'))?.value,
+            '505 8888 7777');
+        expect(
+            (await database.localConfigDao.getConfigByKey('email'))?.value,
+            'fritanga@local.ni');
+
+        // No constraint imposed -> the replay is a no-op, not an endless
+        // repair.
+        final replay = await handler.handleFiscalEnvelope(rev1);
+        expect(replay.status, FiscalInboxStatus.idempotentNoOp);
       });
 
       test('S3: identity keys absent from the payload (pre-P1 builder) are a NO-OP: locally entered values survive', () async {

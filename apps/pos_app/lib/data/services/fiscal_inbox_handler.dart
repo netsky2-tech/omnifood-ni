@@ -93,13 +93,28 @@ class FiscalProjectionKeys {
   /// `printer_header_*` override keys, so an explicit local override keeps
   /// winning until the operator clears it.
   ///
-  /// S3 absence semantics, transposed from the backend writer contract and
-  /// supported by the payload (P1 builder `tenant.x || null`): the snapshot
-  /// ALWAYS sends these keys, so the terminal CAN distinguish omitted from
-  /// null — key present and non-blank -> SET; key present null/blank -> CLEAR
-  /// (delete the local key: a cloud-cleared value must never survive a
-  /// clearing revision); key absent (only possible from a pre-P1 snapshot
-  /// builder) -> NO-OP, never delete, matching "omitted = no-op".
+  /// P2 production-safety fix (S7/L3), reviewer-authorized option B: these
+  /// mirrors are CONDITIONAL clears riding the EXISTING
+  /// [businessProfileManagedKeys] marker — no new machinery, no payload
+  /// change. Present and non-blank -> SET and ASSERT (the key joins the
+  /// marker). Present null/blank -> CLEAR (delete the local key) only when
+  /// the stored marker shows the cloud PREVIOUSLY asserted the field; never
+  /// asserted -> NO-OP, never delete, and no empty string is ever invented.
+  /// Absent (pre-P1 builder only; unreachable after a P1 revision by
+  /// anti-downgrade) -> NO-OP.
+  ///
+  /// Why the marker is the discriminator: the payload collapses two
+  /// different meanings into one null — "the cloud has no opinion about this
+  /// field" and "the cloud erased this field" — and the terminal's own
+  /// history separates them without needing a new producer: the only producer
+  /// of null today (P1 builder `tenant.x || null`) is the first meaning, and
+  /// a terminal whose operator-entered values were never cloud-asserted
+  /// (every terminal today) keeps them. Once the cloud HAS asserted a value,
+  /// a later null is a genuine retraction and the stale mirror must not
+  /// survive its clearing revision (S3).
+  ///
+  /// Clearing DROPS the key from the marker in the same transaction, so a
+  /// later null can never delete a freshly operator-entered value.
   static const String businessAddress = 'address';
   static const String businessPhone = 'phone';
   static const String businessEmail = 'email';
@@ -140,6 +155,11 @@ class FiscalProjectionKeys {
   /// Written in the SAME fiscal projection transaction as the asserted
   /// mirrors; removed when no field is asserted. Not a mandatory projection:
   /// never validated by [FiscalInboxHandler.isProjectionComplete].
+  ///
+  /// Since the P2 option-B fix this ALSO names the identity mirrors
+  /// (`address`, `phone`, `email`) whenever the snapshot carries a non-blank
+  /// value for them. Membership is the assertion record that makes a later
+  /// null/blank a CLEAR for those keys; a clearing revision drops the key.
   static const String businessProfileManagedKeys = 'business_profile_managed_keys';
 }
 
@@ -667,29 +687,47 @@ class FiscalInboxHandler {
 
     // Company identity parity P2: address/phone/email mirrors, read by the
     // printed header fallback (`printer_header_address ?? address`, etc.) and
-    // the reprint snapshot (sales_repository_impl). Tri-state, per the S3
-    // contract documented on [FiscalProjectionKeys.businessAddress]: the P1
-    // snapshot builder always sends the keys, so present+non-blank SETS,
-    // present null/blank CLEARS (a cloud-cleared value must never survive
-    // locally), and absent (pre-P1 builder only) is a NO-OP that preserves
-    // locally entered values instead of deleting them.
+    // the reprint snapshot (sales_repository_impl). Reviewer-authorized
+    // option B (S7/L3 + S3): conditional clears riding the existing
+    // [FiscalProjectionKeys.businessProfileManagedKeys] marker — no new
+    // machinery, no payload change. Present and non-blank -> SET and ASSERT;
+    // present null/blank -> CLEAR only when the stored marker shows the
+    // cloud PREVIOUSLY asserted the field; never asserted or absent ->
+    // NO-OP, never delete. See the block comment on
+    // [FiscalProjectionKeys.businessAddress] for the full rationale.
+    final storedManagedKeys = await _database.localConfigDao
+        .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+    final previousManagedKeys =
+        storedManagedKeys?.value.split(',').toSet() ?? <String>{};
+
+    // D-11/BXW-007/P2-shared assertion record: the identity mirrors below
+    // and the fx/mode mirrors further down all record their assertion in the
+    // SAME marker, written once at the end of this transaction.
+    final assertedBusinessProfileKeys = <String>[];
+
     const identityMirrorEnvelopeKeys = <String, String>{
       FiscalProjectionKeys.businessAddress: 'address',
       FiscalProjectionKeys.businessPhone: 'phone',
       FiscalProjectionKeys.businessEmail: 'email',
     };
     identityMirrorEnvelopeKeys.forEach((localKey, envelopeKey) {
-      if (!rawEnvelope.containsKey(envelopeKey)) return; // omitted = no-op
+      if (!rawEnvelope.containsKey(envelopeKey)) return; // absent = no-op
       final value = rawEnvelope[envelopeKey]?.toString().trim() ?? '';
-      if (value.isEmpty) {
-        keysToDelete.add(localKey); // null/blank = clear
-      } else {
+      if (value.isNotEmpty) {
         projections.add(LocalConfigEntity(
           key: localKey,
           value: value,
           description: 'Projected company identity from fiscal snapshot',
         ));
+        assertedBusinessProfileKeys.add(localKey);
+      } else if (previousManagedKeys.contains(localKey)) {
+        // The cloud retracts a field it previously asserted: a stale mirror
+        // must not survive its clearing revision (S3). The marker write
+        // below drops the key, so a LATER null can never delete a freshly
+        // operator-entered value.
+        keysToDelete.add(localKey);
       }
+      // null/blank and never asserted -> NO-OP, never delete.
     });
 
     // Optional commercialFxSpread: project if present, delete key atomically if absent
@@ -763,7 +801,6 @@ class FiscalInboxHandler {
       FiscalProjectionKeys.checkoutFxMode:
           rawEnvelope['checkoutFxMode']?.toString().trim() ?? '',
     };
-    final assertedBusinessProfileKeys = <String>[];
     // D-11: when the snapshot asserts commercialFxSpread, the office (owner
     // dashboard POST /onboarding/fiscal-setup) is the authoritative writer of
     // the commercial exchange rate too, so the rate key rides the SAME marker
@@ -926,14 +963,22 @@ class FiscalInboxHandler {
       rucMatches = localRuc == null;
     }
 
-    // 6b. Company identity mirrors (parity P2): tri-state, same semantics as
-    // the projection. Key present in the payload -> the local key must exist
-    // and match (non-blank) or MUST NOT exist (null/blank: a cleared value
-    // must not survive its clearing revision). Key absent (pre-P1 builder
-    // only) -> NO constraint: the projection is a no-op for that key, so
-    // demanding absence here would make repair loop forever writing nothing.
+    // 6b. Company identity mirrors (parity P2, reviewer-authorized option B):
+    // the SAME conditional-clear semantics as the projection. Present and
+    // non-blank -> the local key must exist and match. Present null/blank ->
+    // a CLEAR only when the stored marker shows the cloud previously
+    // asserted the field (then the local key MUST NOT exist); never asserted
+    // or absent (pre-P1 builder only) -> NO constraint: the projection is a
+    // no-op for that key and must never delete a locally entered value, so
+    // demanding absence here would make repair loop forever against a key it
+    // must not touch. The marker read below is the PRE-transaction state,
+    // the same state the projection transaction itself reads.
+    final storedManagedKeys = await _database.localConfigDao
+        .getConfigByKey(FiscalProjectionKeys.businessProfileManagedKeys);
+    final previousManagedKeys =
+        storedManagedKeys?.value.split(',').toSet() ?? <String>{};
+
     Future<bool> identityMirrorMatches(String envelopeKey, String localKey) async {
-      if (!rawEnvelope.containsKey(envelopeKey)) return true; // absent = no-op
       final raw = rawEnvelope[envelopeKey];
       final String? value;
       if (raw is String) {
@@ -944,11 +989,16 @@ class FiscalInboxHandler {
         value = raw.toString().trim();
       }
       final hasValue = value != null && value.isNotEmpty;
-      final localEntity = await _database.localConfigDao.getConfigByKey(localKey);
+      if (!rawEnvelope.containsKey(envelopeKey)) return true; // absent = no-op
       if (hasValue) {
+        final localEntity = await _database.localConfigDao.getConfigByKey(localKey);
         return localEntity != null && localEntity.value.trim() == value;
       }
-      return localEntity == null;
+      if (!previousManagedKeys.contains(localKey)) {
+        return true; // never asserted: no opinion -> no-op, never a constraint
+      }
+      final localEntity = await _database.localConfigDao.getConfigByKey(localKey);
+      return localEntity == null; // previously asserted + null -> must be cleared
     }
 
     final addressMatches = await identityMirrorMatches(
