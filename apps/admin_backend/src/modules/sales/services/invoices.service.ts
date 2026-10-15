@@ -237,7 +237,8 @@ export class InvoicesService {
     private readonly loyaltyLedgerService?: LoyaltyLedgerService,
   ) {
     this.outcomeService =
-      this.saleInventoryOutcomeService ?? new SaleInventoryOutcomeService();
+      this.saleInventoryOutcomeService ??
+      new SaleInventoryOutcomeService(this.bomExplosionService);
   }
 
   async syncInvoices(

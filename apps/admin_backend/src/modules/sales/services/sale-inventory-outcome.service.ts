@@ -8,6 +8,10 @@ import { RecipeVersion, RecipePublicationState } from '../../inventory/entities/
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from '../../inventory/bom-explosion.service';
 
 export interface ValidatedBindingToApply {
   item: CreateInvoiceItemDto;
@@ -25,6 +29,10 @@ export interface SaleTimeSnapshotValidationResult {
 
 @Injectable()
 export class SaleInventoryOutcomeService {
+  constructor(
+    private readonly bomExplosionService: BomExplosionService,
+  ) {}
+
   /**
    * Validates SALE_TIME_V1 snapshot contracts per design Section D3.
    * Never queries current active catalog or mutable recipe at ingestion time.
@@ -371,12 +379,71 @@ export class SaleInventoryOutcomeService {
         if (recipeVer) {
           const details = ((await recipeDetailRepo?.find({ where: { recipe_version_id: recipeVer.id, tenant_id: tenantId } })) ?? []).sort((a, b) => a.insumo_id.localeCompare(b.insumo_id) || (a.id ?? '').localeCompare(b.id ?? ''));
           const itemBindings: InventorySnapshotBindingDto[] = [];
-          for (let i = 0; i < details.length; i++) {
-            const d = details[i];
-            if (!(await insumoRepo?.findOne({ where: { id: d.insumo_id, tenant_id: tenantId } }))) throw new BadRequestException(`insumoId '${d.insumo_id}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`);
-            const cId = corrId(i, d.insumo_id), qty = Number(d.quantity), b: InventorySnapshotBindingDto = { bindingOrdinal: i, insumoId: d.insumo_id, recipeComponentId: d.id, quantityPerSaleUnit: qty, saleCorrelationId: cId };
-            itemBindings.push(b); allCorrelationIds.push(cId);
-            bindingsToApply.push({ item, binding: b, explodedQuantity: Number((Math.abs(Number(item.quantity)) * qty).toFixed(4)) });
+
+          // R11 (S7): a SUB_RECIPE component names a PRODUCT, not an insumo, so
+          // the flat per-detail loop rejected the whole sale with "insumoId …
+          // not found". When the recipe has a sub-recipe, descend to the leaf
+          // insumos exactly like the legacy explode() path does after R4.
+          if (hasSubRecipeComponent(details)) {
+            const leafQuantities =
+              await this.bomExplosionService.explodeWithSubRecipes({
+                rootProductId: item.productId,
+                orderQuantity: 1,
+                rootComponents: details,
+                resolveSubRecipeComponents: (subRecipeProductId) =>
+                  this.resolveActiveRecipeComponents(
+                    manager,
+                    tenantId,
+                    subRecipeProductId,
+                    acceptedAt,
+                  ),
+              });
+            const rootComponentByInsumo = new Map(
+              details.map((detail) => [detail.insumo_id, detail.id] as const),
+            );
+            let ordinal = 0;
+            for (const [
+              insumoId,
+              quantityPerSaleUnit,
+            ] of leafQuantities.entries()) {
+              if (
+                !(await insumoRepo?.findOne({
+                  where: { id: insumoId, tenant_id: tenantId },
+                }))
+              ) {
+                throw new BadRequestException(
+                  `insumoId '${insumoId}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`,
+                );
+              }
+              const cId = corrId(ordinal, insumoId);
+              const binding: InventorySnapshotBindingDto = {
+                bindingOrdinal: ordinal,
+                insumoId,
+                recipeComponentId: rootComponentByInsumo.get(insumoId),
+                quantityPerSaleUnit,
+                saleCorrelationId: cId,
+              };
+              itemBindings.push(binding);
+              allCorrelationIds.push(cId);
+              bindingsToApply.push({
+                item,
+                binding,
+                explodedQuantity: Number(
+                  (
+                    Math.abs(Number(item.quantity)) * quantityPerSaleUnit
+                  ).toFixed(4),
+                ),
+              });
+              ordinal += 1;
+            }
+          } else {
+            for (let i = 0; i < details.length; i++) {
+              const d = details[i];
+              if (!(await insumoRepo?.findOne({ where: { id: d.insumo_id, tenant_id: tenantId } }))) throw new BadRequestException(`insumoId '${d.insumo_id}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`);
+              const cId = corrId(i, d.insumo_id), qty = Number(d.quantity), b: InventorySnapshotBindingDto = { bindingOrdinal: i, insumoId: d.insumo_id, recipeComponentId: d.id, quantityPerSaleUnit: qty, saleCorrelationId: cId };
+              itemBindings.push(b); allCorrelationIds.push(cId);
+              bindingsToApply.push({ item, binding: b, explodedQuantity: Number((Math.abs(Number(item.quantity)) * qty).toFixed(4)) });
+            }
           }
           item.inventorySnapshotVersion = 'LEGACY_SYNC_TIME_V1';
           item.inventorySnapshot = { classification: product.product_type, disposition: 'RECIPE', catalogRevision: 'legacy-sync-time', recipeVersionId: recipeVer.id, acceptedAt: acceptedAtIso, bindings: itemBindings };
@@ -396,5 +463,56 @@ export class SaleInventoryOutcomeService {
     if (invoice.inventoryOutcome && invoice.inventoryOutcome !== outcome) throw new BadRequestException(`Snapshot outcome mismatch: client sent '${invoice.inventoryOutcome}', calculated '${outcome}'`);
 
     return { policyVersion: 'LEGACY_SYNC_TIME_V1', outcome, reason, acknowledgedMovementCorrelationIds: outcome === 'APPLIED' ? allCorrelationIds : [], bindingsToApply: outcome === 'APPLIED' ? bindingsToApply : [] };
+  }
+
+  /**
+   * R11 (S7): the active PUBLISHED recipe's components for a sub-recipe
+   * product, resolved inside the same tenant-bound manager the classification
+   * already uses. A missing active recipe is a DATA error, named instead of
+   * silently dropping the sub-recipe's ingredients.
+   */
+  private async resolveActiveRecipeComponents(
+    manager: EntityManager,
+    tenantId: string,
+    productId: string,
+    acceptedAt: Date,
+  ): Promise<RecipeDetail[]> {
+    const recipeVerRepo = manager.getRepository?.(RecipeVersion);
+    const recipeDetailRepo = manager.getRepository?.(RecipeDetail);
+    if (!recipeVerRepo?.createQueryBuilder || !recipeDetailRepo) {
+      return [];
+    }
+
+    const version = await recipeVerRepo
+      .createQueryBuilder('rv')
+      .where(
+        'rv.tenant_id = :tenantId AND rv.product_id = :productId AND rv.publication_state = :pubState AND (rv.fecha_inicio_vigencia IS NULL OR rv.fecha_inicio_vigencia <= :acceptedAt) AND (rv.fecha_fin_vigencia IS NULL OR rv.fecha_fin_vigencia > :acceptedAt)',
+        {
+          tenantId,
+          productId,
+          pubState: RecipePublicationState.PUBLISHED,
+          acceptedAt,
+        },
+      )
+      .orderBy('rv.fecha_inicio_vigencia', 'DESC', 'NULLS LAST')
+      .addOrderBy('rv.version_number', 'DESC')
+      .getOne();
+
+    if (!version) {
+      throw new BadRequestException(
+        `Sub-recipe product ${productId} does not have an active published recipe`,
+      );
+    }
+
+    const details =
+      (await recipeDetailRepo.find({
+        where: { recipe_version_id: version.id, tenant_id: tenantId },
+      })) ?? [];
+
+    return [...details].sort(
+      (a, b) =>
+        a.insumo_id.localeCompare(b.insumo_id) ||
+        (a.id ?? '').localeCompare(b.id ?? ''),
+    );
   }
 }

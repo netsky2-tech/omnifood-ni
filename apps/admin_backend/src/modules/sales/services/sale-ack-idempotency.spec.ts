@@ -1,6 +1,7 @@
 import { EntityManager } from 'typeorm';
 import { InvoicesService, calculateSyncPayloadHash } from './invoices.service';
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
+import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { InventoryMovement, MovementType } from '../../inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
@@ -83,7 +84,7 @@ describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', (
         return item;
       }),
     };
-    outcomeService = new SaleInventoryOutcomeService();
+    outcomeService = new SaleInventoryOutcomeService(new BomExplosionService());
     service = new InvoicesService(
       { transaction: jest.fn(async (iso: any, cb?: any) => (typeof iso === 'function' ? iso : cb)(mockTxManager as EntityManager)) } as any,
       { upsert: jest.fn(), findOne: jest.fn() } as any, { upsert: jest.fn(), find: jest.fn() } as any, { save: jest.fn() } as any, { findOne: jest.fn() } as any,

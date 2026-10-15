@@ -1,4 +1,5 @@
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
+import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import {
@@ -7,6 +8,8 @@ import {
 } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Product } from '../../inventory/entities/product.entity';
+import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { EntityManager } from 'typeorm';
 
 describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
@@ -19,7 +22,7 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
   const componentAId = '44444444-4444-4444-4444-444444444444';
 
   beforeEach(() => {
-    service = new SaleInventoryOutcomeService();
+    service = new SaleInventoryOutcomeService(new BomExplosionService());
   });
 
   const createMockManager = (
@@ -535,5 +538,119 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
     await expect(
       service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager()),
     ).rejects.toThrow(/Snapshot outcome mismatch/);
+  });
+});
+
+describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', () => {
+  const tenant = 'tenant-r11';
+  let subService: SaleInventoryOutcomeService;
+
+  beforeEach(() => {
+    subService = new SaleInventoryOutcomeService(new BomExplosionService());
+  });
+
+  const makeManager = (): EntityManager => {
+    const products: Record<string, any> = {
+      'prod-parent': { id: 'prod-parent', tenant_id: tenant, product_type: 'COMPOUND' },
+      'prod-sub': { id: 'prod-sub', tenant_id: tenant, product_type: 'COMPOUND' },
+    };
+    const versions: Record<string, any> = {
+      'prod-parent': { id: 'rv-parent', product_id: 'prod-parent', tenant_id: tenant, publication_state: RecipePublicationState.PUBLISHED, version_number: 1 },
+      'prod-sub': { id: 'rv-sub', product_id: 'prod-sub', tenant_id: tenant, publication_state: RecipePublicationState.PUBLISHED, version_number: 1 },
+    };
+    const detailsByVersion: Record<string, any[]> = {
+      'rv-parent': [
+        { id: 'rd-sub', insumo_id: 'prod-sub', quantity: 2, ingredient_type: 'SUB_RECIPE' },
+      ],
+      'rv-sub': [
+        { id: 'rd-leaf', insumo_id: 'ins-leaf', quantity: 3, ingredient_type: 'INSUMO' },
+      ],
+    };
+
+    return {
+      getRepository: (entity: any) => {
+        if (entity === Product) {
+          return {
+            findOne: jest.fn(async ({ where }: any) => products[where.id] ?? null),
+          };
+        }
+        if (entity === Insumo) {
+          return {
+            findOne: jest.fn(async ({ where }: any) =>
+              where.id === 'ins-leaf' ? { id: 'ins-leaf', tenant_id: tenant } : null,
+            ),
+          };
+        }
+        if (entity === RecipeVersion) {
+          return {
+            createQueryBuilder: jest.fn(() => {
+              let requestedProductId = '';
+              const qb: any = {
+                where: jest.fn((_sql: string, params: any) => {
+                  if (params?.productId) requestedProductId = params.productId;
+                  return qb;
+                }),
+                andWhere: jest.fn(() => qb),
+                orderBy: jest.fn(() => qb),
+                addOrderBy: jest.fn(() => qb),
+                getOne: jest.fn(async () => versions[requestedProductId] ?? null),
+              };
+              return qb;
+            }),
+          };
+        }
+        if (entity === RecipeDetail) {
+          return {
+            find: jest.fn(async ({ where }: any) =>
+              detailsByVersion[where.recipe_version_id] ?? [],
+            ),
+          };
+        }
+        if (entity === ProductInventoryMappingVersion) {
+          return {
+            createQueryBuilder: jest.fn(() => {
+              const qb: any = {
+                where: jest.fn(() => qb),
+                andWhere: jest.fn(() => qb),
+                orderBy: jest.fn(() => qb),
+                getOne: jest.fn(async () => null),
+              };
+              return qb;
+            }),
+          };
+        }
+        throw new Error(`Unexpected getRepository for ${entity?.name}`);
+      },
+    } as unknown as EntityManager;
+  };
+
+  it('expands a SUB_RECIPE component to its leaf insumos instead of rejecting the sale', async () => {
+    const record = {
+      idempotencyKey: 'k-r11',
+      sourceDeviceId: 'dev-r11',
+      sourceSequence: 1,
+      documentType: 'SALE',
+      invoice: {
+        id: 'inv-r11',
+        items: [{ id: 'item-r11', productId: 'prod-parent', quantity: 1 }],
+      },
+    } as unknown as SyncBatchRecordDto;
+
+    const result = await subService.classifyLegacySyncTime(
+      tenant,
+      record,
+      makeManager(),
+      new Date('2026-10-15T12:00:00.000Z'),
+    );
+
+    expect(result?.outcome).toBe('APPLIED');
+    const bindings = (result?.bindingsToApply ?? []).map((entry) => entry.binding);
+    expect(bindings).toHaveLength(1);
+    // parent SUB_RECIPE(2) -> sub-recipe leaf(3) => 6 per sale unit.
+    expect(bindings[0]).toMatchObject({
+      insumoId: 'ins-leaf',
+      quantityPerSaleUnit: 6,
+    });
+    expect((result?.bindingsToApply ?? [])[0]?.explodedQuantity).toBe(6);
   });
 });
