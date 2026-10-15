@@ -7,16 +7,22 @@ import { runInTenantTransaction } from '../../../core/database/tenant-transactio
 
 /**
  * Company identity parity P3, slice 1 (odd/tasks/identidad-empresa-paridad.md,
- * S5) — the storage owner of the company logo's ORIGINAL bytes.
+ * S5 / S5-bis) — the storage owner of the company logo's ORIGINAL bytes.
  *
  * The upload arrives as JSON with base64 (there is no multer and no
  * server-side staging in this repo) and is validated COMPLETELY before any
  * write: a rejected upload must leave the previous logo untouched, and the
  * only safe place to guarantee that is before the transaction that replaces
  * the row.
+ *
+ * PNG only, on purpose (S5: ONE original, every consumer must be able to use
+ * it). The PDF embeds the original as-is and the terminal derives its 1-bit
+ * Q80 raster from the PNG original with the code it already has — a JPEG
+ * would be STORED and then silently unusable by the terminal. The allowlist
+ * is therefore narrowed to what every consumer accepts.
  */
 
-export const ACCEPTED_LOGO_CONTENT_TYPES = ['image/png', 'image/jpeg'] as const;
+export const ACCEPTED_LOGO_CONTENT_TYPES = ['image/png'] as const;
 export type LogoContentType = (typeof ACCEPTED_LOGO_CONTENT_TYPES)[number];
 
 /**
@@ -68,10 +74,6 @@ const PNG_SIGNATURE = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
 ]);
 
-const JPEG_SOF_MARKERS = new Set([
-  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
-]);
-
 /** CRC-32 (ISO 3309, zlib's polynomial) — validates each PNG chunk. */
 const CRC32_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -106,7 +108,9 @@ const PNG_CHANNELS_BY_COLOR_TYPE: Record<number, number> = {
  * Full structural decode of a PNG: signature, every chunk's length/CRC in
  * bounds, exactly one IHDR, the IDAT stream actually inflating to the exact
  * filtered size IHDR declares. A buffer that passes this cannot be a
- * truncated, corrupt or mislabeled PNG.
+ * truncated, corrupt or mislabeled PNG. The JPEG marker walk was removed
+ * with the JPEG allowlist: this PNG walk IS the structural validation the
+ * upload gate depends on.
  */
 const validatePngBytes = (b: Buffer): string | null => {
   if (
@@ -166,63 +170,13 @@ const validatePngBytes = (b: Buffer): string | null => {
 };
 
 /**
- * Structural walk of a JPEG: SOI, a real frame header (SOF) with non-empty
- * dimensions, and a terminated scan (EOI as the final marker). Not a full
- * DCT decode — but a buffer that passes is a complete, well-formed baseline
- * or progressive JPEG, which is what "the bytes decode" means here.
- */
-const validateJpegBytes = (b: Buffer): string | null => {
-  if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) {
-    return 'not a JPEG image (bad SOI marker)';
-  }
-  let width = 0;
-  let height = 0;
-  let seenSof = false;
-  let offset = 2;
-  while (offset + 4 <= b.length) {
-    if (b[offset] !== 0xff) return `corrupt JPEG marker at byte ${offset}`;
-    const marker = b[offset + 1];
-    if (marker === 0xd9) {
-      if (offset + 2 !== b.length) return 'JPEG data after EOI';
-      if (!seenSof) return 'JPEG without a frame header';
-      return null;
-    }
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
-      offset += 2;
-      continue;
-    }
-    const segmentLength = b.readUInt16BE(offset + 2);
-    if (segmentLength < 2 || offset + 2 + segmentLength > b.length) {
-      return 'truncated JPEG segment';
-    }
-    if (JPEG_SOF_MARKERS.has(marker)) {
-      height = b.readUInt16BE(offset + 5);
-      width = b.readUInt16BE(offset + 7);
-      if (width === 0 || height === 0) return 'JPEG with empty dimensions';
-      seenSof = true;
-    }
-    if (marker === 0xda) {
-      // Start of Scan: everything after its header is ENTROPY-CODED data —
-      // not marker-aligned — so the walk ends here and the scan is judged
-      // complete by a trailing EOI.
-      break;
-    }
-    offset += 2 + segmentLength;
-  }
-  if (!seenSof) return 'JPEG without a frame header';
-  if (b[b.length - 2] !== 0xff || b[b.length - 1] !== 0xd9) {
-    return 'truncated JPEG (no EOI marker)';
-  }
-  return null;
-};
-
-/**
- * THE upload validation, in one place: an accepted content type, a strictly
+ * THE upload validation, in one place: the PNG-only allowlist, a strictly
  * decodable base64 payload, the size ceiling, and a structural decode of the
  * image bytes themselves (magic bytes alone would admit a truncated file
  * that only dies later, mid-document). The returned reason is a declared,
- * human-readable refusal — never an exception mid-write — so a rejected
- * upload cannot have touched the stored logo.
+ * human-readable refusal — never an exception mid-write, and never stack or
+ * base64 internals — so a rejected upload cannot have touched the stored
+ * logo and a person can act on the message.
  */
 export const validateLogoUpload = (
   contentType: string | null | undefined,
@@ -235,7 +189,7 @@ export const validateLogoUpload = (
     return {
       ok: false,
       upload: null,
-      reason: `Unsupported content type '${contentType ?? ''}'. Accepted: ${ACCEPTED_LOGO_CONTENT_TYPES.join(', ')}`,
+      reason: `Unsupported content type '${contentType ?? ''}'. Only a PNG image is accepted: the terminal derives its print raster from the PNG original.`,
     };
   }
   if (typeof base64 !== 'string' || base64.trim() === '') {
@@ -272,10 +226,7 @@ export const validateLogoUpload = (
       reason: `The logo exceeds the ${MAX_LOGO_BYTES}-byte limit (${bytes.length} bytes)`,
     };
   }
-  const structuralReason =
-    acceptedType === 'image/png'
-      ? validatePngBytes(bytes)
-      : validateJpegBytes(bytes);
+  const structuralReason = validatePngBytes(bytes);
   if (structuralReason) {
     return { ok: false, upload: null, reason: structuralReason };
   }

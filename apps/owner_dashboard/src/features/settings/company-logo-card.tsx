@@ -10,7 +10,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ImagePlus, Loader2, TriangleAlert } from "lucide-react";
 import { useCompanyLogo, useUploadCompanyLogo } from "./use-settings";
-import { COMPANY_LOGO_MAX_BYTES } from "./settings-api";
+import { COMPANY_LOGO_ACCEPTED_TYPES, COMPANY_LOGO_MAX_BYTES } from "./settings-api";
 
 /**
  * Company identity parity P3, slice 1 (odd/tasks/identidad-empresa-paridad.md,
@@ -43,9 +43,13 @@ export function CompanyLogoCard() {
     setLocalError(null);
     setPendingFile(null);
     if (!file) return;
-    // Fail fast, client-side; the backend remains authoritative.
-    if (file.type !== "image/png" && file.type !== "image/jpeg") {
-      setLocalError("El logo debe ser una imagen PNG o JPEG.");
+    // Fail fast, client-side; the backend remains authoritative. This check
+    // and the backend allowlist say the SAME thing: PNG only (the terminal
+    // derives its print raster from the PNG original).
+    if (!(COMPANY_LOGO_ACCEPTED_TYPES as readonly string[]).includes(file.type)) {
+      setLocalError(
+        "El logo debe ser una imagen PNG: la terminal deriva de él su raster de impresión.",
+      );
       return;
     }
     if (file.size > COMPANY_LOGO_MAX_BYTES) {
@@ -91,7 +95,7 @@ export function CompanyLogoCard() {
         <CardDescription>
           El logo original vive en la nube: se imprime en los documentos
           formales (como la lista firmable de conteo físico) y la terminal
-          deriva de él su raster para tickets. PNG o JPEG, hasta{" "}
+          deriva de él su raster para tickets. Sólo se acepta PNG, hasta{" "}
           {Math.round(COMPANY_LOGO_MAX_BYTES / (1024 * 1024))} MB.
         </CardDescription>
       </CardHeader>
@@ -114,7 +118,7 @@ export function CompanyLogoCard() {
           </div>
         ) : previewUrl ? (
           <div className="flex items-center gap-4">
-            {/* The stored bytes are a server-validated PNG/JPEG original. */}
+            {/* The stored bytes are a server-validated PNG original. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={previewUrl}
@@ -158,7 +162,7 @@ export function CompanyLogoCard() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/png,image/jpeg"
+            accept="image/png"
             className="hidden"
             data-testid="company-logo-input"
             onChange={(e) => handleFileChange(e.target.files?.[0])}

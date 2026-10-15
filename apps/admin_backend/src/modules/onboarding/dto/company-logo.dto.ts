@@ -11,8 +11,8 @@ import { IsIn, IsString, Length } from 'class-validator';
  * leaves the previous logo untouched.
  */
 export class UploadCompanyLogoDto {
-  @IsIn(['image/png', 'image/jpeg'], {
-    message: 'content_type must be one of: image/png, image/jpeg',
+  @IsIn(['image/png'], {
+    message: 'content_type must be image/png',
   })
   content_type!: string;
 

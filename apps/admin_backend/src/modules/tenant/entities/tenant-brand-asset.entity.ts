@@ -36,7 +36,7 @@ export class TenantBrandAsset {
   @Column({ type: 'uuid' })
   tenant_id: string;
 
-  /** IANA media type as stored — only 'image/png' and 'image/jpeg' pass validation. */
+  /** IANA media type as stored — only 'image/png' passes validation. */
   @Column({ type: 'varchar' })
   content_type: string;
 

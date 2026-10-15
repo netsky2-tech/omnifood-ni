@@ -42,6 +42,37 @@ describe('CompanyLogoService (upload orchestration)', () => {
   const validPngBase64 =
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
 
+  /**
+   * Builds a structurally valid minimal baseline JPEG (SOI, DQT, SOF0 with
+   * real dimensions, SOS, EOI) — the same shape the OLD structural walk
+   * accepted. Under the PNG-only allowlist this must be refused at the
+   * content-type gate, BEFORE any write.
+   */
+  const buildTestJpeg = (): Buffer =>
+    Buffer.concat([
+      Buffer.from([0xff, 0xd8]), // SOI
+      Buffer.from([0xff, 0xdb, 0x00, 0x03, 0x00]), // DQT, segment length 3
+      Buffer.from([
+        0xff,
+        0xc0,
+        0x00,
+        0x0b,
+        0x08, // SOF0, segment length 11, precision 8
+        0x00,
+        0x01,
+        0x00,
+        0x01, // height 1, width 1
+        0x01,
+        0x01,
+        0x00,
+        0x00, // 1 component: id 1, sampling 0x00, q-table 0
+      ]),
+      // SOS, segment length 8: 1 component, spectral bytes 0x00/0x3f/0x00.
+      Buffer.from([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]),
+      Buffer.from([0x00]), // one entropy-coded byte
+      Buffer.from([0xff, 0xd9]), // EOI
+    ]);
+
   beforeEach(async () => {
     brandAssets = {
       replaceWithinManager: jest.fn(),
@@ -107,6 +138,21 @@ describe('CompanyLogoService (upload orchestration)', () => {
     expect(view.base64).toBe(validPngBase64);
   });
 
+  it('rejects a JPEG upload (PNG-only allowlist, S5/S5-bis) BEFORE any write: the previous logo is untouched', async () => {
+    // Structurally valid JPEG bytes: the ONLY reason for rejection is the
+    // narrowed allowlist — a JPEG logo would be stored and then silently
+    // unusable, because the terminal derives its print raster from a PNG.
+    await expect(
+      service.uploadLogo(TENANT_ID, {
+        content_type: 'image/jpeg',
+        data: buildTestJpeg().toString('base64'),
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(brandAssets.replaceWithinManager).not.toHaveBeenCalled();
+    expect(fiscalVersions.recordRevisionChange).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-image content type BEFORE any write: the previous logo is untouched', async () => {
     await expect(
       service.uploadLogo(TENANT_ID, {
@@ -148,7 +194,7 @@ describe('CompanyLogoService (upload orchestration)', () => {
   it('reads the current logo as a declared view, or null when absent (S3)', async () => {
     const current: CompanyLogoView = {
       sha256: 'b'.repeat(64),
-      contentType: 'image/jpeg',
+      contentType: 'image/png',
       byteLength: 128,
       base64: 'AAAA',
     };

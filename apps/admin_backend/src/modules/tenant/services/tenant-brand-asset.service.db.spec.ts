@@ -96,6 +96,36 @@ const buildTestPng = (left: number, right: number): Buffer => {
   ]);
 };
 
+/**
+ * Builds a structurally valid minimal baseline JPEG (SOI, DQT, SOF0 with
+ * real dimensions, SOS, EOI). Under the PNG-only allowlist this is refused
+ * at the content-type gate — exactly the behaviour change pinned here.
+ */
+const buildTestJpeg = (): Buffer =>
+  Buffer.concat([
+    Buffer.from([0xff, 0xd8]), // SOI
+    Buffer.from([0xff, 0xdb, 0x00, 0x03, 0x00]), // DQT, segment length 3
+    Buffer.from([
+      0xff,
+      0xc0,
+      0x00,
+      0x0b,
+      0x08, // SOF0, segment length 11, precision 8
+      0x00,
+      0x01,
+      0x00,
+      0x01, // height 1, width 1
+      0x01,
+      0x01,
+      0x00,
+      0x00, // 1 component: id 1, sampling 0x00, q-table 0
+    ]),
+    // SOS, segment length 8: 1 component, spectral bytes 0x00/0x3f/0x00.
+    Buffer.from([0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00]),
+    Buffer.from([0x00]), // one entropy-coded byte
+    Buffer.from([0xff, 0xd9]), // EOI
+  ]);
+
 describe('TenantBrandAssetService storage round trip (Real PostgreSQL DB, migration-built schema)', () => {
   jest.setTimeout(180000);
 
@@ -260,7 +290,7 @@ describe('TenantBrandAssetService storage round trip (Real PostgreSQL DB, migrat
     });
   });
 
-  it('enforces the size ceiling and the content-type allowlist', () => {
+  it('enforces the size ceiling and the PNG-only content-type allowlist', () => {
     const oversize = validateLogoUpload(
       'image/png',
       Buffer.alloc(MAX_LOGO_BYTES + 1, 1).toString('base64'),
@@ -269,6 +299,15 @@ describe('TenantBrandAssetService storage round trip (Real PostgreSQL DB, migrat
 
     const wrongType = validateLogoUpload('image/webp', 'AAAA');
     expect(wrongType.upload).toBeNull();
+
+    // A STRUCTURALLY VALID JPEG is now rejected too (identidad-empresa-paridad
+    // S5/S5-bis): a JPEG logo would be stored and then silently unusable,
+    // because the terminal derives its print raster from a PNG original. The
+    // refusal must name the accepted format so a person can act on it.
+    const jpeg = buildTestJpeg();
+    const jpegType = validateLogoUpload('image/jpeg', jpeg.toString('base64'));
+    expect(jpegType.upload).toBeNull();
+    expect(jpegType.reason).toContain('PNG');
   });
 
   it('isolates tenants under the FORCEd RLS: another tenant reads absence', async () => {

@@ -51,6 +51,15 @@ export interface CompanyLogoResponse {
  */
 export const COMPANY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
 
+/**
+ * The only accepted logo format, mirroring the backend allowlist
+ * (TenantBrandAssetService.ACCEPTED_LOGO_CONTENT_TYPES). They must AGREE:
+ * the single stored original must be one every consumer can use — the
+ * terminal derives its 1-bit print raster from a PNG — so a JPEG is refused
+ * client-side too instead of being invited and then silently unusable.
+ */
+export const COMPANY_LOGO_ACCEPTED_TYPES = ["image/png"] as const;
+
 export async function fetchCompanyLogo(
   options?: { signal?: AbortSignal },
 ): Promise<CompanyLogoResponse | null> {
