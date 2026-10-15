@@ -64,9 +64,10 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (69 entries: 52 direct:SIUD + 10 direct:SI + 7 direct:SIU; entry ORDER is
+# (70 entries: 52 direct:SIUD + 11 direct:SI + 7 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest for pre-existing entries)
 # ---------------------------------------------------------------------------
+batch_outflow_traces|direct:SI
 batches|direct:SIUD
 cash_movements|direct:SIUD
 cash_shift_sessions|direct:SIUD

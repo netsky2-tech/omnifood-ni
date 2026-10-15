@@ -53,6 +53,7 @@ import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
 import { UomCatalogEntry } from '../../modules/inventory/entities/uom-catalog-entry.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../modules/inventory/entities/batch-outflow-trace.entity';
 import { BcnFxRate } from '../../modules/inventory/entities/bcn-fx-rate.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
 import { ProductionOrder } from '../../modules/inventory/entities/production-order.entity';
@@ -155,6 +156,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     UomConversion,
     UomCatalogEntry,
     Batch,
+    BatchOutflowTrace,
     BcnFxRate,
     PurchaseDocument,
     ProductionOrder,

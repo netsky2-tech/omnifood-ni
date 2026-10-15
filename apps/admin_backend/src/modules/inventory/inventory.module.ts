@@ -9,6 +9,7 @@ import { Supplier } from './entities/supplier.entity';
 import { Warehouse } from './entities/warehouse.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { Batch } from './entities/batch.entity';
+import { BatchOutflowTrace } from './entities/batch-outflow-trace.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
@@ -86,6 +87,9 @@ import { AuditModule } from '../audit/audit.module';
       Warehouse,
       UomConversion,
       Batch,
+      // R3: the outflow trace a sale records and a cancellation reads back.
+      // Without forFeature the draw dies on EntityMetadataNotFoundError.
+      BatchOutflowTrace,
       PurchaseDocument,
       RecipeVersion,
       RecipeDetail,
