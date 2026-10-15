@@ -7,6 +7,7 @@ import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../src/modules/tenant/entities/tenant-brand-asset.entity';
 import {
   User,
   UserRole,
@@ -111,6 +112,9 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
       schema: schemaName,
       entities: [
         Tenant,
+        // Company-identity parity P1: the activation path reads the tenant's
+        // brand assets through CompanyIdentityService.
+        TenantBrandAsset,
         User,
         SecurityProfile,
         SystemParametersConfig,

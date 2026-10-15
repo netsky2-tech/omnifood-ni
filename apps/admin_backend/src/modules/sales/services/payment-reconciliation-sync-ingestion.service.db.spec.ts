@@ -105,6 +105,9 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
     return rows[0];
   };
 
+  // The migration-built fixture runs the FULL migration set (measured
+  // 8.5 s on the dev host, above jest's 5 s default hook ceiling), so the
+  // hook gets the same generous budget the tests already declare.
   beforeAll(async () => {
     fixture = await createMigrationBuiltSchemaFixture();
     process.stdout.write(
@@ -215,7 +218,7 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
       runtime,
       runtime.getRepository(Payment),
     );
-  });
+  }, TEST_TIMEOUT_MS);
 
   afterAll(async () => {
     if (runtime?.isInitialized) {

@@ -12,6 +12,8 @@ import { UomConversion } from './entities/uom-conversion.entity';
 import { Batch } from './entities/batch.entity';
 import { Shrinkage } from './entities/shrinkage.entity';
 import { CountSessionService } from './count-session.service';
+import { CountSession } from './entities/count-session.entity';
+import { CountSessionEntry } from './entities/count-session-entry.entity';
 import { ShrinkageService } from './shrinkage.service';
 import { InvoicesService } from '../sales/services/invoices.service';
 import { Tenant } from '../tenant/entities/tenant.entity';
@@ -229,6 +231,8 @@ describe('batch balances vs aggregate stock parity (Real PostgreSQL DB, migratio
         RecipeDetail,
         Batch,
         Shrinkage,
+        CountSession,
+        CountSessionEntry,
       ],
       ...poolCleanupExtra,
     });
