@@ -119,3 +119,8 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Medido con Playwright live contra el rig** (dashboard del worktree en `:5174`, backend en `:3100`): login → `/dish-margins` → heading visible y la fila **`ZZ TEST Pan de Lote`** (el plato que el backend valuó en `L19`). **3/3** specs live.
   - **Unitario**: `dish-margins-page.test.tsx` (**2/2**), fetch mockeado con el hook y la página reales bajo un QueryClient real.
   - **Evidencia**: typecheck del dashboard limpio; `vitest` 2/2; Playwright live 3/3.
+- **L24** 2026-10-15 — **V10: el formulario de insumo verificado por el camino real, y dos verdades de entorno para cualquier suite live.**
+  - **Verificado en el navegador**: crear un insumo con dos unidades distintas y factor 1 **se rechaza desde la UI** — el banner muestra el mensaje del catálogo (`/catálogo establece/`), o sea la guarda de **R1** llega al operador; y una conversión coherente (`kg → g`, factor 1000) **se acepta**. `inventory-live.live.spec.ts` → **5/5**.
+  - **Hallazgo de entorno 1**: el formulario de insumo lee el catálogo **del tenant** (`GET /catalogs/UOM`, tabla `catalog_values`), no el `uom_catalog` de plataforma. El rig lo tenía **vacío** → el select queda *disabled* y ningún test puede crear un insumo. Se sembraron 5 UOM como dato de prueba.
+  - **Hallazgo de entorno 2**: el login está **throttled a 5 por IP por minuto** y la sesión del dashboard vive **en memoria** (Zustand, sin `localStorage`), así que `storageState` no la puede reusar. La suite loguea **una sola vez** (un `page` de `beforeAll` compartido): 5 tests con login cada uno se comían el presupuesto y la segunda corrida caía en **429**.
+  - **Falta de V10**: los formularios restantes (producto, producción, merma, conteo).
