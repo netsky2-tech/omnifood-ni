@@ -128,6 +128,21 @@ H2 y H1 no son dos problemas separados: son **el mismo agujero visto desde los d
 | **V12** | S5 | **Lo nuevo de esta rama en el rig**: sesión de conteo persistida + lista firmable (R19) e identidad/`ruc` (task 31) | — |
 | **V13** | S3, S6 | Documento de cierre `docs/audits/inventory-core-flow-truth-v2.md`: el flujo paso a paso, **cada celda de la matriz medida** (correcto / roto / no alcanzable) con `path:line` y valor observado, y **qué bloquea la integración** | — |
 
+## Rutas y payloads reales (medidos, para no re-descubrirlos)
+
+Nombres confirmados contra el candidato. **La ruta que documentó la v1 para las escrituras del núcleo — `/api/inventory/movements/sync` — hoy devuelve 404**: la real es `/api/v1/sync/batch`.
+
+| Qué | Ruta / forma |
+|---|---|
+| Escritura del núcleo (POS) | `POST /api/v1/sync/batch`, envelope `{records:[…]}`. Token de **dispositivo** obligatorio: con token de usuario devuelve **401** `Invalid device access token` |
+| Insumo | `POST /api/insumos` (`create-insumo.dto.ts`): `name`, `purchaseUom`, `consumptionUom`, `conversionFactor?`, `parLevel?`, `minStock?`, `averageCost?`, `is_perishable?`, `negativeStockPolicy?`, `warehouse_id?` |
+| Compra | `POST /inventory/purchases` (`purchase-document.dto.ts`): `id`, `insumoId`, `supplierId`, `invoiceNumber`, `quantity`, `unitCost`, `currency` (NIO\|USD), `invoiceDate`, `entryTimestamp`, `fxRateMode?` (explicit\|official), `bcnRate?`, `lotCode?`, `receivedDate?`, `expirationDate?` |
+| Versión de receta | `POST /inventory/recipes/versions` (`create-recipe-version.dto.ts`): `productId`, `productName`, `versionNumber`, `yieldQuantity`, `technicalShrinkPct`, `versionNote?`, `effectiveAt?`, `components[]` — y cada componente: `ingredientId`, `ingredientName`, **`ingredientType`** (`INSUMO`\|`SUB_RECIPE`), `grossQuantity`, `technicalShrinkPct`, `referenceVersionId?`, `componentUom?`. **Es acá donde se mide H3** |
+| Cierre de producción | `POST /inventory/production-orders/close` (`production-order-document.dto.ts`): `id`, `recipeVersionId`, `producedInsumoId`, `producedBatchNumber`, `producedExpirationDate`, `plannedQuantity`, `actualQuantity`, `outcome`, `terminalId`, `sourceSequence`, `idempotencyKey`, `payloadHash`, y opcionales `failureReason?`, `totalConsumedCostNio?`, `producedUnitCostNio?`, `varianceReason?`. **Es acá donde se miden T4-1 y T4-2** |
+| Merma | `POST /inventory/shrinkage`: `insumoId`, `productId?`, `recipeVersionId?`, `quantity`, `reason`, `observation`, `targetType?` (INSUMO\|PRODUCT) |
+
+**Tablas (nombres reales, no inventarlos):** `inventory_purchase_documents` (no `purchase_documents`) · `batches` — con columnas `batch_number`, `received_date`, `expiration_date`, `remaining_stock`, `cost` (**no** `lot_code`) · `recipe_versions` — indexada por **`product_id`**, sin relación con `recipes` · `inventory_kardex` · `count_sessions`, `count_session_entries` (de esta rama).
+
 ## Trampas verificadas (de la v1, no re-pisar)
 
 - **Los specs mockean la propia guarda**: rutas como `test/sales/sync-batch.e2e-spec.ts` hacen `overrideGuard(SyncTransportGuard)` **y** mockean el servicio. Verifican cableado, no comportamiento. La verificación va por el **backend vivo**.
