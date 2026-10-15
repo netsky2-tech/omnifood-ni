@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { StreamableFile } from '@nestjs/common';
 import { InventoryReportsController } from './inventory-reports.controller';
 import { InventoryReportsService } from '../services/inventory-reports.service';
 import { CountSessionPrintableService } from '../services/count-session-printable.service';
@@ -118,30 +119,29 @@ describe('InventoryReportsController', () => {
         }
       ).countSessionPrintableService;
 
-    it('returns the PDF buffer and stamps Content-Disposition with the printable filename', async () => {
+    it('returns the PDF as a StreamableFile with the printable headers (R13)', async () => {
       const buffer = Buffer.from('%PDF-fake');
-      const headers = new Map<string, string>();
-      const res = {
-        setHeader: (name: string, value: string) => headers.set(name, value),
-      } as never;
       getPrintableService().buildPrintableCountList.mockResolvedValue({
         buffer,
         contentType: 'application/pdf',
         filename: 'conteo-fisico-CS-001.pdf',
       });
 
+      // The route returns a StreamableFile (Nest streams the raw bytes and
+      // stamps the headers itself). A plain Buffer return was the V12-1
+      // defect: with a passthrough @Res it got JSON-serialized on the wire.
       const result = await controller.getCountSessionPrintableList(
         'tenant-1',
         'CS/001',
-        res,
       );
 
       expect(
         getPrintableService().buildPrintableCountList,
       ).toHaveBeenCalledWith('tenant-1', 'CS/001');
-      expect(result).toBe(buffer);
-      expect(headers.get('Content-Type')).toBe('application/pdf');
-      expect(headers.get('Content-Disposition')).toBe(
+      expect(result).toBeInstanceOf(StreamableFile);
+      expect(result.getStream().read()).toEqual(buffer);
+      expect(result.options.type).toBe('application/pdf');
+      expect(result.options.disposition).toBe(
         'inline; filename="conteo-fisico-CS-001.pdf"',
       );
     });

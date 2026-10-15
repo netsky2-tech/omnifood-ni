@@ -5,11 +5,10 @@ import {
   Param,
   Post,
   Query,
-  Res,
+  StreamableFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Response } from 'express';
 import { InventoryReportsService } from '../services/inventory-reports.service';
 import { InventoryValuationService } from '../inventory-valuation.service';
 import { TheoreticalCostService } from '../services/theoretical-cost.service';
@@ -164,18 +163,19 @@ export class InventoryReportsController {
   async getCountSessionPrintableList(
     @GetTenantId() tenantId: string,
     @Param('sessionId') sessionId: string,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<Buffer> {
+  ): Promise<StreamableFile> {
     const result =
       await this.countSessionPrintableService.buildPrintableCountList(
         tenantId,
         sessionId,
       );
-    res.setHeader('Content-Type', result.contentType);
-    res.setHeader(
-      'Content-Disposition',
-      `inline; filename="${result.filename}"`,
-    );
-    return result.buffer;
+    // R13 (V12-1): returning a Buffer with a passthrough `@Res` gets
+    // JSON-serialized on the wire ({"type":"Buffer","data":[…]}), so the
+    // browser received JSON text with a PDF content type. StreamableFile
+    // carries the raw bytes and the headers, like the menu-import template.
+    return new StreamableFile(result.buffer, {
+      type: result.contentType,
+      disposition: `inline; filename="${result.filename}"`,
+    });
   }
 }
