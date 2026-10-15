@@ -94,3 +94,21 @@ Registro consolidado de decisiones de producto ya tomadas en conversación con e
   - Issue `#527` (criterio AC-4).
 - **Revisar si**: se requiere un tercer tipo (p. ej. `VARIANT_SUBRECIPE` — modifier que apunta a un producto `PREPARED` en vez de insumos crudos).
 
+## DEC-8 — Modelo de inventario para productos terminados: descuento directo de stock sin insumos intermedios (#518)
+
+- **Fecha**: 2026-10-15
+- **Decisión**: Los productos terminados de reventa directa (`SIMPLE`, ej. agua, gaseosas, cerveza, snacks empacados) **descuentan directamente de su propio stock de producto**. Se descarta la exigencia de crear un "insumo espejo" y un mapeo intermediario para productos terminados.
+- **Reglas del modelo**:
+  1. **Productos Terminados (`SIMPLE`)**: Tienen su propio control de existencias directo (`stock`). No usan recetas ni requieren asociarse a un insumo. Su venta descuenta directamente del stock del producto.
+  2. **Insumos (`Insumo`)**: Son materias primas o ingredientes de bodega (ej. granos de café, leche, carne, queso). **Se descargan únicamente mediante recetas (BOM)** asociadas a productos compuestos (`COMPOUND` o `PREPARED`).
+  3. **No a la deduplicación innecesaria**: Obligar al operador a dar de alta una Coca-Cola como Insumo en compras y luego como Producto en ventas con un mapeo intermedio viola la simplicidad operativa de un Food Park y la experiencia de usuario.
+- **Consecuencia conocida**:
+  - En el Dashboard (`product-page.tsx`) no se agregará ningún selector forzado de insumos para productos simples.
+  - El endpoint `PUT /api/products/:id/inventory-mapping` (mergeado en #932) queda reservado únicamente como capacidad avanzada opcional si en el futuro se deseara enlazar un código de barra externo con una materia prima sin alterar el flujo principal.
+  - El issue `#518` se reencuadra: el descuento de stock de productos simples se realizará contra el `stock` del propio producto en el POS y el backend, cerrando la brecha de ceguera de inventario de forma natural.
+- **Anclas de evidencia**:
+  - `apps/pos_app/lib/domain/services/inventory/movement_engine_impl.dart:615` — `InventoryPolicy.directStock`.
+  - Issue `#518` (planteamiento original vs decisión de arquitectura final).
+- **Revisar si**: se introducen bodegas múltiples o compras de productos terminados en presentaciones mayoristas que requieran factores de conversión fraccionados complejos sin receta.
+
+
