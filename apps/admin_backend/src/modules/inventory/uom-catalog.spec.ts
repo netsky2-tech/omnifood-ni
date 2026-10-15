@@ -109,6 +109,20 @@ describe('uom-catalog (platform)', () => {
       );
     });
 
+    it('accepts the four-decimal storage rounding of the anchor (numeric(12,4))', () => {
+      // The operator enters the exact anchor, the column stores four decimals,
+      // and the next write that touches a UOM field re-validates the STORED
+      // value. That round trip must not reject the value the catalog asked for.
+      expect(() => validateInsumoConversion('lb', 'kg', 0.4536)).not.toThrow();
+      expect(() =>
+        validateInsumoConversion('oz', 'g', 28.3495),
+      ).not.toThrow();
+      // A materially different factor is still rejected.
+      expect(() => validateInsumoConversion('lb', 'kg', 0.45)).toThrow(
+        /el catálogo establece/,
+      );
+    });
+
     it('rejects cross-dimension universal pairs (mass vs volume needs per-insumo density)', () => {
       expect(() => validateInsumoConversion('litro', 'gramos', 1000)).toThrow(
         /No existe conversión universal/,

@@ -27,6 +27,19 @@
  * valid regardless of spelling (unidad → unidades).
  */
 
+/**
+ * Absolute tolerance for the universal anchor check.
+ *
+ * `insumos.conversionFactor` is `numeric(12,4)`, so the platform anchor is
+ * STORED rounded to four decimals: lb→kg = 0.45359237 is saved as 0.4536 and
+ * oz→g = 28.349523125 as 28.3495. A tolerance finer than the storage precision
+ * rejects the very value the catalog told the operator to enter, on the next
+ * write that touches a UOM field. This is tied to the column's precision, not
+ * to the anchor's mathematical precision: it still rejects the unedited
+ * factor-1 default and any materially different value.
+ */
+const ANCHOR_FACTOR_TOLERANCE = 1e-4;
+
 export type UomDimension =
   | 'mass'
   | 'volume'
@@ -365,7 +378,7 @@ export function validateInsumoConversion(
     !sameUnit
   ) {
     const expected = purchase.factorToAnchor / consumption.factorToAnchor;
-    const tolerance = 1e-6;
+    const tolerance = ANCHOR_FACTOR_TOLERANCE;
     if (Math.abs(factor - expected) > tolerance) {
       throw new UnconfiguredConversionError(
         `Factor inválido para "${purchaseUom}" → "${consumptionUom}": el catálogo establece ${expected} (recibido ${factor}).`,
