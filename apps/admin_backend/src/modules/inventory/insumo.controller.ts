@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -27,6 +28,10 @@ import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
 import { DataSource } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
+import {
+  UnconfiguredConversionError,
+  validateInsumoConversion,
+} from './uom-catalog';
 
 @Controller('insumos')
 @UseInterceptors(TenantInterceptor)
@@ -44,6 +49,53 @@ export class InsumoController {
       throw new Error('Tenant context is required');
     }
     return tenantId;
+  }
+
+  /**
+   * S3 (H2): the UOM conversion guard existed but had a single caller — the
+   * seed script. The live catalog routes persisted an incoherent conversion in
+   * silence, and the following purchase then measured stock and cost against
+   * it. The domain error is mapped to a 400 here so the operator gets business
+   * copy and never a 500.
+   */
+  private assertUomConversion(
+    purchaseUom: string,
+    consumptionUom: string,
+    conversionFactor: number,
+  ): void {
+    try {
+      validateInsumoConversion(purchaseUom, consumptionUom, conversionFactor);
+    } catch (error) {
+      if (error instanceof UnconfiguredConversionError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The conversion is re-checked only when the update actually touches a UOM
+   * field. An unrelated edit (a name or a par level) must not fail because a
+   * legacy row carries an incoherent conversion the operator is not touching.
+   */
+  private assertUomConversionOnUpdate(
+    dto: UpdateInsumoDto,
+    insumo: Insumo,
+  ): void {
+    const touchesUom =
+      dto.purchaseUom !== undefined ||
+      dto.consumptionUom !== undefined ||
+      dto.conversionFactor !== undefined;
+
+    if (!touchesUom) {
+      return;
+    }
+
+    this.assertUomConversion(
+      dto.purchaseUom ?? insumo.purchaseUom,
+      dto.consumptionUom ?? insumo.consumptionUom,
+      dto.conversionFactor ?? Number(insumo.conversionFactor ?? 1),
+    );
   }
 
   @Get()
@@ -79,6 +131,11 @@ export class InsumoController {
     @GetTenantId() tenantId?: string,
   ): Promise<InsumoResponse> {
     const normalizedTenantId = this.requireTenant(tenantId);
+    this.assertUomConversion(
+      dto.purchaseUom,
+      dto.consumptionUom,
+      dto.conversionFactor ?? 1,
+    );
 
     const saved = await runInTenantTransaction(
       this.dataSource,
@@ -141,6 +198,8 @@ export class InsumoController {
         if (!insumo) {
           throw new NotFoundException(`Insumo '${id}' no encontrado`);
         }
+
+        this.assertUomConversionOnUpdate(dto, insumo);
 
         if (dto.name && dto.name !== insumo.name) {
           const duplicate = await repo.findOne({
