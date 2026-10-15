@@ -430,8 +430,22 @@ export class ProductionService {
     }
 
     const previousStock = round4(Number(insumo.stock));
+    const previousAverageCostNio = round4(Number(insumo.averageCost ?? 0));
     const newStock = round4(previousStock + input.quantity);
-    const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
+    // R5 (S8): an INFLOW (the produced output) joins the CPP pool at its
+    // production unit cost, so the produced insumo stops being valued at 0
+    // while its batch carries the real cost. An OUTFLOW (a source component)
+    // leaves the weighted average untouched, which is weighted-average
+    // consumption semantics.
+    const averageCostAfterNio =
+      input.quantity > 0 && newStock > 0
+        ? round4(
+            (previousStock * previousAverageCostNio +
+              input.quantity * input.unitCostNio) /
+              newStock,
+          )
+        : previousAverageCostNio;
+    insumo.averageCost = averageCostAfterNio;
     insumo.stock = newStock;
     insumo.existenciaActual = newStock;
     await input.manager.save(Insumo, insumo);

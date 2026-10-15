@@ -489,6 +489,81 @@ describe('ProductionService', () => {
     );
   });
 
+  it('updates the produced insumo CPP with the production unit cost (R5)', async () => {
+    const sourceInsumo = {
+      id: 'ins-raw',
+      stock: 10,
+      existenciaActual: 10,
+      averageCost: 3,
+    };
+    const producedInsumo = {
+      id: 'ins-finished',
+      stock: 0,
+      existenciaActual: 0,
+      averageCost: 0,
+    };
+    manager.createQueryBuilder.mockImplementation(() => {
+      let currentInsumoId = '';
+      const qb = {
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn((_sql: string, params?: { insumoId?: string }) => {
+          if (params?.insumoId) currentInsumoId = params.insumoId;
+          return qb;
+        }),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn(async () =>
+          currentInsumoId === 'ins-finished' ? producedInsumo : sourceInsumo,
+        ),
+      };
+      return qb;
+    });
+
+    recipeService.getSnapshot.mockResolvedValue({
+      recipeVersion: { id: 'v3' },
+      components: [{ insumo_id: 'ins-raw', quantity: 2 }],
+    });
+    bomExplosionService.explode.mockReturnValue(new Map([['ins-raw', 4]]));
+    managerBatchRepo.find.mockResolvedValue([
+      { id: 'batch-a', remaining_stock: 10, cost: 2, expiration_date: null },
+    ]);
+    batchCostingService.buildValuationTrace.mockReturnValue([
+      {
+        batchId: 'batch-a',
+        insumoId: 'ins-raw',
+        consumedQuantity: 4,
+        unitCostNio: 2,
+        totalCostNio: 8,
+        isSoftExpired: false,
+      },
+    ]);
+
+    await service.replayProductionClose({
+      tenantId: 'tenant-A',
+      document: {
+        id: 'prod-doc-cpp',
+        recipeVersionId: 'v3',
+        producedInsumoId: 'ins-finished',
+        producedBatchNumber: 'PB-CPP',
+        producedExpirationDate: '2026-12-01T00:00:00.000Z',
+        plannedQuantity: 2,
+        actualQuantity: 2,
+        outcome: 'COMPLETED',
+        terminalId: 'terminal-1',
+        sourceSequence: 41,
+        idempotencyKey: 'production:terminal-1:prod-doc-cpp',
+        payloadHash: 'client-hash',
+        operationDate: '2026-05-01T00:00:00.000Z',
+        movementReferences: ['out-1', 'in-1'],
+      },
+    });
+
+    // 4 kg valued at 8 NIO for 2 produced units => 4 NIO per produced unit.
+    expect(producedInsumo.averageCost).toBe(4);
+    expect(producedInsumo.stock).toBe(2);
+    // A source outflow leaves the weighted average untouched.
+    expect(sourceInsumo.averageCost).toBe(3);
+  });
+
   it('deducts production source batch balances across FIFO batches', async () => {
     recipeService.getSnapshot.mockResolvedValue({
       recipeVersion: { id: 'v3' },
