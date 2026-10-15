@@ -27,7 +27,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R3** | S6 | **Venta: descontar lotes con traza y restaurarlos en la anulación** — descuento FEFO en `SALE` + traza por asiento + restauración exacta en `SALE_CANCEL` (H6/R13) | ✅ Cerrada (L9) |
 | **R4** | S7 | **Receta: cablear la explosión multi-nivel en los caminos vivos** (H5) | ✅ Cerrada (L10); el camino vivo de venta se separó a R11 |
 | **R5** | S8 | **Producción: el producido no queda en CPP 0** (V4-3), adjudicado en V7 | ✅ Cerrada (L11) |
-| **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | — |
+| **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | ✅ Cerrada (L22) |
 | **R7** | S1 | **Merma/conteo: el umbral forense debe NOTIFICAR de verdad y cubrir el conteo** (H7) | ✅ Cerrada (L17) |
 | **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ (`GET /inventory/reports/dish-margins` y `theoretical-cost?productId=`); **la superficie del dashboard se hace dentro de V10** (decisión del owner, L20) | 🟡 Backend medido (L19) |
 | **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | — |
@@ -109,3 +109,8 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Ojo con la ubicación**: la rama **sí** toca `apps/owner_dashboard` (identidad/settings), así que el dashboard tiene que correr **desde el worktree**, no desde el checkout de `main`.
   - **Resultado**: `inventory-live.live.spec.ts` (smoke nuevo) → login + `/inventory` + `/recipes` → **2/2 en 5.7s** contra el candidato.
   - **Falta de V10**: los specs por formulario (insumo, compra, receta, producto, producción, merma, conteo) y la **superficie del dashboard de R8** (costo teórico y margen por plato).
+- **L22** 2026-10-15 — **R6 CERRADA: la receta del dashboard persiste el tipo, la unidad y la sub-receta (H3).**
+  - **Raíz encontrada en V10**: el formulario **sí** mandaba `ingredientType`, `componentUom` y `referenceVersionId`, pero `recipe.controller.createRecipeVersion` mapeaba cada componente a `{insumoId, grossQuantity, technicalShrinkPct}` y `createNewVersion` persistía sólo `insumo_id`, `gross_quantity`, `technical_shrink_pct` y `quantity`. O sea: **todo componente se guardaba como `INSUMO`, con `component_uom` NULL y sin `reference_version_id`** — la sub-receta quedaba como un insumo que la venta viva no podía consumir, y la unidad del componente se perdía.
+  - **Arreglo**: `RecipeComponentInput` acepta los tres campos, `createNewVersion` persiste `ingredient_type`, `component_uom` y `reference_version_id`, y la ruta los propaga.
+  - **RED→GREEN**: sin el arreglo el spec nuevo **no compila** (`RecipeComponentInput` no tenía `ingredientType` — la capacidad no existía); con el arreglo, **30/30** receta y **547/547** inventario.
+  - **Medido en el rig por la API viva** (`POST /recipes/products/:productId/versions`, el mismo camino que usa el formulario): componente `SUB_RECIPE` con `componentUom "kg"` y `referenceVersionId` → persistido **`SUB_RECIPE | kg | 7e12e4b7…`** (antes: `INSUMO | NULL | NULL`).
