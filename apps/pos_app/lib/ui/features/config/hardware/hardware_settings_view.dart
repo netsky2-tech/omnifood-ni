@@ -334,18 +334,6 @@ class HardwareSettingsView extends StatelessWidget {
                     );
                   },
                 ),
-                if (viewModel.statusMessage != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    viewModel.statusMessage!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
               ],
             ),
           );
@@ -644,14 +632,12 @@ class HardwareSettingsView extends StatelessWidget {
                       onPressed: viewModel.isLoading
                           ? null
                           : () async {
-                              await viewModel.adoptCompanyLogo();
+                              final success = await viewModel.adoptCompanyLogo();
                               if (context.mounted && viewModel.statusMessage != null) {
-                                final isError = viewModel.statusMessage!.startsWith('Error') ||
-                                    viewModel.statusMessage!.startsWith('No se pudo');
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(viewModel.statusMessage!),
-                                    backgroundColor: isError ? Colors.red : Colors.green,
+                                    backgroundColor: success ? Colors.green : Colors.red,
                                     behavior: SnackBarBehavior.floating,
                                   ),
                                 );

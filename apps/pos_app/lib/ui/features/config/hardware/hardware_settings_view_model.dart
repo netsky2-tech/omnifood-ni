@@ -126,9 +126,9 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   /// derive the thermal raster with the existing processor, and persist ONLY
   /// the raster — the operator's width/height/enabled tuning is untouched.
   /// Any failure leaves the previous local raster byte-identical (S7).
-  Future<void> adoptCompanyLogo() async {
+  Future<bool> adoptCompanyLogo() async {
     final adoption = _companyLogoAdoption;
-    if (adoption == null) return;
+    if (adoption == null) return false;
     _isLoading = true;
     _statusMessage = null;
     notifyListeners();
@@ -142,12 +142,15 @@ class HardwareSettingsViewModel extends ChangeNotifier {
         await loadConfig();
         _statusMessage =
             'Logo de la empresa aplicado. El ancho, alto y habilitado locales se conservaron.';
+        return true;
       } else {
         _statusMessage = result.errorMessage;
         _cloudLogoSha256 = await adoption.readCloudLogoSha256();
+        return false;
       }
     } catch (e) {
       _statusMessage = 'Error al aplicar el logo de la empresa: $e';
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();
