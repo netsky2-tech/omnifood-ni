@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNotEmpty,
@@ -74,6 +75,11 @@ export class ManualPurchaseDto {
 
   @IsDateString()
   entryTimestamp: string;
+
+  /** R9 (S11): see PurchaseDocumentDto.costIncludesIva. */
+  @IsOptional()
+  @IsBoolean()
+  costIncludesIva?: boolean;
 
   @IsOptional()
   @IsIn(Object.values(PURCHASE_FX_RATE_MODE))

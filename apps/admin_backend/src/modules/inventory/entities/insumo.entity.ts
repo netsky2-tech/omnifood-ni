@@ -74,6 +74,17 @@ export class Insumo {
   @Column('decimal', { precision: 14, scale: 4, nullable: true })
   parLevel: number;
 
+  // R9 (S11): the declared IVA rate for this insumo, percent 0..100. NULL =
+  // no IVA declared — the purchase net-cost guard is inert until the rate is
+  // declared, and declaring it is what switches the guard on.
+  @Column('decimal', {
+    precision: 7,
+    scale: 4,
+    nullable: true,
+    name: 'iva_rate_pct',
+  })
+  ivaRatePct: number | null;
+
   @Column('decimal', {
     precision: 14,
     scale: 4,

@@ -345,6 +345,12 @@ export class InventoryPurchaseService {
      * in business Spanish without raw UUIDs.
      */
     messageLocale?: PurchaseMessageLocale;
+    /**
+     * R9 (S11): the operator's declaration of whether `unitCost` carries IVA.
+     * Mandatory and false-only when the insumo declares a rate; ignored
+     * otherwise (see the guard below).
+     */
+    costIncludesIva?: boolean;
   }) {
     const tenantId = this.requireTenantId(input.tenantId);
     const invoiceNumber = this.requireInvoiceNumber(input.invoiceNumber);
@@ -362,6 +368,34 @@ export class InventoryPurchaseService {
             .where('insumo.id = :insumoId', { insumoId: input.insumoId })
             .andWhere('insumo.tenant_id = :tenantId', { tenantId })
             .getOne();
+
+          // R9 (S11): the owner decided the purchase cost is loaded NET and
+          // the system guarantees it. When the insumo declares an IVA rate,
+          // the load requires the explicit net/gross declaration and REJECTS
+          // a gross cost — a gross cost would overvalue the inventory (NIC 2
+          // §23-25 excludes recoverable taxes). With no declared rate the
+          // declaration is not required and the guard is inert.
+          const ivaRatePct = Number(insumo?.ivaRatePct ?? 0);
+          if (ivaRatePct > 0) {
+            if (input.costIncludesIva === undefined) {
+              throw messagesInSpanish
+                ? new BadRequestException(
+                    `El insumo declara IVA ${ivaRatePct}%. Debe declarar si el costo que carga es neto (sin IVA) o con IVA incluido.`,
+                  )
+                : new BadRequestException(
+                    `Insumo declares IVA ${ivaRatePct}%. Declare whether the loaded cost is net (without IVA) or IVA-inclusive.`,
+                  );
+            }
+            if (input.costIncludesIva) {
+              throw messagesInSpanish
+                ? new BadRequestException(
+                    `El costo cargado trae IVA incluido. Cargue el costo NETO (sin IVA): divida el precio de factura entre ${(1 + ivaRatePct / 100).toFixed(4)} para este insumo con IVA ${ivaRatePct}%.`,
+                  )
+                : new BadRequestException(
+                    `The loaded cost carries IVA. Load the NET cost (without IVA): divide the invoice price by ${(1 + ivaRatePct / 100).toFixed(4)} for this insumo with IVA ${ivaRatePct}%.`,
+                  );
+            }
+          }
 
           if (!insumo) {
             throw messagesInSpanish

@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -59,6 +60,13 @@ export class CreateInsumoDto {
   @IsOptional()
   @IsBoolean()
   is_perishable?: boolean;
+
+  /** R9 (S11): declared IVA rate percent 0..100. NULL/absent = no IVA. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  ivaRatePct?: number | null;
 
   @IsOptional()
   @IsIn([

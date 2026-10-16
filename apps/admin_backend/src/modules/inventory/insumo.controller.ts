@@ -167,6 +167,7 @@ export class InsumoController {
           is_perishable: dto.is_perishable ?? false,
           negativeStockPolicy: dto.negativeStockPolicy ?? 'RESTRICT',
           warehouse_id: dto.warehouse_id ?? null,
+          ivaRatePct: dto.ivaRatePct ?? null,
           stock: 0,
           existenciaActual: 0,
           is_active: true,
@@ -224,6 +225,8 @@ export class InsumoController {
           insumo.averageCost = dto.averageCost;
         if (dto.is_perishable !== undefined)
           insumo.is_perishable = dto.is_perishable;
+        if (dto.ivaRatePct !== undefined)
+          insumo.ivaRatePct = dto.ivaRatePct;
         if (dto.negativeStockPolicy !== undefined)
           insumo.negativeStockPolicy = dto.negativeStockPolicy;
         if (dto.warehouse_id !== undefined)

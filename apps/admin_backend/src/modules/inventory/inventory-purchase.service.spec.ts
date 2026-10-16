@@ -362,6 +362,127 @@ describe('InventoryPurchaseService', () => {
     );
   });
 
+  // R9 (S11): the owner decided the purchase cost is loaded NET, guaranteed
+  // by the system. An insumo with a declared IVA rate makes the declaration
+  // mandatory: a gross cost is rejected, and so is a missing declaration
+  // (fail closed — nobody loads gross silently).
+  it('rejects a purchase cost declared WITH IVA on an insumo with a rate (R9)', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: 15,
+    });
+    findOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: 15,
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-iva-1',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-IVA-1',
+        quantity: 10,
+        unitCost: 115,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-02',
+        entryTimestamp: '2026-01-02T08:00:00.000Z',
+        costIncludesIva: true,
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow(/costo NETO/i);
+  });
+
+  it('rejects an undeclared cost on an insumo with a rate (R9, fail closed)', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: 15,
+    });
+    findOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: 15,
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-iva-2',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-IVA-2',
+        quantity: 10,
+        unitCost: 100,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-02',
+        entryTimestamp: '2026-01-02T08:00:00.000Z',
+        messageLocale: 'es',
+      }),
+    ).rejects.toThrow(/Debe declarar/i);
+  });
+
+  it('accepts a declared NET cost on an insumo with a rate (R9)', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: 15,
+    });
+    findOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: 15,
+    });
+
+    const result = await service.recordPurchase({
+      id: 'purchase-iva-3',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-IVA-3',
+      quantity: 10,
+      unitCost: 100,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-02',
+      entryTimestamp: '2026-01-02T08:00:00.000Z',
+      costIncludesIva: false,
+    });
+
+    // Net cost: previous 10 @ 50 plus entry 10 @ 100 => (500 + 1000) / 20.
+    expect(result.preview.projectedCppNio).toBe(75);
+  });
+
+  it('accepts any cost on an insumo without a declared rate (R9)', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: null,
+    });
+    findOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+      ivaRatePct: null,
+    });
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-iva-4',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-IVA-4',
+        quantity: 10,
+        unitCost: 115,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-02',
+        entryTimestamp: '2026-01-02T08:00:00.000Z',
+      }),
+    ).resolves.toBeDefined();
+  });
+
   it('persists a batch for perishable purchases during posting', async () => {
     const result = await service.recordPurchase({
       id: 'purchase-doc-1',

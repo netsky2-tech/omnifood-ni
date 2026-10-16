@@ -39,6 +39,7 @@ describe('InsumoController', () => {
         parLevel: '5000.0000',
         minStock: '1000.0000',
         maxStock: null,
+        ivaRatePct: null,
       },
     ]);
     insumoRepo.findOne.mockResolvedValue(null);
@@ -64,6 +65,7 @@ describe('InsumoController', () => {
         parLevel: 5000,
         minStock: 1000,
         maxStock: null,
+        ivaRatePct: null,
       },
     ]);
     expect(typeof result[0].stock).toBe('number');

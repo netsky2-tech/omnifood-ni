@@ -30,7 +30,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | ✅ Cerrada (L22) |
 | **R7** | S1 | **Merma/conteo: el umbral forense debe NOTIFICAR de verdad y cubrir el conteo** (H7) | ✅ Cerrada (L17) |
 | **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ y **superficie del dashboard entregada en V10** | ✅ Cerrada (L19 + L23) |
-| **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | — |
+| **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | 🟡 Backend medido (L31); falta UI |
 | **R10** | S4, S9 | **Corrección de compra: no mezclar unidades** — el documento de corrección toma `correctedQuantity` del movimiento (unidad de **consumo**) y lo escribe junto a un `unit_cost` de **factura**; para factor ≠ 1 son unidades distintas | ✅ Cerrada (L13) |
 | **R11** | S7 | **Venta camino vivo: `SaleInventoryOutcomeService` debe expandir el `SUB_RECIPE`** — hoy **rechaza la venta** con `insumoId '…' not found` | ✅ Cerrada (L12) |
 | **R12** | S11 | **Valuación: cablear el menor entre costo y mercado (R-01/Ley 822)** — fijar el precio de mercado y disparar el castigo | ✅ Cerrada (L18) |
@@ -153,3 +153,15 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Arreglo**: `createNewVersion` (la ruta del dashboard) ahora recorre `assertNoCircularDependency` para cada componente `SUB_RECIPE`, dentro de la misma transacción tenant-bound y **antes de cualquier escritura** — la misma guarda que ya existía para la ingestión POS.
   - **RED→GREEN**: el spec nuevo resolvió sin rechazar antes del arreglo; con él, **548/548** inventario (lección de mock: `mockResolvedValue` sobrevive al `clearAllMocks`, así que el test de R6 tuvo que resetear `manager.findOne`/`manager.find` a `null`/`[]`).
   - **Re-medido en el rig** (sobre el ciclo que V3 dejó persistido): crear `B → A` de nuevo → **400** `Dependencia circular detectada en receta: B -> … -> A -> B`; auto-referencia `A → A` → **400** `el producto no puede contenerse a sí mismo como sub-receta`. Ambos **antes de escribir**.
+- **L31** 2026-10-15 — **R9 (backend) CERRADO Y MEDIDO: tasa de IVA por insumo y guarda de costo neto.**
+  - **Mecánica (fiel a la decisión del owner)**:
+    1. **Columna `insumos.iva_rate_pct`** (migración `1810020000000`, `numeric(5,4)`, nullable). NULL = insumo exento o sin IVA declarado; un valor `> 0` (p. ej. `15.0000`) declara la tasa y **activa la guarda**.
+    2. **Creación/edición de insumo**: `CreateInsumoDto` y `UpdateInsumoDto` exponen `ivaRatePct?` (número 0..100) y `insumo-response` lo expone.
+    3. **Guarda de compra**: `recordPurchase` (tanto device como manual) recibe `costIncludesIva?`. Si el insumo tiene tasa `> 0`:
+       - **Sin declaración** → **400 fail-closed** (`Insumo declares IVA 15%. Declare whether the loaded cost is net (without IVA) or IVA-inclusive.`). Nadie carga bruto en silencio.
+       - **Declaración `costIncludesIva = true`** → **400 rechazo explícito** (`The loaded cost carries IVA. Load the NET cost (without IVA): divide the invoice price by 1.1500 for this insumo with IVA 15%.`). El operador recibe la fórmula en el error.
+       - **Declaración `costIncludesIva = false`** → **201 ACEPTADO**. El costo unitario entra neto al CPP (`10 @ 100` sobre insumo con tasa 15% entra a CPP `100.0000`).
+       - **Insumo sin tasa (NULL)** → **201 inerte**; la declaración no se exige y la compra no se bloquea.
+  - **Medido en el rig** con entidades nuevas: los cuatro casos probados contra Postgres real (3 y 4 dieron 400; 5 y 6 dieron 201 y stock/CPP `10.0000 / 100.0000`).
+  - **Falta de R9**: la UI del formulario de compra y de insumo en el dashboard.
+  - **Evidencia**: **552/552** inventario (4 tests dedicados en `inventory-purchase.service.spec.ts`).
