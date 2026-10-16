@@ -159,3 +159,56 @@ test("the product form creates a product against the live rig", async () => {
     sharedPage.getByPlaceholder("Ej: Taza de Capuccino"),
   ).toBeHidden({ timeout: 15_000 });
 });
+
+test("the purchase form enforces NET cost on insumos declaring IVA (R9 via UI)", async () => {
+  const ivaInsumoName = `E2E IVA 15 ${Date.now()}`;
+  await openInsumoForm(ivaInsumoName);
+  await pickUom("purchase", /kilogramo/i);
+  await pickUom("consumption", /^gramo/i);
+  await sharedPage.getByTestId("insumo-form-conversion-factor").fill("1000");
+  await sharedPage.getByTestId("insumo-form-iva-rate").fill("15");
+  await sharedPage.getByTestId("insumo-form-submit").click();
+  await expect(sharedPage.getByTestId("insumo-form-error")).toBeHidden();
+
+  // Go to Purchases tab and register a purchase for this new IVA insumo
+  await sharedPage.getByTestId("inventory-tab-purchases").click();
+  await sharedPage.getByTestId("purchases-register-btn").click();
+
+  await sharedPage.getByTestId("purchases-form-supplier").click();
+  await sharedPage
+    .getByRole("option", { name: /ZZ TEST Proveedor Rig/ })
+    .click();
+
+  await sharedPage.getByTestId("purchases-form-insumo").click();
+  await sharedPage.getByRole("option", { name: new RegExp(ivaInsumoName) }).click();
+
+  // The IVA guard box MUST appear
+  await expect(
+    sharedPage.getByTestId("purchases-form-iva-guard-box"),
+  ).toBeVisible();
+  await expect(
+    sharedPage.getByTestId("purchases-form-iva-guard-box"),
+  ).toContainText("15%");
+
+  await sharedPage.getByTestId("purchases-form-quantity").fill("5");
+  await sharedPage.getByTestId("purchases-form-unit-cost").fill("115");
+  await sharedPage
+    .getByTestId("purchases-form-invoice-number")
+    .fill(`E2E-IVA-${Date.now()}`);
+
+  // Selecting "El costo incluye IVA" must block submit with the NIC 2 message
+  await sharedPage.getByTestId("purchases-form-cost-gross").check();
+  await sharedPage.getByTestId("purchases-form-submit").click();
+  await expect(
+    sharedPage.getByTestId("purchases-form-error"),
+  ).toContainText(/no admite costos con IVA/i);
+
+  // Switching to "Confirmo que el costo es NETO" allows registering
+  await sharedPage.getByTestId("purchases-form-cost-net").check();
+  await sharedPage.getByTestId("purchases-form-submit").click();
+
+  // Dialog closes on success
+  await expect(
+    sharedPage.getByTestId("purchases-form-error"),
+  ).toBeHidden();
+});

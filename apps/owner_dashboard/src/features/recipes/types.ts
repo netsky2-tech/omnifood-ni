@@ -88,6 +88,7 @@ export interface Insumo {
   is_perishable?: boolean;
   negativeStockPolicy?: string;
   is_active: boolean;
+  ivaRatePct?: number | null;
 }
 
 export interface CreateInsumoInput {
@@ -101,6 +102,7 @@ export interface CreateInsumoInput {
   is_perishable?: boolean;
   negativeStockPolicy?: 'ALLOW_TEMPORARY' | 'RESTRICT';
   warehouse_id?: string;
+  ivaRatePct?: number | null;
 }
 
 export interface UpdateInsumoInput extends Partial<CreateInsumoInput> {

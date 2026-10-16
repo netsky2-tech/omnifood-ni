@@ -43,6 +43,7 @@ interface PurchaseFormState {
   lotCode: string;
   receivedDate: string;
   expirationDate: string;
+  costIncludesIva: boolean | null;
 }
 
 const defaultForm = (): PurchaseFormState => ({
@@ -57,6 +58,7 @@ const defaultForm = (): PurchaseFormState => ({
   lotCode: "",
   receivedDate: "",
   expirationDate: "",
+  costIncludesIva: null,
 });
 
 /**
@@ -100,6 +102,8 @@ export function PurchasesForm({
   const selectedInsumo = insumoList.find((i) => i.id === form.insumoId);
   const isPerishable = Boolean(selectedInsumo?.is_perishable);
   const isUsd = form.currency === "USD";
+  const insumoIvaRate = Number(selectedInsumo?.ivaRatePct ?? 0);
+  const hasIvaRate = insumoIvaRate > 0;
 
   useEffect(() => {
     if (formError && errorRef.current) {
@@ -139,8 +143,14 @@ export function PurchasesForm({
       if (!form.expirationDate)
         return "Los insumos perecederos requieren la fecha de vencimiento.";
     }
+    if (hasIvaRate) {
+      if (form.costIncludesIva === null)
+        return `El insumo declara IVA (${insumoIvaRate}%). Debe confirmar si el costo ingresado es neto o incluye IVA.`;
+      if (form.costIncludesIva === true)
+        return `El inventario no admite costos con IVA (NIC 2). Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`;
+    }
     return null;
-  }, [form, quantity, unitCost, bcnRate, isUsd, isPerishable]);
+  }, [form, quantity, unitCost, bcnRate, isUsd, isPerishable, hasIvaRate, insumoIvaRate]);
 
   /** Payload for the live CPP preview (no batch fields needed for preview). */
   const previewPayload = useMemo((): ManualPurchaseInput | null => {
@@ -244,6 +254,7 @@ export function PurchasesForm({
         lotCode: isPerishable ? form.lotCode.trim() : undefined,
         receivedDate: isPerishable ? form.receivedDate : undefined,
         expirationDate: isPerishable ? form.expirationDate : undefined,
+        costIncludesIva: hasIvaRate ? (form.costIncludesIva ?? undefined) : undefined,
       });
       toast({
         title: "Compra registrada",
@@ -496,6 +507,44 @@ export function PurchasesForm({
                   onChange={(e) => setForm({ ...form, unitCost: e.target.value })}
                 />
               </div>
+
+              {hasIvaRate && (
+                <div
+                  className="col-span-2 space-y-2 rounded-md border border-amber-200 bg-amber-50/50 p-3 text-xs dark:border-amber-900/50 dark:bg-amber-950/20"
+                  data-testid="purchases-form-iva-guard-box"
+                >
+                  <p className="font-medium text-amber-900 dark:text-amber-200">
+                    Insumo con IVA declarado: {insumoIvaRate}%
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    R9: El costo debe cargarse NETO (sin IVA). Si la factura trae IVA incluido, divídalo entre {(1 + insumoIvaRate / 100).toFixed(4)} antes de registrar.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="purchase_cost_iva_mode"
+                        data-testid="purchases-form-cost-net"
+                        checked={form.costIncludesIva === false}
+                        onChange={() => setForm((prev) => ({ ...prev, costIncludesIva: false }))}
+                        className="h-4 w-4 text-primary"
+                      />
+                      <span>Confirmo que el costo es NETO (sin IVA)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-destructive">
+                      <input
+                        type="radio"
+                        name="purchase_cost_iva_mode"
+                        data-testid="purchases-form-cost-gross"
+                        checked={form.costIncludesIva === true}
+                        onChange={() => setForm((prev) => ({ ...prev, costIncludesIva: true }))}
+                        className="h-4 w-4 text-destructive"
+                      />
+                      <span>El costo incluye IVA</span>
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

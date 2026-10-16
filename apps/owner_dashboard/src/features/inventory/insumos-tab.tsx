@@ -87,6 +87,7 @@ interface InsumoFormState {
   minStock: string;
   is_perishable: boolean;
   negativeStockPolicy: "ALLOW_TEMPORARY" | "RESTRICT";
+  ivaRatePct: string;
 }
 
 const DEFAULT_FORM: InsumoFormState = {
@@ -100,6 +101,7 @@ const DEFAULT_FORM: InsumoFormState = {
   minStock: "",
   is_perishable: false,
   negativeStockPolicy: "RESTRICT",
+  ivaRatePct: "",
 };
 
 const FACTOR_ERROR = "El factor de conversión debe ser mayor que 0.";
@@ -314,6 +316,7 @@ export function InsumosTab() {
       negativeStockPolicy: (insumo.negativeStockPolicy === "ALLOW_TEMPORARY"
         ? "ALLOW_TEMPORARY"
         : "RESTRICT"),
+      ivaRatePct: insumo.ivaRatePct != null ? String(insumo.ivaRatePct) : "",
     };
     setForm(values);
     setInitialForm(values);
@@ -388,6 +391,8 @@ export function InsumosTab() {
       minStock: form.minStock.trim() === "" ? undefined : Number(form.minStock),
       is_perishable: form.is_perishable,
       negativeStockPolicy: form.negativeStockPolicy,
+      ivaRatePct:
+        form.ivaRatePct.trim() === "" ? null : Number(form.ivaRatePct),
     };
 
     try {
@@ -954,6 +959,28 @@ export function InsumosTab() {
                 <Label htmlFor="is_perishable" className="text-xs font-normal cursor-pointer">
                   Materia prima perecedera (gestión estricta por lotes FIFO)
                 </Label>
+              </div>
+
+              <div className="space-y-1 pt-1">
+                <Label htmlFor="iva_rate_pct" className="text-xs">
+                  Tasa de IVA del insumo (%) — opcional
+                </Label>
+                <Input
+                  id="iva_rate_pct"
+                  data-testid="insumo-form-iva-rate"
+                  type="number"
+                  step="any"
+                  min="0"
+                  max="100"
+                  placeholder="Ej: 15 (dejar vacío si es exento o no aplica)"
+                  value={form.ivaRatePct}
+                  onChange={(e) =>
+                    setForm({ ...form, ivaRatePct: e.target.value })
+                  }
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  R9: Si se declara una tasa, las compras exigirán costo NETO y rechazarán costo con IVA incluido (NIC 2).
+                </p>
               </div>
             </div>
 

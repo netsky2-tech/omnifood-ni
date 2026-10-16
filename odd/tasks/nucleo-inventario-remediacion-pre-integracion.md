@@ -30,7 +30,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R6** | S1 | **Receta: persistir `componentUom` y distinguir `SUB_RECIPE`** (H3) — su camino real de formularios es V10 | ✅ Cerrada (L22) |
 | **R7** | S1 | **Merma/conteo: el umbral forense debe NOTIFICAR de verdad y cubrir el conteo** (H7) | ✅ Cerrada (L17) |
 | **R8** | S1 | **Superficies humanas: costo teórico y margen bruto por plato** (H8) — backend ✅ y **superficie del dashboard entregada en V10** | ✅ Cerrada (L19 + L23) |
-| **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | 🟡 Backend medido (L31); falta UI |
+| **R9** | S11 | **IVA: cargar neto con guarda** — declarar la tasa por insumo y rechazar en el formulario y la API un costo con IVA | ✅ Cerrada (L31 + L32) |
 | **R10** | S4, S9 | **Corrección de compra: no mezclar unidades** — el documento de corrección toma `correctedQuantity` del movimiento (unidad de **consumo**) y lo escribe junto a un `unit_cost` de **factura**; para factor ≠ 1 son unidades distintas | ✅ Cerrada (L13) |
 | **R11** | S7 | **Venta camino vivo: `SaleInventoryOutcomeService` debe expandir el `SUB_RECIPE`** — hoy **rechaza la venta** con `insumoId '…' not found` | ✅ Cerrada (L12) |
 | **R12** | S11 | **Valuación: cablear el menor entre costo y mercado (R-01/Ley 822)** — fijar el precio de mercado y disparar el castigo | ✅ Cerrada (L18) |
@@ -165,3 +165,11 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Medido en el rig** con entidades nuevas: los cuatro casos probados contra Postgres real (3 y 4 dieron 400; 5 y 6 dieron 201 y stock/CPP `10.0000 / 100.0000`).
   - **Falta de R9**: la UI del formulario de compra y de insumo en el dashboard.
   - **Evidencia**: **552/552** inventario (4 tests dedicados en `inventory-purchase.service.spec.ts`).
+- **L32** 2026-10-15 — **R9 (UI) CERRADA: la guarda de costo neto verificada en el navegador real.**
+  - **Formulario de insumo**: nuevo campo `ivaRatePct` (tasa de IVA %, 0..100 opcional; `insumo-form-iva-rate`).
+  - **Formulario de compra**: cuando el insumo seleccionado declara una tasa de IVA > 0, aparece la caja de advertencia R9 (`purchases-form-iva-guard-box`) con la tasa y la fórmula de desagregado, y exige la declaración explícita:
+    - **“El costo incluye IVA”** (`purchases-form-cost-gross`) → **rechazo inmediato** en la UI con mensaje NIC 2 (*“El inventario no admite costos con IVA (NIC 2). Ingrese el costo neto dividiendo entre …”*).
+    - **“Confirmo que el costo es NETO”** (`purchases-form-cost-net`) → se envía `costIncludesIva = false`, la compra se registra en el backend y el diálogo se cierra.
+    - **Sin insumo con tasa**: la caja no se muestra y la declaración es opcional.
+  - **Medido en Playwright live contra el rig**: `inventory-live.live.spec.ts` → **8/8** en 13.7s, probando el ciclo completo (crear insumo con IVA 15% → seleccionarlo en compras → rechazo con costo bruto → éxito con costo neto).
+  - **Evidencia**: typecheck del dashboard limpio; Playwright live 8/8.

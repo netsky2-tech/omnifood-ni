@@ -189,6 +189,7 @@ export interface ManualPurchaseInput {
   lotCode?: string;
   receivedDate?: string;
   expirationDate?: string;
+  costIncludesIva?: boolean;
 }
 
 export interface CreateSupplierInput {
