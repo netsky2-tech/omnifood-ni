@@ -257,7 +257,7 @@ export function InsumosTab() {
       (ins) =>
         ins.name.toLowerCase().includes(term) ||
         (ins.purchaseUom || "").toLowerCase().includes(term) ||
-        (ins.consumptionUom || ins.consumption_uom || "").toLowerCase().includes(term),
+        (ins.consumptionUom || "").toLowerCase().includes(term),
     );
   }, [insumos, searchTerm]);
 
@@ -306,8 +306,8 @@ export function InsumosTab() {
       name: insumo.name,
       // Stored values without a catalog match still load raw; the select adds
       // them as fallback items so editing never loses the stored unit.
-      purchaseUom: insumo.purchaseUom || insumo.consumption_uom || "",
-      consumptionUom: insumo.consumptionUom || insumo.consumption_uom || "",
+      purchaseUom: insumo.purchaseUom || insumo.consumptionUom || "",
+      consumptionUom: insumo.consumptionUom || "",
       conversionFactor: String(insumo.conversionFactor ?? 1),
       averageCost: String(insumo.averageCost ?? 0),
       parLevel: insumo.parLevel != null ? String(insumo.parLevel) : "",
@@ -555,7 +555,7 @@ export function InsumosTab() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredInsumos.map((ins) => {
-                  const consUom = ins.consumptionUom || ins.consumption_uom || "UN";
+                  const consUom = ins.consumptionUom || "UN";
                   const purchUom = ins.purchaseUom || consUom;
                   const factor = ins.conversionFactor ?? 1;
                   const isLow = ins.parLevel && ins.stock <= ins.parLevel;

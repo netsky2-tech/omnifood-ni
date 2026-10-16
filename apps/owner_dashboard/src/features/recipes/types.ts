@@ -79,7 +79,6 @@ export interface Insumo {
   name: string;
   purchaseUom?: string;
   consumptionUom?: string;
-  consumption_uom?: string;
   conversionFactor?: number;
   stock: number;
   averageCost: number;

@@ -98,9 +98,9 @@ const MOCK_COMPOUND_PRODUCTS: Product[] = [
 ];
 
 const MOCK_INSUMOS: Insumo[] = [
-  { id: 'i1', tenant_id: 't1', name: 'Arroz', consumption_uom: 'kg', stock: 100, averageCost: 15, is_active: true },
-  { id: 'i2', tenant_id: 't1', name: 'Frijol', consumption_uom: 'kg', stock: 50, averageCost: 20, is_active: true },
-  { id: 'i3', tenant_id: 't1', name: 'Plátano', consumption_uom: 'un', stock: 200, averageCost: 5, is_active: true },
+  { id: 'i1', tenant_id: 't1', name: 'Arroz', consumptionUom: 'kg', stock: 100, averageCost: 15, is_active: true },
+  { id: 'i2', tenant_id: 't1', name: 'Frijol', consumptionUom: 'kg', stock: 50, averageCost: 20, is_active: true },
+  { id: 'i3', tenant_id: 't1', name: 'Plátano', consumptionUom: 'un', stock: 200, averageCost: 5, is_active: true },
 ];
 
 const MOCK_ACTIVE_RECIPE: RecipeSnapshot = {

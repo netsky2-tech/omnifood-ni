@@ -214,3 +214,66 @@ test("the purchase form enforces NET cost on insumos declaring IVA (R9 via UI)",
     sharedPage.getByTestId("purchases-form-error"),
   ).toBeHidden();
 });
+
+test("the recipe form pairs Tipo, ingredient and its real unit (R15 via the UI)", async () => {
+  await sharedPage.goto(`${BASE}/recipes`);
+  const dialog = sharedPage.getByRole("dialog");
+
+  // Any compound card opens the form; the save button tells whether the
+  // product already has a recipe (Actualizar) or not (Crear).
+  await sharedPage
+    .getByRole("button", { name: /^(Crear|Editar) Receta$/ })
+    .first()
+    .click();
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Agregar Ingrediente" }).click();
+
+  // Pick a real rig insumo: the pair must stick and unlock the unit field
+  // with the insumo's consumption UOM (never "Base", never "(undefined)").
+  await dialog.getByRole("combobox", { name: /Ingrediente/ }).click();
+  await sharedPage
+    .getByRole("option", { name: /^Café en Grano Matagalpa/ })
+    .click();
+  await expect(
+    dialog.getByRole("combobox", { name: /Ingrediente/ }),
+  ).toContainText("Café en Grano Matagalpa");
+  const uom = dialog.getByRole("combobox", { name: /Unidad de Medida/ });
+  await expect(uom).toBeEnabled();
+  await expect(uom).toContainText("kg");
+
+  // Tipo -> Sub-receta clears the ingredient and hides the unit (a sub-recipe
+  // has no consumption unit).
+  await dialog.getByRole("combobox", { name: /Tipo/ }).click();
+  await sharedPage.getByRole("option", { name: "Sub-receta" }).click();
+  await expect(dialog.getByRole("combobox", { name: /Tipo/ })).toContainText(
+    "Sub-receta",
+  );
+  await expect(
+    dialog.getByRole("combobox", { name: /Ingrediente/ }),
+  ).toContainText("Seleccione un ingrediente");
+  await expect(
+    dialog.getByRole("combobox", { name: /Unidad de Medida/ }),
+  ).toHaveCount(0);
+
+  // Back to Insumo, pick again and SAVE against the live rig: a brand-new
+  // recipe version must be accepted by the backend.
+  await dialog.getByRole("combobox", { name: /Tipo/ }).click();
+  await sharedPage.getByRole("option", { name: "Insumo" }).click();
+  await dialog.getByRole("combobox", { name: /Ingrediente/ }).click();
+  await sharedPage
+    .getByRole("option", { name: /^Café en Grano Matagalpa/ })
+    .click();
+  await expect(
+    dialog.getByRole("combobox", { name: /Unidad de Medida/ }),
+  ).toContainText("kg");
+  await dialog.getByLabel(/Cantidad Bruta/).fill("0.5");
+  await dialog
+    .getByRole("button", { name: /^(Crear Receta|Actualizar Receta)$/ })
+    .click();
+
+  await expect(sharedPage.getByText("Receta creada correctamente")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(dialog).toBeHidden({ timeout: 10_000 });
+});
