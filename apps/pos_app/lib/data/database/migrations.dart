@@ -3328,6 +3328,21 @@ final migration73_74 = Migration(73, 74, (database) async {
   }
 });
 
+final migration74_75 = Migration(74, 75, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(customers)');
+  // A fresh install creates the table with the column via onCreate; legacy
+  // fixtures may predate it. PRAGMA returns no rows for a missing table.
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns.map((column) => column['name']).toSet();
+  if (!existing.contains('customer_type')) {
+    await database.execute(
+      'ALTER TABLE customers ADD COLUMN customer_type TEXT',
+    );
+  }
+});
+
 /// Issue #957: activation evidence contract stamped by the backend on the
 /// attempt (1 = legacy invoice-based, 2 = invoice-free). Legacy rows keep 1.
 final migration75_76 = Migration(75, 76, (database) async {
@@ -3346,19 +3361,78 @@ final migration75_76 = Migration(75, 76, (database) async {
   }
 });
 
-final migration74_75 = Migration(74, 75, (database) async {
-  final columns = await database.rawQuery('PRAGMA table_info(customers)');
-  // A fresh install creates the table with the column via onCreate; legacy
-  // fixtures may predate it. PRAGMA returns no rows for a missing table.
-  if (columns.isEmpty) {
-    return;
-  }
-  final existing = columns.map((column) => column['name']).toSet();
-  if (!existing.contains('customer_type')) {
-    await database.execute(
-      'ALTER TABLE customers ADD COLUMN customer_type TEXT',
-    );
-  }
+/// R21 / S18 — the projection stored recipe components that reference a
+/// PRODUCT id (a SUB_RECIPE component) but the table's composite FK on
+/// `insumo_id` → `authority_insumos` rejected every such insert, so a
+/// multi-level recipe could never hydrate locally (the hydrator fails
+/// mid-loop and leaves the version partially loaded, the #519 bug class).
+///
+/// SQLite cannot drop a constraint in place, so the table is rebuilt without
+/// the insumo FK. Everything else is byte-identical: rows, the unique
+/// (tenant, version, ordinal) index and the immutability triggers (dropped
+/// with the old table, recreated after the rename). `version_id` keeps its
+/// FK — a component still hangs off exactly one recipe version.
+final migration76_77 = Migration(76, 77, (database) async {
+  await database.execute('''
+    CREATE TABLE authority_recipe_version_components_new (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      version_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      insumo_id TEXT NOT NULL,
+      gross_quantity REAL NOT NULL,
+      technical_shrink_pct REAL NOT NULL,
+      ingredient_type TEXT NOT NULL,
+      component_name TEXT NOT NULL,
+      component_uom TEXT,
+      reference_version_id TEXT,
+      PRIMARY KEY (tenant_id, id),
+      FOREIGN KEY (tenant_id, version_id) REFERENCES authority_recipe_versions (tenant_id, id) ON DELETE CASCADE
+    )
+  ''');
+
+  await database.execute('''
+    INSERT INTO authority_recipe_version_components_new (
+      tenant_id,
+      id,
+      version_id,
+      ordinal,
+      insumo_id,
+      gross_quantity,
+      technical_shrink_pct,
+      ingredient_type,
+      component_name,
+      component_uom,
+      reference_version_id
+    )
+    SELECT
+      tenant_id,
+      id,
+      version_id,
+      ordinal,
+      insumo_id,
+      gross_quantity,
+      technical_shrink_pct,
+      ingredient_type,
+      component_name,
+      component_uom,
+      reference_version_id
+    FROM authority_recipe_version_components
+  ''');
+
+  await database.execute('DROP TABLE authority_recipe_version_components');
+  await database.execute(
+    'ALTER TABLE authority_recipe_version_components_new '
+    'RENAME TO authority_recipe_version_components',
+  );
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS
+      index_authority_recipe_version_components_tenant_id_version_id_ordinal
+    ON authority_recipe_version_components (tenant_id, version_id, ordinal)
+  ''');
+
+  await _createAuthorityImmutabilityTriggers(database);
 });
 
 final allMigrations = [
@@ -3428,6 +3502,7 @@ final allMigrations = [
   migration73_74,
   migration74_75,
   migration75_76,
+  migration76_77,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

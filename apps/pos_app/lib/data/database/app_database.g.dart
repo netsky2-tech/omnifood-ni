@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 76,
+      version: 77,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -212,7 +212,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_recipe_versions` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `publication_state` TEXT NOT NULL, `effective_from` TEXT NOT NULL, `effective_until` TEXT, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `published_at` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY (`tenant_id`, `insumo_id`) REFERENCES `authority_insumos` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT, PRIMARY KEY (`tenant_id`, `id`))');
+            'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_ingestion_verdicts` (`recipe_version_id` TEXT NOT NULL, `code` TEXT NOT NULL, `product_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `created_at` TEXT NOT NULL, PRIMARY KEY (`recipe_version_id`, `code`))');
         await database.execute(

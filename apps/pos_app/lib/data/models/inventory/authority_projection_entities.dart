@@ -77,18 +77,17 @@ class AuthorityRecipeVersionEntity {
 @Entity(
   tableName: 'authority_recipe_version_components',
   primaryKeys: ['tenant_id', 'id'],
+  // R21 / S18: the insumo_id FK is deliberately absent. A component of type
+  // 'SUB_RECIPE' names a PRODUCT id (the sub-recipe), which never has an
+  // authority_insumos row — the backend excludes SUB_RECIPE components from
+  // the insumo closure it delivers. ingredient_type is what distinguishes the
+  // two reference kinds; only INSUMO components must resolve to an insumo.
   foreignKeys: [
     ForeignKey(
       childColumns: ['tenant_id', 'version_id'],
       parentColumns: ['tenant_id', 'id'],
       entity: AuthorityRecipeVersionEntity,
       onDelete: ForeignKeyAction.cascade,
-    ),
-    ForeignKey(
-      childColumns: ['tenant_id', 'insumo_id'],
-      parentColumns: ['tenant_id', 'id'],
-      entity: AuthorityInsumoEntity,
-      onDelete: ForeignKeyAction.restrict,
     ),
   ],
   indices: [
