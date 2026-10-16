@@ -71,6 +71,40 @@ test("the dish-margins surface prices a dish against the live rig", async () => 
   ).toBeVisible();
 });
 
+test("the unpriced dishes explain themselves in operator copy (R16 via the UI)", async () => {
+  await sharedPage.goto(`${BASE}/dish-margins`);
+
+  // The rig data DOES have dishes the backend could not price (the E2E
+  // products without an active recipe), so the attention block must be there.
+  const attention = sharedPage.getByRole("alert");
+  await expect(attention).toBeVisible();
+
+  // AP-10 / §30.3: no raw identifier reaches the operator copy. This is the
+  // exact regression the owner reported: 'E2E Producto ...: Product
+  // 21beade5-dfc6-... does not have an active published recipe'.
+  await expect(attention).not.toContainText(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  );
+  await expect(attention).not.toContainText(/does not have|not found/i);
+  await expect(attention).toContainText(/receta publicada vigente/);
+
+  // §12.1/§13: the table is findable by dish OR by the ingredient that carries
+  // its cost. ZZ TEST Pan de Lote consumes V4-PERECEDERO-* (rig data), so the
+  // ingredient search must reach it even though its name says nothing about it.
+  await sharedPage.getByRole("textbox", { name: /Buscar/ }).fill("V4-PERECEDERO");
+  await expect(
+    sharedPage.getByRole("cell", { name: "ZZ TEST Pan de Lote" }),
+  ).toBeVisible();
+
+  await sharedPage.getByRole("textbox", { name: /Buscar/ }).fill("zzzz-no-existe");
+  await expect(
+    sharedPage.getByText(/No se encontraron platos/),
+  ).toBeVisible();
+  await expect(
+    sharedPage.getByRole("button", { name: /Limpiar búsqueda/ }),
+  ).toBeVisible();
+});
+
 async function openInsumoForm(name: string): Promise<void> {
   await sharedPage.goto(`${BASE}/inventory`);
   await sharedPage.getByTestId("inventory-tab-insumos").click();
@@ -272,8 +306,10 @@ test("the recipe form pairs Tipo, ingredient and its real unit (R15 via the UI)"
     .getByRole("button", { name: /^(Crear Receta|Actualizar Receta)$/ })
     .click();
 
-  await expect(sharedPage.getByText("Receta creada correctamente")).toBeVisible({
-    timeout: 20_000,
-  });
+  // The toast renders twice by design: the visible card and the aria-live
+  // status region, so the assertion needs the exact node.
+  await expect(
+    sharedPage.getByText("Receta creada correctamente", { exact: true }),
+  ).toBeVisible({ timeout: 20_000 });
   await expect(dialog).toBeHidden({ timeout: 10_000 });
 });

@@ -31,9 +31,23 @@ export interface DishMargin {
   components: DishMarginComponent[];
 }
 
+/**
+ * Machine code of a dish the backend could not price. The copy the surface
+ * shows arrives in `reason` (operator Spanish, never a raw id or wire error:
+ * Nhilos standard AP-10, §39.4, §30.3); the code is the contract.
+ */
+export type DishMarginSkipCode =
+  | "NO_ACTIVE_RECIPE"
+  | "SUB_RECIPE_NO_ACTIVE_RECIPE"
+  | "MISSING_COMPONENT"
+  | "CIRCULAR_SUB_RECIPE"
+  | "NESTING_TOO_DEEP"
+  | "UNEXPECTED";
+
 export interface DishMarginSkip {
   productId: string;
   productName: string;
+  reasonCode: DishMarginSkipCode;
   reason: string;
 }
 
