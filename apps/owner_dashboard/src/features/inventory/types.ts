@@ -57,6 +57,8 @@ export const MovementType = {
   CREDIT_NOTE_RESTOCK: "CREDIT_NOTE_RESTOCK",
   ADJUSTMENT: "ADJUSTMENT",
   REVERSAL: "REVERSAL",
+  VALUATION_WRITEDOWN: "VALUATION_WRITEDOWN",
+  INITIAL_STOCK: "INITIAL_STOCK",
 } as const;
 
 export type MovementType = (typeof MovementType)[keyof typeof MovementType];

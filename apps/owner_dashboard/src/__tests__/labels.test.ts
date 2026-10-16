@@ -152,6 +152,7 @@ describe("label families — key sets verified against source enums", () => {
         "CREDIT_NOTE_RESTOCK",
         "ADJUSTMENT",
         "REVERSAL",
+        "VALUATION_WRITEDOWN",
         "INITIAL_STOCK",
       ].sort(),
     );

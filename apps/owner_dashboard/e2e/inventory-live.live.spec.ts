@@ -320,3 +320,26 @@ test("the recipe form pairs Tipo, ingredient and its real unit (R15 via the UI)"
   ).toBeVisible({ timeout: 20_000 });
   await expect(dialog).toBeHidden({ timeout: 10_000 });
 });
+
+test("the kardex tab renders complete taxonomy and standard controls (R19 via UI)", async () => {
+  await sharedPage.goto(`${BASE}/inventory?tab=kardex&startDate=2026-10-01&endDate=2026-11-01`);
+
+  // 1) Taxonomy check: Castigo por valuación must render for Ron Flor de Caña, not an em dash
+  const florDeCanaRow = sharedPage.locator("tr", { hasText: "Ron Flor de Caña 7 Años 750ml" }).first();
+  await expect(florDeCanaRow).toBeVisible();
+  await expect(florDeCanaRow).toContainText("Castigo por valuación");
+  await expect(florDeCanaRow).toContainText("C$300.00");
+
+  // 2) Search functionality
+  const searchInput = sharedPage.getByPlaceholder("Buscar por insumo o motivo...");
+  await expect(searchInput).toBeVisible();
+  await searchInput.fill("Ron Flor de Caña");
+  await expect(sharedPage.locator("tr", { hasText: "Ron Flor de Caña" })).toHaveCount(2);
+
+  // 3) Pagination range display
+  await expect(sharedPage.getByText(/Mostrando 1–/i)).toBeVisible();
+
+  // 4) Clean search
+  await sharedPage.getByRole("button", { name: "Limpiar búsqueda" }).click();
+  await expect(sharedPage.locator("tr", { hasText: "Ron Flor de Caña" }).first()).toBeVisible();
+});

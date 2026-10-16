@@ -107,6 +107,7 @@ export const kardexMovementTypeLabels: Record<string, string> = {
   CREDIT_NOTE_RESTOCK: "Nota de crédito",
   ADJUSTMENT: "Ajuste",
   REVERSAL: "Reversión",
+  VALUATION_WRITEDOWN: "Castigo por valuación",
   INITIAL_STOCK: "Stock inicial",
 };
 

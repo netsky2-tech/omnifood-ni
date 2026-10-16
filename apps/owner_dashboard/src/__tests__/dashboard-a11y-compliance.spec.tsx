@@ -251,7 +251,7 @@ describe("§21 readable contrast", () => {
 // ---------------------------------------------------------------------------
 
 const FOCUS_RING_FILES: Array<[string, number]> = [
-  ["features/inventory/inventory-page.tsx", 4],
+  ["features/inventory/inventory-page.tsx", 6],
   ["features/sales/sales-page.tsx", 2],
   ["features/fiscal/fiscal-page.tsx", 2],
   ["features/dashboard/attention-band.tsx", 1],

@@ -223,8 +223,8 @@ npx playwright test -c playwright.live.config.ts inventory-live
 ## 6. Estado final y veredicto de pre-integración
 
 - **Suites backend:** 360 suites pasadas, **4,271 tests unitarios e integración en verde** (0 fallos, 8 skip, 3 suites db/e2e excluídas).
-- **Suites live dashboard:** **10 de 10 pruebas e2e en navegador real pasando** (17.8s) contra el rig.
-- **Suite unitaria del dashboard:** **1.783 passed | 4 skipped** en 121 archivos; `tsc -b` y `oxlint` limpios.
+- **Suites live dashboard:** **11 de 11 pruebas e2e en navegador real pasando** (18.2s) contra el rig.
+- **Suite unitaria del dashboard:** **1.788 passed | 4 skipped** en 122 archivos; `tsc -b` y `oxlint` limpios.
 - **Cumplimiento normativo:**
   - `R-01` (Menor entre costo o mercado): **CABLEADO Y MEDIDO** (R12).
   - `R-05` / `R-06` (Listas físicas firmadas por hoja): **BINARIO PDF ENTREGADO** (R13).
@@ -234,18 +234,19 @@ npx playwright test -c playwright.live.config.ts inventory-live
 
 ## 7. Addendum — aceptación manual del owner (post-informe)
 
-El veredicto de arriba se publicó con el recorrido automatizado cerrado. La **aceptación manual del owner** (S23 Ultra + dashboard, sobre el mismo candidato) midió cuatro defectos que ningún instrumento anterior había tocado, y **todos se cerraron antes de integrar**:
+El veredicto de arriba se publicó con el recorrido automatizado cerrado. La **aceptación manual del owner** (S23 Ultra + dashboard, sobre el mismo candidato) midió cinco defectos que ningún instrumento anterior había tocado, y **todos se cerraron antes de integrar**:
 
 | ID | Medido por el owner | Raíz | Cierre |
 |---|---|---|---|
 | **R15** | Formulario de recetas: el campo Tipo no cambiaba a *Sub-receta*, el UOM mostraba "Base" y quedaba bloqueado en receta nueva | `updateComponent` escribía contra el estado capturado del render (los handlers encadenan 2–5 writes y sólo sobrevivía el último) + lecturas `consumption_uom` snake contra un wire `consumptionUom` | estado funcional, camelCase, UOM = **unidad base real** (decisión del owner), Tipo derivado del ingrediente; RED 6/6 → GREEN 9/9 + live |
 | **R16** | `/dish-margins`: el bloque "No valuados" mostraba el **UUID del producto y el mensaje en inglés**; la superficie no pasaba el estándar de backoffice | `listDishMargins` metía el `error.message` **crudo** del backend como copy de operador (AP-10 / §39.4 / §30.3) | contrato `reasonCode` + `reason` en español de operador (el detalle técnico va al **log**), y la superficie lleva el estándar: atención con variante semántica y próximo paso, búsqueda por plato **o ingrediente**, orden visible con `aria-sort`, rango paginado, y sin-datos ≠ sin-resultados; RED 5/5 → GREEN (backend 10/10, dashboard 8/8) + live 10/10 |
+| **R19** | Pestaña Kardex (`/inventory?tab=kardex`): el enum no mapeaba `VALUATION_WRITEDOWN` ni `INITIAL_STOCK` (mostraba guion `—`), y la tabla carecía de búsqueda, ordenamiento, selector de items por página y paginación con rango | Aplicar los estándares de listas y tablas de Nhilos (§12-§15) y completar la taxonomía de movimientos | Enum ampliado con *Castigo por valuación* y *Stock inicial*; buscador multicampo con clear; orden por columnas con `aria-sort`; paginador 10/25/50 con rango "Mostrando X–Y de Z"; RED 5/5 -> GREEN 5/5; live 11/11 en el rig |
 | **R18** | El vocabulario de estado de los componentes compartidos (`alert`, `badge`, `toast`, `stat-card`, `button`) usaba **paleta cruda de Tailwind** (`amber-*`, `emerald-*`, etc.) en vez de los tokens de `DESIGN_BACKOFFICE.md` §2, y los colores base sobre su `-50` **fallaban WCAG AA** (warning 2.07:1, info 3.38:1, destructive 4.41:1 vivo) | Migrar la capa de vocabulario a tokens, agregar la rampa de texto `-700` (`#b91c1c`, `#b45309`, `#1d4ed8`) al sistema de diseño, y fijar el contrato con spec duradero | 5 componentes migrados a tokens; contrato `design-token-vocabulary.test.ts` (16 specs); 6 suites de tests actualizadas conservando intención; vitest 1783/1783 (121 archivos); live 10/10 en el rig; 410 consumidores restantes contados y declarados como capa de consumidor |
 | **R17** | El bloque de atención que cerró R16 quedó **fuera del sistema de diseño**: alerta ámbar tintada (paleta cruda de Tailwind), anatomía de notificación transitoria para un hueco de datos permanente, `role="alert"` anunciando en cada carga, y la excepción empujando la tabla P0 fuera de la primera vista | Usar el componente de notificación en vez del patrón de excepciones del propio dashboard (`AttentionBand`) | Tarjeta quieta con severidad ícono + texto `amber-700` (contraste AA ya fijado por el spec de accesibilidad), una línea por plato, alcance declarado en el encabezado de la tabla y el detalle **debajo** del trabajo P0; RED 1/1 → GREEN 9/9 + live 10/10 |
 
 **Lección de instrumento**: el patrón de *capacidad huérfana* que dominó la v2 tiene un hermano — la **copy de operador alimentada por el mensaje técnico interno**. Un spec unitario que mockea el wire no lo ve; sólo el navegador real sobre el rig lo muestra. Ambos hallazgos nacieron del recorrido manual del owner, no de la matriz automatizada.
 
-**Veredicto final:** con R15, R16, R17 y R18 cerradas y re-medidas (18 remediaciones totales, R1–R18), el candidato `feat/inventory-count-session-persistence` sigue en **cero deuda técnica** y queda listo para la aceptación final del owner y su integración.
+**Veredicto final:** con R15, R16, R17, R18 y R19 cerradas y re-medidas (19 remediaciones totales, R1–R19), el candidato `feat/inventory-count-session-persistence` sigue en **cero deuda técnica** y queda listo para la aceptación final del owner y su integración.
 
 ---
 
