@@ -1623,10 +1623,18 @@ class SaleViewModel extends ChangeNotifier {
   static bool _foldContains(String? source, String foldedQuery) =>
       source != null && _foldSearchTerm(source).contains(foldedQuery);
 
+  /// Products available for retail checkout on the cash register.
+  /// R21 / S18: internal kitchen preparations / sub-recipes (sellPrice <= 0)
+  /// are not retail items and must not clutter the cashier's catalog grid
+  /// (Nhilos Backoffice & POS Experience Standards §12.2, §39.4).
+  List<Product> get _sellableProducts =>
+      _products.where((p) => p.sellPrice > 0).toList(growable: false);
+
   List<Product> get filteredProducts {
-    if (_searchQuery.isEmpty) return _products;
+    final base = _sellableProducts;
+    if (_searchQuery.isEmpty) return base;
     final q = _foldSearchTerm(_searchQuery);
-    return _products
+    return base
         .where(
           (p) =>
               _foldContains(p.name, q) ||

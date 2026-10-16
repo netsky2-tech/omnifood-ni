@@ -200,6 +200,19 @@ void main() {
     );
   });
 
+
+  test('filteredProducts excludes products with sellPrice <= 0 (sub-recipes / kitchen preps) (R21 / S18)', () async {
+    when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => [
+      const Product(id: 'p1', name: 'Tacos Especiales', uom: 'UN', stock: 10, averageCost: 40, sellPrice: 180),
+      const Product(id: 'p2', name: 'Relleno de Carne Criolla', uom: 'UN', stock: 5, averageCost: 20, sellPrice: 0),
+    ]);
+
+    await viewModel.loadProducts();
+
+    expect(viewModel.filteredProducts.map((p) => p.name), contains('Tacos Especiales'));
+    expect(viewModel.filteredProducts.map((p) => p.name), isNot(contains('Relleno de Carne Criolla')));
+  });
+
   test('processSale fails when there is no authenticated user', () async {
     await expectLater(
       viewModel.processSale([PaymentMethod.cash]),
