@@ -643,7 +643,20 @@ class HardwareSettingsView extends StatelessWidget {
                       label: const Text('Aplicar logo de la empresa'),
                       onPressed: viewModel.isLoading
                           ? null
-                          : () => viewModel.adoptCompanyLogo(),
+                          : () async {
+                              await viewModel.adoptCompanyLogo();
+                              if (context.mounted && viewModel.statusMessage != null) {
+                                final isError = viewModel.statusMessage!.startsWith('Error') ||
+                                    viewModel.statusMessage!.startsWith('No se pudo');
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(viewModel.statusMessage!),
+                                    backgroundColor: isError ? Colors.red : Colors.green,
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            },
                     ),
                   ],
                 ),

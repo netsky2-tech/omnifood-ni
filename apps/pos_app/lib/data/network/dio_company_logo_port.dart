@@ -22,10 +22,9 @@ class DioCompanyLogoPort implements CompanyLogoPort {
 
   final Dio _dio;
 
-  /// Exact device-transported path (no leading slash, matching the
-  /// interceptor's route allowlist normalization).
+  /// Exact device-transported path (matching the baseUrl ending in /api).
   static const String deviceCompanyLogoPath =
-      'v1/sync/inbound/company-logo';
+      '/v1/sync/inbound/company-logo';
 
   @override
   Future<CloudCompanyLogoOriginal?> fetchOriginal() async {
