@@ -222,13 +222,29 @@ npx playwright test -c playwright.live.config.ts inventory-live
 
 ## 6. Estado final y veredicto de pre-integración
 
-- **Suites backend:** 358 suites pasadas, **4,239 tests unitarios e integración en verde** (0 fallos).
-- **Suites live dashboard:** **8 de 8 pruebas e2e en navegador real pasando** (13.6s).
+- **Suites backend:** 360 suites pasadas, **4,271 tests unitarios e integración en verde** (0 fallos, 8 skip, 3 suites db/e2e excluídas).
+- **Suites live dashboard:** **10 de 10 pruebas e2e en navegador real pasando** (16.9s) contra el rig.
+- **Suite unitaria del dashboard:** **1.766 passed | 4 skipped** en 120 archivos; `tsc -b` y `oxlint` limpios.
 - **Cumplimiento normativo:**
   - `R-01` (Menor entre costo o mercado): **CABLEADO Y MEDIDO** (R12).
   - `R-05` / `R-06` (Listas físicas firmadas por hoja): **BINARIO PDF ENTREGADO** (R13).
   - `NIC 2` (Exclusión de IVA recuperable del costo): **GUARDA Y DECLARACIÓN EN FORMA Y API** (R9).
   - `DGI 09-2007` (Disciplina de identidad y RUC no borrable): **VERIFICADO EN RIG** (V12).
 - **Deuda técnica:** **CERO**. Ningún hallazgo medido quedó diferido o declarado como deuda tolerable.
+
+## 7. Addendum — aceptación manual del owner (post-informe)
+
+El veredicto de arriba se publicó con el recorrido automatizado cerrado. La **aceptación manual del owner** (S23 Ultra + dashboard, sobre el mismo candidato) midió dos defectos que ningún instrumento anterior había tocado, y **ambos se cerraron antes de integrar**:
+
+| ID | Medido por el owner | Raíz | Cierre |
+|---|---|---|---|
+| **R15** | Formulario de recetas: el campo Tipo no cambiaba a *Sub-receta*, el UOM mostraba "Base" y quedaba bloqueado en receta nueva | `updateComponent` escribía contra el estado capturado del render (los handlers encadenan 2–5 writes y sólo sobrevivía el último) + lecturas `consumption_uom` snake contra un wire `consumptionUom` | estado funcional, camelCase, UOM = **unidad base real** (decisión del owner), Tipo derivado del ingrediente; RED 6/6 → GREEN 9/9 + live |
+| **R16** | `/dish-margins`: el bloque "No valuados" mostraba el **UUID del producto y el mensaje en inglés**; la superficie no pasaba el estándar de backoffice | `listDishMargins` metía el `error.message` **crudo** del backend como copy de operador (AP-10 / §39.4 / §30.3) | contrato `reasonCode` + `reason` en español de operador (el detalle técnico va al **log**), y la superficie lleva el estándar: atención con variante semántica y próximo paso, búsqueda por plato **o ingrediente**, orden visible con `aria-sort`, rango paginado, y sin-datos ≠ sin-resultados; RED 5/5 → GREEN (backend 10/10, dashboard 8/8) + live 10/10 |
+
+**Lección de instrumento**: el patrón de *capacidad huérfana* que dominó la v2 tiene un hermano — la **copy de operador alimentada por el mensaje técnico interno**. Un spec unitario que mockea el wire no lo ve; sólo el navegador real sobre el rig lo muestra. Ambos hallazgos nacieron del recorrido manual del owner, no de la matriz automatizada.
+
+**Veredicto final:** con R15 y R16 cerradas y re-medidas (16 remediaciones totales, R1–R16), el candidato `feat/inventory-count-session-persistence` sigue en **cero deuda técnica** y queda listo para la aceptación final del owner y su integración.
+
+---
 
 **Veredicto:** El candidato de integración `feat/inventory-count-session-persistence` (@ `6e2ceb58`) **está listo para merge a `main`** y para empaquetarse en el próximo release del POS, con la garantía empírica de que el núcleo de inventario, valuación y costos funciona de acuerdo a la ley y a los requerimientos de negocio de OmniFood NI.
