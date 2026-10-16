@@ -27,7 +27,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { AlertTriangle, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Plus, ShieldCheck } from "lucide-react";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -510,39 +512,86 @@ export function PurchasesForm({
 
               {hasIvaRate && (
                 <div
-                  className="col-span-2 space-y-2 rounded-md border border-amber-200 bg-amber-50/50 p-3 text-xs dark:border-amber-900/50 dark:bg-amber-950/20"
+                  className="col-span-2 space-y-3 rounded-lg border border-border bg-card p-3.5 shadow-2xs"
                   data-testid="purchases-form-iva-guard-box"
                 >
-                  <p className="font-medium text-amber-900 dark:text-amber-200">
-                    Insumo con IVA declarado: {insumoIvaRate}%
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      Control fiscal de IVA (NIC 2)
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground tabular-nums">
+                      Tasa declarada: {insumoIvaRate}%
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    El inventario se valúa al costo neto (sin impuestos recuperables). Si la factura de su proveedor incluye IVA, divida el precio entre <span className="font-semibold text-foreground">{(1 + insumoIvaRate / 100).toFixed(4)}</span> antes de ingresar el costo unitario.
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    R9: El costo debe cargarse NETO (sin IVA). Si la factura trae IVA incluido, divídalo entre {(1 + insumoIvaRate / 100).toFixed(4)} antes de registrar.
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                    <label
+                      className={cn(
+                        "flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer transition-all",
+                        form.costIncludesIva === false
+                          ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                          : "border-border hover:bg-muted/40 text-muted-foreground"
+                      )}
+                    >
                       <input
                         type="radio"
                         name="purchase_cost_iva_mode"
                         data-testid="purchases-form-cost-net"
                         checked={form.costIncludesIva === false}
-                        onChange={() => setForm((prev) => ({ ...prev, costIncludesIva: false }))}
-                        className="h-4 w-4 text-primary"
+                        onChange={() => {
+                          setForm((prev) => ({ ...prev, costIncludesIva: false }));
+                          setFormError(null);
+                        }}
+                        className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                       />
-                      <span>Confirmo que el costo es NETO (sin IVA)</span>
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-foreground">Costo NETO (sin IVA)</p>
+                        <p className="text-[10px] text-muted-foreground">Aceptado para valuación contable</p>
+                      </div>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-destructive">
+
+                    <label
+                      className={cn(
+                        "flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer transition-all",
+                        form.costIncludesIva === true
+                          ? "border-destructive bg-destructive/5 text-destructive ring-1 ring-destructive"
+                          : "border-border hover:bg-muted/40 text-muted-foreground"
+                      )}
+                    >
                       <input
                         type="radio"
                         name="purchase_cost_iva_mode"
                         data-testid="purchases-form-cost-gross"
                         checked={form.costIncludesIva === true}
-                        onChange={() => setForm((prev) => ({ ...prev, costIncludesIva: true }))}
-                        className="h-4 w-4 text-destructive"
+                        onChange={() => {
+                          setForm((prev) => ({ ...prev, costIncludesIva: true }));
+                          setFormError(
+                            `El inventario no admite costos con IVA (NIC 2). Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`
+                          );
+                        }}
+                        className="mt-0.5 h-4 w-4 text-destructive focus:ring-destructive"
                       />
-                      <span>El costo incluye IVA</span>
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-foreground">Costo incluye IVA</p>
+                        <p className="text-[10px] text-muted-foreground">Bloquea registro de compra</p>
+                      </div>
                     </label>
                   </div>
+
+                  {form.costIncludesIva === true && (
+                    <Alert variant="destructive" className="py-2.5 px-3 text-xs">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle className="text-xs font-semibold">Costo bruto no admitido</AlertTitle>
+                      <AlertDescription className="text-[11px] leading-relaxed">
+                        Cargar costos con IVA sobrevalúa las existencias en un {insumoIvaRate}% (NIC 2 §23-25). Por favor calcule y coloque el costo neto antes de guardar.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               )}
             </div>

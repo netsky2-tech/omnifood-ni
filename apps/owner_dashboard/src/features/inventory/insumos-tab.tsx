@@ -606,6 +606,11 @@ export function InsumosTab() {
                               Perecedero
                             </Badge>
                           )}
+                          {Number(ins.ivaRatePct ?? 0) > 0 && (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border">
+                              IVA {Number(ins.ivaRatePct)}%
+                            </Badge>
+                          )}
                           {!ins.is_active && (
                             // §26/§27: INACTIVE is a neutral lifecycle state,
                             // not an exception — secondary palette, not red.
@@ -961,25 +966,33 @@ export function InsumosTab() {
                 </Label>
               </div>
 
-              <div className="space-y-1 pt-1">
-                <Label htmlFor="iva_rate_pct" className="text-xs">
-                  Tasa de IVA del insumo (%) — opcional
+              <div className="space-y-1.5 pt-1">
+                <Label htmlFor="iva_rate_pct" className="text-xs font-medium">
+                  Tasa de IVA aplicable (%)
                 </Label>
-                <Input
-                  id="iva_rate_pct"
-                  data-testid="insumo-form-iva-rate"
-                  type="number"
-                  step="any"
-                  min="0"
-                  max="100"
-                  placeholder="Ej: 15 (dejar vacío si es exento o no aplica)"
-                  value={form.ivaRatePct}
-                  onChange={(e) =>
-                    setForm({ ...form, ivaRatePct: e.target.value })
-                  }
-                />
-                <p className="text-[10px] text-muted-foreground">
-                  R9: Si se declara una tasa, las compras exigirán costo NETO y rechazarán costo con IVA incluido (NIC 2).
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="iva_rate_pct"
+                    data-testid="insumo-form-iva-rate"
+                    type="number"
+                    step="any"
+                    min="0"
+                    max="100"
+                    placeholder="Ej: 15"
+                    className="w-32"
+                    value={form.ivaRatePct}
+                    onChange={(e) =>
+                      setForm({ ...form, ivaRatePct: e.target.value })
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {form.ivaRatePct.trim() === "" || Number(form.ivaRatePct) === 0
+                      ? "Exento de IVA / Sin tasa declarada"
+                      : `${form.ivaRatePct}% IVA declarado (exigirá costo neto en compras)`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Conforme a la norma NIC 2, declarar una tasa activará la guarda de costo neto en el registro de compras para impedir la sobrevaluación de inventario.
                 </p>
               </div>
             </div>
