@@ -118,7 +118,7 @@ describe("DishMarginsPage (R8)", () => {
 
     renderPage();
 
-    const attention = await screen.findByRole("alert");
+    const attention = await screen.findByTestId("dish-margins-attention");
     expect(within(attention).getByText("E2E Producto 1792102512976")).toBeInTheDocument();
     expect(
       within(attention).getByText(/receta publicada vigente/),
@@ -128,6 +128,43 @@ describe("DishMarginsPage (R8)", () => {
       screen.queryByText(/21beade5-dfc6-44df-b680-1065b42fc68b/),
     ).toBeNull();
     expect(screen.queryByText(/does not have an active published recipe/)).toBeNull();
+  });
+
+  // R17 (S14) — the owner rejected the first attention block on design grounds.
+  // The surface is not a notification: the app's own exception pattern is the
+  // AttentionBand (a quiet card whose severity travels as glyph + text in the
+  // AA-compliant amber-700), never a tinted Alert rectangle, and never an
+  // assertive live region announcing the same gap on every load (§46).
+  it("presents the gap as a quiet attention card, not a tinted notification", async () => {
+    mockedFetch.mockResolvedValue({
+      dishes: [dish({ productId: "prod-1", productName: "Cappuccino" })],
+      skipped: [
+        {
+          productId: "prod-bad",
+          productName: "Desayuno Típico",
+          reasonCode: "NO_ACTIVE_RECIPE",
+          reason: "No tiene una receta publicada vigente.",
+        },
+      ],
+    });
+
+    renderPage();
+
+    const attention = await screen.findByTestId("dish-margins-attention");
+    // Not an assertive alert: this is a standing data gap, not a transient
+    // notification (§46; the Dashboard's AttentionBand set the precedent).
+    expect(attention).not.toHaveRole("alert");
+    // §42.1: color communicates state, it does not paint the surface.
+    expect(attention.className).toContain("bg-card");
+    expect(attention.className).not.toContain("bg-amber-50");
+    // §21 readable contrast: the warning ink is amber-700 (5.02:1), never
+    // amber-600 (3.19:1) — the same value AttentionBand pins.
+    const severity = within(attention).getByTestId("dish-margins-attention-severity");
+    expect(severity.className).toContain("text-amber-700");
+    expect(severity.textContent).toContain("▲");
+    expect(severity.textContent).toContain("1 plato sin costo");
+    // Glyph + text: colour is never the only signal (AP-12).
+    expect(within(attention).getByText("Desayuno Típico")).toBeInTheDocument();
   });
 
   it("names the sub-recipe or ingredient the backend pointed at", async () => {
@@ -158,7 +195,7 @@ describe("DishMarginsPage (R8)", () => {
     renderPage();
 
     await screen.findByText("Cappuccino");
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByTestId("dish-margins-attention")).toBeNull();
   });
 
   it("searches by dish and by ingredient, and says so when nothing matches", async () => {
@@ -281,7 +318,7 @@ describe("DishMarginsPage (R8)", () => {
 
     // §29/§39.4: no implementation vocabulary (COMPOUND/PREPARED) in the copy,
     // and the exception block is the answer, not an empty table.
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(await screen.findByTestId("dish-margins-attention")).toBeInTheDocument();
     expect(screen.queryByText(/COMPOUND|PREPARED/)).toBeNull();
     expect(screen.getByRole("link", { name: /Ir a Recetas/ })).toHaveAttribute(
       "href",

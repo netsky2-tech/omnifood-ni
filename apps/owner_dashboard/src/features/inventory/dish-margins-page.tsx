@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, ChefHat, Search, TriangleAlert, X } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, ChefHat, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -38,35 +37,24 @@ const PAGE_SIZE = 10;
 
 type SortKey = "name" | "cost" | "price" | "margin" | "marginPct";
 
-const SORTS: {
-  key: SortKey;
-  label: string;
-  value: (dish: DishMargin) => number | string;
-}[] = [
-  { key: "name", label: "Plato", value: (d) => d.productName.toLowerCase() },
-  {
-    key: "cost",
-    label: "Costo unitario",
-    value: (d) => toFiniteNumber(d.unitTheoreticalCostNio),
-  },
-  {
-    key: "price",
-    label: "Precio",
-    // An unpriced dish sorts below every priced one: it is missing, not zero
-    // (AP-02: unknown is never presented as zero).
-    value: (d) => (d.sellingPriceNio == null ? -1 : toFiniteNumber(d.sellingPriceNio)),
-  },
-  {
-    key: "margin",
-    label: "Margen",
-    value: (d) => (d.grossMarginNio == null ? -1 : toFiniteNumber(d.grossMarginNio)),
-  },
-  {
-    key: "marginPct",
-    label: "Margen %",
-    value: (d) => (d.grossMarginPct == null ? -1 : toFiniteNumber(d.grossMarginPct)),
-  },
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Plato" },
+  { key: "cost", label: "Costo unitario" },
+  { key: "price", label: "Precio" },
+  { key: "margin", label: "Margen" },
+  { key: "marginPct", label: "Margen %" },
 ];
+
+// An unpriced price or margin sorts below every priced one: it is missing,
+// never zero (AP-02).
+const SORT_VALUE: Record<SortKey, (dish: DishMargin) => number | string> = {
+  name: (dish) => dish.productName.toLowerCase(),
+  cost: (dish) => toFiniteNumber(dish.unitTheoreticalCostNio),
+  price: (dish) => (dish.sellingPriceNio == null ? -1 : toFiniteNumber(dish.sellingPriceNio)),
+  margin: (dish) => (dish.grossMarginNio == null ? -1 : toFiniteNumber(dish.grossMarginNio)),
+  marginPct: (dish) =>
+    dish.grossMarginPct == null ? -1 : toFiniteNumber(dish.grossMarginPct),
+};
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("es-NI", {
@@ -104,11 +92,11 @@ export function DishMarginsPage() {
     const dishes = (data?.dishes ?? []).filter(
       (dish) => !term || matchesSearch(dish, term),
     );
-    const sort = SORTS.find((s) => s.key === sortKey) ?? SORTS[0];
+    const value = SORT_VALUE[sortKey];
     const direction = sortDir === "asc" ? 1 : -1;
     return [...dishes].sort((a, b) => {
-      const left = sort.value(a);
-      const right = sort.value(b);
+      const left = value(a);
+      const right = value(b);
       if (typeof left === "string" || typeof right === "string") {
         return String(left).localeCompare(String(right)) * direction;
       }
@@ -161,37 +149,6 @@ export function DishMarginsPage() {
         </p>
       </header>
 
-      {/* §7.4: the exception carries its own weight and a next step; a fully
-        priced catalog says nothing (§+1.13). */}
-      {skipped.length > 0 && (
-        <Alert variant="warning" data-testid="dish-margins-attention">
-          <TriangleAlert className="h-4 w-4" />
-          <AlertTitle>
-            {skipped.length} {skipped.length === 1 ? "plato sin costo" : "platos sin costo"}
-          </AlertTitle>
-          <AlertDescription>
-            <ul className="space-y-1">
-              {skipped.map((skip) => (
-                <li key={skip.productId}>
-                  <span className="font-medium text-foreground">
-                    {skip.productName}
-                  </span>
-                  {": "}
-                  {skip.reason}
-                </li>
-              ))}
-            </ul>
-            <Link
-              to="/recipes"
-              className="inline-flex items-center gap-1 mt-2 text-sm font-medium underline-offset-4 hover:underline"
-            >
-              <ChefHat className="h-3.5 w-3.5" />
-              Ir a Recetas
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
       {!hasDishes && skipped.length === 0 ? (
         // §29 first-use empty: what belongs here, why it matters, next action.
         <EmptyState
@@ -207,6 +164,14 @@ export function DishMarginsPage() {
         <Card>
           <CardHeader className="space-y-3">
             <CardTitle>Platos</CardTitle>
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="dish-margins-scope"
+            >
+              {data.dishes.length} {data.dishes.length === 1 ? "plato valuado" : "platos valuados"}
+              {skipped.length > 0 &&
+                ` · ${skipped.length} ${skipped.length === 1 ? "sin costo" : "sin costo"}`}
+            </p>
             <div className="relative max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Label
@@ -218,7 +183,7 @@ export function DishMarginsPage() {
               <Input
                 id="dish-margins-search"
                 data-testid="dish-margins-search"
-                placeholder="Buscar por plato o ingrediente…"
+                placeholder="Buscar plato o ingrediente…"
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value);
@@ -257,7 +222,7 @@ export function DishMarginsPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      {SORTS.map((sort) => (
+                      {SORT_COLUMNS.map((sort) => (
                         <TableHead
                           key={sort.key}
                           className={sort.key === "name" ? undefined : "text-right"}
@@ -353,6 +318,56 @@ export function DishMarginsPage() {
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+{/* §7.4 + §42.1 + §46: the gap is a standing data condition, not a
+        transient notification. It follows the Dashboard AttentionBand pattern
+        (owner decision on this surface, S14): a quiet card whose severity
+        travels as glyph + text in the AA-compliant amber-700, on the card
+        surface — never a tinted Alert rectangle, never an assertive live
+        region, and never colour as the only signal (AP-12). */}
+      {skipped.length > 0 && (
+        <Card data-testid="dish-margins-attention">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              <span
+                data-testid="dish-margins-attention-severity"
+                className="font-medium text-amber-700 dark:text-amber-300"
+              >
+                <span aria-hidden="true" className="mr-1.5">
+                  ▲
+                </span>
+                {skipped.length}{" "}
+                {skipped.length === 1 ? "plato sin costo" : "platos sin costo"}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {/* One line per dish: the block must not outgrow the table it
+                is warning about (§8: the primary job keeps the fold). */}
+            <ul className="space-y-1">
+              {skipped.map((skip) => (
+                <li
+                  key={skip.productId}
+                  data-testid={`dish-margins-skip-${skip.reasonCode}`}
+                  className="flex flex-wrap items-baseline gap-x-2 text-sm"
+                >
+                  <span className="font-medium">{skip.productName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {skip.reason}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <Link
+              to="/recipes"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              <ChefHat className="h-4 w-4" />
+              Ir a Recetas
+            </Link>
           </CardContent>
         </Card>
       )}

@@ -76,8 +76,15 @@ test("the unpriced dishes explain themselves in operator copy (R16 via the UI)",
 
   // The rig data DOES have dishes the backend could not price (the E2E
   // products without an active recipe), so the attention block must be there.
-  const attention = sharedPage.getByRole("alert");
+  // R17/S14: it is the Dashboard's quiet attention-card pattern (glyph +
+  // amber-700 text on the card surface), not a tinted notification and not an
+  // assertive live region.
+  const attention = sharedPage.getByTestId("dish-margins-attention");
   await expect(attention).toBeVisible();
+  await expect(attention.locator("div[class*='bg-amber-50']")).toHaveCount(0);
+  await expect(
+    sharedPage.getByTestId("dish-margins-attention-severity"),
+  ).toContainText("sin costo");
 
   // AP-10 / §30.3: no raw identifier reaches the operator copy. This is the
   // exact regression the owner reported: 'E2E Producto ...: Product
