@@ -32,6 +32,17 @@
   --color-info-foreground: #ffffff;
   --color-info-50: #eff6ff;
 
+  /* Status text shades (R18/S15).
+     The base status colors are borders, icons and solid fills: on their own
+     `-50` tint they fail WCAG AA for small text (warning 2.07:1, info 3.38:1,
+     destructive 4.41:1). Every status surface that carries words uses these
+     shades instead, and each one passes on its own tint: warning 4.84:1,
+     info 6.16:1, destructive 5.91:1 (and 6.47:1 on the card surface, the
+     value the AttentionBand and the a11y contract already pinned). */
+  --color-destructive-700: #b91c1c;
+  --color-warning-700: #b45309;
+  --color-info-700: #1d4ed8;
+
   /* Neutral & Surfaces */
   --color-background: #ffffff;
   --color-foreground: #0f172a;

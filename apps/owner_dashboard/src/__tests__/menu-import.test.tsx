@@ -208,8 +208,8 @@ describe("MenuImportWizard", () => {
     );
     // Row-issues block is a destructive alert (§42.1): failure ≠ near-white.
     expect(screen.getByTestId("menu-import-errors-block")).toHaveClass(
-      "bg-destructive/10",
-      "text-destructive",
+      "bg-destructive-50",
+      "text-destructive-700",
     );
     // Warnings render in their own table.
     expect(screen.getByTestId("menu-import-warnings-table-body")).toHaveTextContent(
@@ -279,9 +279,9 @@ describe("MenuImportWizard", () => {
 
     // Success receipt uses the semantic success palette, not a near-white tint.
     expect(screen.getByTestId("menu-import-receipt-alert")).toHaveClass(
-      "border-emerald-200",
-      "bg-emerald-50",
-      "text-emerald-700",
+      "border-secondary-700/25",
+      "bg-secondary-50",
+      "text-secondary-700",
     );
 
     expect(screen.getByTestId("menu-import-committed-categories")).toHaveTextContent("2");
@@ -304,8 +304,8 @@ describe("MenuImportWizard", () => {
 
     expect(screen.getByTestId("menu-import-client-error")).toBeInTheDocument();
     expect(screen.getByTestId("menu-import-client-error")).toHaveClass(
-      "bg-destructive/10",
-      "text-destructive",
+      "bg-destructive-50",
+      "text-destructive-700",
     );
     expect(previewMenuImport).not.toHaveBeenCalled();
     expect(commitMenuImport).not.toHaveBeenCalled();

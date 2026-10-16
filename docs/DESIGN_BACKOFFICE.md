@@ -61,6 +61,15 @@ Palette base de NHILOS POS. Tints y shades derivados para estados hover/active/d
 | **Info** | `#3b82f6` | Información, links |
 | **Info foreground** | `#ffffff` | Texto sobre info |
 | **Info 50** | `#eff6ff` | Background info sutil |
+| **Destructive 700** | `#b91c1c` | **Texto** sobre tintas destructivas y sobre card |
+| **Warning 700** | `#b45309` | **Texto** sobre tintas de warning y sobre card |
+| **Info 700** | `#1d4ed8` | **Texto** sobre tintas de info y sobre card |
+
+> **Regla de la rampa (R18):** los colores base de estado (`#dc2626`, `#f59e0b`,
+> `#3b82f6`) son para **bordes, íconos y rellenos sólidos con texto blanco**.
+> Nunca para texto pequeño sobre su propia tinta `-50`: miden 4.41:1, 2.07:1 y
+> 3.38:1 y fallan AA. Para escribir palabras sobre una tinta de estado se usa
+> el shade `-700` correspondiente.
 
 ### Neutral (Derivada)
 
@@ -114,6 +123,11 @@ Palette base de NHILOS POS. Tints y shades derivados para estados hover/active/d
   --color-info-foreground: #ffffff;
   --color-info-50: #eff6ff;
 
+  /* Status text shades (ver regla de la rampa arriba) */
+  --color-destructive-700: #b91c1c;
+  --color-warning-700: #b45309;
+  --color-info-700: #1d4ed8;
+
   /* Neutral */
   --color-background: #ffffff;
   --color-foreground: #1a1a1a;
@@ -139,6 +153,15 @@ Palette base de NHILOS POS. Tints y shades derivados para estados hover/active/d
 | Secondary `#00be84` on White | ~2.1:1 | ❌ (solo large text/icons) | ❌ |
 | White on Secondary `#00be84` | ~2.1:1 | ❌ (solo large text/icons) | ❌ |
 | Secondary `#00be84` on Primary `#013a57` | ~5.8:1 | ✅ | ❌ |
+| Warning `#f59e0b` on Warning 50 `#fffbeb` | 2.07:1 | ❌ (solo íconos/bordes) | ❌ |
+| **Warning 700 `#b45309` on Warning 50** | 4.84:1 | ✅ | ❌ |
+| Warning 700 `#b45309` on White/card | 5.02:1 | ✅ | ❌ |
+| Info `#3b82f6` on Info 50 `#eff6ff` | 3.38:1 | ❌ (solo íconos/bordes) | ❌ |
+| **Info 700 `#1d4ed8` on Info 50** | 6.16:1 | ✅ | ✅ |
+| Destructive `#dc2626` on Destructive 50 `#fef2f2` | 4.41:1 | ❌ | ❌ |
+| **Destructive 700 `#b91c1c` on Destructive 50** | 5.91:1 | ✅ | ✅ |
+| Secondary 700 `#005236` on Secondary 50 `#e6faf3` | 8.55:1 | ✅ | ✅ |
+| White on Secondary 700 `#005236` | 9.29:1 | ✅ | ✅ |
 | Muted fg `#737373` on White | ~4.9:1 | ✅ | ❌ |
 | Foreground `#1a1a1a` on White | ~16.1:1 | ✅ | ✅ |
 

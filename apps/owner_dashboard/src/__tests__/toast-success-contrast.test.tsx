@@ -39,14 +39,16 @@ describe("Toast success variant — contrast contract", () => {
   it("keeps the light-mode high-contrast pairing (dark green text on pale green)", () => {
     const classes = successClasses();
 
-    expect(classes).toContain("bg-emerald-50");
-    expect(classes).toContain("text-emerald-950");
+    // R18/S15: the same pairing on the token ramp — secondary-50 surface
+    // with secondary-700 ink (8.55:1, WCAG AA).
+    expect(classes).toContain("bg-secondary-50");
+    expect(classes).toContain("text-secondary-700");
   });
 
   it("keeps a visible border for definition against the page", () => {
     const classes = successClasses();
 
     expect(classes).toContain("dark:border-emerald-600");
-    expect(classes).toContain("border-emerald-600/40");
+    expect(classes).toContain("border-secondary-700/30");
   });
 });

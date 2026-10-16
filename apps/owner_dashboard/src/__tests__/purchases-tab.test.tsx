@@ -244,7 +244,7 @@ describe("PurchasesTab", () => {
     expect(notice).toHaveTextContent("puede haber más en el rango");
     // §42.1/§62: an exception the owner must see wears the semantic warning
     // palette (border + tinted background), not a near-white tint.
-    expect(notice).toHaveClass("border-amber-200", "bg-amber-50", "text-amber-800");
+    expect(notice).toHaveClass("border-warning/30", "bg-warning-50", "text-warning-700");
   });
 
   it("does not show the truncation notice when the page is not full", () => {
@@ -289,7 +289,7 @@ describe("PurchasesTab", () => {
       /No se pudo cargar el historial de compras/i,
     );
     // Destructive treatment for a failure state (§42.1), with icon + text.
-    expect(alert).toHaveClass("bg-destructive/10", "text-destructive");
+    expect(alert).toHaveClass("bg-destructive-50", "text-destructive-700");
 
     const user = userEvent.setup();
     await user.click(screen.getByTestId("purchases-retry-btn"));
