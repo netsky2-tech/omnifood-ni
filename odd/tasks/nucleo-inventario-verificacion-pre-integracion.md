@@ -136,7 +136,7 @@ H2 y H1 no son dos problemas separados: son **el mismo agujero visto desde los d
 | **V10** | **S8, S9** | **Formularios y APIs por el camino real** — Playwright live sobre **cada** formulario que participa (insumo, compra, receta, producto, producción, merma, conteo) + las APIs que consumen: que **ninguno falle** y que **persistan lo que muestran**. Es el pedido explícito del owner | — |
 | **V11** | S5 | **Aislamiento multi-tenant** — las mismas operaciones en dos tenants, sin filas cruzadas (RLS `FORCE`) | — |
 | **V12** | S5 | **Lo nuevo de esta rama en el rig**: sesión de conteo persistida + lista firmable (R19) e identidad/`ruc` (task 31) | — |
-| **V13** | S3, S6 | Documento de cierre `docs/audits/inventory-core-flow-truth-v2.md`: el flujo paso a paso, **cada celda de la matriz medida** (correcto / roto / no alcanzable) con `path:line` y valor observado, y **qué bloquea la integración** | — |
+| **V13** | S3, S6 | Documento de cierre `docs/audits/inventory-core-flow-truth-v2.md`: el flujo paso a paso, **cada celda de la matriz medida** (correcto / roto / no alcanzable) con `path:line` y valor observado, y **qué bloquea la integración** | ✅ Cerrada (L33); publicado en `docs/audits/inventory-core-flow-truth-v2.md` |
 
 ## Rutas y payloads reales (medidos, para no re-descubrirlos)
 

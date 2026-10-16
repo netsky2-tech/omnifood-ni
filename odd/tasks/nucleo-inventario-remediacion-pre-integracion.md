@@ -173,3 +173,6 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
     - **Sin insumo con tasa**: la caja no se muestra y la declaración es opcional.
   - **Medido en Playwright live contra el rig**: `inventory-live.live.spec.ts` → **8/8** en 13.7s, probando el ciclo completo (crear insumo con IVA 15% → seleccionarlo en compras → rechazo con costo bruto → éxito con costo neto).
   - **Evidencia**: typecheck del dashboard limpio; Playwright live 8/8.
+- **L33** 2026-10-15 — **V13 CERRADA: publicado el informe final de verdad del flujo en `docs/audits/inventory-core-flow-truth-v2.md`.**
+  - Contiene: contraste punto a punto contra la v1, el inventario de las 14 remediaciones cerradas (R1–R14), la matriz de 12 ejes completa y medida en el rig, la documentación de las 8 apariciones del patrón de capacidad huérfana, y las recetas reproducibles de entorno para las suites live.
+  - **Veredicto final**: **CERO DEUDA TÉCNICA**. Ningún hallazgo quedó postergado. La rama `feat/inventory-count-session-persistence` está en verde absoluto y lista para integración en `main`.
