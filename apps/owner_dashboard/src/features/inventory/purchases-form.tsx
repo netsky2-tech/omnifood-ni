@@ -149,7 +149,7 @@ export function PurchasesForm({
       if (form.costIncludesIva === null)
         return `El insumo declara IVA (${insumoIvaRate}%). Debe confirmar si el costo ingresado es neto o incluye IVA.`;
       if (form.costIncludesIva === true)
-        return `El inventario no admite costos con IVA (NIC 2). Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`;
+        return `El costo debe ser neto de IVA. Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`;
     }
     return null;
   }, [form, quantity, unitCost, bcnRate, isUsd, isPerishable, hasIvaRate, insumoIvaRate]);
@@ -242,7 +242,7 @@ export function PurchasesForm({
    *  or an explicit acknowledgement when the preview is unavailable. */
   const canSubmit = !validationError && !previewLoading && (preview !== null || previewAcked);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (mode: "close" | "createAnother" = "close") => {
     setFormError(null);
     if (validationError) {
       setFormError(validationError);
@@ -259,15 +259,18 @@ export function PurchasesForm({
         costIncludesIva: hasIvaRate ? (form.costIncludesIva ?? undefined) : undefined,
       });
       toast({
+        variant: "success",
         title: "Compra registrada",
         description: "La compra aparece en el historial con su costo proyectado.",
       });
-      // §19.3: multiple purchases are common — reset for the next one but
-      // keep the panel open.
-      setForm(defaultForm());
-      setPreview(null);
-      setPreviewError(null);
-      setPreviewAcked(false);
+      if (mode === "close") {
+        closeDialog(false);
+      } else {
+        setForm(defaultForm());
+        setPreview(null);
+        setPreviewError(null);
+        setPreviewAcked(false);
+      }
     } catch (err: unknown) {
       setFormError(
         getApiErrorMessage(err, "No se pudo registrar la compra. Intenta de nuevo."),
@@ -518,7 +521,7 @@ export function PurchasesForm({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                      Control fiscal de IVA (NIC 2)
+                      Control fiscal de IVA
                     </span>
                     <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground tabular-nums">
                       Tasa declarada: {insumoIvaRate}%
@@ -571,7 +574,7 @@ export function PurchasesForm({
                         onChange={() => {
                           setForm((prev) => ({ ...prev, costIncludesIva: true }));
                           setFormError(
-                            `El inventario no admite costos con IVA (NIC 2). Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`
+                            `El costo debe ser neto de IVA. Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`
                           );
                         }}
                         className="mt-0.5 h-4 w-4 text-destructive focus:ring-destructive"
@@ -586,9 +589,9 @@ export function PurchasesForm({
                   {form.costIncludesIva === true && (
                     <Alert variant="destructive" className="py-2.5 px-3 text-xs">
                       <AlertTriangle className="h-4 w-4" />
-                      <AlertTitle className="text-xs font-semibold">Costo bruto no admitido</AlertTitle>
+                      <AlertTitle className="text-xs font-semibold">Costo con IVA no admitido</AlertTitle>
                       <AlertDescription className="text-[11px] leading-relaxed">
-                        Cargar costos con IVA sobrevalúa las existencias en un {insumoIvaRate}% (NIC 2 §23-25). Por favor calcule y coloque el costo neto antes de guardar.
+                        Cargar el costo con IVA sobrevalúa las existencias en un {insumoIvaRate}%. El costo de inventario debe registrarse neto de impuestos recuperables. Ingrese el costo neto antes de guardar.
                       </AlertDescription>
                     </Alert>
                   )}
@@ -763,8 +766,10 @@ export function PurchasesForm({
                     </span>
                   </p>
                   <p className="text-muted-foreground">
-                    Stock: {preview.previousStock} → {preview.projectedStock} ·
-                    Tasa BCN: {preview.bcnRate} ({preview.bcnRateSource})
+                    Stock: {preview.previousStock} → {preview.projectedStock}
+                    {preview.currency === "USD"
+                      ? ` · Tasa BCN: C$${preview.bcnRate.toFixed(4)}`
+                      : ""}
                   </p>
                 </div>
               )}
@@ -803,19 +808,29 @@ export function PurchasesForm({
               onClick={() => closeDialog(false)}
               className="text-xs h-8"
             >
-              Cerrar
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="purchases-form-save-another"
+              disabled={!canSubmit || submitting}
+              onClick={() => handleSubmit("createAnother")}
+              className="text-xs h-8"
+            >
+              Guardar y registrar otra
             </Button>
             <Button
               type="submit"
               data-testid="purchases-form-submit"
               disabled={!canSubmit || submitting}
-              className="text-xs h-8 min-w-[10rem]"
+              className="text-xs h-8 min-w-[8rem]"
             >
               {submitting
                 ? "Registrando..."
                 : previewLoading
-                  ? "Calculando preview..."
-                  : "Registrar compra"}
+                  ? "Calculando..."
+                  : "Guardar"}
             </Button>
           </DialogFooter>
         </form>

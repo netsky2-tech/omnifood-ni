@@ -543,17 +543,17 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
   });
 
-  it("submits through the manual route, toasts, resets and keeps the panel open (§19.3)", async () => {
+  it("submits through the manual route, toasts and closes, or resets on save-another", async () => {
     const mutateAsync = mockCreatePurchase();
     const user = userEvent.setup();
     render(<PurchasesTab />, { wrapper: TestWrapper });
 
     await openAndFillForm(user);
     await waitFor(() => {
-      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+      expect(screen.getByTestId("purchases-form-save-another")).toBeEnabled();
     });
 
-    await user.click(screen.getByTestId("purchases-form-submit"));
+    await user.click(screen.getByTestId("purchases-form-save-another"));
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith(
@@ -570,8 +570,7 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Compra registrada" }),
     );
-    // Multiple purchases are common: form resets for the next entry but the
-    // dialog stays open.
+    // On save-another: form resets for the next entry and dialog stays open.
     expect(screen.getByTestId("purchases-form-quantity")).toHaveValue(null);
     expect(screen.getByTestId("purchases-form-supplier")).toHaveTextContent(
       "Seleccione proveedor",

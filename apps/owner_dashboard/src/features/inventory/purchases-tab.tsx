@@ -56,6 +56,8 @@ interface PurchasesTabProps {
 export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
   const [searchParams, setSearchParams] = useSafeSearchParams();
   const [formOpen, setFormOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [search, setSearch] = useState(
     () => searchParams.get("q_compras") ?? "",
   );
@@ -71,6 +73,7 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
+    setCurrentPage(1);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -88,14 +91,23 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
   const filtered = useMemo(() => {
     if (!data) return [];
     if (!search.trim()) return data;
-    const term = search.toLowerCase();
+    const term = search.toLowerCase().trim();
     return data.filter(
       (doc) =>
         doc.invoice_number?.toLowerCase().includes(term) ||
         doc.insumo?.name?.toLowerCase().includes(term) ||
-        doc.supplier?.name?.toLowerCase().includes(term),
+        doc.supplier?.name?.toLowerCase().includes(term) ||
+        doc.lot_code?.toLowerCase().includes(term) ||
+        (doc.fiscal_authorization_code && doc.fiscal_authorization_code.toLowerCase().includes(term)),
     );
   }, [data, search]);
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const safePage = Math.min(Math.max(1, currentPage), Math.max(1, totalPages));
+  const paginated = useMemo(() => {
+    const start = (safePage - 1) * itemsPerPage;
+    return filtered.slice(start, start + itemsPerPage);
+  }, [filtered, safePage, itemsPerPage]);
 
   const totals = useMemo(() => {
     const docs = filtered ?? [];
@@ -243,7 +255,7 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {filtered.map((doc) => {
+                {paginated.map((doc) => {
                   const qty = Number(doc.quantity) || 0;
                   const unitNio = Number(doc.unit_cost_nio) || 0;
                   const isCorrection = doc.document_type !== "PURCHASE";
@@ -287,6 +299,34 @@ export function PurchasesTab({ startDate, endDate }: PurchasesTabProps) {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border border-border bg-card rounded-lg shadow-2xs">
+          <span className="text-xs text-muted-foreground">
+            Página {safePage} de {totalPages} ({filtered.length} compras)
+          </span>
+          <div className="flex gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              className="h-8 text-xs"
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              className="h-8 text-xs"
+            >
+              Siguiente
+            </Button>
           </div>
         </div>
       )}

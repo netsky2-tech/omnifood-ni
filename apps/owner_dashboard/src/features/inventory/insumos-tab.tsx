@@ -992,7 +992,7 @@ export function InsumosTab() {
                   </span>
                 </div>
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
-                  Conforme a la norma NIC 2, declarar una tasa activará la guarda de costo neto en el registro de compras para impedir la sobrevaluación de inventario.
+                  Declarar una tasa activará la guarda de costo neto en el registro de compras para registrar el inventario libre de impuestos recuperables.
                 </p>
               </div>
             </div>
