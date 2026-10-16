@@ -1,8 +1,10 @@
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_inventory_outcome_planner.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_time_inventory_snapshot_builder.dart';
+import 'package:pos_app/domain/usecases/inventory/sub_recipe_bom_explosion.dart';
 import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
 
 class PreparedSaleInventoryResult {
@@ -65,12 +67,7 @@ class CheckoutInventoryPreparationService {
       final productEntity = await _database.productDao.findProductById(
         item.productId,
       );
-      final productType = productEntity?.productType ?? 'SIMPLE';
-      final kind = switch (productType) {
-        'PREPARED' => AuthorityInventoryKind.prepared,
-        'COMPOUND' => AuthorityInventoryKind.compound,
-        _ => AuthorityInventoryKind.simple,
-      };
+      final kind = _inventoryKindOf(productEntity?.productType);
 
       authorityProductsById.putIfAbsent(
         item.productId,
@@ -141,6 +138,7 @@ class CheckoutInventoryPreparationService {
         );
 
         for (final c in components) {
+          final ingredientType = parseAuthorityIngredientType(c.ingredientType);
           authorityComponentsById.putIfAbsent(
             c.id,
             () => AuthorityComponent(
@@ -149,18 +147,39 @@ class CheckoutInventoryPreparationService {
               recipeId: active.id,
               insumoId: c.insumoId,
               quantityPerSaleUnit: c.grossQuantity,
+              ingredientType: ingredientType,
+              referenceVersionId: c.referenceVersionId,
             ),
           );
 
-          final insumo = await authorityDao.findInsumoById(
-            tenantId,
-            c.insumoId,
-          );
-          if (insumo != null) {
-            authorityInsumosById.putIfAbsent(
-              insumo.id,
-              () => AuthorityInsumo(id: insumo.id, tenantId: tenantId),
+          if (ingredientType == AuthorityIngredientType.subRecipe) {
+            // R21 / S18: this component names a PRODUCT (the sub-recipe),
+            // never an insumo. Descend into the sub-recipe's own published
+            // version so the authority carries every leaf insumo the sale
+            // will actually consume — the POS mirror of the backend's
+            // BomExplosionService (R11).
+            await _hydrateSubRecipeClosure(
+              authorityDao: authorityDao,
+              tenantId: tenantId,
+              nowIso: nowIso,
+              subRecipeProductId: c.insumoId,
+              ancestors: <String>[item.productId],
+              productsById: authorityProductsById,
+              recipesById: authorityRecipesById,
+              componentsById: authorityComponentsById,
+              insumosById: authorityInsumosById,
             );
+          } else {
+            final insumo = await authorityDao.findInsumoById(
+              tenantId,
+              c.insumoId,
+            );
+            if (insumo != null) {
+              authorityInsumosById.putIfAbsent(
+                insumo.id,
+                () => AuthorityInsumo(id: insumo.id, tenantId: tenantId),
+              );
+            }
           }
         }
       }
@@ -244,4 +263,128 @@ class CheckoutInventoryPreparationService {
       items: frozenItems,
     );
   }
+
+  /// R21 / S18 — hydrates everything a SUB_RECIPE component needs for the
+  /// explosion to reach its leaf insumos: the sub-recipe's product fact, its
+  /// active published version, that version's components and their insumo
+  /// facts, recursively.
+  ///
+  /// Fail closed on every gap the backend would reject as a DATA error
+  /// (R11's `resolveActiveRecipeComponents` throws instead of silently
+  /// dropping a sub-recipe's ingredients): unknown product, no active
+  /// published version, a published version with no components, a leaf
+  /// insumo the projection never received, a cycle or nesting beyond
+  /// [SubRecipeBomExplosion.maxDepth]. The sale is blocked by the same
+  /// `CheckoutAuthorityException` the flat-structure guard raises, so the
+  /// operator sees the existing "no tiene receta publicada" directive.
+  Future<void> _hydrateSubRecipeClosure({
+    required AuthorityProjectionDao authorityDao,
+    required String tenantId,
+    required String nowIso,
+    required String subRecipeProductId,
+    required List<String> ancestors,
+    required Map<String, AuthorityProduct> productsById,
+    required Map<String, AuthorityRecipe> recipesById,
+    required Map<String, AuthorityComponent> componentsById,
+    required Map<String, AuthorityInsumo> insumosById,
+  }) async {
+    // `ancestors` holds the root product plus every product on the path down
+    // to (but not including) this one, so its length is this node's nesting
+    // level and its contents are the cycle guard (the backend's
+    // `visitedStack`, which pops on the way out so a diamond — the same
+    // sub-recipe reached from two branches — stays legal).
+    if (ancestors.length > SubRecipeBomExplosion.maxDepth ||
+        ancestors.contains(subRecipeProductId)) {
+      throw const CheckoutAuthorityException();
+    }
+
+    final subProduct = await _database.productDao.findProductById(
+      subRecipeProductId,
+    );
+    if (subProduct == null) {
+      throw const CheckoutAuthorityException();
+    }
+    productsById.putIfAbsent(
+      subRecipeProductId,
+      () => AuthorityProduct(
+        id: subRecipeProductId,
+        tenantId: tenantId,
+        inventoryKind: _inventoryKindOf(subProduct.productType),
+      ),
+    );
+
+    final versions = await authorityDao.findActivePublishedVersions(
+      tenantId,
+      subRecipeProductId,
+      nowIso,
+    );
+    if (versions.isEmpty) {
+      throw const CheckoutAuthorityException();
+    }
+    final version = versions.first;
+    recipesById.putIfAbsent(
+      version.id,
+      () => AuthorityRecipe(
+        id: version.id,
+        tenantId: tenantId,
+        productId: subRecipeProductId,
+        isPublished: version.publicationState == 'PUBLISHED',
+      ),
+    );
+
+    final subComponents = await authorityDao.findComponentsByVersion(
+      tenantId,
+      version.id,
+    );
+    if (subComponents.isEmpty) {
+      throw const CheckoutAuthorityException();
+    }
+
+    final nextAncestors = <String>[...ancestors, subRecipeProductId];
+    for (final c in subComponents) {
+      final ingredientType = parseAuthorityIngredientType(c.ingredientType);
+      componentsById.putIfAbsent(
+        c.id,
+        () => AuthorityComponent(
+          id: c.id,
+          tenantId: tenantId,
+          recipeId: version.id,
+          insumoId: c.insumoId,
+          quantityPerSaleUnit: c.grossQuantity,
+          ingredientType: ingredientType,
+          referenceVersionId: c.referenceVersionId,
+        ),
+      );
+
+      if (ingredientType == AuthorityIngredientType.subRecipe) {
+        await _hydrateSubRecipeClosure(
+          authorityDao: authorityDao,
+          tenantId: tenantId,
+          nowIso: nowIso,
+          subRecipeProductId: c.insumoId,
+          ancestors: nextAncestors,
+          productsById: productsById,
+          recipesById: recipesById,
+          componentsById: componentsById,
+          insumosById: insumosById,
+        );
+      } else {
+        final leaf = await authorityDao.findInsumoById(tenantId, c.insumoId);
+        if (leaf == null) {
+          throw const CheckoutAuthorityException();
+        }
+        insumosById.putIfAbsent(
+          leaf.id,
+          () => AuthorityInsumo(id: leaf.id, tenantId: tenantId),
+        );
+      }
+    }
+  }
+
+  static AuthorityInventoryKind _inventoryKindOf(String? productType) =>
+      switch (productType) {
+        'PREPARED' => AuthorityInventoryKind.prepared,
+        'COMPOUND' => AuthorityInventoryKind.compound,
+        _ => AuthorityInventoryKind.simple,
+      };
 }

@@ -755,4 +755,205 @@ void main() {
       );
     },
   );
+
+  // R21 / S18 — Camino B: the POS mirror of the backend's recursive BOM
+  // explosion (R11). The tacos recipe consumes a SUB_RECIPE plus two direct
+  // insumos; the sale must freeze bindings on the LEAF insumos.
+  Future<void> seedSubRecipeProjection({
+    bool seedSubRecipeVersion = true,
+  }) async {
+    final dao = database.authorityProjectionDao;
+    for (final insumo in [
+      const AuthorityInsumoEntity(
+        tenantId: 'tenant-1',
+        id: 'insumo-carne',
+        name: 'Carne Molida',
+        uom: 'g',
+      ),
+      const AuthorityInsumoEntity(
+        tenantId: 'tenant-1',
+        id: 'insumo-tortillas',
+        name: 'Tortillas',
+        uom: 'UND',
+      ),
+      const AuthorityInsumoEntity(
+        tenantId: 'tenant-1',
+        id: 'insumo-queso',
+        name: 'Queso',
+        uom: 'g',
+      ),
+    ]) {
+      await dao.insertInsumo(insumo);
+    }
+
+    await insertUnmappedProduct(id: 'prod-tacos', productType: 'COMPOUND');
+    await insertUnmappedProduct(id: 'prod-relleno', productType: 'COMPOUND');
+
+    await dao.insertRecipeVersion(
+      const AuthorityRecipeVersionEntity(
+        tenantId: 'tenant-1',
+        id: 'ver-tacos-1',
+        productId: 'prod-tacos',
+        versionNumber: 1,
+        isActive: true,
+        publicationState: 'PUBLISHED',
+        effectiveFrom: '2026-01-01T00:00:00Z',
+        yieldQuantity: 1.0,
+        technicalShrinkPct: 0.0,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      ),
+    );
+    await dao.insertComponents([
+      const AuthorityRecipeVersionComponentEntity(
+        tenantId: 'tenant-1',
+        id: 'comp-tacos-relleno',
+        versionId: 'ver-tacos-1',
+        ordinal: 0,
+        insumoId: 'prod-relleno',
+        grossQuantity: 1.0,
+        technicalShrinkPct: 0.0,
+        ingredientType: 'SUB_RECIPE',
+        componentName: 'Relleno de Carne Criolla',
+        referenceVersionId: 'ver-relleno-1',
+      ),
+      const AuthorityRecipeVersionComponentEntity(
+        tenantId: 'tenant-1',
+        id: 'comp-tacos-tortillas',
+        versionId: 'ver-tacos-1',
+        ordinal: 1,
+        insumoId: 'insumo-tortillas',
+        grossQuantity: 3.0,
+        technicalShrinkPct: 0.0,
+        ingredientType: 'INSUMO',
+        componentName: 'Tortillas',
+        componentUom: 'UND',
+      ),
+      const AuthorityRecipeVersionComponentEntity(
+        tenantId: 'tenant-1',
+        id: 'comp-tacos-queso',
+        versionId: 'ver-tacos-1',
+        ordinal: 2,
+        insumoId: 'insumo-queso',
+        grossQuantity: 40.0,
+        technicalShrinkPct: 0.0,
+        ingredientType: 'INSUMO',
+        componentName: 'Queso',
+        componentUom: 'g',
+      ),
+    ]);
+
+    if (seedSubRecipeVersion) {
+      await dao.insertRecipeVersion(
+        const AuthorityRecipeVersionEntity(
+          tenantId: 'tenant-1',
+          id: 'ver-relleno-1',
+          productId: 'prod-relleno',
+          versionNumber: 1,
+          isActive: true,
+          publicationState: 'PUBLISHED',
+          effectiveFrom: '2026-01-01T00:00:00Z',
+          yieldQuantity: 1.0,
+          technicalShrinkPct: 0.0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        ),
+      );
+      await dao.insertComponent(
+        const AuthorityRecipeVersionComponentEntity(
+          tenantId: 'tenant-1',
+          id: 'comp-relleno-carne',
+          versionId: 'ver-relleno-1',
+          ordinal: 0,
+          insumoId: 'insumo-carne',
+          grossQuantity: 0.15,
+          technicalShrinkPct: 0.0,
+          ingredientType: 'INSUMO',
+          componentName: 'Carne Molida',
+          componentUom: 'g',
+        ),
+      );
+    }
+  }
+
+  test(
+    'Camino B: a SUB_RECIPE component expands into leaf insumo bindings',
+    () async {
+      await seedSubRecipeProjection();
+
+      final result = await service.prepare(
+        invoice: buildInvoice(),
+        items: [buildDirectItem(id: 'item-tacos', productId: 'prod-tacos')],
+        offlineUserId: 'user-1',
+        tenantId: 'tenant-1',
+        terminalId: 'term-1',
+      );
+
+      final snapshot = result.items.single.inventorySnapshot!;
+      expect(result.invoice.inventoryPolicyVersion, 'SALE_TIME_V1');
+      expect(result.invoice.inventoryOutcome, 'APPLIED');
+      expect(result.invoice.inventoryOutcomeReason, isNull);
+      expect(result.items.single.inventorySnapshotVersion, 'SALE_TIME_V1');
+      expect(snapshot.disposition.name, 'recipe');
+      expect(snapshot.recipeVersionId, 'ver-tacos-1');
+
+      // Bindings are the LEAVES (sorted by insumo id), not the root
+      // components: the sub-recipe product never becomes a binding.
+      expect(snapshot.bindings, hasLength(3));
+      expect(snapshot.bindings.map((b) => b.insumoId).toList(), [
+        'insumo-carne',
+        'insumo-queso',
+        'insumo-tortillas',
+      ]);
+      expect(snapshot.bindings.map((b) => b.bindingOrdinal).toList(), [0, 1, 2]);
+      expect(snapshot.bindings.map((b) => b.quantityPerSaleUnit).toList(), [
+        0.15,
+        40.0,
+        3.0,
+      ]);
+
+      // Direct leaves keep their root component id; a nested leaf cannot
+      // (the backend validates that id against the ROOT recipe's details).
+      final bindingsByInsumo = {
+        for (final binding in snapshot.bindings) binding.insumoId: binding,
+      };
+      expect(
+        bindingsByInsumo['insumo-carne']!.recipeComponentId,
+        isNull,
+      );
+      expect(
+        bindingsByInsumo['insumo-queso']!.recipeComponentId,
+        'comp-tacos-queso',
+      );
+      expect(
+        bindingsByInsumo['insumo-tortillas']!.recipeComponentId,
+        'comp-tacos-tortillas',
+      );
+
+      // Every correlation id stays unique, which is what the backend's
+      // SALE_TIME_V1 validator enforces.
+      final correlationIds = snapshot.bindings
+          .map((binding) => binding.saleCorrelationId)
+          .toSet();
+      expect(correlationIds, hasLength(3));
+    },
+  );
+
+  test(
+    'Camino B: a sub-recipe without an active published version fails closed',
+    () async {
+      await seedSubRecipeProjection(seedSubRecipeVersion: false);
+
+      await expectLater(
+        service.prepare(
+          invoice: buildInvoice(),
+          items: [buildDirectItem(id: 'item-tacos', productId: 'prod-tacos')],
+          offlineUserId: 'user-1',
+          tenantId: 'tenant-1',
+          terminalId: 'term-1',
+        ),
+        throwsA(isA<CheckoutAuthorityException>()),
+      );
+    },
+  );
 }

@@ -24,7 +24,10 @@ void main() {
     test('enforces binding identities and preserves supplied ordinal semantics', () {
       SaleTimeInventoryBinding recipe(String? component, {int ordinal = 0, String insumo = 'a'}) => SaleTimeInventoryBinding(bindingOrdinal: ordinal, insumoId: insumo, recipeComponentId: component, quantityPerSaleUnit: 1.25, saleCorrelationId: 'c-$ordinal');
       expect(() => SaleTimeInventorySnapshot(classification: SaleInventoryClassification.simple, disposition: SaleInventoryDisposition.direct, catalogRevision: 'r', mappingVersionId: 'mapping', bindings: [recipe('component')]), throwsArgumentError);
-      expect(() => SaleTimeInventorySnapshot(classification: SaleInventoryClassification.prepared, disposition: SaleInventoryDisposition.recipe, catalogRevision: 'r', recipeVersionId: 'recipe', bindings: [recipe(null)]), throwsArgumentError);
+      // R21 / S18: a nested SUB_RECIPE leaf freezes without a
+      // recipeComponentId — the backend validates that id against the ROOT
+      // recipe's details only. An empty recorded id stays invalid.
+      expect(SaleTimeInventorySnapshot(classification: SaleInventoryClassification.prepared, disposition: SaleInventoryDisposition.recipe, catalogRevision: 'r', recipeVersionId: 'recipe', bindings: [recipe(null)]).bindings.single.recipeComponentId, isNull);
       expect(() => SaleTimeInventorySnapshot(classification: SaleInventoryClassification.compound, disposition: SaleInventoryDisposition.recipe, catalogRevision: 'r', recipeVersionId: 'recipe', bindings: [recipe('')]), throwsArgumentError);
       expect(() => SaleTimeInventorySnapshot(classification: SaleInventoryClassification.prepared, disposition: SaleInventoryDisposition.recipe, catalogRevision: 'r', recipeVersionId: 'recipe', bindings: [recipe('component', ordinal: 1)]), throwsArgumentError);
       expect(() => SaleTimeInventorySnapshot(classification: SaleInventoryClassification.prepared, disposition: SaleInventoryDisposition.recipe, catalogRevision: 'r', recipeVersionId: 'recipe', bindings: [recipe('component-a', insumo: 'b'), recipe('component-b', ordinal: 1, insumo: 'a')]), throwsArgumentError);

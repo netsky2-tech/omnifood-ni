@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
 
 import 'sale_inventory_outcome_planner.dart';
+import 'sub_recipe_bom_explosion.dart';
 import 'validated_sale_inventory_authority.dart';
 
 class SaleTimeInventorySnapshotBuildException implements Exception {
@@ -169,22 +170,26 @@ class SaleTimeInventorySnapshotBuilder {
     String movementKind,
   ) {
     final recipe = authority.recipesByProductId[line.line.productId]!;
-    final components =
-        authority.componentsById.values
-            .where((item) => item.recipeId == recipe.id)
-            .toList()
-          ..sort(
-            (a, b) => a.insumoId != b.insumoId
-                ? a.insumoId.compareTo(b.insumoId)
-                : a.id.compareTo(b.id),
-          );
+    // R21 / S18: one binding per LEAF insumo, not per root component. A
+    // SUB_RECIPE component is expanded recursively (the POS mirror of the
+    // backend's BomExplosionService, R11) and its leaves travel with
+    // `recipeComponentId: null`, because the backend validates that id
+    // against the ROOT recipe's details only.
+    final leaves = const SubRecipeBomExplosion()
+        .explode(
+          authority: authority,
+          recipeId: recipe.id,
+          rootProductId: line.line.productId,
+        )
+        .values
+        .toList(growable: false);
     return [
-      for (var i = 0; i < components.length; i++)
+      for (var i = 0; i < leaves.length; i++)
         _binding(
           i,
-          components[i].insumoId,
-          components[i].id,
-          components[i].quantityPerSaleUnit,
+          leaves[i].insumoId,
+          leaves[i].rootComponentId,
+          leaves[i].quantityPerSaleUnit,
           line.line.id,
           authority.context.provisionedTenantId,
           terminalId,

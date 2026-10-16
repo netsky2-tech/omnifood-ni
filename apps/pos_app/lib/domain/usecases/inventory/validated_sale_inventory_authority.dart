@@ -48,6 +48,20 @@ class AuthorityRecipe {
   final bool isPublished;
 }
 
+/// R21 / S18: what a recipe component references. An `insumo` component
+/// names an insumo; a `subRecipe` component names a PRODUCT whose own
+/// published recipe is expanded recursively at sale time (the POS mirror of
+/// the backend's `BomExplosionService`, R11).
+enum AuthorityIngredientType { insumo, subRecipe }
+
+/// Any recorded value that is not the literal `SUB_RECIPE` (`INSUMO`, the
+/// legacy `DIRECT`, an unknown string) is an insumo reference: that is the
+/// historical behaviour and it must not change.
+AuthorityIngredientType parseAuthorityIngredientType(String raw) =>
+    raw.trim().toUpperCase() == 'SUB_RECIPE'
+        ? AuthorityIngredientType.subRecipe
+        : AuthorityIngredientType.insumo;
+
 class AuthorityComponent {
   const AuthorityComponent({
     required this.id,
@@ -55,9 +69,17 @@ class AuthorityComponent {
     required this.recipeId,
     required this.insumoId,
     required this.quantityPerSaleUnit,
+    this.ingredientType = AuthorityIngredientType.insumo,
+    this.referenceVersionId,
   });
-  final String id, tenantId, recipeId, insumoId;
+  final String id, tenantId, recipeId;
+
+  /// Insumo id for [AuthorityIngredientType.insumo] components; product id of
+  /// the sub-recipe for [AuthorityIngredientType.subRecipe] ones.
+  final String insumoId;
   final double quantityPerSaleUnit;
+  final AuthorityIngredientType ingredientType;
+  final String? referenceVersionId;
 }
 
 class ValidatedSaleInventoryAuthority {
@@ -104,9 +126,17 @@ class ValidatedSaleInventoryAuthority {
     }
     final componentLinks = <String>{};
     for (final component in components) {
+      // R21 / S18: a SUB_RECIPE component names a PRODUCT (the sub-recipe),
+      // which never has an authority insumo row — the backend excludes it
+      // from the insumo closure. It must resolve against the product map; an
+      // insumo component keeps resolving against the insumo map.
+      final targetResolves =
+          component.ingredientType == AuthorityIngredientType.subRecipe
+          ? productMap.containsKey(component.insumoId)
+          : insumoMap.containsKey(component.insumoId);
       _require(
         recipeMap.values.any((recipe) => recipe.id == component.recipeId) &&
-            insumoMap.containsKey(component.insumoId) &&
+            targetResolves &&
             component.quantityPerSaleUnit.isFinite &&
             component.quantityPerSaleUnit > 0 &&
             componentLinks.add('${component.recipeId}\u0000${component.insumoId}'),
