@@ -196,15 +196,17 @@ test("the purchase form enforces NET cost on insumos declaring IVA (R9 via UI)",
     .getByTestId("purchases-form-invoice-number")
     .fill(`E2E-IVA-${Date.now()}`);
 
-  // Selecting "El costo incluye IVA" must block submit with the NIC 2 message
+  // Selecting "El costo incluye IVA" must disable the submit button (NIC 2 compliance)
   await sharedPage.getByTestId("purchases-form-cost-gross").check();
-  await sharedPage.getByTestId("purchases-form-submit").click();
   await expect(
-    sharedPage.getByTestId("purchases-form-error"),
-  ).toContainText(/no admite costos con IVA/i);
+    sharedPage.getByTestId("purchases-form-submit"),
+  ).toBeDisabled();
 
-  // Switching to "Confirmo que el costo es NETO" allows registering
+  // Switching to "Confirmo que el costo es NETO" enables submit and allows registering
   await sharedPage.getByTestId("purchases-form-cost-net").check();
+  await expect(
+    sharedPage.getByTestId("purchases-form-submit"),
+  ).toBeEnabled();
   await sharedPage.getByTestId("purchases-form-submit").click();
 
   // Dialog closes on success
