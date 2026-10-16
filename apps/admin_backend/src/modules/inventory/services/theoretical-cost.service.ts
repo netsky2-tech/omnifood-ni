@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
@@ -15,6 +16,53 @@ import { Insumo } from '../entities/insumo.entity';
 import type { RecipeDetail } from '../entities/recipe-detail.entity';
 
 const MAX_SUB_RECIPE_DEPTH = 5;
+
+/**
+ * Machine code of a skipped dish. The code is the contract; the `reason` is
+ * operator copy. Nhilos backoffice experience standard AP-10 forbids a raw
+ * technical error as the primary explanation, §39.4 forbids implementation
+ * vocabulary, and §30.3 keeps raw ids in a support detail instead of the
+ * surface — so the wire error message never becomes the reason an operator
+ * reads.
+ */
+export type DishMarginSkipCode =
+  | 'NO_ACTIVE_RECIPE'
+  | 'SUB_RECIPE_NO_ACTIVE_RECIPE'
+  | 'MISSING_COMPONENT'
+  | 'CIRCULAR_SUB_RECIPE'
+  | 'NESTING_TOO_DEEP'
+  | 'UNEXPECTED';
+
+/**
+ * A pricing gap with its own code and its own operator copy. Two families
+ * keep the HTTP semantics the single-dish route already had: the missing
+ * recipe/component class answers 404 (`SkipNotFound`) and the recipe-graph
+ * class answers 400 (`SkipBadRequest`). The list route reads `code`, never the
+ * message.
+ */
+class SkipNotFound extends NotFoundException {
+  constructor(
+    readonly code: DishMarginSkipCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+class SkipBadRequest extends BadRequestException {
+  constructor(
+    readonly code: DishMarginSkipCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+type DishMarginSkipError = SkipNotFound | SkipBadRequest;
+
+const isSkipError = (error: unknown): error is DishMarginSkipError =>
+  (error instanceof SkipNotFound || error instanceof SkipBadRequest) &&
+  typeof (error as DishMarginSkipError).code === 'string';
 
 export interface DishMargin {
   productId: string;
@@ -31,6 +79,9 @@ export interface DishMargin {
 export interface DishMarginSkip {
   productId: string;
   productName: string;
+  /** Machine code of the gap — the contract the UI maps over. */
+  reasonCode: DishMarginSkipCode;
+  /** Operator copy: calm Spanish, names things, never a raw id or wire error. */
   reason: string;
 }
 
@@ -53,6 +104,8 @@ export interface DishMarginsResult {
  */
 @Injectable()
 export class TheoreticalCostService {
+  private readonly logger = new Logger(TheoreticalCostService.name);
+
   constructor(
     private readonly dataSource: DataSource,
     private readonly recipeService: RecipeService,
@@ -94,10 +147,27 @@ export class TheoreticalCostService {
       try {
         dishes.push(await this.getProductTheoreticalCost(tenantId, product.id));
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : String(error);
+        if (isSkipError(error)) {
+          skipped.push({
+            productId: product.id,
+            productName: product.name,
+            reasonCode: error.code,
+            reason: error.message,
+          });
+          continue;
+        }
+        // Technical detail stays in the log (§30.3); the surface gets a calm,
+        // generic sentence that never leaks an id or a wire error (AP-10).
+        this.logger.warn(
+          `Dish margin skipped for product ${product.id} (${product.name}): ${message}`,
+        );
         skipped.push({
           productId: product.id,
           productName: product.name,
-          reason: error instanceof Error ? error.message : String(error),
+          reasonCode: 'UNEXPECTED',
+          reason: 'No se pudo calcular el costo de este plato. Revise su receta.',
         });
       }
     }
@@ -110,15 +180,22 @@ export class TheoreticalCostService {
     productId: string,
     visited: Set<string>,
     depth: number,
+    componentLabel?: string,
   ): Promise<DishMargin> {
     if (visited.has(productId)) {
-      throw new BadRequestException(
-        `Circular sub-recipe reference detected at product ${productId}`,
+      throw new SkipBadRequest(
+        'CIRCULAR_SUB_RECIPE',
+        componentLabel
+          ? `La receta tiene una referencia circular: “${componentLabel}” ya forma parte de este plato.`
+          : 'La receta tiene una referencia circular entre sub-recetas.',
       );
     }
     if (depth > MAX_SUB_RECIPE_DEPTH) {
-      throw new BadRequestException(
-        `Sub-recipe nesting too deep (max ${MAX_SUB_RECIPE_DEPTH}) at product ${productId}`,
+      throw new SkipBadRequest(
+        'NESTING_TOO_DEEP',
+        componentLabel
+          ? `“${componentLabel}” supera el máximo de ${MAX_SUB_RECIPE_DEPTH} niveles de sub-recetas.`
+          : `La receta supera el máximo de ${MAX_SUB_RECIPE_DEPTH} niveles de sub-recetas.`,
       );
     }
 
@@ -141,8 +218,13 @@ export class TheoreticalCostService {
       productId,
     );
     if (!version) {
-      throw new NotFoundException(
-        `Product ${productId} does not have an active published recipe`,
+      // A dish reached as a component is named by its recipe label; the
+      // operator reads a name, never the id the error carried before (S13).
+      throw new SkipNotFound(
+        componentLabel ? 'SUB_RECIPE_NO_ACTIVE_RECIPE' : 'NO_ACTIVE_RECIPE',
+        componentLabel
+          ? `La sub-receta “${componentLabel}” no tiene una receta publicada vigente.`
+          : 'No tiene una receta publicada vigente. Cree y publique la receta para ver su costo y margen.',
       );
     }
 
@@ -197,6 +279,7 @@ export class TheoreticalCostService {
           component.insumo_id,
           visited,
           depth + 1,
+          component.ingredient_name ?? undefined,
         );
         priced.push({
           ingredientId: component.insumo_id,
@@ -223,8 +306,11 @@ export class TheoreticalCostService {
             .findOne({ where: { id: component.insumo_id, tenant_id: tenantId } }),
       );
       if (!insumo) {
-        throw new NotFoundException(
-          `Insumo ${component.insumo_id} not found for tenant ${tenantId}`,
+        throw new SkipNotFound(
+          'MISSING_COMPONENT',
+          component.ingredient_name
+            ? `El ingrediente “${component.ingredient_name}” ya no existe en el catálogo de insumos.`
+            : 'La receta referencia un ingrediente que ya no existe en el catálogo de insumos.',
         );
       }
 

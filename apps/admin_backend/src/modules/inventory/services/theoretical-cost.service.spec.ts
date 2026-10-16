@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { TheoreticalCostService } from './theoretical-cost.service';
 import { CostCalculatorService } from '../cost-calculator.service';
@@ -234,5 +234,135 @@ describe('TheoreticalCostService (R8)', () => {
     expect(result.skipped).toEqual([
       expect.objectContaining({ productId: 'prod-bad' }),
     ]);
+  });
+
+  // Nhilos backoffice experience standard: AP-10 (raw technical error as the
+  // primary explanation), §39.4 (implementation vocabulary) and §30.3 (raw ids
+  // live in a support detail, never as operator copy). The skip surface carries
+  // a machine code plus calm Spanish copy, and the raw technical message only
+  // reaches the log.
+  describe('skip reasons are operator copy, never a wire error (S13)', () => {
+    const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+    // Loosely typed on purpose: the assertion of a missing `reasonCode` must
+    // fail as a BEHAVIOURAL red, not as a compile error the fix would hide.
+    const marginsFor = async (
+      tenantId: string,
+      productId: string,
+    ): Promise<{ dishes: unknown[]; skipped: Array<Record<string, string>> }> => {
+      productFind.mockResolvedValueOnce([{ id: productId, name: 'Pan de Lote', product_type: ProductType.COMPOUND }]);
+      productFind.mockResolvedValueOnce([]);
+      return (await service.listDishMargins(tenantId)) as unknown as {
+        dishes: unknown[];
+        skipped: Array<Record<string, string>>;
+      };
+    };
+
+    it('a dish without a published recipe reports the code and Spanish copy, no UUID', async () => {
+      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote' });
+      recipeService.findActiveVersion.mockResolvedValue(null);
+
+      const { skipped } = await marginsFor('21beade5-dfc6-44df-b680-1065b42fc68b', 'prod-a');
+
+      expect(skipped[0]).toMatchObject({
+        productId: 'prod-a',
+        productName: 'Pan de Lote',
+        reasonCode: 'NO_ACTIVE_RECIPE',
+      });
+      expect(skipped[0].reason).toContain('receta publicada');
+      expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
+      expect(skipped[0].reason).not.toMatch(/does not have|not found|Product [0-9a-f]/i);
+    });
+
+    it('a sub-recipe without its own recipe names the sub-recipe, not its UUID', async () => {
+      productFindOne.mockImplementation(async ({ where }: { where: { id: string } }) =>
+        where.id === 'prod-a'
+          ? { id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 }
+          : { id: '21beade5-dfc6-44df-b680-1065b42fc68b', name: 'Salsa Madre', sellPrice: 0 },
+      );
+      recipeService.findActiveVersion.mockImplementation(
+        async (_tenant: string, productId: string) =>
+          productId === 'prod-a' ? { id: 'rv-a', yield_quantity: 1 } : null,
+      );
+      recipeService.getSnapshot.mockResolvedValue({
+        components: [
+          {
+            insumo_id: '21beade5-dfc6-44df-b680-1065b42fc68b',
+            ingredient_name: 'Salsa Madre',
+            ingredient_type: 'SUB_RECIPE',
+            gross_quantity: 1,
+            technical_shrink_pct: 0,
+          },
+        ],
+      });
+
+      const { skipped } = await marginsFor('tenant-1', 'prod-a');
+
+      expect(skipped[0]).toMatchObject({ reasonCode: 'SUB_RECIPE_NO_ACTIVE_RECIPE' });
+      expect(skipped[0].reason).toContain('Salsa Madre');
+      expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
+    });
+
+    it('a component whose insumo no longer exists names the ingredient, not its UUID', async () => {
+      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 });
+      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-a', yield_quantity: 1 });
+      recipeService.getSnapshot.mockResolvedValue({
+        components: [
+          {
+            insumo_id: '6e80db28-0000-4000-8000-000000000000',
+            ingredient_name: 'Queso Viejo',
+            ingredient_type: 'INSUMO',
+            gross_quantity: 1,
+            technical_shrink_pct: 0,
+          },
+        ],
+      });
+      insumoFindOne.mockResolvedValue(null);
+
+      const { skipped } = await marginsFor('tenant-1', 'prod-a');
+
+      expect(skipped[0]).toMatchObject({ reasonCode: 'MISSING_COMPONENT' });
+      expect(skipped[0].reason).toContain('Queso Viejo');
+      expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
+      expect(skipped[0].reason).not.toMatch(/tenant/i);
+    });
+
+    it('an unexpected failure keeps the raw message in the log, not in the copy', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 });
+      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-a', yield_quantity: 1 });
+      recipeService.getSnapshot.mockRejectedValue(new Error('connection reset by peer'));
+
+      const { skipped } = await marginsFor('tenant-1', 'prod-a');
+
+      expect(skipped[0]).toMatchObject({ reasonCode: 'UNEXPECTED' });
+      expect(skipped[0].reason).not.toMatch(/connection reset/i);
+      expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('connection reset by peer'),
+      );
+      warn.mockRestore();
+    });
+
+    it('a circular sub-recipe reference gets its own code', async () => {
+      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 });
+      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-a', yield_quantity: 1 });
+      recipeService.getSnapshot.mockResolvedValue({
+        components: [
+          {
+            insumo_id: 'prod-a',
+            ingredient_name: 'Masa madre',
+            ingredient_type: 'SUB_RECIPE',
+            gross_quantity: 1,
+            technical_shrink_pct: 0,
+          },
+        ],
+      });
+
+      const { skipped } = await marginsFor('tenant-1', 'prod-a');
+
+      expect(skipped[0]).toMatchObject({ reasonCode: 'CIRCULAR_SUB_RECIPE' });
+      expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
+    });
   });
 });
