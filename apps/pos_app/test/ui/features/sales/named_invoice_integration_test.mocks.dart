@@ -2841,6 +2841,17 @@ class MockPrinterConfigService extends _i1.Mock
       ) as _i56.Future<void>);
 
   @override
+  _i56.Future<void> adoptCompanyLogoRaster(String? base64Raster) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #adoptCompanyLogoRaster,
+          [base64Raster],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
   void dispose() => super.noSuchMethod(
         Invocation.method(
           #dispose,
