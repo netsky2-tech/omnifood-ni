@@ -901,8 +901,13 @@ export class InboundSyncService {
       componentsByVersionId.set(component.recipe_version_id, matching);
     }
 
+    // R21 / S18: components with ingredient_type === 'SUB_RECIPE' reference
+    // a PRODUCT id (the sub-recipe), not an insumo id. Only components of type
+    // 'INSUMO' (or untyped legacy rows) are checked against the insumos table.
+    const isSubRecipeComponent = (c: RecipeDetail) => c.ingredient_type === 'SUB_RECIPE';
+    const insumoComponents = components.filter((c) => !isSubRecipeComponent(c));
     const componentInsumoIds = [
-      ...new Set(components.map((component) => component.insumo_id)),
+      ...new Set(insumoComponents.map((component) => component.insumo_id)),
     ];
     // Issue #519 U1: these fetched rows are not only the eligibility gate —
     // they are the authority facts the POS hydration needs for every
@@ -946,7 +951,11 @@ export class InboundSyncService {
         (left, right) => left.id.localeCompare(right.id),
       );
       const versionInsumoIds = [
-        ...new Set(versionComponents.map((detail) => detail.insumo_id)),
+        ...new Set(
+          versionComponents
+            .filter((detail) => detail.ingredient_type !== 'SUB_RECIPE')
+            .map((detail) => detail.insumo_id),
+        ),
       ].sort((left, right) => left.localeCompare(right));
       return {
         id: rv.id,

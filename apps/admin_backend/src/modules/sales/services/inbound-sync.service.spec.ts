@@ -1758,7 +1758,93 @@ describe('InboundSyncService', () => {
     });
   });
 
-  describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
+    it('delivers recipe versions with SUB_RECIPE components without throwing insumo eligibility error (R21 / S18)', async () => {
+    // A recipe whose component is a SUB_RECIPE names a product id in insumo_id,
+    // not an insumo row. The inbound sync must not look it up in the insumos table.
+    const productRepo = { find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() };
+    const catalogRepo = { find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() };
+    const userRepo = { find: jest.fn().mockResolvedValue([]) };
+    const insumoRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          { id: 'ins-leaf', tenant_id: 'tenant-1', name: 'Queso', consumptionUom: 'g' },
+        ]),
+      }),
+    };
+    const rvQb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: 'rv-parent',
+          tenant_id: 'tenant-1',
+          product_id: 'prod-dish',
+          version_number: 1,
+          is_active: true,
+          publication_state: 'PUBLISHED',
+          fecha_inicio_vigencia: new Date('2026-10-01'),
+          yield_quantity: 1,
+          technical_shrink_pct: 0,
+        },
+      ]),
+    };
+    const detailQb = {
+      where: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: 'det-1',
+          tenant_id: 'tenant-1',
+          recipe_version_id: 'rv-parent',
+          insumo_id: 'prod-subrecipe-1',
+          ingredient_type: 'SUB_RECIPE',
+          gross_quantity: 1,
+          quantity: 1,
+          technical_shrink_pct: 0,
+        },
+        {
+          id: 'det-2',
+          tenant_id: 'tenant-1',
+          recipe_version_id: 'rv-parent',
+          insumo_id: 'ins-leaf',
+          ingredient_type: 'INSUMO',
+          gross_quantity: 50,
+          quantity: 50,
+          technical_shrink_pct: 0,
+        },
+      ]),
+    };
+
+    const recipeQb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) };
+    const mockManager: any = {
+      getRepository: (entity: any) => {
+        if (entity.name === 'Recipe') return { createQueryBuilder: () => recipeQb };
+        if (entity.name === 'RecipeVersion') return { createQueryBuilder: () => rvQb };
+        if (entity.name === 'RecipeDetail') return { createQueryBuilder: () => detailQb };
+        if (entity.name === 'Insumo') return insumoRepo;
+        if (entity.name === 'Product') return productRepo;
+        if (entity.name === 'CatalogValue') return catalogRepo;
+        if (entity.name === 'User') return userRepo;
+        return { find: jest.fn().mockResolvedValue([]) };
+      },
+    };
+
+    const result = await service.getInboundDeltas(
+      'tenant-1',
+      { types: 'recipes,recipeVersions' },
+      undefined,
+      mockManager,
+    );
+
+    expect(result.deltas.recipeVersions).toHaveLength(1);
+    expect(result.deltas.recipeVersions[0].components).toHaveLength(2);
+    expect(result.deltas.recipeVersions[0].insumos).toEqual([
+      { id: 'ins-leaf', tenantId: 'tenant-1', name: 'Queso', uom: 'g' },
+    ]);
+  });
+
+describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
     it('includes the three new keys by default and reads them through the bound manager', async () => {
       loyaltyProgramQb.getMany.mockResolvedValue([]);
       loyaltyRewardQb.getMany.mockResolvedValue([]);
