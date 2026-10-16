@@ -1040,6 +1040,41 @@ describe('InventoryReportsService', () => {
   });
 
   describe('getKardexReport', () => {
+    it('treats YYYY-MM-DD to date as end-of-day inclusive (R20 / S17)', async () => {
+      const qb: any = {
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        orderBy: jest.fn().mockReturnThis(),
+        take: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+      };
+      (service as any).dataSource = {
+        transaction: jest.fn(async (cb) =>
+          cb({
+            query: jest.fn().mockResolvedValue(undefined),
+            getRepository: (entity: any) => {
+              if (entity.name === 'InventoryMovement') return { createQueryBuilder: () => qb };
+              return { find: jest.fn().mockResolvedValue([]) };
+            },
+          }),
+        ),
+      };
+
+      await service.getKardexReport('tenant-1', {
+        from: '2026-10-16',
+        to: '2026-10-16',
+      });
+
+      // The 'to' clause must pass an end-of-day timestamp (23:59:59.999), not 00:00:00.000
+      const toCall = qb.andWhere.mock.calls.find(([sql]: [string]) => sql.includes('mov.timestamp <= :to'));
+      expect(toCall).toBeDefined();
+      const boundTo: Date = toCall[1].to;
+      expect(boundTo.getUTCHours()).toBe(23);
+      expect(boundTo.getUTCMinutes()).toBe(59);
+      expect(boundTo.getUTCSeconds()).toBe(59);
+    });
+
     it('queries and maps movements with multi-filters and pagination', async () => {
       const mockInsumos: Partial<Insumo>[] = [
         {

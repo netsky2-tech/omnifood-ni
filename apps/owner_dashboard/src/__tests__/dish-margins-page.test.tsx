@@ -268,8 +268,8 @@ describe("DishMarginsPage (R8)", () => {
       Array.from(
         screen
           .getByRole("table")
-          .querySelectorAll("tbody tr td:first-child"),
-      ).map((td) => td.textContent);
+          .querySelectorAll("tbody tr td:first-child span.font-medium"),
+      ).map((span) => span.textContent);
 
     expect(rows()).toEqual(["Barato", "Caro"]);
 
@@ -325,4 +325,35 @@ describe("DishMarginsPage (R8)", () => {
       expect.stringContaining("/recipes"),
     );
   });
+
+  it("renders distinct badges for Platos vs Sub-recetas and supports type filtering (R20 / S17)", async () => {
+    const user = userEvent.setup();
+    mockedFetch.mockResolvedValue({
+      dishes: [
+        dish({ productId: "p1", productName: "Tacos al Pastor", sellingPriceNio: 150 }),
+        dish({ productId: "p2", productName: "Salsa Verde Base", sellingPriceNio: null }),
+      ],
+      skipped: [],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Tacos al Pastor")).toBeInTheDocument();
+    expect(screen.getByText("Salsa Verde Base")).toBeInTheDocument();
+
+    // Check badges
+    expect(screen.getAllByText("Plato").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Sub-receta")).toBeInTheDocument();
+
+    // Filter Solo Platos
+    await user.click(screen.getByRole("button", { name: "Solo Platos" }));
+    expect(screen.getByText("Tacos al Pastor")).toBeInTheDocument();
+    expect(screen.queryByText("Salsa Verde Base")).toBeNull();
+
+    // Filter Solo Sub-recetas
+    await user.click(screen.getByRole("button", { name: "Solo Sub-recetas" }));
+    expect(screen.getByText("Salsa Verde Base")).toBeInTheDocument();
+    expect(screen.queryByText("Tacos al Pastor")).toBeNull();
+  });
+
 });

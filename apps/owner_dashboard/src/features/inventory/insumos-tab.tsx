@@ -906,18 +906,24 @@ export function InsumosTab() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="average_cost" className="text-xs">
-                    Costo Promedio (C$)
+                    Costo por unidad de consumo ({form.consumptionUom.trim() ? `C$ por ${form.consumptionUom.trim()}` : "C$"})
                   </Label>
                   <Input
                     id="average_cost"
                     data-testid="insumo-form-cost"
                     type="number"
-                    step="0.01"
+                    step="any"
                     min="0"
                     placeholder="0.00"
                     value={form.averageCost}
                     onChange={(e) => setForm({ ...form, averageCost: e.target.value })}
                   />
+                  {form.purchaseUom.trim() && form.consumptionUom.trim() && Number(form.conversionFactor) > 1 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Costo por {form.consumptionUom.trim()}: si compra 1 {form.purchaseUom.trim()} a C$100, ingrese{" "}
+                      {(100 / Number(form.conversionFactor)).toFixed(4)} (C$100 ÷ {form.conversionFactor}).
+                    </p>
+                  )}
                 </div>
               </div>
 

@@ -477,7 +477,16 @@ export class InventoryReportsService {
           qb.andWhere('mov.timestamp >= :from', { from: new Date(query.from) });
         }
         if (query.to) {
-          qb.andWhere('mov.timestamp <= :to', { to: new Date(query.to) });
+          const rawTo = query.to.trim();
+          let toDate: Date;
+          if (rawTo.length === 10) {
+            // YYYY-MM-DD: make end-of-day inclusive (23:59:59.999 UTC) so movements
+            // occurring on that day are not silently excluded (R20 / S17).
+            toDate = new Date(`${rawTo}T23:59:59.999Z`);
+          } else {
+            toDate = new Date(rawTo);
+          }
+          qb.andWhere('mov.timestamp <= :to', { to: toDate });
         }
         if (query.insumoId) {
           qb.andWhere('mov.insumoId = :insumoId', {

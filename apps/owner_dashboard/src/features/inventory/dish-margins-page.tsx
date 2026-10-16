@@ -33,9 +33,9 @@ import type { DishMargin } from "./dish-margins";
  * and range are visible (§15), no-data and no-results are different states
  * (§13.2, §29), and a priced catalog stays quiet (§+1.13).
  */
-const PAGE_SIZE = 10;
 
 type SortKey = "name" | "cost" | "price" | "margin" | "marginPct";
+type DishTypeFilter = "ALL" | "DISH" | "SUB_RECIPE";
 
 const SORT_COLUMNS: { key: SortKey; label: string }[] = [
   { key: "name", label: "Plato" },
@@ -82,16 +82,28 @@ export function DishMarginsPage() {
   const [search, setSearch] = useState("");
   // The default sort answers the page's operational job: what does this dish
   // cost, cheapest first (§15).
+  const [typeFilter, setTypeFilter] = useState<DishTypeFilter>("ALL");
+  const [pageSize, setPageSize] = useState<number>(10);
   const [sortKey, setSortKey] = useState<SortKey>("cost");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
 
   const term = search.trim().toLowerCase();
 
+  const isSubRecipe = (dish: DishMargin) => dish.sellingPriceNio == null;
+
   const visibleDishes = useMemo(() => {
-    const dishes = (data?.dishes ?? []).filter(
-      (dish) => !term || matchesSearch(dish, term),
-    );
+    let dishes = data?.dishes ?? [];
+
+    if (typeFilter === "DISH") {
+      dishes = dishes.filter((d) => !isSubRecipe(d));
+    } else if (typeFilter === "SUB_RECIPE") {
+      dishes = dishes.filter((d) => isSubRecipe(d));
+    }
+
+    if (term) {
+      dishes = dishes.filter((d) => matchesSearch(d, term));
+    }
     const value = SORT_VALUE[sortKey];
     const direction = sortDir === "asc" ? 1 : -1;
     return [...dishes].sort((a, b) => {
@@ -106,12 +118,12 @@ export function DishMarginsPage() {
       }
       return (left - right) * direction;
     });
-  }, [data, term, sortKey, sortDir]);
+  }, [data, term, typeFilter, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(visibleDishes.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(visibleDishes.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * PAGE_SIZE;
-  const paged = visibleDishes.slice(start, start + PAGE_SIZE);
+  const start = (safePage - 1) * pageSize;
+  const paged = visibleDishes.slice(start, start + pageSize);
 
   const toggleSort = (key: SortKey) => {
     if (key === sortKey) {
@@ -163,7 +175,7 @@ export function DishMarginsPage() {
       ) : (
         <Card>
           <CardHeader className="space-y-3">
-            <CardTitle>Platos</CardTitle>
+            <CardTitle>Platos y Preparaciones</CardTitle>
             <p
               className="text-xs text-muted-foreground"
               data-testid="dish-margins-scope"
@@ -172,7 +184,46 @@ export function DishMarginsPage() {
               {skipped.length > 0 &&
                 ` · ${skipped.length} ${skipped.length === 1 ? "sin costo" : "sin costo"}`}
             </p>
-            <div className="relative max-w-md">
+
+            {/* Quick type filter chips */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setTypeFilter("ALL"); setPage(1); }}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 ${
+                  typeFilter === "ALL"
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Todos
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTypeFilter("DISH"); setPage(1); }}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 ${
+                  typeFilter === "DISH"
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Solo Platos
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTypeFilter("SUB_RECIPE"); setPage(1); }}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 ${
+                  typeFilter === "SUB_RECIPE"
+                    ? "bg-primary text-primary-foreground shadow-xs"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                }`}
+              >
+                Solo Sub-recetas
+              </button>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between pt-1">
+              <div className="relative max-w-md w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Label
                 htmlFor="dish-margins-search"
@@ -205,6 +256,28 @@ export function DishMarginsPage() {
                   <X className="h-4 w-4" />
                 </button>
               )}
+              </div>
+
+              {/* Page size selector */}
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <Label htmlFor="dish-margins-page-size" className="text-xs text-muted-foreground whitespace-nowrap">
+                  Filas por página
+                </Label>
+                <select
+                  id="dish-margins-page-size"
+                  aria-label="Filas por página"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -255,9 +328,23 @@ export function DishMarginsPage() {
                       const negative =
                         dish.grossMarginNio != null &&
                         toFiniteNumber(dish.grossMarginNio) < 0;
+                      const sub = isSubRecipe(dish);
                       return (
                         <TableRow key={dish.productId}>
-                          <TableCell>{dish.productName}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-foreground">{dish.productName}</span>
+                              <span
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                  sub
+                                    ? "bg-muted text-muted-foreground border border-border"
+                                    : "bg-primary/10 text-primary border border-primary/20"
+                                }`}
+                              >
+                                {sub ? "Sub-receta" : "Plato"}
+                              </span>
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right tabular-nums">
                             {formatCurrency(
                               toFiniteNumber(dish.unitTheoreticalCostNio),
