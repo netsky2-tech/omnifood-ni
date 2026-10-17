@@ -31,6 +31,11 @@ class AuthorityHydrationPayload {
       final id = map['id'] as String?;
       final name = map['name'] as String?;
       final uom = map['uom'] as String?;
+      final negativeStockPolicy = (map['negativeStockPolicy'] as String?)?.trim();
+      final effectivePolicy =
+          (negativeStockPolicy != null && negativeStockPolicy.isNotEmpty)
+              ? negativeStockPolicy
+              : 'RESTRICT';
 
       if (tenantId == null ||
           tenantId != expectedTenantId ||
@@ -46,6 +51,7 @@ class AuthorityHydrationPayload {
         id: id,
         name: name,
         uom: uom,
+        negativeStockPolicy: effectivePolicy,
       ));
     }
 

@@ -1373,6 +1373,53 @@ export class InvoicesService {
             );
           }
 
+          if (v1Outcome && v1Outcome.outcome === 'APPLIED') {
+            // R22: Pre-check bindings against negative stock policy under RESTRICT.
+            // If any insumo would go negative and policy is not ALLOW_TEMPORARY,
+            // degrade the inventory outcome to APPLIED_INVENTORY_PENDING so the DGI fiscal
+            // invoice is persisted and the stream sequence advances, rather than
+            // wedging the terminal's sync queue with a permanent 400.
+            let negativeStockBlockedInsumoId: string | null = null;
+            for (const b of v1Outcome.bindingsToApply) {
+              const insumo = await manager
+                .createQueryBuilder(Insumo, 'insumo')
+                .setLock('pessimistic_write')
+                .where('insumo.id = :insumoId', { insumoId: b.binding.insumoId })
+                .andWhere('insumo.tenant_id = :tenantId', { tenantId })
+                .getOne();
+              if (insumo) {
+                const normQty =
+                  record.documentType === 'SALE_CANCEL'
+                    ? Math.abs(b.explodedQuantity)
+                    : -Math.abs(b.explodedQuantity);
+                const nextStock = Number(
+                  (Number(insumo.stock) + normQty).toFixed(4),
+                );
+                if (
+                  nextStock < 0 &&
+                  insumo.negativeStockPolicy !==
+                    NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY
+                ) {
+                  negativeStockBlockedInsumoId = b.binding.insumoId;
+                  break;
+                }
+              }
+            }
+
+            if (negativeStockBlockedInsumoId) {
+              v1Outcome = {
+                policyVersion: v1Outcome.policyVersion,
+                outcome: 'APPLIED_INVENTORY_PENDING',
+                reason: {
+                  code: 'NEGATIVE_STOCK_BLOCKED_BY_POLICY',
+                  lines: [negativeStockBlockedInsumoId],
+                },
+                acknowledgedMovementCorrelationIds: [],
+                bindingsToApply: [],
+              };
+            }
+          }
+
           const invoiceToSync: SyncInvoiceDto = {
             ...record.invoice,
             ...(v1Outcome

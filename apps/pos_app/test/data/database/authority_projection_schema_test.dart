@@ -274,4 +274,103 @@ void main() {
       await db.close();
     },
   );
+
+  test(
+    'migration74_75 adds negative_stock_policy to authority_insumos and insumos with RESTRICT default',
+    () async {
+      final db = await openDatabase(
+        inMemoryDatabasePath,
+        version: 74,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE authority_insumos (
+              tenant_id TEXT NOT NULL,
+              id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              uom TEXT NOT NULL,
+              PRIMARY KEY (tenant_id, id)
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE insumos (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              consumption_uom TEXT NOT NULL,
+              warehouse_id TEXT,
+              is_perishable INTEGER NOT NULL,
+              stock REAL NOT NULL,
+              average_cost REAL NOT NULL,
+              par_level REAL,
+              stock_min REAL,
+              stock_max REAL,
+              is_active INTEGER NOT NULL
+            )
+          ''');
+          await db.insert('authority_insumos', {
+            'tenant_id': 'tenant-1',
+            'id': 'insumo-pre',
+            'name': 'Pre Insumo',
+            'uom': 'KG',
+          });
+          await db.insert('insumos', {
+            'id': 'insumo-pre',
+            'name': 'Pre Insumo',
+            'consumption_uom': 'KG',
+            'is_perishable': 0,
+            'stock': 10.0,
+            'average_cost': 50.0,
+            'is_active': 1,
+          });
+        },
+      );
+
+      // Run migration 74 -> 75
+      await migration74_75.migrate(db);
+
+      // Verify authority_insumos has negative_stock_policy with default 'RESTRICT'
+      final authorityColumns = await db.rawQuery('PRAGMA table_info(authority_insumos)');
+      final hasAuthorityPolicy = authorityColumns.any(
+        (col) => col['name'] == 'negative_stock_policy',
+      );
+      expect(hasAuthorityPolicy, isTrue);
+
+      final preAuthorityRow = (await db.query(
+        'authority_insumos',
+        where: 'tenant_id = ? AND id = ?',
+        whereArgs: ['tenant-1', 'insumo-pre'],
+      )).first;
+      expect(preAuthorityRow['negative_stock_policy'], 'RESTRICT');
+
+      // Verify insumos has negative_stock_policy with default 'RESTRICT'
+      final insumoColumns = await db.rawQuery('PRAGMA table_info(insumos)');
+      final hasInsumoPolicy = insumoColumns.any(
+        (col) => col['name'] == 'negative_stock_policy',
+      );
+      expect(hasInsumoPolicy, isTrue);
+
+      final preInsumoRow = (await db.query(
+        'insumos',
+        where: 'id = ?',
+        whereArgs: ['insumo-pre'],
+      )).first;
+      expect(preInsumoRow['negative_stock_policy'], 'RESTRICT');
+
+      // Insert new rows with explicit 'ALLOW_TEMPORARY'
+      await db.insert('authority_insumos', {
+        'tenant_id': 'tenant-1',
+        'id': 'insumo-allow',
+        'name': 'Allow Insumo',
+        'uom': 'KG',
+        'negative_stock_policy': 'ALLOW_TEMPORARY',
+      });
+      final allowAuthRow = (await db.query(
+        'authority_insumos',
+        where: 'tenant_id = ? AND id = ?',
+        whereArgs: ['tenant-1', 'insumo-allow'],
+      )).first;
+      expect(allowAuthRow['negative_stock_policy'], 'ALLOW_TEMPORARY');
+
+      await db.close();
+    },
+  );
 }

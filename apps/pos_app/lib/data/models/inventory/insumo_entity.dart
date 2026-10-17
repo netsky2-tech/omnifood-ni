@@ -22,6 +22,8 @@ class InsumoEntity {
   final double? stockMax;
   @ColumnInfo(name: 'is_active')
   final bool isActive;
+  @ColumnInfo(name: 'negative_stock_policy')
+  final String negativeStockPolicy;
 
   InsumoEntity({
     required this.id,
@@ -35,5 +37,6 @@ class InsumoEntity {
     this.stockMin,
     this.stockMax,
     this.isActive = true,
+    this.negativeStockPolicy = 'RESTRICT',
   });
 }

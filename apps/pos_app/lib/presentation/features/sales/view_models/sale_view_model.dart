@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 import 'package:pos_app/data/services/fiscal_inbox_handler.dart'
     show FiscalProjectionKeys;
 import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
+import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../domain/models/config/tax_regime.dart';
@@ -2589,6 +2590,38 @@ class SaleViewModel extends ChangeNotifier {
         // #67/T2a: same directive-message contract — the operator acts on
         // the configuration state, verbatim.
         _errorMessage = e.message;
+      } else if (e is CheckoutAuthorityException) {
+        switch (e.reason) {
+          case CheckoutAuthorityFailureReason.negativeStockBlocked:
+            final prodPart = e.productName != null ? 'el producto «${e.productName}»' : 'este producto';
+            final insumoPart = e.insumoName != null ? 'el insumo «${e.insumoName}»' : 'un insumo';
+            final reqStr = e.requiredQuantity != null ? e.requiredQuantity!.toStringAsFixed(2) : '?';
+            final availStr = e.availableQuantity != null ? e.availableQuantity!.toStringAsFixed(2) : '?';
+            _errorMessage =
+                'No se puede vender $prodPart: $insumoPart no tiene stock suficiente (requerido: $reqStr, disponible: $availStr) y la política no permite existencias negativas. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.missingRecipe:
+            final prod = e.productName ?? 'un producto compuesto';
+            _errorMessage =
+                'No se puede vender «$prod»: no tiene receta publicada. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.circularRecipe:
+            final prod = e.productName ?? 'el producto';
+            _errorMessage =
+                'No se puede vender «$prod»: se detectó una dependencia circular en su receta. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.maxDepthExceeded:
+            final prod = e.productName ?? 'el producto';
+            _errorMessage =
+                'No se puede vender «$prod»: la receta supera el límite de 5 niveles de sub-recetas. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.unresolvedInsumo:
+          case CheckoutAuthorityFailureReason.invalidContext:
+          case CheckoutAuthorityFailureReason.invalidFact:
+            _errorMessage =
+                'No se pudo autorizar el inventario para la venta. Verificá la configuración del producto o avisá al encargado.';
+            break;
+        }
       } else {
         // Go-live fix (NHILOS §4.1): user-facing copy never carries raw
         // errors, UUIDs or English data-layer text. The repository's

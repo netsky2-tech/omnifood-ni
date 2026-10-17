@@ -3435,6 +3435,30 @@ final migration76_77 = Migration(76, 77, (database) async {
   await _createAuthorityImmutabilityTriggers(database);
 });
 
+/// R23: Negative stock policy persistence. Adds `negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'`
+/// to both `authority_insumos` and `insumos` tables.
+final migration77_78 = Migration(77, 78, (database) async {
+  final authorityColumns = await database.rawQuery('PRAGMA table_info(authority_insumos)');
+  final hasAuthorityPolicy = authorityColumns.any(
+    (column) => column['name'] == 'negative_stock_policy',
+  );
+  if (!hasAuthorityPolicy) {
+    await database.execute(
+      "ALTER TABLE authority_insumos ADD COLUMN negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'",
+    );
+  }
+
+  final insumoColumns = await database.rawQuery('PRAGMA table_info(insumos)');
+  final hasInsumoPolicy = insumoColumns.any(
+    (column) => column['name'] == 'negative_stock_policy',
+  );
+  if (!hasInsumoPolicy) {
+    await database.execute(
+      "ALTER TABLE insumos ADD COLUMN negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'",
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3503,6 +3527,7 @@ final allMigrations = [
   migration74_75,
   migration75_76,
   migration76_77,
+  migration77_78,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

@@ -190,6 +190,7 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(
           'tenantId': tenant,
           'name': name,
           'uom': uom,
+          'negativeStockPolicy': insumo['negativeStockPolicy'] ?? 'RESTRICT',
         },
       );
       rowInsumoIds.add(insumoId);

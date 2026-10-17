@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
@@ -328,13 +329,14 @@ void main() {
   InvoiceItem buildDirectItem({
     String id = 'item-direct',
     required String productId,
+    double quantity = 1.0,
   }) =>
       InvoiceItem(
         id: id,
         invoiceId: 'inv-1',
         productId: productId,
         productName: 'Producto Directo',
-        quantity: 1.0,
+        quantity: quantity,
         unitPrice: 150.0,
         originalTaxRate: 0.15,
         appliedTaxRate: 0.15,
@@ -954,6 +956,139 @@ void main() {
         ),
         throwsA(isA<CheckoutAuthorityException>()),
       );
+    },
+  );
+
+  test(
+    'R23: checkout fails closed when negative_stock_policy is RESTRICT and stock is insufficient',
+    () async {
+      final dao = database.authorityProjectionDao;
+      await dao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-salmon',
+          name: 'Salmón Fresco',
+          uom: 'KG',
+          negativeStockPolicy: 'RESTRICT',
+        ),
+      );
+      // Insumo in SQLite with 0 stock
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-salmon',
+          name: 'Salmón Fresco',
+          consumptionUom: 'KG',
+          stock: 0.0,
+          averageCost: 350.0,
+          negativeStockPolicy: 'RESTRICT',
+        ),
+      ]);
+      await insertDirectMappedProduct(
+        id: 'prod-salmon-platter',
+        productType: 'SIMPLE',
+        mappingVersionId: 'mv-salmon-1',
+        insumoId: 'insumo-salmon',
+      );
+
+      try {
+        await service.prepare(
+          invoice: buildInvoice(),
+          items: [buildDirectItem(productId: 'prod-salmon-platter', quantity: 1.0)],
+          offlineUserId: 'user-1',
+          tenantId: 'tenant-1',
+          terminalId: 'term-1',
+        );
+        fail('Should have thrown CheckoutAuthorityException');
+      } on CheckoutAuthorityException catch (e) {
+        expect(e.reason, CheckoutAuthorityFailureReason.negativeStockBlocked);
+        expect(e.insumoName, 'Salmón Fresco');
+        expect(e.availableQuantity, 0.0);
+        expect(e.requiredQuantity, 1.0);
+      }
+    },
+  );
+
+  test(
+    'R23: checkout succeeds when negative_stock_policy is ALLOW_TEMPORARY even with zero stock',
+    () async {
+      final dao = database.authorityProjectionDao;
+      await dao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-cafe',
+          name: 'Café Grano',
+          uom: 'KG',
+          negativeStockPolicy: 'ALLOW_TEMPORARY',
+        ),
+      );
+      // Insumo in SQLite with 0 stock but ALLOW_TEMPORARY
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-cafe',
+          name: 'Café Grano',
+          consumptionUom: 'KG',
+          stock: 0.0,
+          averageCost: 180.0,
+          negativeStockPolicy: 'ALLOW_TEMPORARY',
+        ),
+      ]);
+      await insertDirectMappedProduct(
+        id: 'prod-cafe-espresso',
+        productType: 'SIMPLE',
+        mappingVersionId: 'mv-cafe-1',
+        insumoId: 'insumo-cafe',
+      );
+
+      final result = await service.prepare(
+        invoice: buildInvoice(),
+        items: [buildDirectItem(productId: 'prod-cafe-espresso', quantity: 1.0)],
+        offlineUserId: 'user-1',
+        tenantId: 'tenant-1',
+        terminalId: 'term-1',
+      );
+      expect(result.invoice.inventoryOutcome, 'APPLIED');
+    },
+  );
+
+  test(
+    'R23: checkout succeeds when negative_stock_policy is RESTRICT and stock is sufficient',
+    () async {
+      final dao = database.authorityProjectionDao;
+      await dao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-arroz',
+          name: 'Arroz 80/20',
+          uom: 'KG',
+          negativeStockPolicy: 'RESTRICT',
+        ),
+      );
+      // Insumo in SQLite with plenty of stock
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-arroz',
+          name: 'Arroz 80/20',
+          consumptionUom: 'KG',
+          stock: 50.0,
+          averageCost: 25.0,
+          negativeStockPolicy: 'RESTRICT',
+        ),
+      ]);
+      await insertDirectMappedProduct(
+        id: 'prod-porcion-arroz',
+        productType: 'SIMPLE',
+        mappingVersionId: 'mv-arroz-1',
+        insumoId: 'insumo-arroz',
+      );
+
+      final result = await service.prepare(
+        invoice: buildInvoice(),
+        items: [buildDirectItem(productId: 'prod-porcion-arroz', quantity: 2.0)],
+        offlineUserId: 'user-1',
+        tenantId: 'tenant-1',
+        terminalId: 'term-1',
+      );
+      expect(result.invoice.inventoryOutcome, 'APPLIED');
     },
   );
 }

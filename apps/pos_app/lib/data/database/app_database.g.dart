@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 77,
+      version: 78,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -206,9 +206,9 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, `negative_stock_policy` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
+            'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `negative_stock_policy` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_recipe_versions` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `publication_state` TEXT NOT NULL, `effective_from` TEXT NOT NULL, `effective_until` TEXT, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `published_at` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
@@ -1151,7 +1151,8 @@ class _$InsumoDao extends InsumoDao {
                   'par_level': item.parLevel,
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -1168,7 +1169,8 @@ class _$InsumoDao extends InsumoDao {
                   'par_level': item.parLevel,
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1195,7 +1197,8 @@ class _$InsumoDao extends InsumoDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0));
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String));
   }
 
   @override
@@ -1212,7 +1215,8 @@ class _$InsumoDao extends InsumoDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0),
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String),
         arguments: [id]);
   }
 
@@ -1235,7 +1239,8 @@ class _$InsumoDao extends InsumoDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0),
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String),
         arguments: [...ids]);
   }
 
@@ -4415,7 +4420,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'par_level': item.parLevel,
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -4468,7 +4474,8 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0),
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String),
         arguments: [id]);
   }
 
@@ -7774,7 +7781,8 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
                   'tenant_id': item.tenantId,
                   'id': item.id,
                   'name': item.name,
-                  'uom': item.uom
+                  'uom': item.uom,
+                  'negative_stock_policy': item.negativeStockPolicy
                 }),
         _authorityRecipeVersionEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -7862,7 +7870,8 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
             tenantId: row['tenant_id'] as String,
             id: row['id'] as String,
             name: row['name'] as String,
-            uom: row['uom'] as String),
+            uom: row['uom'] as String,
+            negativeStockPolicy: row['negative_stock_policy'] as String),
         arguments: [tenantId, id]);
   }
 

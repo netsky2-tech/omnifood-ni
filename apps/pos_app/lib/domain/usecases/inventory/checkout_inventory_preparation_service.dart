@@ -227,6 +227,57 @@ class CheckoutInventoryPreparationService {
       movementKind: 'SALE',
     );
 
+    // R23: Evaluate negative_stock_policy fail-closed in checkout before committing.
+    // If an insumo's resulting stock is negative and its policy is not ALLOW_TEMPORARY
+    // (default RESTRICT), the checkout must abort with a typed exception naming the failing
+    // product, insumo and quantities, rather than selling offline and wedging cloud sync.
+    final totalRequiredByInsumo = <String, double>{};
+    final insumoContributingProducts = <String, String>{};
+    for (final line in buildResult.lines) {
+      final item = items.firstWhere(
+        (it) => it.id == line.lineId,
+        orElse: () => items.first,
+      );
+      for (final binding in line.snapshot.bindings) {
+        totalRequiredByInsumo[binding.insumoId] =
+            (totalRequiredByInsumo[binding.insumoId] ?? 0.0) +
+            (binding.quantityPerSaleUnit * item.quantity);
+        insumoContributingProducts.putIfAbsent(
+          binding.insumoId,
+          () => item.productName,
+        );
+      }
+    }
+
+    for (final entry in totalRequiredByInsumo.entries) {
+      final insumoId = entry.key;
+      final requiredQty = entry.value;
+      if (requiredQty <= 0) continue;
+
+      final insumoRow = await _database.insumoDao.findInsumoById(insumoId);
+      if (insumoRow == null) continue;
+
+      final authInsumo = await authorityDao.findInsumoById(tenantId, insumoId);
+      final policy = authInsumo?.negativeStockPolicy ??
+          insumoRow.negativeStockPolicy;
+
+      final availableStock = insumoRow.stock;
+      final resultingStock = availableStock - requiredQty;
+
+      if (policy != 'ALLOW_TEMPORARY' && resultingStock < 0) {
+        final insumoName = authInsumo?.name ?? insumoRow.name;
+        final productName =
+            insumoContributingProducts[insumoId] ?? 'Producto';
+        throw CheckoutAuthorityException(
+          reason: CheckoutAuthorityFailureReason.negativeStockBlocked,
+          productName: productName,
+          insumoName: insumoName,
+          requiredQuantity: requiredQty,
+          availableQuantity: availableStock,
+        );
+      }
+    }
+
     final snapshotsByLineId = {
       for (final l in buildResult.lines) l.lineId: l.snapshot,
     };
@@ -297,16 +348,26 @@ class CheckoutInventoryPreparationService {
     // level and its contents are the cycle guard (the backend's
     // `visitedStack`, which pops on the way out so a diamond — the same
     // sub-recipe reached from two branches — stays legal).
-    if (ancestors.length > SubRecipeBomExplosion.maxDepth ||
-        ancestors.contains(subRecipeProductId)) {
-      throw const CheckoutAuthorityException();
-    }
-
     final subProduct = await _database.productDao.findProductById(
       subRecipeProductId,
     );
+    if (ancestors.length > SubRecipeBomExplosion.maxDepth) {
+      throw CheckoutAuthorityException(
+        reason: CheckoutAuthorityFailureReason.maxDepthExceeded,
+        productName: subProduct?.name ?? subRecipeProductId,
+      );
+    }
+    if (ancestors.contains(subRecipeProductId)) {
+      throw CheckoutAuthorityException(
+        reason: CheckoutAuthorityFailureReason.circularRecipe,
+        productName: subProduct?.name ?? subRecipeProductId,
+      );
+    }
+
     if (subProduct == null) {
-      throw const CheckoutAuthorityException();
+      throw const CheckoutAuthorityException(
+        reason: CheckoutAuthorityFailureReason.unresolvedInsumo,
+      );
     }
     productsById.putIfAbsent(
       subRecipeProductId,

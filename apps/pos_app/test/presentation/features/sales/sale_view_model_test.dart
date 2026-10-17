@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:mockito/mockito.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
@@ -1887,6 +1888,55 @@ void main() {
           viewModel.errorMessage,
           'Configure el consecutivo inicial DGI antes de facturar.',
         );
+      },
+    );
+
+    test(
+      'CheckoutAuthorityException with negativeStockBlocked surfaces friendly Spanish directive naming product and insumo',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          const CheckoutAuthorityException(
+            reason: CheckoutAuthorityFailureReason.negativeStockBlocked,
+            productName: 'Pescado Frito',
+            insumoName: 'Pargo Rojo',
+            requiredQuantity: 1.0,
+            availableQuantity: 0.0,
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<CheckoutAuthorityException>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, contains('Pescado Frito'));
+        expect(message, contains('Pargo Rojo'));
+        expect(message, contains('stock suficiente'));
+        expect(message, contains('no permite existencias negativas'));
+      },
+    );
+
+    test(
+      'CheckoutAuthorityException with circularRecipe surfaces friendly Spanish directive naming circular dependency',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          const CheckoutAuthorityException(
+            reason: CheckoutAuthorityFailureReason.circularRecipe,
+            productName: 'Enchilada Suprema',
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<CheckoutAuthorityException>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, contains('Enchilada Suprema'));
+        expect(message, contains('dependencia circular'));
       },
     );
 

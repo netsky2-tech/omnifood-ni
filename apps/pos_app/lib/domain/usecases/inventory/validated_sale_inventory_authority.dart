@@ -1,7 +1,35 @@
 import 'dart:collection';
 
+enum CheckoutAuthorityFailureReason {
+  invalidContext,
+  missingRecipe,
+  circularRecipe,
+  maxDepthExceeded,
+  negativeStockBlocked,
+  unresolvedInsumo,
+  invalidFact,
+}
+
 class CheckoutAuthorityException implements Exception {
-  const CheckoutAuthorityException();
+  final CheckoutAuthorityFailureReason reason;
+  final String? productName;
+  final String? insumoName;
+  final double? requiredQuantity;
+  final double? availableQuantity;
+  final String? message;
+
+  const CheckoutAuthorityException({
+    this.reason = CheckoutAuthorityFailureReason.invalidFact,
+    this.productName,
+    this.insumoName,
+    this.requiredQuantity,
+    this.availableQuantity,
+    this.message,
+  });
+
+  @override
+  String toString() =>
+      'CheckoutAuthorityException(reason: $reason, product: $productName, insumo: $insumoName, required: $requiredQuantity, available: $availableQuantity, message: $message)';
 }
 
 class CheckoutAuthorityContext {
@@ -23,8 +51,13 @@ class AuthorityProduct {
 }
 
 class AuthorityInsumo {
-  const AuthorityInsumo({required this.id, required this.tenantId});
-  final String id, tenantId;
+  const AuthorityInsumo({
+    required this.id,
+    required this.tenantId,
+    this.name = '',
+    this.negativeStockPolicy = 'RESTRICT',
+  });
+  final String id, tenantId, name, negativeStockPolicy;
 }
 
 class AuthorityMapping {

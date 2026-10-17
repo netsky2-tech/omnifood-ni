@@ -9,11 +9,15 @@ class AuthorityInsumoEntity {
   final String name;
   final String uom;
 
+  @ColumnInfo(name: 'negative_stock_policy')
+  final String negativeStockPolicy;
+
   const AuthorityInsumoEntity({
     required this.tenantId,
     required this.id,
     required this.name,
     required this.uom,
+    this.negativeStockPolicy = 'RESTRICT',
   });
 }
 
