@@ -66,6 +66,37 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
 | **R24** | L41 | **POS: los fallos de autoridad en checkout (`CheckoutAuthorityException`) caen en el mensaje genérico** — la excepción no lleva motivo ni producto; el catch de `sale_view_model.dart` solo traduce el marker legacy de receta plana. El comentario que afirma "el operador ve la directiva 'no tiene receta publicada'" está falsificado en campo. Requiere: motivo tipado en la excepción + copy de operador por caso (sin receta, profundidad excedida, ciclo) | 🟡 Abierta — hallazgo medio de ensayo S23 (L41) |
 | **R25** | L41 | **Shrink técnico a nivel de versión no surte efecto (revisión de diseño)** — ni `recipe.service.ts` ni el POS aplican `recipe_versions.technical_shrink_pct` en la fórmula de consumo (solo el shrink de componente); un lote con shrink de versión configurado descuenta de más (no consume la merma prevista). Definir si la versión debe aplicar (cambio de fórmula + backfill) o si el campo debe validarse/rechazarse en la carga | 🟡 Abierta — hallazgo de diseño de ensayo S23 (L41) |
 
+## Research
+
+Temas que el owner pide investigar **antes** de abrir tarea de implementación — no bloquean el merge de R21.
+
+| ID | Tema | Petición del owner (verbatim) | Estado |
+|---|---|---|---|
+| **RS1** | **Reporte de costos en bimonetario (USD/NIO)** — qué dice la ley nicaragüense sobre la moneda de reporte de costos/inventarios y cómo lo resuelven sistemas comparables del mercado | *"anotado como research, para ver que dice la ley y como suelen manejarlo otros sistemas"* | 🔬 Research abierta (L42) |
+| **RS2** | **Cierres de inventario y gestión de períodos** — si aplica para los rubros que atacamos: períodos fiscales, bloqueo de movimientos retroactivos, artefactos de cierre anual, y cómo impacta el modelo offline-first (ventas tardías que sincronizan después del cierre) | *"Tengo entendido que así como contabilidad, inventario tiene cierres y manejo de periodos, es importante tomarlo en cuenta y ver si aplica en los rubros a los que vamos a aplicar"* | 🔬 Research abierta (L42) |
+
+### RS1 — Costos bimonetario: estado actual y preguntas
+
+**Estado actual (verificado en código, L42)**: los costos son NIO por diseño — la compra convierte al entrar (`unitCostNio = unitCost × tasaBCN`, con fuente registrada: NIO/tasa explícita/oficial BCN por fecha), y CPP, kardex, valuación (`stock × averageCost`) y costo teórico/márgenes viven solo en NIO. La venta sí es bimonetaria en el lado de ingreso (`total` NIO autoritativo + `total_usd` + `bcn_official_rate` + `commercial_rate` como snapshot). **No existe reporte de costos en USD** — es derivable, no almacenado.
+
+**Preguntas de la research**:
+1. ¿Ley 822 art. 44 / Reglamento exigen o permiten el reporte de inventarios y costos en moneda distinta de NIO (o en ambas)?
+2. ¿Qué tasa es la admisible para reportes (BCN oficial vs comercial) y para cuándo?
+3. ¿Cómo lo resuelven sistemas comparables del mercado (QuickBooks multi-moneda, Siigo, Alegra u otros usados en NI) — serie USD almacenada vs derivada, y qué rompe o no rompe con la valuación a menor costo-mercado (R-01)?
+4. ¿La moneda funcional NIC 2 del cliente cambia algo, o el marco del proyecto ya fija NIO?
+
+### RS2 — Cierres de inventario: estado actual y preguntas
+
+**Anclaje normativo ya existente en el marco (`docs/inventario_marco_normativo.md`)**: Reglamento art. 33 (§2.5) exige (1) inventario físico **anual**, (2) listas firmadas y fechadas **por hoja** por quienes contaron, (3) **registros y conteos periódicos** disponibles para la Administración — que es R-05/R-06. El marco declara además (§129–130) que *"el período como unidad del método"* es **nuestra decisión de diseño** (ledger inmutable/auditable); la norma habla de consistencia y autorización, **no de períodos de cierre**.
+
+**Estado actual (verificado en código)**: existen sesiones de conteo (`count_sessions`, R19), kardex inmutable y método de valuación por período en el modelo; **no existe** concepto de cierre: no hay bloqueo de movimientos con fecha dentro de un período cerrado, no hay artefacto de cierre anual (la lista firmada de R-05 sigue siendo parcial), no hay snapshot de CPP/valuación a cierre ni reportes acotados a un período cerrado.
+
+**Preguntas de la research**:
+1. ¿Qué exige exactamente la ley para los rubros que atacamos (retail de alimentos, POS) además del inventario físico anual ya mapeado en R-05?
+2. ¿Aplica bloqueo de períodos (mensual/anual) como en contabilidad, o solo el cierre anual con evidencia?
+3. **Frente offline-first (el peligro no obvio)**: una venta hecha offline durante un período abierto puede sincronizar **después** de que el período cerró en la nube — ¿qué hace el sistema? (rechazarla, reabrir, moverla a período siguiente, marcar excepción). Cualquier diseño de cierre tiene que responder esto, porque el POS nicaragüense trabaja sin internet por diseño.
+4. ¿Cómo lo resuelven sistemas comparables (cierre contable con bloqueo de fechas, períodos fiscales en POS)?
+
 ## Log
 
 - **L1** 2026-10-15 — **Decisión del owner (verbatim)**: *"Se cierra antes de integrar, no dejemos deudas tecnicas en el camino"*. Responde a la pregunta abierta de la verificación: *"¿Se integra con la brecha declarada o se cierra antes?"*. Cambia el plan de la rama: la verificación pasa a ser el instrumento de evidencia y la remediación el trabajo.
@@ -274,3 +305,7 @@ Cerrar **antes de integrar** los defectos que la pre-verificación v2 midió rot
   - **Hallazgo de diseño (→ R25)**: el shrink técnico a nivel de versión no entra en la fórmula de consumo (ni backend ni POS); el campo acepta configurarse y no hace nada.
   - **Housekeeping**: sub-receta intermedia "R23 Relleno de Carne" devuelta a `sellPrice 0` (fuera de la botonera, concepción original del owner); `estado_costeo` de filas con stock negativo quedó en 30 (REGULARIZED) en vez de 10 (PROVISIONAL) — observación menor anotada.
   - **Estado**: todos los escenarios de la matriz en verde; las correcciones 1 y 2 están implementadas, probadas y desplegadas en el rig pero **sin commitear** (esperan aprobación del owner).
+- **L42** 2026-10-16 — **Corrección de L41 y dos research abiertas por el owner tras la verificación de la venta USD (#66).**
+  - **Corrección**: las correcciones de L41 **sí fueron commiteadas** ese mismo día con aprobación del owner — `535030de` (kardex source_sequence), `5444c864` (net per-unit hydration) y `6ff04fe0` (este doc). El "sin commitear" de L41 quedó obsoleto minutos después.
+  - **Contexto**: la venta en USD (#66: `total 85 NIO`, `total_usd 2.32`, tasas BCN 36.6241 / comercial 36.6243) hizo preguntar al owner si los **costos internos** también son bimonetarios. Verificado en código: **no** — los costos son NIO por diseño (conversión al entrar en la compra con tasa BCN y fuente registrada; CPP, kardex, valuación y márgenes solo NIO); la bimonetariedad existe solo en el lado de ingreso de la venta. El owner pidió dejarlo como **research** (RS1): ver qué dice la ley y cómo lo manejan otros sistemas, antes de decidir si se necesita.
+  - **Segunda research (RS2) — cierres de inventario y gestión de períodos**: el owner recordó que, como en contabilidad, el inventario tiene cierres y períodos, y pidió evaluar si aplica a los rubros que atacamos. El marco normativo ya ancla el piso: Reglamento art. 33 (inventario físico anual + listas firmadas por hoja + conteos periódicos = R-05/R-06), y declara que el período como unidad del método es **nuestra decisión de diseño**, no un mandato de la norma. Lo que **no** existe hoy: bloqueo de períodos, artefacto de cierre anual completo, snapshot de CPP a cierre. La pregunta más peligrosa del diseño (documentada en RS2) es el **frente offline-first**: una venta offline de un período abierto que sincroniza después del cierre — cualquier diseño de cierre debe responder eso primero.
