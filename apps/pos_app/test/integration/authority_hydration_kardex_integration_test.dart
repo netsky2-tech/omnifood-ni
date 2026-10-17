@@ -335,6 +335,77 @@ void main() {
   });
 
   test(
+      'lote recipe (yield=4, component shrink 5%): the frozen binding carries '
+      'the NET consumption per sold unit, never the batch gross '
+      '(backend recipe_details.quantity parity)', () async {
+    final database = await buildProductionStyleDatabase();
+    await bindTenant(database, 'tenant-alpha');
+
+    final dio = _MockDio();
+    stubDeltas(dio, {
+      'products': [
+        {
+          'id': 'prod-pizza',
+          'name': 'Pizza Familiar',
+          'uom': 'UND',
+          'tenantId': 'tenant-alpha',
+          'productType': 'PREPARED',
+          'sellPrice': 100.0,
+          'isActive': true,
+        }
+      ],
+      'insumos': [
+        {'id': 'ins-1', 'name': 'Harina', 'consumptionUom': 'G', 'stock': 2000.0},
+      ],
+      'recipeVersions': [
+        _wireVersion(
+          yieldQuantity: 4.0,
+          components: [
+            _wireComponent(grossQuantity: 800.0, technicalShrinkPct: 5.0),
+          ],
+          insumos: [_wireClosureInsumo()],
+        ),
+      ],
+    });
+
+    final syncService = buildSyncService(database, dio);
+    final result = await syncService.pullInboundDeltas();
+    expect(result, isNotNull);
+    expect(result!.authorityHydrationFailed, isFalse);
+
+    final prep = await runCheckout(
+      database,
+      invoiceId: 'inv-lote-1',
+      quantity: 1.0,
+    );
+    expect(prep.invoice.inventoryOutcome, 'APPLIED');
+    final snapshot = prep.items.single.inventorySnapshot!;
+    // Backend formula (recipe.service.ts createNewVersion):
+    // net = gross × (1 − shrink/100) ÷ yield = 800 × 0.95 ÷ 4 = 190.
+    // The pre-fix hydration froze the gross 800 here, deducting the whole
+    // batch per sold unit.
+    expect(snapshot.bindings.single.quantityPerSaleUnit, 190.0);
+
+    final repository = buildSalesRepository(database, '001-001-01-00000002');
+    await repository.saveSale(
+      invoice: prep.invoice,
+      items: prep.items,
+      payments: [
+        Payment(
+          id: 'pay-lote-1',
+          invoiceId: 'inv-lote-1',
+          amount: 115.0,
+          method: PaymentMethod.cash,
+        ),
+      ],
+    );
+
+    final movements = await kardexRows(database, 'inv-lote-1');
+    expect(movements, hasLength(1));
+    expect(movements.single.quantity, -190.0);
+  });
+
+  test(
       'COUNTER-CASE: same pull WITHOUT the recipeVersions key leaves the sale pending with zero kardex rows (#519 signature)',
       () async {
     final database = await buildProductionStyleDatabase();
@@ -717,6 +788,8 @@ Map<String, dynamic> _wireVersion({
   String id = 'rv-1',
   String tenantId = 'tenant-alpha',
   String productId = 'prod-pizza',
+  double yieldQuantity = 1.0,
+  double technicalShrinkPct = 0.0,
   List<Map<String, dynamic>> components = const [],
   List<Map<String, dynamic>> insumos = const [],
 }) {
@@ -732,8 +805,8 @@ Map<String, dynamic> _wireVersion({
     'publicationState': 'PUBLISHED',
     'effectiveAt': '2026-09-01T00:00:00Z',
     'effectiveUntil': null,
-    'yieldQuantity': 1.0,
-    'technicalShrinkPct': 0.0,
+    'yieldQuantity': yieldQuantity,
+    'technicalShrinkPct': technicalShrinkPct,
     'versionNote': null,
     'publishedAt': null,
     'posCreatedAt': null,
@@ -750,6 +823,8 @@ Map<String, dynamic> _wireComponent({
   String tenantId = 'tenant-alpha',
   String versionId = 'rv-1',
   String insumoId = 'ins-1',
+  double grossQuantity = 0.2,
+  double technicalShrinkPct = 0.0,
 }) {
   return {
     'id': id,
@@ -757,9 +832,9 @@ Map<String, dynamic> _wireComponent({
     'recipeVersionId': versionId,
     'componentOrdinal': 0,
     'insumoId': insumoId,
-    'quantityPerSaleUnit': 0.25,
-    'grossQuantity': 0.2,
-    'technicalShrinkPct': 0.0,
+    'quantityPerSaleUnit': grossQuantity,
+    'grossQuantity': grossQuantity,
+    'technicalShrinkPct': technicalShrinkPct,
     'ingredientName': 'Mozzarella',
     'ingredientType': 'DIRECT',
     'componentUom': 'KG',

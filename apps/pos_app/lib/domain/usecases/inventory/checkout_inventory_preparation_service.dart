@@ -146,7 +146,11 @@ class CheckoutInventoryPreparationService {
               tenantId: tenantId,
               recipeId: active.id,
               insumoId: c.insumoId,
-              quantityPerSaleUnit: c.grossQuantity,
+              quantityPerSaleUnit: _netQuantityPerSaleUnit(
+                grossQuantity: c.grossQuantity,
+                technicalShrinkPct: c.technicalShrinkPct,
+                yieldQuantity: active.yieldQuantity,
+              ),
               ingredientType: ingredientType,
               referenceVersionId: c.referenceVersionId,
             ),
@@ -350,7 +354,11 @@ class CheckoutInventoryPreparationService {
           tenantId: tenantId,
           recipeId: version.id,
           insumoId: c.insumoId,
-          quantityPerSaleUnit: c.grossQuantity,
+          quantityPerSaleUnit: _netQuantityPerSaleUnit(
+            grossQuantity: c.grossQuantity,
+            technicalShrinkPct: c.technicalShrinkPct,
+            yieldQuantity: version.yieldQuantity,
+          ),
           ingredientType: ingredientType,
           referenceVersionId: c.referenceVersionId,
         ),
@@ -379,6 +387,25 @@ class CheckoutInventoryPreparationService {
         );
       }
     }
+  }
+
+  /// Backend parity with `recipe.service.ts` createNewVersion:
+  /// `recipe_details.quantity` (consumption for ONE sold unit) is
+  /// `gross × (1 − componentShrink/100) ÷ yieldQuantity`. Hydrating the
+  /// authority from `grossQuantity` alone made every lote recipe
+  /// (yield > 1) deduct the whole batch per sold unit — a silent
+  /// over-deduction the V1 freeze then froze into the kardex.
+  /// A non-positive yield fails closed like any other authority gap.
+  static double _netQuantityPerSaleUnit({
+    required double grossQuantity,
+    required double technicalShrinkPct,
+    required double yieldQuantity,
+  }) {
+    if (yieldQuantity <= 0) throw const CheckoutAuthorityException();
+    return double.parse(
+      (grossQuantity * (1 - technicalShrinkPct / 100) / yieldQuantity)
+          .toStringAsFixed(4),
+    );
   }
 
   static AuthorityInventoryKind _inventoryKindOf(String? productType) =>
