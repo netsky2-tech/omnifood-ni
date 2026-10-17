@@ -1398,8 +1398,15 @@ export class InvoicesService {
         }
         if (v1Outcome) {
           if (v1Outcome.outcome === 'APPLIED') {
+            const nextSourceSequence = this.recordSequenceAllocator(record);
             for (const b of v1Outcome.bindingsToApply) {
-              await this.appendV1Movement(tenantId, record, b, manager);
+              await this.appendV1Movement(
+                tenantId,
+                record,
+                b,
+                manager,
+                nextSourceSequence,
+              );
             }
           }
         } else {
@@ -1788,11 +1795,36 @@ export class InvoicesService {
     return null;
   }
 
+  /**
+   * `uq_inventory_kardex_source_sequence` allows exactly ONE kardex row per
+   * (tenant, device, sales|inventory family, source_sequence), but a single
+   * sync record legitimately produces MULTIPLE rows: V1 snapshot replay emits
+   * one row per binding, multi-movement deltas one per movement, and credit
+   * notes one per compensated origin movement. Stamping the record-level
+   * sequence on every row made any multi-row record violate the index and
+   * roll back forever (retryable REJECTED loop on the terminal). Only the
+   * FIRST kardex row of a record carries the record sequence; the rest carry
+   * NULL, which the partial index ignores. Whole-record idempotency stays
+   * with the receipt row + transaction, and V1 rows keep the per-binding
+   * `uq_inventory_kardex_sale_correlation` guard.
+   */
+  private recordSequenceAllocator(
+    record: SyncBatchRecordDto,
+  ): () => string | null {
+    let allocated = false;
+    return () => {
+      if (allocated) return null;
+      allocated = true;
+      return String(record.sourceSequence);
+    };
+  }
+
   private async appendFohMovements(
     tenantId: string,
     record: SyncBatchRecordDto,
     manager: EntityManager,
   ): Promise<void> {
+    const nextSourceSequence = this.recordSequenceAllocator(record);
     const movementType =
       record.documentType === 'SALE_CANCEL'
         ? MovementType.SALE_CANCEL
@@ -1866,7 +1898,7 @@ export class InvoicesService {
             ),
             idempotencyKey: `${record.idempotencyKey}:${item.id}:${insumoId}`,
             sourceDeviceId: record.sourceDeviceId,
-            sourceSequence: String(record.sourceSequence),
+            sourceSequence: nextSourceSequence(),
             sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
             sourceDocumentType: movementType,
             compensationForKardexId,
@@ -1920,6 +1952,8 @@ export class InvoicesService {
       return;
     }
     if (!record.movements?.length) return;
+
+    const nextSourceSequence = this.recordSequenceAllocator(record);
 
     for (const movement of record.movements) {
       const insumo = await manager
@@ -1991,7 +2025,7 @@ export class InvoicesService {
           totalCostNio: Number((Math.abs(delta) * unitCostNio).toFixed(4)),
           idempotencyKey: `${record.idempotencyKey}:${movement.insumoId}`,
           sourceDeviceId: record.sourceDeviceId,
-          sourceSequence: String(record.sourceSequence),
+          sourceSequence: nextSourceSequence(),
           reason: record.invoice?.id ?? record.idempotencyKey,
           sourceDocumentType: record.documentType,
           // The kardex `source_document_id` column is NOT NULL and this insert
@@ -2186,6 +2220,7 @@ export class InvoicesService {
     record: SyncBatchRecordDto,
     validatedBinding: ValidatedBindingToApply,
     manager: EntityManager,
+    nextSourceSequence: () => string | null,
   ): Promise<void> {
     const { item, binding, explodedQuantity } = validatedBinding;
     const invoice = record.invoice;
@@ -2272,7 +2307,7 @@ export class InvoicesService {
         idempotencyKey: binding.saleCorrelationId,
         saleCorrelationId: binding.saleCorrelationId,
         sourceDeviceId: record.sourceDeviceId,
-        sourceSequence: String(record.sourceSequence),
+        sourceSequence: nextSourceSequence(),
         sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
         sourceDocumentType: movementType,
         compensationForKardexId,
@@ -2664,6 +2699,8 @@ export class InvoicesService {
         })
       : [];
 
+    const nextSourceSequence = this.recordSequenceAllocator(record);
+
     for (const creditItem of invoice.items ?? []) {
       const originItemId = creditItem.originInvoiceItemId;
       if (!originItemId) continue;
@@ -2710,6 +2747,7 @@ export class InvoicesService {
           refundRatio,
           refundReasonPolicy: policy,
           existingCompensations,
+          nextSourceSequence,
         });
       }
     }
@@ -2731,6 +2769,7 @@ export class InvoicesService {
     refundRatio: number;
     refundReasonPolicy: string;
     existingCompensations: InventoryMovement[];
+    nextSourceSequence: () => string | null;
   }): Promise<void> {
     const { tenantId, record, manager, originMovement } = input;
     const invoice = record.invoice;
@@ -2798,7 +2837,7 @@ export class InvoicesService {
         totalCostNio: round4(quantity * unitCostNio),
         idempotencyKey: `${record.idempotencyKey}:${input.originInvoiceItemId}:${originMovement.id}`,
         sourceDeviceId: record.sourceDeviceId,
-        sourceSequence: String(record.sourceSequence),
+        sourceSequence: input.nextSourceSequence(),
         sourceDocumentId: invoice.id,
         sourceDocumentType: 'CREDIT_NOTE',
         compensationForKardexId: originMovement.id,

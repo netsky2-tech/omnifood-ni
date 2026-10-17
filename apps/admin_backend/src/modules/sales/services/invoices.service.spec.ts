@@ -271,9 +271,16 @@ describe('InvoicesService', () => {
             rec: unknown,
             validated: unknown,
             mgr: unknown,
+            nextSourceSequence: () => string | null,
           ) => Promise<void>;
         }
-      ).appendV1Movement('tenant-1', record, builtBinding, manager);
+      ).appendV1Movement(
+        'tenant-1',
+        record,
+        builtBinding,
+        manager,
+        () => String((record as { sourceSequence?: number }).sourceSequence ?? 0),
+      );
 
     beforeEach(() => {
       appendQb = {
