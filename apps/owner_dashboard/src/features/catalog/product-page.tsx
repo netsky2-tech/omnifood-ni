@@ -390,10 +390,15 @@ function ProductDialog({
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
 
-  const { data: uomValues } = useCatalogValues("UOM" as CatalogType, true);
+  // The UoM and category selects offer the ACTIVE catalog values only. The
+  // dialog used to load them with `includeInactive=true`, so a deactivated
+  // unit or category still showed up in the dropdowns ("los select no
+  // filtran por estado"). A product that already stores a deactivated value
+  // keeps it visible through the synthetic "(valor actual)" entry below, so
+  // the edit never hides what is saved.
+  const { data: uomValues } = useCatalogValues("UOM" as CatalogType);
   const { data: categoryValues } = useCatalogValues(
     "SALES_PRODUCT_CATEGORY" as CatalogType,
-    true,
   );
 
   // Unit B (form sweep): the app owns validation through the zod schema in

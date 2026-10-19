@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import { cn, formatFactor } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, Plus, ShieldCheck } from "lucide-react";
 
@@ -474,17 +474,45 @@ export function PurchasesForm({
                   {insumoList.map((i) => (
                     <SelectItem key={i.id} value={i.id} className="text-xs">
                       {i.name}
+                      {i.purchaseUom ? ` (${i.purchaseUom})` : ""}
                       {i.is_perishable ? " (perecedero)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {selectedInsumo?.purchaseUom && (
+                // The unit of measure is the piece of information the operator
+                // most often lacks: the quantity and the unit cost are typed
+                // in the PURCHASE unit, while the stock and the CPP the
+                // system keeps are expressed in the CONSUMPTION unit.
+                <p
+                  className="text-[10px] text-muted-foreground"
+                  data-testid="purchases-form-uom-hint"
+                >
+                  Cantidad y costo en{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedInsumo.purchaseUom}
+                  </span>
+                  {selectedInsumo.consumptionUom &&
+                    selectedInsumo.consumptionUom !== selectedInsumo.purchaseUom && (
+                      <>
+                        {" "}
+                        · 1 {selectedInsumo.purchaseUom} ={" "}
+                        {formatFactor(
+                          Number(selectedInsumo.conversionFactor ?? 1),
+                        )}{" "}
+                        {selectedInsumo.consumptionUom} (el inventario se
+                        registra en {selectedInsumo.consumptionUom})
+                      </>
+                    )}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="purchase_quantity" className="text-xs">
-                  Cantidad *
+                  Cantidad{selectedInsumo?.purchaseUom ? ` (${selectedInsumo.purchaseUom})` : ""} *
                 </Label>
                 <Input
                   id="purchase_quantity"
@@ -499,7 +527,11 @@ export function PurchasesForm({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="purchase_unit_cost" className="text-xs">
-                  Costo unitario *
+                  Costo unitario
+                  {selectedInsumo?.purchaseUom
+                    ? ` (C$ por ${selectedInsumo.purchaseUom})`
+                    : ""}{" "}
+                  *
                 </Label>
                 <Input
                   id="purchase_unit_cost"
@@ -529,8 +561,35 @@ export function PurchasesForm({
                   </div>
 
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    El inventario se valúa al costo neto (sin impuestos recuperables). Si la factura de su proveedor incluye IVA, divida el precio entre <span className="font-semibold text-foreground">{(1 + insumoIvaRate / 100).toFixed(4)}</span> antes de ingresar el costo unitario.
+                    Este control NO calcula el IVA: declara de dónde viene el
+                    número que usted ingresa. El inventario se valúa al costo
+                    neto (sin impuestos recuperables), por eso la única
+                    opción aceptable es el costo neto. Si la factura de su
+                    proveedor trae IVA incluido, divida el precio entre{" "}
+                    <span className="font-semibold text-foreground">
+                      {(1 + insumoIvaRate / 100).toFixed(4)}
+                    </span>{" "}
+                    antes de escribirlo.
                   </p>
+
+                  {form.costIncludesIva === false && unitCost > 0 && (
+                    <p
+                      className="text-[11px] leading-relaxed text-muted-foreground"
+                      data-testid="purchases-form-iva-net-readout"
+                    >
+                      Costo neto que se registrará:{" "}
+                      <span className="font-semibold text-foreground tabular-nums">
+                        C${unitCost.toFixed(4)}
+                      </span>{" "}
+                      por {selectedInsumo?.purchaseUom ?? "unidad"}. Si su
+                      factura trae el {insumoIvaRate}% incluido, el costo
+                      neto equivalente es{" "}
+                      <span className="font-semibold text-foreground tabular-nums">
+                        C${(unitCost / (1 + insumoIvaRate / 100)).toFixed(4)}
+                      </span>
+                      .
+                    </p>
+                  )}
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                     <label
@@ -553,8 +612,13 @@ export function PurchasesForm({
                         className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
                       />
                       <div className="space-y-0.5">
-                        <p className="text-xs font-medium text-foreground">Costo NETO (sin IVA)</p>
-                        <p className="text-[10px] text-muted-foreground">Aceptado para valuación contable</p>
+                        <p className="text-xs font-medium text-foreground">
+                          Ingreso NETO (sin IVA)
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          El costo que escribo ya está sin IVA — opción
+                          aceptada
+                        </p>
                       </div>
                     </label>
 
@@ -580,8 +644,12 @@ export function PurchasesForm({
                         className="mt-0.5 h-4 w-4 text-destructive focus:ring-destructive"
                       />
                       <div className="space-y-0.5">
-                        <p className="text-xs font-medium text-foreground">Costo incluye IVA</p>
-                        <p className="text-[10px] text-muted-foreground">Bloquea registro de compra</p>
+                        <p className="text-xs font-medium text-foreground">
+                          Ingreso con IVA incluido
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          No se puede registrar: el inventario se valúa neto
+                        </p>
                       </div>
                     </label>
                   </div>

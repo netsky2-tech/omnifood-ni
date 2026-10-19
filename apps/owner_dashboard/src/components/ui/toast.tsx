@@ -32,7 +32,11 @@ const toastVariants = cva(
         destructive:
           'destructive group border-destructive/40 bg-destructive text-destructive-foreground shadow-sm',
         success:
-          'border-secondary-700/30 bg-secondary-50 text-secondary-700 dark:border-emerald-600 dark:bg-emerald-900 dark:text-white shadow-sm',
+          // Solid surface, white text (secondary-700 on secondary-foreground
+          // = 9.29:1, the same contract the success badge uses). The pale
+          // pairing (secondary-50 surface) read as a WHITE box on a white
+          // page — the operator reported the confirmation toast as "blank".
+          'border-secondary-700 bg-secondary-700 text-secondary-foreground shadow-sm',
       },
     },
     defaultVariants: {

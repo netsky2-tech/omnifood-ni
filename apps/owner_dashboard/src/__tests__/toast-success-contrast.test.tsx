@@ -25,30 +25,32 @@ describe("Toast success variant — contrast contract", () => {
   it("uses a solid dark green surface in dark mode (no alpha bleed-through)", () => {
     const classes = successClasses();
 
-    expect(classes).toContain("dark:bg-emerald-900");
+    expect(classes).toContain("bg-secondary-700");
     expect(classes).not.toContain("dark:bg-emerald-950/80");
   });
 
-  it("uses pure white text in dark mode instead of desaturated emerald-50", () => {
+  it("uses pure white text instead of desaturated emerald-50", () => {
     const classes = successClasses();
 
-    expect(classes).toContain("dark:text-white");
-    expect(classes).not.toContain("dark:text-emerald-50");
+    expect(classes).toContain("text-secondary-foreground");
+    expect(classes).not.toContain("text-emerald-50");
   });
 
-  it("keeps the light-mode high-contrast pairing (dark green text on pale green)", () => {
+  it("never renders the confirmation as a near-white surface", () => {
     const classes = successClasses();
 
-    // R18/S15: the same pairing on the token ramp — secondary-50 surface
-    // with secondary-700 ink (8.55:1, WCAG AA).
-    expect(classes).toContain("bg-secondary-50");
-    expect(classes).toContain("text-secondary-700");
+    // Operator report: "Toast sale en blanco". The pale pairing
+    // (secondary-50 surface) is #e6faf3 — indistinguishable from the white
+    // page behind it, so a confirmation read as an empty box. The success
+    // surface is SOLID (secondary-700, the same contract the success badge
+    // uses) with white text at 9.29:1.
+    expect(classes).not.toContain("bg-secondary-50");
+    expect(classes).toContain("bg-secondary-700");
   });
 
   it("keeps a visible border for definition against the page", () => {
     const classes = successClasses();
 
-    expect(classes).toContain("dark:border-emerald-600");
-    expect(classes).toContain("border-secondary-700/30");
+    expect(classes).toContain("border-secondary-700");
   });
 });
