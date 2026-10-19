@@ -8,6 +8,7 @@ import { RequestMethod } from '@nestjs/common';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { RecipeService } from './recipe.service';
 import { RecipeController } from './recipe.controller';
+import { TheoreticalCostService } from './services/theoretical-cost.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
@@ -242,6 +243,9 @@ describe('Recipe Draft Lifecycle & BOM Protection (TDD / ONB1.3E / AC-45)', () =
       };
       controller = new RecipeController(
         recipeService as unknown as RecipeService,
+        {
+          listDishMargins: jest.fn(),
+        } as unknown as TheoreticalCostService,
       );
     });
 

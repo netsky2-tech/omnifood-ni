@@ -59,7 +59,15 @@ export function RecipeForm({
       return existingRecipe.components.map((c, index) => ({
         tempId: `existing-${index}`,
         ingredientId: c.insumo_id,
-        ingredientName: c.ingredient_name ?? '',
+        // Legacy rows carry a NULL ingredient_name (the write path never
+        // persisted it). The name is resolved from the referenced insumo /
+        // sub-recipe product so the operator sees WHICH ingredient the row
+        // is, and the round trip no longer sends an empty name back.
+        ingredientName:
+          c.ingredient_name ??
+          insumos.find((i) => i.id === c.insumo_id)?.name ??
+          compoundProducts.find((p) => p.id === c.insumo_id)?.name ??
+          '',
         ingredientType: c.ingredient_type as IngredientType,
         grossQuantity: Number(c.gross_quantity),
         technicalShrinkPct: Number(c.technical_shrink_pct),

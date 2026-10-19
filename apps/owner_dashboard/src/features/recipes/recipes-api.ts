@@ -6,6 +6,7 @@ import type {
   Insumo,
   CreateInsumoInput,
   UpdateInsumoInput,
+  ActiveRecipeSummary,
 } from './types';
 
 /**
@@ -25,6 +26,18 @@ export function insumosQueryKey(tenantId: string) {
 
 export function fetchActiveRecipe(productId: string, opts?: ApiClientMethodOptions) {
   return api.get<RecipeSnapshot>(`/recipes/products/${productId}/active`, opts);
+}
+
+/**
+ * Every product with an ACTIVE PUBLISHED recipe, with the recipe's own
+ * figures (yield, ingredient count, theoretical unit cost).
+ *
+ * The grid used to ask for the active recipe of the SELECTED product only,
+ * so every other card claimed to have no recipe and rendered the product's
+ * catalog columns (0 NIO / 0 stock for a compound product nobody produced).
+ */
+export function fetchActiveRecipes(opts?: ApiClientMethodOptions) {
+  return api.get<ActiveRecipeSummary[]>('/recipes/active', opts);
 }
 
 export function fetchRecipeSnapshot(recipeVersionId: string, opts?: ApiClientMethodOptions) {

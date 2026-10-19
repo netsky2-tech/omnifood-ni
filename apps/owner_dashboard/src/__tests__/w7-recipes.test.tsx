@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecipesPage } from '@/features/recipes/recipes-page';
 import { RecipeForm } from '@/features/recipes/RecipeForm';
 import { useProducts } from '@/features/catalog/use-product';
-import { useActiveRecipe, useInsumos, useCreateRecipeVersion } from '@/features/recipes/use-recipes';
+import { useActiveRecipe, useActiveRecipes, useInsumos, useCreateRecipeVersion } from '@/features/recipes/use-recipes';
 import { toast } from '@/hooks/use-toast';
 import type { Product } from '@/features/catalog/product-types';
 import type { Insumo, RecipeSnapshot } from '@/features/recipes/types';
@@ -22,6 +22,11 @@ vi.mock('@/features/catalog/use-product', () => ({
 vi.mock('@/features/recipes/use-recipes', () => ({
   useActiveRecipe: vi.fn(() => ({
     data: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  })),
+  useActiveRecipes: vi.fn(() => ({
+    data: [],
     isLoading: false,
     refetch: vi.fn(),
   })),
@@ -153,6 +158,7 @@ beforeEach(() => {
   vi.mocked(useProducts).mockReturnValue({ data: [], isLoading: false, error: null, refetch: vi.fn() } as any);
   vi.mocked(useInsumos).mockReturnValue({ data: [], isLoading: false } as any);
   vi.mocked(useActiveRecipe).mockReturnValue({ data: null, isLoading: false, refetch: vi.fn() } as any);
+  vi.mocked(useActiveRecipes).mockReturnValue({ data: [], isLoading: false, refetch: vi.fn() } as any);
   vi.mocked(useCreateRecipeVersion).mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false } as any);
 });
 
@@ -196,24 +202,44 @@ describe('W7 — RecipesPage', () => {
 
   it('shows active recipe info and "Editar Receta" button when recipe exists', async () => {
     mockProducts();
-    let callCount = 0;
-    vi.mocked(useActiveRecipe).mockImplementation(() => {
-      callCount++;
-      if (callCount <= 1) return { data: null, isLoading: false, refetch: vi.fn() } as any;
-      return { data: MOCK_ACTIVE_RECIPE, isLoading: false, refetch: vi.fn() } as any;
-    });
+    // The grid reads the RECIPE's own figures from the active-recipes list
+    // (one call for the whole grid), not from the selected product's
+    // snapshot.
+    vi.mocked(useActiveRecipes).mockReturnValue({
+      data: [
+        {
+          productId: 'p1',
+          productName: 'Gallopinto',
+          productUom: 'un',
+          recipeVersionId: 'rv1',
+          versionNumber: 1,
+          componentCount: 2,
+          yieldQuantity: 10,
+          technicalShrinkPct: 5,
+          versionNote: 'Receta original',
+          effectiveAt: '2026-01-01T00:00:00Z',
+          estimatedCostNio: 12.5,
+          costUnavailableReason: null,
+        },
+      ],
+      isLoading: false,
+      refetch: vi.fn(),
+    } as any);
 
-    const user = userEvent.setup();
     render(<RecipesPage />, { wrapper: TestWrapper });
-
-    await user.click(screen.getByText('Gallopinto'));
 
     await waitFor(() => {
       expect(screen.getByText(/Receta v1 activa/)).toBeInTheDocument();
     });
     expect(screen.getByText(/2 ingrediente/)).toBeInTheDocument();
-    expect(screen.getByText(/Rendimiento: 10/)).toBeInTheDocument();
+    // The card shows the RECIPE's figures: its cost and its yield — not the
+    // product's catalog price/stock, which never change with the recipe.
+    expect(screen.getByText('12.5 NIO')).toBeInTheDocument();
+    expect(screen.getByText('10 un')).toBeInTheDocument();
     expect(screen.getByText('Editar Receta')).toBeInTheDocument();
+    // Only the product WITH a recipe offers "Editar"; the other two still
+    // offer "Crear".
+    expect(screen.getAllByText('Crear Receta').length).toBe(2);
   });
 
   it('filters products by search query', async () => {

@@ -76,9 +76,21 @@ describe('RecipeService', () => {
   // Issue #512 slice 1 part A: the ingest transaction resolves product /
   // insumo / UOM repositories from the tenant-bound manager, so the spec
   // keeps dedicated manager-scoped repo mocks.
-  const mgrProductRepo = { findOne: jest.fn() };
-  const mgrInsumoRepo = { findOne: jest.fn() };
+  const mgrProductRepo = { findOne: jest.fn(), find: jest.fn() };
+  const mgrInsumoRepo = { findOne: jest.fn(), find: jest.fn() };
   const mgrUomConversionRepo = { findOne: jest.fn() };
+
+  /**
+   * The ids a `where` clause asks for. The service resolves the component
+   * identity with `In([...])`, so the mock needs the operator's value to
+   * answer with a row per requested id.
+   */
+  const requestedIds = (where: unknown): string[] => {
+    const id = (where as { id?: unknown } | undefined)?.id;
+    if (typeof id === 'string') return [id];
+    const value = (id as { value?: unknown } | undefined)?.value;
+    return Array.isArray(value) ? (value as string[]) : [];
+  };
 
   type CreatedRecord = Record<string, unknown>;
   const createdVersions: CreatedRecord[] = [];
@@ -147,6 +159,26 @@ describe('RecipeService', () => {
       if (entity === RecipeDetail) return recipeDetailRepo;
       return null;
     });
+    // The service resolves the component identity (the authoritative
+    // ingredient name) from the referenced insumo / sub-recipe product.
+    mgrInsumoRepo.find.mockImplementation((opts: { where?: unknown }) =>
+      Promise.resolve(
+        requestedIds(opts?.where).map((id) => ({
+          id,
+          name: `Insumo ${id}`,
+          consumptionUom: 'kg',
+        })),
+      ),
+    );
+    mgrProductRepo.find.mockImplementation((opts: { where?: unknown }) =>
+      Promise.resolve(
+        requestedIds(opts?.where).map((id) => ({
+          id,
+          name: `Producto ${id}`,
+          uom: 'und',
+        })),
+      ),
+    );
     manager.query.mockResolvedValue(undefined);
     dataSource.transaction.mockImplementation(
       <T>(cb: (m: typeof manager) => Promise<T>): Promise<T> => cb(manager),
@@ -330,6 +362,84 @@ describe('RecipeService', () => {
         component_uom: 'kg',
         reference_version_id: 'rv-ref',
       }),
+    );
+  });
+
+  // The dashboard write path never persisted `ingredient_name`: the column
+  // stayed NULL and the next edit round-tripped NULL as "" into a
+  // `@IsNotEmpty` DTO (400 `components.0.ingredientName should not be
+  // empty`). The service resolves the name from the referenced insumo /
+  // sub-recipe product, so the snapshot is complete even when the client
+  // sends nothing.
+  it('persists the resolved ingredient name and the insumo consumption unit', async () => {
+    recipeVersionRepo.findOne.mockResolvedValue(null);
+    recipeVersionRepo.create.mockImplementation((value: unknown) => value);
+    recipeVersionRepo.save.mockResolvedValue({
+      id: 'rv-named',
+      version_number: 1,
+      is_active: true,
+    });
+    recipeDetailRepo.create.mockImplementation((value: unknown) => value);
+    recipeDetailRepo.save.mockResolvedValue([]);
+    manager.findOne.mockResolvedValue(null);
+    manager.find.mockResolvedValue([]);
+
+    await service.createNewVersion({
+      tenantId: 'tenant-A',
+      productId: 'prod-1',
+      components: [
+        {
+          insumoId: 'ins-1',
+          grossQuantity: 2,
+          technicalShrinkPct: 0,
+          ingredientType: 'INSUMO',
+        },
+      ],
+      yieldQuantity: 1,
+      technicalShrinkPct: 0,
+    });
+
+    expect(recipeDetailRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        insumo_id: 'ins-1',
+        ingredient_name: 'Insumo ins-1',
+        component_uom: 'kg',
+      }),
+    );
+  });
+
+  it('falls back to the client name when the referenced insumo is gone', async () => {
+    recipeVersionRepo.findOne.mockResolvedValue(null);
+    recipeVersionRepo.create.mockImplementation((value: unknown) => value);
+    recipeVersionRepo.save.mockResolvedValue({
+      id: 'rv-fallback',
+      version_number: 1,
+      is_active: true,
+    });
+    recipeDetailRepo.create.mockImplementation((value: unknown) => value);
+    recipeDetailRepo.save.mockResolvedValue([]);
+    manager.findOne.mockResolvedValue(null);
+    manager.find.mockResolvedValue([]);
+    mgrInsumoRepo.find.mockResolvedValue([]);
+
+    await service.createNewVersion({
+      tenantId: 'tenant-A',
+      productId: 'prod-1',
+      components: [
+        {
+          insumoId: 'ins-gone',
+          grossQuantity: 2,
+          technicalShrinkPct: 0,
+          ingredientType: 'INSUMO',
+          ingredientName: 'Nombre del cliente',
+        },
+      ],
+      yieldQuantity: 1,
+      technicalShrinkPct: 0,
+    });
+
+    expect(recipeDetailRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ ingredient_name: 'Nombre del cliente' }),
     );
   });
 

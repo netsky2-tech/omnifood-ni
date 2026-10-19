@@ -9,6 +9,7 @@ import {
   RecipeSuggestionState,
 } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
+import { Insumo } from './entities/insumo.entity';
 import { UomConversionCalculator } from './uom-conversion-calculator';
 
 /**
@@ -34,7 +35,13 @@ const PRODUCT_NAME = 'Espresso Doble';
 describe('Recipe product-type guard (#611)', () => {
   let service: RecipeService;
 
-  const productRepo = { findOne: jest.fn() };
+  const productRepo = { findOne: jest.fn(), find: jest.fn() };
+  const insumoRepo = {
+    findOne: jest.fn(),
+    find: jest.fn().mockResolvedValue([
+      { id: 'ins-1', name: 'Café en Grano', consumptionUom: 'g' },
+    ]),
+  };
   const recipeVersionRepo = {
     findOne: jest.fn(),
     find: jest.fn(),
@@ -53,6 +60,7 @@ describe('Recipe product-type guard (#611)', () => {
     query: jest.fn().mockResolvedValue(undefined),
     getRepository: jest.fn((entity: unknown) => {
       if (entity === Product) return productRepo;
+      if (entity === Insumo) return insumoRepo;
       if (entity === RecipeVersion) return recipeVersionRepo;
       if (entity === RecipeDetail) return recipeDetailRepo;
       return null;
