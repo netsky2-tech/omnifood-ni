@@ -78,7 +78,7 @@ El efecto es un dato **P2** de la opción (un atributo de la configuración), no
 
 ## 6. Conflict resolution (§0.1)
 
-Sin conflictos de autoridad: las cinco decisiones (D1–D6) son del owner y el estándar se aplica sobre ellas. El único punto donde el estándar y unaCostumbre previa chocaban —el diálogo que edita una parte de un formulario en vez de un formulario propio— se resolvió a favor del estándar: la guarda de descarte (§20) existe aunque el formulario mayor no la tenga para sus filas.
+Sin conflictos de autoridad: las cinco decisiones (D1–D6) son del owner y el estándar se aplica sobre ellas. El único punto donde el estándar y una costumbre previa chocaban —el diálogo que edita una parte de un formulario en vez de un formulario propio— se resolvió a favor del estándar: la guarda de descarte (§20) existe aunque el formulario mayor no la tenga para sus filas.
 
 ---
 
