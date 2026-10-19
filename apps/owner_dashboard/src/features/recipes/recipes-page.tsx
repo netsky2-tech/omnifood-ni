@@ -22,7 +22,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { RecipeForm } from './RecipeForm';
-import { formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '@/lib/api-error';
 
 type RecipesTabId = 'recetas' | 'sugerencias';
@@ -54,7 +54,11 @@ function RecipesOverview() {
   // Every product with an active published recipe, with the recipe's own
   // figures. The grid needs the recipe data for ALL its cards, not only for
   // the selected one.
-  const { data: activeRecipes } = useActiveRecipes();
+  const {
+    data: activeRecipes,
+    isLoading: activeRecipesLoading,
+    isFetching: activeRecipesFetching,
+  } = useActiveRecipes();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -117,7 +121,7 @@ function RecipesOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div className="relative flex-1 max-w-md">
           <label htmlFor="recipe-search" className="sr-only">Buscar productos compuestos</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -129,6 +133,17 @@ function RecipesOverview() {
             className="pl-10"
           />
         </div>
+        {/* §28.3: after a save the grid refetches; the cards keep the valid
+            data they have, so the refresh is announced instead of silently
+            swapping the numbers under the operator's eyes. */}
+        {activeRecipesFetching && !activeRecipesLoading && (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="recipes-grid-refreshing"
+          >
+            Actualizando…
+          </span>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -161,7 +176,11 @@ function RecipesOverview() {
                   <ChefHat className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{product.name}</h3>
                 </div>
-                <Badge variant={product.is_active ? 'success' : 'destructive'}>
+                {/* §26: INACTIVE is a neutral lifecycle state, not an
+                    exception — a destructive badge misreports a quiet
+                    state as a problem (the Insumos table already carries
+                    the neutral badge). */}
+                <Badge variant={product.is_active ? 'success' : 'secondary'}>
                   {product.is_active ? 'Activo' : 'Inactivo'}
                 </Badge>
               </div>
@@ -179,7 +198,7 @@ function RecipesOverview() {
                       <span>Costo receta:</span>
                       <span className="font-medium tabular-nums">
                         {summary.estimatedCostNio != null
-                          ? `${formatNumber(summary.estimatedCostNio)} NIO`
+                          ? formatCurrency(summary.estimatedCostNio)
                           : '—'}
                       </span>
                     </div>
@@ -195,9 +214,20 @@ function RecipesOverview() {
                     </div>
                     <div className="flex justify-between text-muted-foreground">
                       <span>Precio:</span>
-                      <span className="font-medium tabular-nums">{formatNumber(product.sellPrice)} NIO</span>
+                      <span className="font-medium tabular-nums">{formatCurrency(product.sellPrice)}</span>
                     </div>
                   </>
+                ) : activeRecipesLoading ? (
+                  // The recipe list is still loading: the card MUST NOT
+                  // claim "Sin receta vigente" — that is an unknown
+                  // presented as a fact (AP-02). Until the list resolves the
+                  // verdict is simply absent.
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Receta:</span>
+                    <span className="font-medium text-muted-foreground/70">
+                      Cargando…
+                    </span>
+                  </div>
                 ) : (
                   <>
                     <div className="flex justify-between text-muted-foreground">
@@ -226,7 +256,7 @@ function RecipesOverview() {
                     {summary.componentCount} ingrediente{summary.componentCount !== 1 ? 's' : ''}
                   </div>
                   <div className="text-muted-foreground">
-                    Costo de receta: {summary.estimatedCostNio != null ? `${formatNumber(summary.estimatedCostNio)} NIO` : 'no disponible'}
+                    Costo de receta: {summary.estimatedCostNio != null ? formatCurrency(summary.estimatedCostNio) : 'no disponible'}
                   </div>
                   {summary.estimatedCostNio == null && summary.costUnavailableReason && (
                     <div className="text-muted-foreground">
@@ -245,7 +275,7 @@ function RecipesOverview() {
                 </div>
               )}
 
-              {!summary && (
+              {!summary && !activeRecipesLoading && (
                 <Button
                   variant="outline"
                   size="sm"

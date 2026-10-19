@@ -193,7 +193,13 @@ export function RecipeForm({
         },
       });
 
-      toast({ variant: 'success', title: 'Éxito', description: 'Receta creada correctamente' });
+      // §19.2: the success feedback states WHAT happened; "Éxito" is a
+      // generic label for a specific fact.
+      toast({
+        variant: 'success',
+        title: 'Receta guardada',
+        description: `La receta v${versionNumber} de ${productName} quedó vigente con ${components.length} ingrediente${components.length !== 1 ? 's' : ''}.`,
+      });
       onSuccess();
     } catch (err: unknown) {
       toast({
@@ -249,6 +255,21 @@ export function RecipeForm({
           <CardTitle>Información de la Versión</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {existingRecipe && (
+            // §22: the edit flow must make its scope clear. Saving does not
+            // rewrite the live recipe: it publishes a NEW version and the
+            // previous one stays as history (it stops being consumed, but it
+            // is never deleted — the recipe versions are the DGI/audit
+            // trail).
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="recipe-form-edit-scope"
+            >
+              Al guardar se publica la versión {versionNumber}. La versión
+              anterior queda como historial y deja de consumirse; ninguna
+              versión se borra.
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <Label htmlFor="versionNumber">Número de Versión *</Label>

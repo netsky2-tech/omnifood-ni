@@ -289,6 +289,7 @@ export function PurchasesForm({
         name: newSupplierName.trim(),
       });
       toast({
+        variant: "success",
         title: "Proveedor creado",
         description: `'${created.name}' ya está disponible para registrar compras.`,
       });
@@ -552,7 +553,7 @@ export function PurchasesForm({
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      <ShieldCheck className="h-4 w-4 text-secondary-700" />
                       Control fiscal de IVA
                     </span>
                     <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground tabular-nums">

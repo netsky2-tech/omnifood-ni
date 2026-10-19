@@ -194,6 +194,34 @@ describe('W7 — RecipesPage', () => {
     expect(screen.getAllByText('Inactivo').length).toBe(1);
   });
 
+  it('treats INACTIVE as a neutral lifecycle state, not an exception (Nhilos §26)', () => {
+    mockProducts();
+    render(<RecipesPage />, { wrapper: TestWrapper });
+
+    // A destructive badge misreports a quiet state as a problem; the
+    // inactive product carries the neutral badge, like the Insumos table.
+    const inactive = screen.getByText('Inactivo');
+    expect(inactive).toBeInTheDocument();
+    expect(inactive.className).toContain('bg-muted');
+    expect(inactive.className).not.toContain('destructive');
+  });
+
+  it('never claims "Sin receta vigente" while the recipe list is still loading (AP-02)', () => {
+    mockProducts();
+    vi.mocked(useActiveRecipes).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      refetch: vi.fn(),
+    } as any);
+
+    render(<RecipesPage />, { wrapper: TestWrapper });
+
+    // Unknown is not "no recipe": while the list is in flight the verdict is
+    // absent, and the create action is not offered on a guess.
+    expect(screen.queryByText('Sin receta vigente')).not.toBeInTheDocument();
+    expect(screen.queryByText('Crear Receta')).not.toBeInTheDocument();
+  });
+
   it('shows "Crear Receta" for all compound products without recipe', () => {
     mockProducts();
     render(<RecipesPage />, { wrapper: TestWrapper });
@@ -234,7 +262,9 @@ describe('W7 — RecipesPage', () => {
     expect(screen.getByText(/2 ingrediente/)).toBeInTheDocument();
     // The card shows the RECIPE's figures: its cost and its yield — not the
     // product's catalog price/stock, which never change with the recipe.
-    expect(screen.getByText('12.5 NIO')).toBeInTheDocument();
+    // Money uses the module's currency format — the same one the
+    // "Costo por plato" report uses for the very same figure.
+    expect(screen.getByText('C$12.50')).toBeInTheDocument();
     expect(screen.getByText('10 un')).toBeInTheDocument();
     expect(screen.getByText('Editar Receta')).toBeInTheDocument();
     // Only the product WITH a recipe offers "Editar"; the other two still
@@ -331,6 +361,16 @@ describe('W7 — RecipeForm', () => {
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     expect(screen.getAllByDisplayValue('5').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByDisplayValue('Receta original')).toBeInTheDocument();
+  });
+
+  it('states the scope of the edit: a new version, the previous one kept as history (Nhilos §22)', () => {
+    render(
+      <RecipeForm {...defaultProps} existingRecipe={MOCK_ACTIVE_RECIPE} />,
+      { wrapper: TestWrapper },
+    );
+    const scope = screen.getByTestId('recipe-form-edit-scope');
+    expect(scope).toHaveTextContent(/se publica la versión 2/i);
+    expect(scope).toHaveTextContent(/historial/i);
   });
 
   it('calls onCancel when cancel is clicked', async () => {
