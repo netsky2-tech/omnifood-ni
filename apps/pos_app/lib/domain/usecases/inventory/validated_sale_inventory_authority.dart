@@ -56,8 +56,16 @@ class AuthorityInsumo {
     required this.tenantId,
     this.name = '',
     this.negativeStockPolicy = 'RESTRICT',
+    // R28: the insumo's consumption unit. The deviation resolver needs it
+    // to know whether a quantity INHERITED from a recipe component means
+    // the same thing in the insumo the effect applies to (a number in
+    // millilitres is not a number in litres).
+    this.consumptionUom = '',
   });
   final String id, tenantId, name, negativeStockPolicy;
+
+  /// The unit the stock of this insumo is kept in.
+  final String consumptionUom;
 }
 
 class AuthorityMapping {

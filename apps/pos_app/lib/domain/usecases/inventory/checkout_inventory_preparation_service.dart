@@ -107,6 +107,10 @@ class CheckoutInventoryPreparationService {
             authorityInsumosById[directInsumo.id] = AuthorityInsumo(
               id: directInsumo.id,
               tenantId: tenantId,
+              // R28: the consumption unit travels into the authority so a
+              // deviation can tell whether an inherited quantity means the
+              // same thing in the insumo it applies to.
+              consumptionUom: directInsumo.uom,
             );
           }
         }
@@ -181,7 +185,11 @@ class CheckoutInventoryPreparationService {
             if (insumo != null) {
               authorityInsumosById.putIfAbsent(
                 insumo.id,
-                () => AuthorityInsumo(id: insumo.id, tenantId: tenantId),
+                () => AuthorityInsumo(
+                  id: insumo.id,
+                  tenantId: tenantId,
+                  consumptionUom: insumo.uom,
+                ),
               );
             }
           }
@@ -211,6 +219,10 @@ class CheckoutInventoryPreparationService {
               id: i.id,
               productId: i.productId,
               quantity: i.quantity,
+              // R28: the line's modifiers carry the inventory effects, so
+              // the snapshot builder can resolve the demand the line
+              // really consumes (recipe + deviations).
+              modifiers: i.selectedModifiers,
             ),
           )
           .toList(),
@@ -444,7 +456,11 @@ class CheckoutInventoryPreparationService {
         }
         insumosById.putIfAbsent(
           leaf.id,
-          () => AuthorityInsumo(id: leaf.id, tenantId: tenantId),
+          () => AuthorityInsumo(
+            id: leaf.id,
+            tenantId: tenantId,
+            consumptionUom: leaf.uom,
+          ),
         );
       }
     }

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
 
+import 'modifier_deviation_resolver.dart';
 import 'sale_inventory_outcome_planner.dart';
 import 'sub_recipe_bom_explosion.dart';
 import 'validated_sale_inventory_authority.dart';
@@ -183,13 +184,28 @@ class SaleTimeInventorySnapshotBuilder {
         )
         .values
         .toList(growable: false);
+
+    // R28: the line's modifiers CORRECT the recipe's consumption. The
+    // resolution is fail-soft by construction: an effect the company cannot
+    // apply (an insumo it has not registered, a quantity whose unit does not
+    // match) simply does not touch the stock, and the sale goes through.
+    final resolution = const ModifierDeviationResolver().resolve(
+      leaves: leaves,
+      rootComponents: authority.componentsById.values
+          .where((component) => component.recipeId == recipe.id)
+          .toList(growable: false),
+      modifiers: line.line.modifiers,
+      insumosById: authority.insumosById,
+    );
+
+    final resolved = resolution.leaves;
     return [
-      for (var i = 0; i < leaves.length; i++)
+      for (var i = 0; i < resolved.length; i++)
         _binding(
           i,
-          leaves[i].insumoId,
-          leaves[i].rootComponentId,
-          leaves[i].quantityPerSaleUnit,
+          resolved[i].insumoId,
+          resolved[i].rootComponentId,
+          resolved[i].quantityPerSaleUnit,
           line.line.id,
           authority.context.provisionedTenantId,
           terminalId,
