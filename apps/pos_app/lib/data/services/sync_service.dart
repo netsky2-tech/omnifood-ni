@@ -4786,6 +4786,16 @@ class SyncService {
                   isDefault: optionMap['isDefault'] as bool? ?? false,
                   sortOrder: asInt(optionMap['sortOrder']) ?? 0,
                   isActive: optionMap['isActive'] as bool? ?? true,
+                  // R28: the option's INVENTORY effect. A backend that
+                  // predates R28 sends no effect at all, and the option
+                  // then reads as 'NONE' — price-only, exactly as before.
+                  inventoryEffect:
+                      optionMap['inventoryEffect']?.toString() ?? 'NONE',
+                  effectInsumoId: optionMap['effectInsumoId']?.toString(),
+                  effectTargetInsumoId:
+                      optionMap['effectTargetInsumoId']?.toString(),
+                  effectQuantity: asDouble(optionMap['effectQuantity']),
+                  effectFactor: asDouble(optionMap['effectFactor']),
                 ),
               );
             }

@@ -3459,6 +3459,74 @@ final migration77_78 = Migration(77, 78, (database) async {
   }
 });
 
+/// R28: the modifier option's optional INVENTORY effect, mirrored locally
+/// so the terminal can resolve the demand of a line (M3) and the sale can
+/// carry the deviation (M2).
+///
+/// The columns are nullable and default to the price-only behaviour, so a
+/// terminal that receives a catalogue WITHOUT the effect (an older backend)
+/// keeps behaving exactly as before: every option reads as 'NONE' and the
+/// stock is not touched.
+final migration78_79 = Migration(78, 79, (database) async {
+  final optionColumns = await database.rawQuery(
+    'PRAGMA table_info(modifier_options)',
+  );
+  final hasEffect = optionColumns.any(
+    (column) => column['name'] == 'inventory_effect',
+  );
+  if (!hasEffect) {
+    await database.execute(
+      "ALTER TABLE modifier_options ADD COLUMN inventory_effect TEXT NOT NULL DEFAULT 'NONE'",
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_target_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_quantity REAL',
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_factor REAL',
+    );
+  }
+
+  // R28: the invoice line's DEVIATION RECORD. The local row used to keep
+  // only the modifier's NAME, so after the sale neither the terminal nor
+  // the cloud could tell WHICH option was sold. The option and group ids
+  // are kept instead of a fresh UUID.
+  final itemModifierColumns = await database.rawQuery(
+    'PRAGMA table_info(invoice_item_modifiers)',
+  );
+  final hasOptionId = itemModifierColumns.any(
+    (column) => column['name'] == 'option_id',
+  );
+  if (!hasOptionId) {
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN option_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN group_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN inventory_effect TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_target_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_quantity REAL',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_factor REAL',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3528,6 +3596,7 @@ final allMigrations = [
   migration75_76,
   migration76_77,
   migration77_78,
+  migration78_79,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

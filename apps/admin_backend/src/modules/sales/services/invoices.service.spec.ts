@@ -753,12 +753,28 @@ describe('InvoicesService', () => {
           name: 'Michelada Extra',
           extraPrice: 30,
           quantity: 2,
+          // R28: a line without identity or deviation carries none, and the
+          // absence is recorded AS absence — never invented.
+          optionId: null,
+          groupId: null,
+          inventoryEffect: null,
+          effectInsumoId: null,
+          effectTargetInsumoId: null,
+          effectQuantity: null,
+          effectFactor: null,
         },
         {
           invoiceItemId: 'item-mod-1',
           name: 'Sin Cebolla',
           extraPrice: 0,
           quantity: 1,
+          optionId: null,
+          groupId: null,
+          inventoryEffect: null,
+          effectInsumoId: null,
+          effectTargetInsumoId: null,
+          effectQuantity: null,
+          effectFactor: null,
         },
       ]);
       // Deterministic mirror: the item's previous modifier lines are
@@ -774,6 +790,73 @@ describe('InvoicesService', () => {
         ]),
         ['id'],
       );
+    });
+
+    it('persists the option identity and its inventory effect on the line (R28)', async () => {
+      // R28: the line's DEVIATION RECORD. Until R28 the cloud stored only
+      // the modifier's NAME (free text), so neither the cloud nor the audit
+      // could tell WHICH option was sold, and a deviation from the recipe
+      // (almond milk instead of the recipe's whole milk) left no trace.
+      const tenantId = 'tenant-1';
+      recipeService.getSnapshot.mockResolvedValue({
+        recipeVersion: { id: 'rv-cap', product_id: 'prod-cap' },
+        components: [],
+      });
+      const dto: SyncInvoiceDto = {
+        id: 'inv-deviation-1',
+        number: '013',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 80,
+        totalTax: 12,
+        total: 92,
+        paymentStatus: 'PAID',
+        items: [
+          {
+            id: 'item-dev-1',
+            productId: 'prod-cap',
+            productName: 'Capuccino',
+            quantity: 1,
+            unitPrice: 70,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 12,
+            total: 92,
+            discount: 0,
+            modifiers: [
+              {
+                name: 'Leche: Almendras',
+                extraPrice: 10,
+                quantity: 1,
+                optionId: 'opt-almendras',
+                groupId: 'grp-leche',
+                inventoryEffect: 'SWAP',
+                effectTargetInsumoId: 'ins-leche-entera',
+                effectInsumoId: 'ins-leche-almendras',
+              },
+            ],
+          },
+        ],
+        payments: [],
+      };
+
+      await service.syncInvoices(tenantId, [dto]);
+
+      expect(modifierRepo.insert).toHaveBeenCalledWith([
+        expect.objectContaining({
+          invoiceItemId: 'item-dev-1',
+          name: 'Leche: Almendras',
+          quantity: 1,
+          optionId: 'opt-almendras',
+          groupId: 'grp-leche',
+          inventoryEffect: 'SWAP',
+          effectTargetInsumoId: 'ins-leche-entera',
+          effectInsumoId: 'ins-leche-almendras',
+          // No explicit quantity: the resolution INHERITS the recipe's own.
+          effectQuantity: null,
+          effectFactor: null,
+        }),
+      ]);
     });
 
     it('rejects cross-tenant item id collision before persisting any invoice/item', async () => {

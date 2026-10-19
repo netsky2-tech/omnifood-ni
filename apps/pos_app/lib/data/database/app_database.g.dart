@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 78,
+      version: 79,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -270,7 +270,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, `discount_origin_json` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, `quantity` INTEGER NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, `quantity` INTEGER NOT NULL, `option_id` TEXT, `group_id` TEXT, `inventory_effect` TEXT, `effect_insumo_id` TEXT, `effect_target_insumo_id` TEXT, `effect_quantity` REAL, `effect_factor` REAL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `amount_nio` REAL NOT NULL, `change_given` REAL NOT NULL, `change_currency` TEXT NOT NULL, `voucher_code` TEXT, `card_brand` TEXT, `card_type` TEXT, `bank_pos` TEXT, `reconciliation_status` TEXT, `last4` TEXT, `batch_number` TEXT, `reconciled_at` INTEGER, `reconciled_by_user_id` TEXT, `override_supervisor_ref` TEXT, `reconciliation_sync_status` TEXT NOT NULL, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -288,7 +288,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `modifier_groups` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `min_selected` INTEGER NOT NULL, `max_selected` INTEGER NOT NULL, `allow_quantities` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `modifier_options` (`id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_delta` REAL NOT NULL, `is_default` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `modifier_options` (`id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_delta` REAL NOT NULL, `is_default` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `inventory_effect` TEXT NOT NULL, `effect_insumo_id` TEXT, `effect_target_insumo_id` TEXT, `effect_quantity` REAL, `effect_factor` REAL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `category_modifier_groups` (`id` TEXT NOT NULL, `catalog_value_id` TEXT NOT NULL, `catalog_code` TEXT NOT NULL, `group_id` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -3788,7 +3788,7 @@ class _$InvoiceItemDao extends InvoiceItemDao {
       String invoiceId) async {
     return _queryAdapter.queryList(
         'SELECT invoice_item_modifiers.* FROM invoice_item_modifiers INNER JOIN invoice_items ON invoice_items.id = invoice_item_modifiers.invoice_item_id WHERE invoice_items.invoice_id = ?1 ORDER BY invoice_item_modifiers.rowid',
-        mapper: (Map<String, Object?> row) => InvoiceItemModifierEntity(id: row['id'] as String, invoiceItemId: row['invoice_item_id'] as String, name: row['name'] as String, extraPrice: row['extra_price'] as double, quantity: row['quantity'] as int),
+        mapper: (Map<String, Object?> row) => InvoiceItemModifierEntity(id: row['id'] as String, invoiceItemId: row['invoice_item_id'] as String, name: row['name'] as String, extraPrice: row['extra_price'] as double, quantity: row['quantity'] as int, optionId: row['option_id'] as String?, groupId: row['group_id'] as String?, inventoryEffect: row['inventory_effect'] as String?, effectInsumoId: row['effect_insumo_id'] as String?, effectTargetInsumoId: row['effect_target_insumo_id'] as String?, effectQuantity: row['effect_quantity'] as double?, effectFactor: row['effect_factor'] as double?),
         arguments: [invoiceId]);
   }
 
@@ -4182,7 +4182,14 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'invoice_item_id': item.invoiceItemId,
                   'name': item.name,
                   'extra_price': item.extraPrice,
-                  'quantity': item.quantity
+                  'quantity': item.quantity,
+                  'option_id': item.optionId,
+                  'group_id': item.groupId,
+                  'inventory_effect': item.inventoryEffect,
+                  'effect_insumo_id': item.effectInsumoId,
+                  'effect_target_insumo_id': item.effectTargetInsumoId,
+                  'effect_quantity': item.effectQuantity,
+                  'effect_factor': item.effectFactor
                 }),
         _paymentEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -5579,7 +5586,12 @@ class _$ModifierDao extends ModifierDao {
                   'price_delta': item.priceDelta,
                   'is_default': item.isDefault ? 1 : 0,
                   'sort_order': item.sortOrder,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'inventory_effect': item.inventoryEffect,
+                  'effect_insumo_id': item.effectInsumoId,
+                  'effect_target_insumo_id': item.effectTargetInsumoId,
+                  'effect_quantity': item.effectQuantity,
+                  'effect_factor': item.effectFactor
                 }),
         _categoryModifierGroupEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -5664,7 +5676,12 @@ class _$ModifierDao extends ModifierDao {
             priceDelta: row['price_delta'] as double,
             isDefault: (row['is_default'] as int) != 0,
             sortOrder: row['sort_order'] as int,
-            isActive: (row['is_active'] as int) != 0));
+            isActive: (row['is_active'] as int) != 0,
+            inventoryEffect: row['inventory_effect'] as String,
+            effectInsumoId: row['effect_insumo_id'] as String?,
+            effectTargetInsumoId: row['effect_target_insumo_id'] as String?,
+            effectQuantity: row['effect_quantity'] as double?,
+            effectFactor: row['effect_factor'] as double?));
   }
 
   @override

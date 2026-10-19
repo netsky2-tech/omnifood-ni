@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsIn,
   IsString,
   IsNumber,
   IsBoolean,
@@ -14,6 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
+import { MODIFIER_INVENTORY_EFFECTS } from '../../modifiers/modifier-inventory-effect';
 
 export class InventorySnapshotBindingDto {
   @IsNumber()
@@ -221,6 +223,51 @@ export class CreateModifierDto {
   // Absence persists as 1 (the database column default, migration
   // 1809640000000), never as a fabricated business value.
   quantity?: number;
+
+  // --- R28: the IDENTITY of the option and its INVENTORY effect ----------
+  // Until R28 the line carried only the modifier's NAME (free text, and the
+  // POS built it as "Grupo: Opción"), so neither the cloud nor the audit
+  // could tell WHICH option was sold. These fields are OPTIONAL: a
+  // terminal that predates R28 keeps working, and its lines simply carry no
+  // deviation (the effect is NONE, exactly as before).
+
+  /** The backend's option id — the option this line actually is. */
+  @IsOptional()
+  @IsString()
+  optionId?: string;
+
+  /** The group the option belongs to. */
+  @IsOptional()
+  @IsString()
+  groupId?: string;
+
+  /**
+   * The option's inventory effect (NONE / ADD / REMOVE / SWAP / SCALE).
+   * Absent or 'NONE' means the option is price-only.
+   */
+  @IsOptional()
+  @IsIn(MODIFIER_INVENTORY_EFFECTS)
+  inventoryEffect?: string;
+
+  /** The insumo the effect acts ON: added (ADD) or substituted in (SWAP). */
+  @IsOptional()
+  @IsString()
+  effectInsumoId?: string;
+
+  /** The insumo of the recipe component the effect affects. */
+  @IsOptional()
+  @IsString()
+  effectTargetInsumoId?: string;
+
+  /** The quantity to apply per sold unit (NULL/absent = inherited). */
+  @IsOptional()
+  @IsNumber()
+  effectQuantity?: number;
+
+  /** The multiplier of a SCALE. */
+  @IsOptional()
+  @IsNumber()
+  effectFactor?: number;
 }
 
 export class CreatePaymentDto {

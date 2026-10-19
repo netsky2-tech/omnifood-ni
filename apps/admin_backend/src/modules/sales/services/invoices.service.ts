@@ -334,6 +334,25 @@ export class InvoicesService {
             // invoice_item_modifier_entity.dart:30). 0/negative can never
             // reach this code: the DTO rejects them with a named error.
             quantity: modifier.quantity ?? 1,
+            // R28: the line's DEVIATION RECORD — which option it carries
+            // and what it did to the stock. Absent for a price-only line
+            // and for every line written by a terminal that predates R28,
+            // so the historical records stay exactly as they are.
+            optionId: modifier.optionId ?? null,
+            groupId: modifier.groupId ?? null,
+            inventoryEffect:
+              modifier.inventoryEffect &&
+              modifier.inventoryEffect !== 'NONE'
+                ? modifier.inventoryEffect
+                : null,
+            effectInsumoId: modifier.effectInsumoId ?? null,
+            effectTargetInsumoId: modifier.effectTargetInsumoId ?? null,
+            effectQuantity:
+              modifier.effectQuantity === undefined
+                ? null
+                : modifier.effectQuantity,
+            effectFactor:
+              modifier.effectFactor === undefined ? null : modifier.effectFactor,
           })),
         );
         if (modifierRows.length) {

@@ -1547,40 +1547,38 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                     !groupName.toLowerCase().startsWith('extra');
                 final displayName = hasGroupContext ? '$groupName: $optionName' : optionName;
 
+                // R28: the option's IDENTITY (the backend's option and
+                // group ids) and its INVENTORY EFFECT travel with the line.
+                // Until now the line carried only a display NAME, so neither
+                // the terminal nor the cloud could tell WHICH option was
+                // sold, and the effect of the option was invisible.
+                Modifier buildModifier(int quantity) => Modifier(
+                      id: option.id,
+                      name: displayName,
+                      extraPrice: option.priceDelta,
+                      quantity: quantity,
+                      optionId: option.id,
+                      groupId: group.id,
+                      inventoryEffect: option.inventoryEffect,
+                      effectInsumoId: option.effectInsumoId,
+                      effectTargetInsumoId: option.effectTargetInsumoId,
+                      effectQuantity: option.effectQuantity,
+                      effectFactor: option.effectFactor,
+                    );
+
                 if (group.maxSelected == 1) {
                   if (_selectedRadioOption[group.id] == option.id) {
-                    selectedModifiers.add(
-                      Modifier(
-                        id: option.id,
-                        name: displayName,
-                        extraPrice: option.priceDelta,
-                        quantity: 1,
-                      ),
-                    );
+                    selectedModifiers.add(buildModifier(1));
                   }
                 } else if (group.allowQuantities) {
                   final quantity = _optionQuantities[option.id] ?? 0;
                   if (quantity > 0) {
-                    selectedModifiers.add(
-                      Modifier(
-                        id: option.id,
-                        name: displayName,
-                        // Precio POR UNIDAD: la cantidad viaja en su campo
-                        // propio para que totales y comanda sepan cuántas.
-                        extraPrice: option.priceDelta,
-                        quantity: quantity,
-                      ),
-                    );
+                    // Precio POR UNIDAD: la cantidad viaja en su campo
+                    // propio para que totales y comanda sepan cuántas.
+                    selectedModifiers.add(buildModifier(quantity));
                   }
                 } else if (_checkedOptions[option.id] == true) {
-                  selectedModifiers.add(
-                    Modifier(
-                      id: option.id,
-                      name: displayName,
-                      extraPrice: option.priceDelta,
-                      quantity: 1,
-                    ),
-                  );
+                  selectedModifiers.add(buildModifier(1));
                 }
               }
             }

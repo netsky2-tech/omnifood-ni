@@ -80,10 +80,39 @@ class Modifier with _$Modifier {
     /// old persisted payloads (name + extraPrice only, invoice history
     /// included) keep loading as quantity 1.
     @Default(1) int quantity,
+    /// R28: the BACKEND's option id. The identity travels with the line so
+    /// the sale can say WHICH option was sold — the name alone was free
+    /// text ("Grupo: Opción") and proved nothing.
+    ///
+    /// NULL for the legacy local modifiers: the cloud has never known those
+    /// options, and inventing an identifier for them would put a fiction in
+    /// a fiscal record.
+    String? optionId,
+    /// The backend's group id. Null for the legacy local modifiers, for the
+    /// same reason.
+    String? groupId,
+    /// R28: the option's INVENTORY effect. 'NONE' means price-only, which
+    /// is what every option that never declared an effect is.
+    @Default('NONE') String inventoryEffect,
+    /// The insumo the effect acts ON: added (ADD) or substituted in (SWAP).
+    String? effectInsumoId,
+    /// The insumo of the recipe component the effect affects.
+    String? effectTargetInsumoId,
+    /// The quantity to apply per sold unit. Null = inherited from the
+    /// recipe component; it is never 0, because "nothing" is not a
+    /// quantity.
+    double? effectQuantity,
+    /// The multiplier of a SCALE.
+    double? effectFactor,
   }) = _Modifier;
 
   factory Modifier.fromJson(Map<String, dynamic> json) =>
       _$ModifierFromJson(json);
+}
+
+/// R28: whether the option declares an effect on the stock at all.
+extension ModifierInventoryEffect on Modifier {
+  bool get hasInventoryEffect => inventoryEffect != 'NONE';
 }
 
 /// One selectable option inside an effective modifier group. Kept minimal:
@@ -96,6 +125,17 @@ class EffectiveModifierOption with _$EffectiveModifierOption {
     required String name,
     required double priceDelta,
     required bool isDefault,
+    /// R28: the option's INVENTORY effect, mirrored from the catalogue
+    /// delta. 'NONE' means the option is price-only.
+    @Default('NONE') String inventoryEffect,
+    /// The insumo the effect acts ON: added (ADD) or substituted in (SWAP).
+    String? effectInsumoId,
+    /// The insumo of the recipe component the effect affects.
+    String? effectTargetInsumoId,
+    /// The quantity to apply per sold unit. Null = inherited.
+    double? effectQuantity,
+    /// The multiplier of a SCALE.
+    double? effectFactor,
   }) = _EffectiveModifierOption;
 
   factory EffectiveModifierOption.fromJson(Map<String, dynamic> json) =>

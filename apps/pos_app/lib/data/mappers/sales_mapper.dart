@@ -537,6 +537,20 @@ class SalesMapper {
             name: m.name,
             extraPrice: m.extraPrice,
             quantity: m.quantity,
+            // R28: the option's IDENTITY and its INVENTORY EFFECT are kept
+            // with the line. The row's own id stays a local UUID (it is the
+            // table's key), but the catalogue option id and the deviation
+            // travel in their own columns, so the terminal and the cloud
+            // can both say WHICH option was sold and what it did to the
+            // stock. A legacy local modifier has neither, and that is
+            // recorded as such (null), never invented.
+            optionId: m.optionId,
+            groupId: m.groupId,
+            inventoryEffect: m.hasInventoryEffect ? m.inventoryEffect : null,
+            effectInsumoId: m.effectInsumoId,
+            effectTargetInsumoId: m.effectTargetInsumoId,
+            effectQuantity: m.effectQuantity,
+            effectFactor: m.effectFactor,
           ),
         )
         .toList();
@@ -552,6 +566,13 @@ class SalesMapper {
         name: row.name,
         extraPrice: row.extraPrice,
         quantity: row.quantity,
+        optionId: row.optionId,
+        groupId: row.groupId,
+        inventoryEffect: row.inventoryEffect ?? 'NONE',
+        effectInsumoId: row.effectInsumoId,
+        effectTargetInsumoId: row.effectTargetInsumoId,
+        effectQuantity: row.effectQuantity,
+        effectFactor: row.effectFactor,
       );
 
   // --- Payment ---
@@ -743,6 +764,25 @@ class SalesMapper {
                       'name': m.name,
                       'extraPrice': m.extraPrice,
                       'quantity': m.quantity,
+                      // R28: the option's identity and its inventory
+                      // effect. The fields are sent ONLY when they exist,
+                      // so a line whose option is price-only (or comes from
+                      // the legacy local modifiers) keeps the exact wire
+                      // shape it had before, and the cloud's DTO — whose new
+                      // fields are all optional — accepts it unchanged.
+                      if (m.optionId != null) 'optionId': m.optionId,
+                      if (m.groupId != null) 'groupId': m.groupId,
+                      if (m.hasInventoryEffect) ...{
+                        'inventoryEffect': m.inventoryEffect,
+                        if (m.effectInsumoId != null)
+                          'effectInsumoId': m.effectInsumoId,
+                        if (m.effectTargetInsumoId != null)
+                          'effectTargetInsumoId': m.effectTargetInsumoId,
+                        if (m.effectQuantity != null)
+                          'effectQuantity': m.effectQuantity,
+                        if (m.effectFactor != null)
+                          'effectFactor': m.effectFactor,
+                      },
                     },
                   )
                   .toList(),
