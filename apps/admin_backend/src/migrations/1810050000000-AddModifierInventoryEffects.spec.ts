@@ -1,5 +1,5 @@
 import { QueryResult, type QueryRunner } from 'typeorm';
-import { AddModifierInventoryEffects1810030000000 } from './1810030000000-AddModifierInventoryEffects';
+import { AddModifierInventoryEffects1810050000000 } from './1810030000000-AddModifierInventoryEffects';
 
 /**
  * R28 — the migration that gives a modifier option its optional inventory
@@ -18,8 +18,8 @@ import { AddModifierInventoryEffects1810030000000 } from './1810030000000-AddMod
  * protect the contract without coupling to the migration's indentation. */
 const flat = (sql: string): string => sql.replace(/\s+/g, ' ');
 
-describe('AddModifierInventoryEffects1810030000000', () => {
-  const migration = new AddModifierInventoryEffects1810030000000();
+describe('AddModifierInventoryEffects1810050000000', () => {
+  const migration = new AddModifierInventoryEffects1810050000000();
 
   const collectSql = async (direction: 'up' | 'down' = 'up') => {
     const queries: string[] = [];

@@ -28,7 +28,7 @@ import type { QueryRunner } from 'typeorm';
  * RLS posture is UNCHANGED: this is a column addition only, no
  * grant/policy/statement-level change.
  */
-export class AddModifierDeviationToInvoiceItemModifiers1810040000000 {
+export class AddModifierDeviationToInvoiceItemModifiers1810060000000 {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
       'ALTER TABLE invoice_item_modifiers ' +

@@ -26,10 +26,10 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * which is the failure mode the checks exist to prevent (a modifier that
  * silently deducts nothing).
  */
-export class AddModifierInventoryEffects1810030000000
+export class AddModifierInventoryEffects1810050000000
   implements MigrationInterface
 {
-  name = 'AddModifierInventoryEffects1810030000000';
+  name = 'AddModifierInventoryEffects1810050000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
