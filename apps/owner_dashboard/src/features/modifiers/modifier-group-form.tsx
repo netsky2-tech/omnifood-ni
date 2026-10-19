@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Trash2 } from "lucide-react";
+import { Boxes, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,13 @@ import {
 } from "./use-modifiers";
 import { modifierGroupFormSchema, type ModifierGroupFormData } from "./schema";
 import { describeModifierError } from "./modifiers-api";
+import { ModifierEffectDialog } from "./modifier-effect-dialog";
+import {
+  effectBadgeLabel,
+  EMPTY_EFFECT,
+  MODIFIER_EFFECT,
+  type ModifierEffectSpec,
+} from "./effect";
 import { toFiniteNumber } from "@/lib/numeric";
 import { type ModifierGroup, type ModifierOption } from "./types";
 
@@ -37,6 +44,11 @@ interface OptionRowState {
   sort_order: number;
   /** False only for options loaded from an inactive/all group listing. */
   is_active?: boolean;
+  /**
+   * R28 — the option's optional inventory effect. Absent means the default
+   * (NONE: price only), which is what every option that predates R28 is.
+   */
+  effect?: ModifierEffectSpec;
 }
 
 // Backend option payloads carry `is_active` (soft-delete state); the shared
@@ -93,6 +105,10 @@ export function ModifierGroupForm({
   const [optionRows, setOptionRows] = useState<OptionRowState[]>([]);
   // Existing options removed in this edit session; deactivated on save.
   const [removedOptionIds, setRemovedOptionIds] = useState<string[]>([]);
+  // R28 — the option whose inventory effect is being edited. The effect is
+  // edited in its own dialog: the option row is a compact grid, and the
+  // effect needs room for a governed insumo selector and its explanation.
+  const [effectRowKey, setEffectRowKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialData) {
@@ -119,6 +135,14 @@ export function ModifierGroupForm({
           is_default: option.is_default,
           sort_order: option.sort_order,
           is_active: (option as OptionWithActiveState).is_active,
+          effect: {
+            effect: (option.inventory_effect ??
+              MODIFIER_EFFECT.NONE) as ModifierEffectSpec["effect"],
+            effect_insumo_id: option.effect_insumo_id ?? null,
+            effect_target_insumo_id: option.effect_target_insumo_id ?? null,
+            effect_quantity: option.effect_quantity ?? null,
+            effect_factor: option.effect_factor ?? null,
+          },
         }));
       setOptionRows(rows);
       setRemovedOptionIds([]);
@@ -142,6 +166,7 @@ export function ModifierGroupForm({
         price_delta: 0,
         is_default: rows.length === 0,
         sort_order: rows.length,
+        effect: { ...EMPTY_EFFECT },
       },
     ]);
   };
@@ -237,6 +262,14 @@ export function ModifierGroupForm({
           price_delta: row.price_delta,
           is_default: row.is_default,
           sort_order: row.sort_order,
+          // R28 — the inventory effect travels with the option. An option
+          // without one is NONE (price only), exactly as before.
+          inventory_effect: (row.effect ?? EMPTY_EFFECT).effect,
+          effect_insumo_id: (row.effect ?? EMPTY_EFFECT).effect_insumo_id,
+          effect_target_insumo_id: (row.effect ?? EMPTY_EFFECT)
+            .effect_target_insumo_id,
+          effect_quantity: (row.effect ?? EMPTY_EFFECT).effect_quantity,
+          effect_factor: (row.effect ?? EMPTY_EFFECT).effect_factor,
         };
         if (row.id) {
           await updateOption.mutateAsync({
@@ -481,6 +514,33 @@ export function ModifierGroupForm({
                       />
                       <span>Predeterminado</span>
                     </label>
+                    {/* The effect lives on its own line: the row's twelve
+                        columns are already exactly filled by the fields
+                        above, and the effect needs a badge AND a button. */}
+                    <div className="col-span-12 flex items-center gap-2 border-t border-border pt-2 mt-1">
+                      <span className="text-xs text-muted-foreground">
+                        Efecto sobre el inventario:
+                      </span>
+                      <Badge
+                        variant={row.effect?.effect === "NONE" ? "outline" : "info"}
+                        className="text-[10px]"
+                        data-testid={`option-effect-badge-${row.key}`}
+                      >
+                        {effectBadgeLabel(row.effect?.effect ?? MODIFIER_EFFECT.NONE)}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        data-testid={`option-effect-edit-${row.key}`}
+                        aria-label={`Configurar el efecto de inventario de la opción ${optionLabelSuffix(row, index)}`}
+                        onClick={() => setEffectRowKey(row.key)}
+                      >
+                        <Boxes className="h-3.5 w-3.5" />
+                        Configurar
+                      </Button>
+                    </div>
                     <div className="col-span-1 flex justify-end">
                       <Button
                         type="button"
@@ -500,6 +560,30 @@ export function ModifierGroupForm({
           </div>
         )}
       </div>
+
+      {effectRowKey && (
+        <ModifierEffectDialog
+          key={effectRowKey}
+          open
+          optionName={
+            optionRows.find((r) => r.key === effectRowKey)?.name.trim() ||
+            "opción"
+          }
+          value={
+            optionRows.find((r) => r.key === effectRowKey)?.effect ??
+            EMPTY_EFFECT
+          }
+          onOpenChange={(open) => {
+            if (!open) setEffectRowKey(null);
+          }}
+          onSave={(effect) => {
+            setOptionRows((rows) =>
+              rows.map((r) => (r.key === effectRowKey ? { ...r, effect } : r)),
+            );
+            setEffectRowKey(null);
+          }}
+        />
+      )}
 
       <DialogFooter className="border-t pt-4">
         <Button

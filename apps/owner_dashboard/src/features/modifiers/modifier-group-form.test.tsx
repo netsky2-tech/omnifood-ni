@@ -50,6 +50,11 @@ const mockGroup: ModifierGroup = {
       price_delta: 5,
       is_default: true,
       sort_order: 0,
+      inventory_effect: "NONE",
+      effect_insumo_id: null,
+      effect_target_insumo_id: null,
+      effect_quantity: null,
+      effect_factor: null,
     },
     {
       id: "opt-2",
@@ -57,6 +62,11 @@ const mockGroup: ModifierGroup = {
       price_delta: 0,
       is_default: false,
       sort_order: 1,
+      inventory_effect: "NONE",
+      effect_insumo_id: null,
+      effect_target_insumo_id: null,
+      effect_quantity: null,
+      effect_factor: null,
     },
   ],
 };
@@ -451,6 +461,11 @@ describe("ModifierGroupForm", () => {
     // shape drifts, it fails HERE, at the producer, instead of the backend
     // replay silently testing an outdated artifact.
     expect(Object.keys(entera!.input).sort()).toEqual([
+      "effect_factor",
+      "effect_insumo_id",
+      "effect_quantity",
+      "effect_target_insumo_id",
+      "inventory_effect",
       "is_default",
       "name",
       "price_delta",

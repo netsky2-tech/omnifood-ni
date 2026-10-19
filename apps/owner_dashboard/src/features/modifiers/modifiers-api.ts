@@ -17,8 +17,13 @@ import type {
  * declares it as `number`. Everything else is an `integer`/`boolean`/`uuid`
  * column, which node-postgres returns with its declared type already.
  */
-export type RawModifierOption = Omit<ModifierOption, "price_delta"> & {
+export type RawModifierOption = Omit<
+  ModifierOption,
+  "price_delta" | "effect_quantity" | "effect_factor"
+> & {
   price_delta: unknown;
+  effect_quantity: unknown;
+  effect_factor: unknown;
 };
 
 export type RawModifierGroup = Omit<ModifierGroup, "options"> & {
@@ -40,12 +45,26 @@ export type RawEffectiveModifierGroup = Omit<
 };
 
 /** Mirrors the backend response boundary in `apps/admin_backend/src/modules/modifiers/modifier-response.ts`. */
+/**
+ * A decimal that is NULL must stay NULL: `0` would be a quantity (the
+ * operator applied nothing) instead of "not declared" (the quantity is
+ * inherited from the recipe component). Same doctrine as the backend
+ * response boundary.
+ */
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function normalizeModifierOption(
   raw: RawModifierOption,
 ): ModifierOption {
   return {
     ...raw,
     price_delta: toFiniteNumber(raw.price_delta),
+    effect_quantity: toNullableNumber(raw.effect_quantity),
+    effect_factor: toNullableNumber(raw.effect_factor),
   };
 }
 
