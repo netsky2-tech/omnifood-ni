@@ -436,7 +436,7 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
     |---|---|---|
     | **M1** | Modelo de datos y configuración: tabla de efecto por opción (`NONE/ADD/REMOVE/SWAP/SCALE` + insumo destino + insumo objetivo + cantidad + factor), migración, entidad, DTOs, servicio de modificadores, API del dashboard, **tests** — **✅ CERRADA (backend `5fddaee4` + dashboard `0c363460`)** | Backend + dashboard (Módulos) |
     | **M2** | El POS conoce el efecto: espejo local de la configuración, modelo de dominio del modificador con efecto, **dejar de descartar el `option.id`** (que hoy se pierde al persistir y en el wire) y el payload de venta que lo lleva | POS (migración local + delta de catálogo) |
-    | **M3** | El POS **resuelve** la demanda: receta + desviaciones → bindings (aditivo, remocido, sustituto que repone el original, escalado), con la cantidad heredada y marcada en el modal; y el **guard de stock** sobre esa demanda | POS — **✅ CERRADA (`c1a2b3d4`)** |
+    | **M3** | El POS **resuelve** la demanda: receta + desviaciones → bindings (aditivo, remocido, sustituto que repone el original, escalado), con la cantidad heredada y marcada en el modal; y el **guard de stock** sobre esa demanda | POS — **✅ CERRADA (`b5597ff4`)** |
     | **M4** | La nube **recalcula y compara**: motivo nuevo de fail-closed, auditoría de la factura (la desviación queda trazada: qué opción, qué sustituyó a qué) | Backend |
     | **M5** | **Las dos cifras de costo**: "como está escrita" y "como se vendió" (el agregado ponderado de las líneas reales) | Backend + dashboard |
     | **M6** | Campaña en el rig: los 5 efectos, la sustitución (que repone la original), el combinado, y la **garantía SOHO** (tenant sin insumos ⇒ venta normal) | Rig |
