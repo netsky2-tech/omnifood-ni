@@ -1,0 +1,245 @@
+{
+  "version": "v1",
+  "description": "Vectores de conformidad del EFECTO DE INVENTARIO de un modificador (R28). Los MISMOS vectores se ejecutan contra el resolutor del terminal (apps/pos_app/lib/domain/usecases/inventory/modifier_deviation_resolver.dart) y contra el espejo de la nube (apps/admin_backend/src/modules/inventory/modifier-deviation-resolver.ts). Si un lado cambia su semántica sin el otro, uno de los dos deja de pasar: esta es la guarda que impide que la demanda que recalcula la nube y la que envía el terminal diverjan. Es la +1 que hace que la comparación de M4 signifique algo.",
+  "semantics": {
+    "ADD": "suma un insumo a la demanda; la cantidad se hereda del componente objetivo salvo que el operador la marque",
+    "REMOVE": "el componente de la receta deja de consumirse",
+    "SWAP": "el componente de la receta se repone y el insumo sustituto se descuenta en su cantidad",
+    "SCALE": "el componente de la receta se multiplica por el factor",
+    "skipReasons": {
+      "INSUMSO_NOT_IN_CATALOG": "la empresa no tiene registrado el insumo: el efecto no aplica (garantía de SOHO, D6)",
+      "UNIT_MISMATCH": "la cantidad heredada pertenece a otra unidad: el operador debe marcarla",
+      "COMPONENT_NOT_IN_RECIPE": "la receta no tiene ese componente",
+      "INCOMPLETE": "el efecto no declara lo que necesita"
+    }
+  },
+  "cases": [
+    {
+      "name": "add inherits the recipe quantity (D2)",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" },
+        { "insumoId": "ins-leche", "quantityPerSaleUnit": 150, "rootComponentId": "cmp-leche" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 },
+        { "id": "cmp-leche", "insumoId": "ins-leche", "quantityPerSaleUnit": 150 }
+      ],
+      "tenantInsumos": [
+        { "id": "ins-cafe", "consumptionUom": "G" },
+        { "id": "ins-leche", "consumptionUom": "ML" }
+      ],
+      "modifiers": [
+        {
+          "optionId": "opt-shot",
+          "inventoryEffect": "ADD",
+          "effectInsumoId": "ins-cafe",
+          "effectTargetInsumoId": "ins-cafe"
+        }
+      ],
+      "expectedDemand": { "ins-cafe": 36, "ins-leche": 150 },
+      "expectedOutcomes": [
+        { "optionId": "opt-shot", "effect": "ADD", "applied": true }
+      ]
+    },
+    {
+      "name": "the operator's marked quantity wins over the inherited one",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 }
+      ],
+      "tenantInsumos": [{ "id": "ins-cafe", "consumptionUom": "G" }],
+      "modifiers": [
+        {
+          "optionId": "opt-shot",
+          "inventoryEffect": "ADD",
+          "effectInsumoId": "ins-cafe",
+          "effectTargetInsumoId": "ins-cafe",
+          "effectQuantity": 9
+        }
+      ],
+      "expectedDemand": { "ins-cafe": 27 },
+      "expectedOutcomes": [
+        { "optionId": "opt-shot", "effect": "ADD", "applied": true }
+      ]
+    },
+    {
+      "name": "swap restocks the replaced component and deducts the substitute",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" },
+        { "insumoId": "ins-leche", "quantityPerSaleUnit": 150, "rootComponentId": "cmp-leche" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 },
+        { "id": "cmp-leche", "insumoId": "ins-leche", "quantityPerSaleUnit": 150 }
+      ],
+      "tenantInsumos": [
+        { "id": "ins-cafe", "consumptionUom": "G" },
+        { "id": "ins-leche", "consumptionUom": "ML" },
+        { "id": "ins-almendras", "consumptionUom": "ML" }
+      ],
+      "modifiers": [
+        {
+          "optionId": "opt-almendras",
+          "inventoryEffect": "SWAP",
+          "effectTargetInsumoId": "ins-leche",
+          "effectInsumoId": "ins-almendras"
+        }
+      ],
+      "expectedDemand": { "ins-cafe": 18, "ins-almendras": 150 },
+      "expectedOutcomes": [
+        { "optionId": "opt-almendras", "effect": "SWAP", "applied": true }
+      ]
+    },
+    {
+      "name": "remove takes the component out of the consumption",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" },
+        { "insumoId": "ins-leche", "quantityPerSaleUnit": 150, "rootComponentId": "cmp-leche" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 },
+        { "id": "cmp-leche", "insumoId": "ins-leche", "quantityPerSaleUnit": 150 }
+      ],
+      "tenantInsumos": [
+        { "id": "ins-cafe", "consumptionUom": "G" },
+        { "id": "ins-leche", "consumptionUom": "ML" }
+      ],
+      "modifiers": [
+        {
+          "optionId": "opt-sin-cebolla",
+          "inventoryEffect": "REMOVE",
+          "effectTargetInsumoId": "ins-leche"
+        }
+      ],
+      "expectedDemand": { "ins-cafe": 18 },
+      "expectedOutcomes": [
+        { "optionId": "opt-sin-cebolla", "effect": "REMOVE", "applied": true }
+      ]
+    },
+    {
+      "name": "scale multiplies the component",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" },
+        { "insumoId": "ins-leche", "quantityPerSaleUnit": 150, "rootComponentId": "cmp-leche" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 },
+        { "id": "cmp-leche", "insumoId": "ins-leche", "quantityPerSaleUnit": 150 }
+      ],
+      "tenantInsumos": [
+        { "id": "ins-cafe", "consumptionUom": "G" },
+        { "id": "ins-leche", "consumptionUom": "ML" }
+      ],
+      "modifiers": [
+        {
+          "optionId": "opt-doble",
+          "inventoryEffect": "SCALE",
+          "effectTargetInsumoId": "ins-cafe",
+          "effectFactor": 2
+        }
+      ],
+      "expectedDemand": { "ins-cafe": 36, "ins-leche": 150 },
+      "expectedOutcomes": [
+        { "optionId": "opt-doble", "effect": "SCALE", "applied": true }
+      ]
+    },
+    {
+      "name": "SOHO: an insumo the company has not registered is NO_IMPACT",
+      "leaves": [
+        { "insumoId": "ins-leche", "quantityPerSaleUnit": 150, "rootComponentId": "cmp-leche" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-leche", "insumoId": "ins-leche", "quantityPerSaleUnit": 150 }
+      ],
+      "tenantInsumos": [{ "id": "ins-leche", "consumptionUom": "ML" }],
+      "modifiers": [
+        {
+          "optionId": "opt-almendras",
+          "inventoryEffect": "SWAP",
+          "effectTargetInsumoId": "ins-leche",
+          "effectInsumoId": "ins-que-no-existe"
+        }
+      ],
+      "expectedDemand": { "ins-leche": 150 },
+      "expectedOutcomes": [
+        {
+          "optionId": "opt-almendras",
+          "effect": "SWAP",
+          "applied": false,
+          "skipReason": "INSUMSO_NOT_IN_CATALOG"
+        }
+      ]
+    },
+    {
+      "name": "a quantity inherited across units does not apply",
+      "leaves": [
+        { "insumoId": "ins-leche", "quantityPerSaleUnit": 150, "rootComponentId": "cmp-leche" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-leche", "insumoId": "ins-leche", "quantityPerSaleUnit": 150 }
+      ],
+      "tenantInsumos": [
+        { "id": "ins-leche", "consumptionUom": "ML" },
+        { "id": "ins-almendras", "consumptionUom": "L" }
+      ],
+      "modifiers": [
+        {
+          "optionId": "opt-almendras",
+          "inventoryEffect": "SWAP",
+          "effectTargetInsumoId": "ins-leche",
+          "effectInsumoId": "ins-almendras"
+        }
+      ],
+      "expectedDemand": { "ins-leche": 150 },
+      "expectedOutcomes": [
+        {
+          "optionId": "opt-almendras",
+          "effect": "SWAP",
+          "applied": false,
+          "skipReason": "UNIT_MISMATCH"
+        }
+      ]
+    },
+    {
+      "name": "a component the recipe does not have is ignored",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 }
+      ],
+      "tenantInsumos": [{ "id": "ins-cafe", "consumptionUom": "G" }],
+      "modifiers": [
+        {
+          "optionId": "opt-sin-cebolla",
+          "inventoryEffect": "REMOVE",
+          "effectTargetInsumoId": "ins-cebolla"
+        }
+      ],
+      "expectedDemand": { "ins-cafe": 18 },
+      "expectedOutcomes": [
+        {
+          "optionId": "opt-sin-cebolla",
+          "effect": "REMOVE",
+          "applied": false,
+          "skipReason": "COMPONENT_NOT_IN_RECIPE"
+        }
+      ]
+    },
+    {
+      "name": "a price-only modifier changes nothing",
+      "leaves": [
+        { "insumoId": "ins-cafe", "quantityPerSaleUnit": 18, "rootComponentId": "cmp-cafe" }
+      ],
+      "rootComponents": [
+        { "id": "cmp-cafe", "insumoId": "ins-cafe", "quantityPerSaleUnit": 18 }
+      ],
+      "tenantInsumos": [{ "id": "ins-cafe", "consumptionUom": "G" }],
+      "modifiers": [{ "optionId": "opt-legacy", "inventoryEffect": "NONE" }],
+      "expectedDemand": { "ins-cafe": 18 },
+      "expectedOutcomes": []
+    }
+  ]
+}

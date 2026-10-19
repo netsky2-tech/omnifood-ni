@@ -24,7 +24,19 @@ enum ModifierEffectSkipReason {
   componentNotInRecipe,
 
   /// The effect is incomplete: it names neither a component nor a quantity.
-  incomplete,
+  incomplete;
+
+  /// The vocabulary of the SHARED conformance contract
+  /// (`fixtures/modifier-deviation/v1/vectors.json`), which the cloud's
+  /// mirror speaks verbatim. The two sides must name the same reasons the
+  /// same way, or the contract cannot compare them.
+  String get wireName => switch (this) {
+        ModifierEffectSkipReason.insumoNotInCatalog => 'INSUMSO_NOT_IN_CATALOG',
+        ModifierEffectSkipReason.unitMismatch => 'UNIT_MISMATCH',
+        ModifierEffectSkipReason.componentNotInRecipe =>
+          'COMPONENT_NOT_IN_RECIPE',
+        ModifierEffectSkipReason.incomplete => 'INCOMPLETE',
+      };
 }
 
 /// What happened to ONE declared effect.
