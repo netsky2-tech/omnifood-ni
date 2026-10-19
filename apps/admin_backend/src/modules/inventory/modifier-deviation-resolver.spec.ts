@@ -21,15 +21,15 @@ describe('resolveDeviations (cloud mirror, R28/M4)', () => {
   const tenantInsumosById = new Map([
     [
       'ins-cafe',
-      { id: 'ins-cafe', consumptionUom: 'G' },
+      { id: 'ins-cafe', consumptionUom: 'G', isActive: true },
     ],
     [
       'ins-leche',
-      { id: 'ins-leche', consumptionUom: 'ML' },
+      { id: 'ins-leche', consumptionUom: 'ML', isActive: true },
     ],
     [
       'ins-almendras',
-      { id: 'ins-almendras', consumptionUom: 'ML' },
+      { id: 'ins-almendras', consumptionUom: 'ML', isActive: true },
     ],
   ]);
 
@@ -160,7 +160,7 @@ describe('resolveDeviations (cloud mirror, R28/M4)', () => {
           ...tenantInsumosById,
           [
             'ins-almendras',
-            { id: 'ins-almendras', consumptionUom: 'L' },
+            { id: 'ins-almendras', consumptionUom: 'L', isActive: true },
           ],
         ]),
         modifiers: [

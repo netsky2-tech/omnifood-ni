@@ -9,6 +9,13 @@ class AuthorityInsumoEntity {
   final String name;
   final String uom;
 
+  /// R28: whether the insumo is still ACTIVE in the catalog. The delta
+  /// already carries it; the projection did not map it, so a deactivated
+  /// insumo looked available to the terminal. An effect that points at a
+  /// deactivated insumo must NOT apply (the SOHO guarantee, D6): the
+  /// terminal would demand a stock that is not for sale.
+  final bool isActive;
+
   @ColumnInfo(name: 'negative_stock_policy')
   final String negativeStockPolicy;
 
@@ -17,6 +24,7 @@ class AuthorityInsumoEntity {
     required this.id,
     required this.name,
     required this.uom,
+    this.isActive = true,
     this.negativeStockPolicy = 'RESTRICT',
   });
 }

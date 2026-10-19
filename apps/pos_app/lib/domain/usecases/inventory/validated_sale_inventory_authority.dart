@@ -61,11 +61,18 @@ class AuthorityInsumo {
     // the same thing in the insumo the effect applies to (a number in
     // millilitres is not a number in litres).
     this.consumptionUom = '',
+    // R28: whether the insumo is still ACTIVE. An effect that points at a
+    // deactivated insumo does NOT apply (the SOHO guarantee, D6): the
+    // terminal would demand a stock that is not for sale.
+    this.isActive = true,
   });
   final String id, tenantId, name, negativeStockPolicy;
 
   /// The unit the stock of this insumo is kept in.
   final String consumptionUom;
+
+  /// Whether the insumo is still active in the catalog.
+  final bool isActive;
 }
 
 class AuthorityMapping {

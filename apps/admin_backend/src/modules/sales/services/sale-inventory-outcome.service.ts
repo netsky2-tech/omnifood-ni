@@ -618,8 +618,13 @@ export class SaleInventoryOutcomeService {
       }
     }
     const insumoRepo = manager.getRepository(Insumo);
+    // ONLY the ACTIVE insumos: the terminal's authority projects the
+    // catalog's active rows, so an effect that points at a DEACTIVATED
+    // insumo is NO_IMPACT on both sides. If the cloud considered it
+    // applicable, the two demands would disagree and every such sale would
+    // degrade — the opposite of the SOHO guarantee.
     const tenantInsumos = await insumoRepo.find({
-      where: { tenant_id: tenantId },
+      where: { tenant_id: tenantId, is_active: true },
     });
     const tenantInsumosById = new Map<string, DeviationInsumo>(
       tenantInsumos.map((insumo) => [
@@ -627,6 +632,7 @@ export class SaleInventoryOutcomeService {
         {
           id: insumo.id,
           consumptionUom: insumo.consumptionUom ?? '',
+          isActive: true,
         },
       ]),
     );

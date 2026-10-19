@@ -54,6 +54,13 @@ export interface DeviationRootComponent {
 export interface DeviationInsumo {
   id: string;
   consumptionUom: string;
+  /**
+   * R28: whether the insumo is still ACTIVE. An effect that points at a
+   * deactivated insumo does NOT apply (the SOHO guarantee, D6) — the
+   * terminal must not demand a stock that is not for sale, and both sides
+   * must reach that conclusion the same way.
+   */
+  isActive: boolean;
 }
 
 export type DeviationSkipReason =
@@ -152,7 +159,8 @@ export function resolveDeviations(input: {
           });
           break;
         }
-        if (!input.tenantInsumosById.has(substituteId)) {
+        const substitute = input.tenantInsumosById.get(substituteId);
+        if (!substitute || !substitute.isActive) {
           // THE SOHO GUARANTEE: an insumo this company has not registered
           // cannot be deducted, on either side.
           outcomes.push({
@@ -236,7 +244,8 @@ export function resolveDeviations(input: {
           });
           break;
         }
-        if (!input.tenantInsumosById.has(insumoId)) {
+        const affected = input.tenantInsumosById.get(insumoId);
+        if (!affected || !affected.isActive) {
           outcomes.push({
             optionId,
             effect,

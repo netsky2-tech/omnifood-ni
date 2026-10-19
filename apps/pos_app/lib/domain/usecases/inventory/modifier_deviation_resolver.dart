@@ -253,7 +253,7 @@ class ModifierDeviationResolver {
     // THE SOHO GUARANTEE: an insumo this company has not registered cannot
     // be deducted. The effect does not apply and the sale goes through.
     final substitute = insumosById[substituteId];
-    if (substitute == null) {
+    if (substitute == null || !substitute.isActive) {
       return _EffectResult.skipped(
         AppliedModifierEffect(
           optionId: optionId,
@@ -365,7 +365,8 @@ class ModifierDeviationResolver {
     }
     // THE SOHO GUARANTEE, again: an insumo the company has not registered
     // cannot be deducted, so the effect does not apply.
-    if (!insumosById.containsKey(insumoId)) {
+    final affected = insumosById[insumoId];
+    if (affected == null || !affected.isActive) {
       return _EffectResult.skipped(
         AppliedModifierEffect(
           optionId: optionId,

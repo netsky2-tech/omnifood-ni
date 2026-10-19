@@ -59,6 +59,9 @@ void main() {
             id: insumo['id'] as String,
             tenantId: 't1',
             consumptionUom: insumo['consumptionUom'] as String,
+            // The catalog's active state travels with the insumo: an effect
+            // that points at a deactivated insumo does not apply.
+            isActive: (insumo['isActive'] as bool?) ?? true,
           ),
       };
       final modifiers = ((testCase['modifiers'] as List)
