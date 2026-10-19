@@ -38,6 +38,9 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
   useSuppliers: vi.fn(),
   useCreateSupplier: vi.fn(),
   useCreateManualPurchase: vi.fn(),
+  // The insumo form derives its conversion-factor presets from the PLATFORM
+  // UoM catalog (protocol data with the physical anchor factors).
+  usePlatformUomCatalog: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 vi.mock("@/features/recipes/use-recipes", () => ({

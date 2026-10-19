@@ -13,6 +13,7 @@ import type {
   CreateSupplierInput,
   UpdateSupplierInput,
   PurchasePreviewResult,
+  PlatformUomEntry,
 } from "./types";
 import {
   normalizeInventoryCoverage,
@@ -67,6 +68,22 @@ export function fetchKardex(filters: KardexFilters = {}, opts?: ApiClientMethodO
 
 export function fetchAlerts(opts?: ApiClientMethodOptions) {
   return opts ? api.get<AlertsSummary>("/inventory/reports/alerts", opts) : api.get<AlertsSummary>("/inventory/reports/alerts");
+}
+
+/**
+ * The PLATFORM units-of-measure catalog with its anchor factors.
+ *
+ * The insumo form used to carry a hardcoded list of "common factors"
+ * (LB→G 454, KG→G 1000, DOCENA→UN 12) that had drifted from the platform
+ * catalog: the platform anchor for a pound is 453.59237 g, so the suggested
+ * 454 was REJECTED by the server on save. The factors are now derived from
+ * the platform anchors, so the form can never offer a value the guard
+ * refuses.
+ */
+export function fetchPlatformUomCatalog(opts?: ApiClientMethodOptions) {
+  return opts
+    ? api.get<PlatformUomEntry[]>("/inventory/uom-catalog", opts)
+    : api.get<PlatformUomEntry[]>("/inventory/uom-catalog");
 }
 
 export function fetchPurchases(filters: PurchaseFilters = {}, opts?: ApiClientMethodOptions) {

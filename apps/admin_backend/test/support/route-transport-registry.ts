@@ -671,4 +671,8 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'ProductController', transport: 'human' },
   { controller: 'RecipeController', transport: 'human' },
   { controller: 'InsumoController', transport: 'human' },
+  // The platform units-of-measure catalog (protocol data with the physical
+  // anchor factors). Read by the owner dashboard's insumo form under a human
+  // session; it is not a device transport.
+  { controller: 'UomCatalogController', transport: 'human' },
 ];

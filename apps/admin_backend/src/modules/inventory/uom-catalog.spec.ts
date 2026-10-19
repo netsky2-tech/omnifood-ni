@@ -147,6 +147,56 @@ describe('uom-catalog (platform)', () => {
       );
     });
   });
+
+  describe('tenant-declared units', () => {
+    // The operator owns the units of his own business ("arroba", "cajilla").
+    // The guard used to reject every one of them while its own message
+    // promised "Regístrala en el catálogo" — the only catalog it consulted
+    // was the platform one.
+    const tenantUomCodes = ['arroba', 'cajilla'];
+
+    it('resolves a unit the tenant registered in its own UOM catalog', () => {
+      expect(
+        resolveUom('arroba', tenantUomCodes)?.dimension,
+      ).toBe('tenant');
+      expect(resolveUom('arroba')?.dimension).toBeUndefined();
+    });
+
+    it('accepts a tenant unit paired with a platform unit as a content declaration', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'gramos', 15587.772, {
+          tenantUomCodes,
+        }),
+      ).not.toThrow();
+      expect(() =>
+        validateInsumoConversion('cajilla', 'unidad', 20, {
+          tenantUomCodes,
+        }),
+      ).not.toThrow();
+    });
+
+    it('still rejects the untouched factor-1 default for a tenant unit', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'gramos', 1, {
+          tenantUomCodes,
+        }),
+      ).toThrow(/Conversión no configurada/);
+    });
+
+    it('still rejects a unit that is in neither the platform nor the tenant catalog', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'gramos', 15587.772),
+      ).toThrow(/no está en el catálogo/);
+    });
+
+    it('rejects a factor other than 1 when both sides are the same tenant unit', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'arroba', 2, {
+          tenantUomCodes,
+        }),
+      ).toThrow(/misma unidad/);
+    });
+  });
 });
 
 /** Small indirection so the plural/accent case reads naturally above. */

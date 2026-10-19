@@ -81,6 +81,19 @@ export interface KardexMovement {
   createdAt: string;
 }
 
+/**
+ * One entry of the platform units-of-measure catalog (with the anchor
+ * factor). `factorToAnchor` is null for the container/serving families,
+ * which carry no universal factor: their content is declared per insumo.
+ */
+export interface PlatformUomEntry {
+  code: string;
+  name: string;
+  dimension: "mass" | "volume" | "count" | "container" | "serving";
+  factorToAnchor: number | null;
+  aliases: string[];
+}
+
 export interface KardexReport {
   totalCount: number;
   filters: {

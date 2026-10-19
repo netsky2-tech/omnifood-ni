@@ -65,6 +65,8 @@ import { InventoryReportsService } from './services/inventory-reports.service';
 import { TheoreticalCostService } from './services/theoretical-cost.service';
 import { InventoryValuationService } from './inventory-valuation.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
+import { UomCatalogController } from './controllers/uom-catalog.controller';
+import { CatalogValue } from '../catalog/entities/catalog-value.entity';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
@@ -113,6 +115,10 @@ import { AuditModule } from '../audit/audit.module';
       KardexCorrection,
       ProductInventoryMappingVersion,
       InventoryRemediationReceipt,
+      // The tenant's own units-of-measure registry. The insumo conversion
+      // guard honours a unit the operator registered in Catálogos, so it
+      // must read that catalog.
+      CatalogValue,
     ]),
   ],
   controllers: [
@@ -123,6 +129,7 @@ import { AuditModule } from '../audit/audit.module';
     ProductController,
     RecipeController,
     InsumoController,
+    UomCatalogController,
   ],
   providers: [
     InventoryPurchaseService,
