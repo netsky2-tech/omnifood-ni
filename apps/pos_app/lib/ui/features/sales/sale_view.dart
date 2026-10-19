@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
+import '../../../domain/usecases/inventory/modifier_effect_preview.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../domain/services/config/discount_policy_service.dart';
 import '../../../domain/services/printer/kitchen_modifier_lines.dart';
@@ -1273,6 +1274,29 @@ class ProductOptionsDialog extends StatefulWidget {
   State<ProductOptionsDialog> createState() => _ProductOptionsDialogState();
 }
 
+/// What the dialog needs to know about a RECIPE COMPONENT: the quantity it
+/// consumes per sold unit (the quantity an effect INHERITS) and its unit.
+class _RecipeComponentFact {
+  const _RecipeComponentFact({
+    required this.insumoId,
+    required this.quantityPerSaleUnit,
+    required this.unit,
+  });
+
+  final String insumoId;
+  final double quantityPerSaleUnit;
+  final String? unit;
+}
+
+/// What the dialog needs to know about an INSUMO: its name and the unit its
+/// stock is kept in.
+class _InsumoFact {
+  const _InsumoFact({required this.name, required this.unit});
+
+  final String name;
+  final String? unit;
+}
+
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   String? _selectedVariantId;
   // Legacy flat modifiers: unreachable today, but never a silent sink.
@@ -1283,8 +1307,206 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   final Map<String, String> _selectedRadioOption = {};
   final Map<String, bool> _checkedOptions = {};
   final Map<String, int> _optionQuantities = {};
+  // R28 (decision D2): the quantity the CASHIER marks for an option whose
+  // effect adds or replaces stock. Absent = the quantity is INHERITED from
+  // the recipe component the effect targets.
+  final Map<String, double> _markedEffectQuantities = {};
+  // R28: the facts the dialog needs to tell the operator what the option
+  // does to the stock: the live recipe's components (the inherited
+  // quantity) and the insumos' names and units.
+  Map<String, _RecipeComponentFact> _recipeComponents = {};
+  Map<String, _InsumoFact> _insumoFacts = {};
   // Inline error shows only while the required group is still unsatisfied.
   bool _showMissingGroupError = false;
+
+  /// R28: reads the facts the effect needs — the live recipe's components
+  /// (the quantity an effect inherits) and the insumos' names and units.
+  ///
+  /// It NEVER blocks the dialog: a terminal whose authority is not hydrated
+  /// yet simply shows the effect without the inherited number, and the
+  /// quantity is inherited at sale time anyway. Failing to read the facts
+  /// must not stop the cashier from selling (§39.3, and the SOHO
+  /// guarantee: a failure of this feature degrades the inventory, never the
+  /// sale).
+  Future<void> _loadEffectFacts() async {
+    final options = <EffectiveModifierOption>[
+      for (final group in widget.product.availableModifierGroups) ...group.options,
+    ];
+    if (options.every((o) => o.inventoryEffect == 'NONE')) {
+      return;
+    }
+    try {
+      final database = context.read<AppDatabase>();
+      final tenantId =
+          (await database.localConfigDao.getConfigByKey('tenant_id'))?.value ??
+              '';
+      if (tenantId.isEmpty) return;
+
+      final versions =
+          await database.authorityProjectionDao.findActivePublishedVersions(
+        tenantId,
+        widget.product.id,
+        DateTime.now().toIso8601String(),
+      );
+      if (versions.isEmpty) return;
+      final version = versions.first;
+      final components = await database.authorityProjectionDao.findComponentsByVersion(
+        tenantId,
+        version.id,
+      );
+
+      final yieldQuantity = version.yieldQuantity > 0 ? version.yieldQuantity : 1;
+      final facts = <String, _RecipeComponentFact>{};
+      for (final component in components) {
+        if (component.ingredientType != 'INSUMO') continue;
+        facts[component.insumoId] = _RecipeComponentFact(
+          insumoId: component.insumoId,
+          // The SAME formula the explosion uses: the gross quantity, less the
+          // technical shrink, spread over the yield (the per-sold-unit
+          // consumption).
+          quantityPerSaleUnit:
+              (component.grossQuantity *
+                      (1 - component.technicalShrinkPct / 100)) /
+                  yieldQuantity,
+          unit: component.componentUom,
+        );
+      }
+
+      final insumoFacts = <String, _InsumoFact>{};
+      final referenced = <String>{};
+      for (final option in options) {
+        if (option.effectInsumoId != null) referenced.add(option.effectInsumoId!);
+        if (option.effectTargetInsumoId != null) {
+          referenced.add(option.effectTargetInsumoId!);
+        }
+      }
+      for (final insumoId in referenced) {
+        final insumo =
+            await database.authorityProjectionDao.findInsumoById(tenantId, insumoId);
+        if (insumo == null) continue;
+        insumoFacts[insumoId] = _InsumoFact(
+          name: insumo.name,
+          unit: insumo.uom.isEmpty ? null : insumo.uom,
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _recipeComponents = facts;
+        _insumoFacts = insumoFacts;
+      });
+    } catch (_) {
+      // The facts are a convenience for the operator, never a gate.
+    } finally {
+      // Nada que limpiar: mientras los hechos no llegan, el número heredado
+      // simplemente no se muestra.
+    }
+  }
+
+  /// R28: the line under an option that declares an inventory effect — what
+  /// it does to the stock, and (for the effects that take a quantity) the
+  /// field where the cashier MARKS the quantity to apply.
+  ///
+  /// A price-only option shows nothing: the overwhelming majority of the
+  /// options in a food park are just a price, and a line under every one of
+  /// them would be noise (the restraint filter).
+  Widget? _effectSubtitle(EffectiveModifierOption option) {
+    final preview = _previewOf(option);
+    if (preview == null) return null;
+    final marked = _markedEffectQuantities[option.id];
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(preview.explanation, style: const TextStyle(fontSize: 11)),
+          if (preview.acceptsMarkedQuantity)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Cantidad a aplicar: ', style: TextStyle(fontSize: 11)),
+                  SizedBox(
+                    width: 86,
+                    child: TextField(
+                      key: Key('modifier_effect_quantity_${option.id}'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                        hintText: preview.inheritedQuantity == null
+                            ? 'Heredar'
+                            : _trimQuantity(preview.inheritedQuantity!),
+                        hintStyle: const TextStyle(fontSize: 12),
+                      ),
+                      onChanged: (value) {
+                        final parsed = double.tryParse(value.trim());
+                        setState(() {
+                          if (parsed == null || parsed <= 0) {
+                            _markedEffectQuantities.remove(option.id);
+                          } else {
+                            _markedEffectQuantities[option.id] = parsed;
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                  if (preview.inheritedQuantity != null) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '${_trimQuantity(preview.inheritedQuantity!)}${preview.inheritedUnit == null ? '' : ' ${preview.inheritedUnit}'} (heredada de la receta)',
+                        style: const TextStyle(fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          if (marked != null)
+            Text(
+              'Se aplicará $marked por unidad vendida.',
+              style: const TextStyle(fontSize: 10),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static String _trimQuantity(double value) {
+    final rounded = (value * 10000).roundToDouble() / 10000;
+    return rounded == rounded.truncateToDouble()
+        ? rounded.toStringAsFixed(0)
+        : rounded.toString();
+  }
+
+  /// The preview of an option's effect, or null when the option declares
+  /// none (the overwhelmingly common case: a price-only option).
+  ModifierEffectPreview? _previewOf(EffectiveModifierOption option) {
+    if (option.inventoryEffect == 'NONE') return null;
+    final target = option.effectTargetInsumoId == null
+        ? null
+        : _recipeComponents[option.effectTargetInsumoId];
+    return buildModifierEffectPreview(
+      option: option,
+      insumoName: option.effectInsumoId == null
+          ? null
+          : _insumoFacts[option.effectInsumoId]?.name,
+      targetName: option.effectTargetInsumoId == null
+          ? null
+          : (_insumoFacts[option.effectTargetInsumoId]?.name ??
+              _recipeComponents[option.effectTargetInsumoId]?.insumoId),
+      unit: option.effectInsumoId == null
+          ? null
+          : _insumoFacts[option.effectInsumoId]?.unit,
+      inheritedQuantity: target?.quantityPerSaleUnit,
+      inheritedUnit: target?.unit,
+      quantityIsMarked: _markedEffectQuantities.containsKey(option.id),
+    );
+  }
 
   @override
   void initState() {
@@ -1292,6 +1514,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     if (widget.product.variants.isNotEmpty) {
       _selectedVariantId = widget.product.variants.first.id;
     }
+    _loadEffectFacts();
     // Radio groups preselect the option flagged as default, when present.
     for (final group in widget.product.availableModifierGroups) {
       if (group.maxSelected == 1) {
@@ -1440,6 +1663,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                               title: Text(
                                 '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                               ),
+                              subtitle: _effectSubtitle(option),
                               value: option.id,
                             ),
                           )
@@ -1453,8 +1677,16 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                         Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                                  ),
+                                  if (_effectSubtitle(option) != null)
+                                    _effectSubtitle(option)!,
+                                ],
                               ),
                             ),
                             IconButton(
@@ -1493,6 +1725,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                             title: Text(
                               '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                             ),
+                            subtitle: _effectSubtitle(option),
                             value: _checkedOptions[option.id] ?? false,
                             onChanged: (selected) => setState(() {
                               if (selected != true) {
@@ -1562,7 +1795,12 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                       inventoryEffect: option.inventoryEffect,
                       effectInsumoId: option.effectInsumoId,
                       effectTargetInsumoId: option.effectTargetInsumoId,
-                      effectQuantity: option.effectQuantity,
+                      // R28 (D2): the quantity the cashier MARKED wins;
+                      // with no mark the option's own declared quantity
+                      // applies, and with neither the resolution INHERITS
+                      // the recipe component's quantity.
+                      effectQuantity:
+                          _markedEffectQuantities[option.id] ?? option.effectQuantity,
                       effectFactor: option.effectFactor,
                     );
 
