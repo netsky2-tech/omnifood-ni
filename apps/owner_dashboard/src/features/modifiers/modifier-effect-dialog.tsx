@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Boxes, ShieldCheck } from "lucide-react";
 import {
   Dialog,
@@ -68,6 +68,11 @@ export function ModifierEffectDialog({
   const [insumoSearch, setInsumoSearch] = useState("");
   const [targetSearch, setTargetSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // §20: the draft is work the operator typed. Leaving the dialog with
+  // changes in it must ASK, not silently drop it.
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const allowCloseRef = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
 
   const insumoList = useMemo(() => insumos ?? [], [insumos]);
 
@@ -120,10 +125,35 @@ export function ModifierEffectDialog({
     setError(null);
   };
 
+  const isDirty =
+    JSON.stringify(draft) !== JSON.stringify({
+      effect: value.effect,
+      effect_insumo_id: value.effect_insumo_id,
+      effect_target_insumo_id: value.effect_target_insumo_id,
+      effect_quantity: value.effect_quantity,
+      effect_factor: value.effect_factor,
+    });
+
+  /**
+   * §20 — a close with unsaved changes asks first. Escape, the overlay and
+   * the Cancel button all land here, so none of them can silently discard
+   * what the operator typed.
+   */
+  const requestClose = () => {
+    if (isDirty && !allowCloseRef.current) {
+      setDiscardOpen(true);
+      return;
+    }
+    onOpenChange(false);
+  };
+
   const handleSave = () => {
     const message = validateModifierEffect(draft);
     if (message) {
       setError(message);
+      // §18.3: the actionable error takes the focus, so a keyboard or
+      // screen-reader user lands on the explanation.
+      requestAnimationFrame(() => errorRef.current?.focus());
       return;
     }
     onSave(draft);
@@ -144,7 +174,7 @@ export function ModifierEffectDialog({
   )?.description;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => (next ? undefined : requestClose())}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -276,7 +306,7 @@ export function ModifierEffectDialog({
           )}
 
           {draft.effect !== MODIFIER_EFFECT.NONE && (
-            <Alert className="py-2.5 px-3 text-xs">
+            <Alert variant="info" className="py-2.5 px-3 text-xs">
               <ShieldCheck className="h-4 w-4" />
               <AlertDescription>
                 Si el insumo no está registrado en esta empresa, el efecto no
@@ -288,6 +318,8 @@ export function ModifierEffectDialog({
 
           {error && (
             <p
+              ref={errorRef}
+              tabIndex={-1}
               className="text-sm text-destructive"
               role="alert"
               data-testid="modifier-effect-error"
@@ -297,11 +329,16 @@ export function ModifierEffectDialog({
           )}
         </div>
 
+        <p className="text-xs text-muted-foreground">
+          El efecto se aplica a la opción del grupo. Se guarda al actualizar el
+          grupo.
+        </p>
+
         <DialogFooter className="border-t pt-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={requestClose}
           >
             Cancelar
           </Button>
@@ -310,10 +347,44 @@ export function ModifierEffectDialog({
             onClick={handleSave}
             data-testid="modifier-effect-save"
           >
-            Guardar efecto
+            Aplicar al grupo
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* §20: the operator is told what is being discarded and may stay. */}
+      <Dialog open={discardOpen} onOpenChange={setDiscardOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>¿Descartar los cambios del efecto?</DialogTitle>
+            <DialogDescription>
+              La opción {optionName} conserva el efecto que tenía. Si sale
+              ahora, lo que editó aquí se pierde.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDiscardOpen(false)}
+            >
+              Seguir editando
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              data-testid="modifier-effect-discard-confirm"
+              onClick={() => {
+                allowCloseRef.current = true;
+                setDiscardOpen(false);
+                onOpenChange(false);
+              }}
+            >
+              Descartar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

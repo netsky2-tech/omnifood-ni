@@ -275,6 +275,59 @@ describe("the inventory effect of a modifier option (R28)", () => {
     expect(call.input.effect_quantity).toBeNull();
   });
 
+  it("§20 — asks before discarding the edits of the effect", async () => {
+    renderForm(mockGroup);
+    fireEvent.click(
+      screen.getByRole("button", { name: /efecto de inventario de la opción/i }),
+    );
+    await screen.findByTestId("modifier-effect-select");
+    fireEvent.click(screen.getByTestId("modifier-effect-select"));
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Aporta un insumo/ }),
+    );
+
+    // The operator changed something and tries to leave.
+    fireEvent.click(screen.getByRole("button", { name: /^Cancelar$/ }));
+
+    // The dialog is still open and the discard is ASKED for, not done.
+    expect(
+      await screen.findByTestId("modifier-effect-discard-confirm"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("modifier-effect-select")).toBeInTheDocument();
+  });
+
+  it("§20 — a close without changes does not ask anything", async () => {
+    renderForm(mockGroup);
+    fireEvent.click(
+      screen.getByRole("button", { name: /efecto de inventario de la opción/i }),
+    );
+    await screen.findByTestId("modifier-effect-select");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Cancelar$/ }));
+    expect(
+      screen.queryByTestId("modifier-effect-discard-confirm"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("§26.1 — the note carries a semantic variant, not the neutral default", async () => {
+    renderForm(mockGroup);
+    fireEvent.click(
+      screen.getByRole("button", { name: /efecto de inventario de la opción/i }),
+    );
+    await screen.findByTestId("modifier-effect-select");
+    fireEvent.click(screen.getByTestId("modifier-effect-select"));
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Aporta un insumo/ }),
+    );
+
+    const note = screen
+      .getByText(/no está registrado en esta empresa/i)
+      .closest('[role="alert"]');
+    // The neutral default would leave the alert indistinguishable from any
+    // other box; the info variant gives it a tint and a border.
+    expect(note?.className).toContain("bg-info-50");
+  });
+
   it("sends NONE for an option that declares no effect", async () => {
     mockUpdateOption.mutateAsync.mockResolvedValue({ id: "opt-1" });
     renderForm(mockGroup);
