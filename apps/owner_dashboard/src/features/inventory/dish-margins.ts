@@ -29,6 +29,20 @@ export interface DishMargin {
   grossMarginNio: number | null;
   grossMarginPct: number | null;
   components: DishMarginComponent[];
+  /**
+   * R28 / M5 — the SECOND figure: what the dish actually cost when it was
+   * sold in the period, per unit. It is a FACT read from the kardex (with
+   * the extras already inside it), while `unitTheoreticalCostNio` is an
+   * ESTIMATE with the components' current CPPs.
+   *
+   * NULL when the dish was not sold in the period: "not sold" is not "zero
+   * cost" (§27, AP-02).
+   */
+  unitsSold?: number | null;
+  unitActualCostNio?: number | null;
+  actualCostNio?: number | null;
+  /** The gap between the two figures, per unit. */
+  costGapNio?: number | null;
 }
 
 /**
@@ -54,12 +68,30 @@ export interface DishMarginSkip {
 export interface DishMarginsResult {
   dishes: DishMargin[];
   skipped: DishMarginSkip[];
+  /** The period the second figure covers. */
+  period?: { from: string | null; to: string | null };
+  unitsSold?: number;
+  totalActualCostNio?: number;
+  totalTheoreticalCostNio?: number;
+  /**
+   * The headline the industry surfaces ("Modifiers added $1,140 of food
+   * cost"): what the period's sales cost MINUS what the recipes said they
+   * would cost. It carries BOTH the extras' effect and the CPP drift.
+   */
+  extrasImpactNio?: number;
+  extrasImpactPct?: number | null;
 }
 
 export function fetchDishMargins(
+  period?: { from?: string; to?: string },
   opts?: ApiClientMethodOptions,
 ): Promise<DishMarginsResult> {
-  return opts
-    ? api.get<DishMarginsResult>("/inventory/reports/dish-margins", opts)
-    : api.get<DishMarginsResult>("/inventory/reports/dish-margins");
+  // R28 / M5: the period of the second figure travels with the request, so
+  // the surface never compares today's recipe with the sales of all time.
+  const params = new URLSearchParams();
+  if (period?.from) params.set("from", period.from);
+  if (period?.to) params.set("to", period.to);
+  const qs = params.toString();
+  const url = `/inventory/reports/dish-margins${qs ? `?${qs}` : ""}`;
+  return opts ? api.get<DishMarginsResult>(url, opts) : api.get<DishMarginsResult>(url);
 }

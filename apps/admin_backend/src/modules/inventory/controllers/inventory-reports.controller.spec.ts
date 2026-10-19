@@ -302,10 +302,17 @@ describe('InventoryReportsController', () => {
     const margins = { dishes: [], skipped: [] };
     theoreticalCostService.listDishMargins.mockResolvedValue(margins as never);
 
-    const result = await controller.getDishMargins('tenant-1');
+    // R28 / M5: the period of the second figure ("what it actually cost")
+    // travels to the service.
+    const result = await controller.getDishMargins(
+      'tenant-1',
+      '2026-10-01',
+      '2026-10-19',
+    );
 
     expect(theoreticalCostService.listDishMargins).toHaveBeenCalledWith(
       'tenant-1',
+      { from: '2026-10-01', to: '2026-10-19' },
     );
     expect(result).toBe(margins);
   });

@@ -59,8 +59,13 @@ export class InventoryReportsController {
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   async getDishMargins(
     @GetTenantId() tenantId: string,
+    // R28 / M5: the period of the SECOND figure (what the dishes actually
+    // cost when they were sold). Without it the surface would compare the
+    // recipe of today with the sales of all time.
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ): Promise<unknown> {
-    return this.theoreticalCostService.listDishMargins(tenantId);
+    return this.theoreticalCostService.listDishMargins(tenantId, { from, to });
   }
 
   @Get('theoretical-cost')

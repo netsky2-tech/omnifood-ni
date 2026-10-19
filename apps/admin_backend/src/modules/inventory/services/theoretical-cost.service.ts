@@ -13,9 +13,17 @@ import {
 import { RecipeService } from '../recipe.service';
 import { Product, ProductType } from '../entities/product.entity';
 import { Insumo } from '../entities/insumo.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../entities/inventory-movement.entity';
+import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
 import type { RecipeDetail } from '../entities/recipe-detail.entity';
 
 const MAX_SUB_RECIPE_DEPTH = 5;
+
+/** The four-decimal scale the costs are kept at (NUMERIC(14,4)). */
+const round4 = (value: number): number => Number(value.toFixed(4));
 
 /**
  * Machine code of a skipped dish. The code is the contract; the `reason` is
@@ -74,6 +82,28 @@ export interface DishMargin {
   grossMarginNio: number | null;
   grossMarginPct: number | null;
   components: RecipeTheoreticalCostResult['components'];
+  /**
+   * R28 / M5 — the SECOND figure: what the dish actually cost when it was
+   * sold in the period, per unit.
+   *
+   * It is a FACT read from the kardex (the movements' cost at the moment they
+   * happened), while `unitTheoreticalCostNio` is an ESTIMATE computed with
+   * the components' CURRENT CPPs. The two differ when the extras consumed
+   * stock the recipe does not declare (the almond milk that replaced the
+   * whole milk, the extra shot of coffee) and when the CPPs moved since the
+   * recipe was written.
+   *
+   * NULL when the dish was not sold in the period: "no sales" is not "zero
+   * cost" (§27, AP-02).
+   */
+  unitsSold: number | null;
+  unitActualCostNio: number | null;
+  actualCostNio: number | null;
+  /**
+   * The gap between the two figures, per unit. It is POSITIVE when the dish
+   * cost more than the recipe says (the extras, or a CPP that moved).
+   */
+  costGapNio: number | null;
 }
 
 export interface DishMarginSkip {
@@ -89,6 +119,22 @@ export interface DishMarginsResult {
   dishes: DishMargin[];
   /** Products that could not be priced, with the reason — never silently dropped. */
   skipped: DishMarginSkip[];
+  /**
+   * R28 / M5 — the aggregate of the two figures over the period.
+   *
+   * `extrasImpactNio` is the headline the industry surfaces ("Modifiers
+   * added $1,140 of food cost"): what the period's sales cost MINUS what
+   * the recipes said they would cost. It carries BOTH the extras' effect and
+   * the CPP drift, and the surface says so — the difference between a recipe
+   * written today and the stock that left the shop is never attributable to
+   * one cause alone.
+   */
+  period: { from: string | null; to: string | null };
+  unitsSold: number;
+  totalActualCostNio: number;
+  totalTheoreticalCostNio: number;
+  extrasImpactNio: number;
+  extrasImpactPct: number | null;
 }
 
 /**
@@ -119,7 +165,10 @@ export class TheoreticalCostService {
     return this.computeProduct(tenantId, productId, new Set<string>(), 0);
   }
 
-  async listDishMargins(tenantId: string): Promise<DishMarginsResult> {
+  async listDishMargins(
+    tenantId: string,
+    period?: { from?: string; to?: string },
+  ): Promise<DishMarginsResult> {
     const products = await runInTenantTransaction(
       this.dataSource,
       tenantId,
@@ -172,7 +221,158 @@ export class TheoreticalCostService {
       }
     }
 
-    return { dishes, skipped };
+    // R28 / M5: the SECOND figure — what the dishes actually cost when they
+    // were sold in the period, read from the kardex. The first figure (the
+    // theoretical cost) is an estimate with the components' CURRENT CPPs;
+    // this one is the fact of what left the stock.
+    const actuals = await this.actualCostByProduct(tenantId, period);
+
+    let totalUnitsSold = 0;
+    let totalActualCostNio = 0;
+    let totalTheoreticalCostNio = 0;
+    for (const dish of dishes) {
+      const actual = actuals.get(dish.productId);
+      if (!actual || actual.unitsSold <= 0) {
+        // No sales in the period is NOT a zero cost (§27, AP-02).
+        dish.unitsSold = null;
+        dish.unitActualCostNio = null;
+        dish.actualCostNio = null;
+        dish.costGapNio = null;
+        continue;
+      }
+      const unitActualCostNio = round4(actual.costNio / actual.unitsSold);
+      dish.unitsSold = actual.unitsSold;
+      dish.unitActualCostNio = unitActualCostNio;
+      dish.actualCostNio = round4(actual.costNio);
+      dish.costGapNio = round4(unitActualCostNio - dish.unitTheoreticalCostNio);
+
+      totalUnitsSold += actual.unitsSold;
+      totalActualCostNio += actual.costNio;
+      totalTheoreticalCostNio += actual.unitsSold * dish.unitTheoreticalCostNio;
+    }
+
+    const extrasImpactNio = round4(totalActualCostNio - totalTheoreticalCostNio);
+
+    return {
+      dishes,
+      skipped,
+      period: {
+        from: period?.from ?? null,
+        to: period?.to ?? null,
+      },
+      unitsSold: totalUnitsSold,
+      totalActualCostNio: round4(totalActualCostNio),
+      totalTheoreticalCostNio: round4(totalTheoreticalCostNio),
+      extrasImpactNio,
+      extrasImpactPct:
+        totalTheoreticalCostNio > 0
+          ? round4((extrasImpactNio / totalTheoreticalCostNio) * 100)
+          : null,
+    };
+  }
+
+  /**
+   * R28 / M5 — what each dish ACTUALLY cost in the period, read from the
+   * kardex.
+   *
+   * The SALE movements carry the line they came from
+   * (`originInvoiceItemId`), and the line carries the product: the sum of the
+   * movements' cost is the cost of what left the stock for that dish, and
+   * the line's quantity is what was sold. Dividing gives the cost per unit
+   * AS SOLD — which, since R28, already carries the effect of the extras
+   * (the almond milk that replaced the whole milk, the extra shot).
+   *
+   * The period is read on the movement's BUSINESS moment (`occurred_at`),
+   * the same clock the reports use.
+   */
+  private async actualCostByProduct(
+    tenantId: string,
+    period?: { from?: string; to?: string },
+  ): Promise<Map<string, { costNio: number; unitsSold: number }>> {
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const qb = manager
+        .getRepository(InventoryMovement)
+        .createQueryBuilder('mov')
+        .where('mov.tenant_id = :tenantId', { tenantId })
+        .andWhere('mov.type = :type', { type: MovementType.SALE });
+
+      if (period?.from) {
+        qb.andWhere('mov.timestamp >= :from', { from: new Date(period.from) });
+      }
+      if (period?.to) {
+        const to = period.to.trim();
+        qb.andWhere('mov.timestamp <= :to', {
+          to:
+            to.length === 10
+              ? new Date(`${to}T23:59:59.999Z`)
+              : new Date(to),
+        });
+      }
+
+      // The cost of what left the stock, per product. The movement carries
+      // the line it came from, and the line carries the product.
+      const costRows: Array<{
+        product_id: string;
+        total_cost: string | number;
+      }> = await qb
+        .innerJoin(
+          InvoiceItem,
+          'item',
+          'item.id = mov.originInvoiceItemId AND item.tenant_id = :tenantId',
+          { tenantId },
+        )
+        .select('item.product_id', 'product_id')
+        .addSelect('SUM(mov.totalCostNio)', 'total_cost')
+        .groupBy('item.product_id')
+        .getRawMany();
+
+      // The units sold, counted ONCE per line. The join above repeats a
+      // line once per movement (one per insumo), so the quantity can NOT
+      // come from it: it is summed over the DISTINCT lines.
+      const lineRows: Array<{
+        product_id: string;
+        units: string | number;
+      }> = await manager
+        .getRepository(InvoiceItem)
+        .createQueryBuilder('item')
+        .where('item.tenant_id = :tenantId', { tenantId })
+        .andWhere(
+          'item.id IN (SELECT origin_invoice_item_id FROM inventory_kardex WHERE tenant_id = :tenantId AND type = :type' +
+            (period?.from ? ' AND timestamp >= :from' : '') +
+            (period?.to ? ' AND timestamp <= :to' : '') +
+            ')',
+          {
+            tenantId,
+            type: MovementType.SALE,
+            ...(period?.from ? { from: new Date(period.from) } : {}),
+            ...(period?.to
+              ? {
+                  to:
+                    period.to.trim().length === 10
+                      ? new Date(`${period.to.trim()}T23:59:59.999Z`)
+                      : new Date(period.to),
+                }
+              : {}),
+          },
+        )
+        .select('item.product_id', 'product_id')
+        .addSelect('SUM(item.quantity)', 'units')
+        .groupBy('item.product_id')
+        .getRawMany();
+
+      const unitsByProduct = new Map<string, number>(
+        lineRows.map((row) => [row.product_id, Number(row.units ?? 0)]),
+      );
+
+      const result = new Map<string, { costNio: number; unitsSold: number }>();
+      for (const row of costRows) {
+        result.set(row.product_id, {
+          costNio: Number(row.total_cost ?? 0),
+          unitsSold: unitsByProduct.get(row.product_id) ?? 0,
+        });
+      }
+      return result;
+    });
   }
 
   private async computeProduct(
@@ -258,6 +458,13 @@ export class TheoreticalCostService {
       grossMarginNio: theoretical.grossMarginNio ?? null,
       grossMarginPct: theoretical.grossMarginPct ?? null,
       components: theoretical.components,
+      // R28 / M5: the "as sold" figures are filled by the caller, which is
+      // the only place that knows the PERIOD. A single dish's theoretical
+      // cost has no period, so these stay null here.
+      unitsSold: null,
+      unitActualCostNio: null,
+      actualCostNio: null,
+      costGapNio: null,
     };
   }
 

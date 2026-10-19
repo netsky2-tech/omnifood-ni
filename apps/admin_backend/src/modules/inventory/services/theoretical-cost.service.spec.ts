@@ -5,6 +5,8 @@ import { CostCalculatorService } from '../cost-calculator.service';
 import { RecipeService } from '../recipe.service';
 import { Product, ProductType } from '../entities/product.entity';
 import { Insumo } from '../entities/insumo.entity';
+import { InventoryMovement } from '../entities/inventory-movement.entity';
+import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
 
 /**
  * R8 (H8): the orchestrator that turns a product's recipe plus its
@@ -17,6 +19,24 @@ describe('TheoreticalCostService (R8)', () => {
   const productFindOne = jest.fn();
   const insumoFindOne = jest.fn();
   const query = jest.fn();
+  // R28 / M5: the "as sold" figures are read from the kardex (the SALE
+  // movements) joined to the invoice lines. The double defaults to "no
+  // sales", which is the honest empty for a report (a dish nobody sold has
+  // no cost, not a zero one).
+  const movementRows: Array<Record<string, unknown>> = [];
+  const lineRows: Array<Record<string, unknown>> = [];
+  const rawQueryBuilder = (rows: Array<Record<string, unknown>>) => {
+    const builder = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      innerJoin: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      addSelect: jest.fn().mockReturnThis(),
+      groupBy: jest.fn().mockReturnThis(),
+      getRawMany: jest.fn(async () => rows),
+    };
+    return builder;
+  };
   const manager = {
     query,
     getRepository: jest.fn((entity: unknown) => {
@@ -25,6 +45,12 @@ describe('TheoreticalCostService (R8)', () => {
       }
       if (entity === Insumo) {
         return { findOne: insumoFindOne };
+      }
+      if (entity === InventoryMovement) {
+        return { createQueryBuilder: () => rawQueryBuilder(movementRows) };
+      }
+      if (entity === InvoiceItem) {
+        return { createQueryBuilder: () => rawQueryBuilder(lineRows) };
       }
       throw new Error('Unexpected repository');
     }),
@@ -56,6 +82,8 @@ describe('TheoreticalCostService (R8)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    movementRows.length = 0;
+    lineRows.length = 0;
     query.mockResolvedValue(undefined);
     transaction.mockImplementation(
       async (work: (m: unknown) => unknown) => work(manager),
@@ -363,6 +391,98 @@ describe('TheoreticalCostService (R8)', () => {
 
       expect(skipped[0]).toMatchObject({ reasonCode: 'CIRCULAR_SUB_RECIPE' });
       expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
+    });
+  });
+
+  describe('R28 / M5: the two figures — the recipe as written and what it actually cost', () => {
+    const productId = 'prod-dish-1';
+
+    beforeEach(() => {
+      // The service lists COMPOUND and PREPARED separately: the dish is
+      // COMPOUND, and a PREPARED listing that returned the same product
+      // would count it twice.
+      productFind.mockImplementation(async (args?: any) =>
+        args?.where?.product_type === ProductType.PREPARED
+          ? []
+          : [
+              {
+                id: productId,
+                name: 'Capuccino',
+                sellPrice: 70,
+              },
+            ],
+      );
+      productFindOne.mockResolvedValue({
+        id: productId,
+        name: 'Capuccino',
+        sellPrice: 70,
+      });
+      recipeService.findActiveVersion.mockResolvedValue({
+        id: 'rv-1',
+        product_id: productId,
+        yield_quantity: 1,
+      });
+      recipeService.getSnapshot.mockResolvedValue({
+        recipeVersion: { id: 'rv-1', product_id: productId },
+        components: [],
+      });
+      costCalculator.calculateRecipeTheoreticalCost.mockReturnValue(
+        calculatorResult(20),
+      );
+    });
+
+    it('reports the units sold and the actual cost per unit from the kardex', async () => {
+      // The dish was sold 3 times and C$75.0000 of stock left for it: the
+      // actual cost is C$25.0000 per unit, while the recipe says C$20.0000.
+      movementRows.push({ product_id: productId, total_cost: '75.0000' });
+      lineRows.push({ product_id: productId, units: '3' });
+
+      const result = await service.listDishMargins('tenant-1');
+
+      const dish = result.dishes[0];
+      // The FIRST figure: the recipe as written (an estimate with the
+      // components' current CPPs).
+      expect(dish.unitTheoreticalCostNio).toBe(20);
+      // The SECOND figure: what it actually cost (a fact from the kardex).
+      expect(dish.unitsSold).toBe(3);
+      expect(dish.actualCostNio).toBe(75);
+      expect(dish.unitActualCostNio).toBe(25);
+      // And the gap between the two.
+      expect(dish.costGapNio).toBe(5);
+    });
+
+    it('aggregates the impact over the period', async () => {
+      movementRows.push({ product_id: productId, total_cost: '75.0000' });
+      lineRows.push({ product_id: productId, units: '3' });
+
+      const result = await service.listDishMargins('tenant-1', {
+        from: '2026-10-01',
+        to: '2026-10-19',
+      });
+
+      // The headline the industry surfaces: what the sales cost MINUS what
+      // the recipes said they would cost.
+      expect(result.totalActualCostNio).toBe(75);
+      expect(result.totalTheoreticalCostNio).toBe(60);
+      expect(result.extrasImpactNio).toBe(15);
+      expect(result.extrasImpactPct).toBe(25);
+      expect(result.period).toEqual({
+        from: '2026-10-01',
+        to: '2026-10-19',
+      });
+    });
+
+    it('reports NO sales as no figure, never as a zero cost', async () => {
+      const result = await service.listDishMargins('tenant-1');
+
+      const dish = result.dishes[0];
+      // "Not sold" is not "cost zero" (§27, AP-02).
+      expect(dish.unitsSold).toBeNull();
+      expect(dish.unitActualCostNio).toBeNull();
+      expect(dish.actualCostNio).toBeNull();
+      expect(dish.costGapNio).toBeNull();
+      expect(result.extrasImpactNio).toBe(0);
+      expect(result.extrasImpactPct).toBeNull();
     });
   });
 });

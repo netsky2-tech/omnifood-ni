@@ -16,6 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toFiniteNumber } from "@/lib/numeric";
+import { formatLocalDate } from "@/lib/utils";
+import {
+  DateRangePicker,
+  type DateRangeValue,
+} from "@/components/date-range-picker";
 import { useDishMargins } from "./use-dish-margins";
 import type { DishMargin } from "./dish-margins";
 
@@ -34,12 +39,22 @@ import type { DishMargin } from "./dish-margins";
  * (§13.2, §29), and a priced catalog stays quiet (§+1.13).
  */
 
-type SortKey = "name" | "cost" | "price" | "margin" | "marginPct";
+type SortKey =
+  | "name"
+  | "cost"
+  | "actualCost"
+  | "price"
+  | "margin"
+  | "marginPct";
 type DishTypeFilter = "ALL" | "DISH" | "SUB_RECIPE";
 
 const SORT_COLUMNS: { key: SortKey; label: string }[] = [
   { key: "name", label: "Plato" },
-  { key: "cost", label: "Costo unitario" },
+  { key: "cost", label: "Costo receta" },
+  // R28 / M5: the SECOND figure — what the dish actually cost when it was
+  // sold in the period. The label says it, so nobody reads the recipe's
+  // cost as the real one.
+  { key: "actualCost", label: "Costo real" },
   { key: "price", label: "Precio" },
   { key: "margin", label: "Margen" },
   { key: "marginPct", label: "Margen %" },
@@ -50,6 +65,10 @@ const SORT_COLUMNS: { key: SortKey; label: string }[] = [
 const SORT_VALUE: Record<SortKey, (dish: DishMargin) => number | string> = {
   name: (dish) => dish.productName.toLowerCase(),
   cost: (dish) => toFiniteNumber(dish.unitTheoreticalCostNio),
+  // A dish that was not sold has no real cost: it sorts BELOW every dish
+  // that has one (it is missing, never zero — AP-02).
+  actualCost: (dish) =>
+    dish.unitActualCostNio == null ? -1 : toFiniteNumber(dish.unitActualCostNio),
   price: (dish) => (dish.sellingPriceNio == null ? -1 : toFiniteNumber(dish.sellingPriceNio)),
   margin: (dish) => (dish.grossMarginNio == null ? -1 : toFiniteNumber(dish.grossMarginNio)),
   marginPct: (dish) =>
@@ -78,7 +97,21 @@ function matchesSearch(dish: DishMargin, term: string): boolean {
 }
 
 export function DishMarginsPage() {
-  const { data, isLoading, isError } = useDishMargins();
+  // R28 / M5: the period of the second figure. It starts at the last 30
+  // days —the question an owner actually asks ("¿cómo se están costando
+  // mis platos?")— and is a range the operator can change.
+  const [period, setPeriod] = useState<DateRangeValue>(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 29);
+    return { startDate: formatLocalDate(from), endDate: formatLocalDate(to) };
+  });
+  const { data, isLoading, isError } = useDishMargins(
+    useMemo(
+      () => ({ from: period.startDate, to: period.endDate }),
+      [period.startDate, period.endDate],
+    ),
+  );
   const [search, setSearch] = useState("");
   // The default sort answers the page's operational job: what does this dish
   // cost, cheapest first (§15).
@@ -156,10 +189,81 @@ export function DishMarginsPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Costo y margen por plato</h1>
         <p className="text-sm text-muted-foreground">
-          Costo teórico a partir del costo promedio actual de cada ingrediente
-          y de la receta vigente del plato.
+          Dos cifras: el costo de la receta <strong>como está escrita</strong>{" "}
+          (con el costo promedio actual de cada insumo) y el costo{" "}
+          <strong>real</strong> de lo que se vendió en el período. La
+          diferencia es lo que los extras y el cambio de los costos le
+          movieron al plato.
         </p>
       </header>
+
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">
+          Período del costo real:
+        </span>
+        <DateRangePicker value={period} onChange={setPeriod} />
+      </div>
+
+      {data && (data.unitsSold ?? 0) > 0 && (
+        // The +1 the industry headlines: what the period's sales cost
+        // MINUS what the recipes said they would cost. It is the number
+        // that tells the owner whether the margin he is reading is real.
+        <div
+          className="grid gap-3 sm:grid-cols-3"
+          data-testid="dish-margins-impact"
+        >
+          <Card>
+            <CardContent className="p-4 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Ventas del período
+              </p>
+              <p className="text-2xl font-semibold tabular-nums">
+                {toFiniteNumber(data.unitsSold ?? 0)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                platos vendidos con costo registrado
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Costo real del período
+              </p>
+              <p className="text-2xl font-semibold tabular-nums">
+                {formatCurrency(toFiniteNumber(data.totalActualCostNio))}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                lo que realmente salió del inventario
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Diferencia contra la receta
+              </p>
+              <p
+                className={`text-2xl font-semibold tabular-nums ${
+                  toFiniteNumber(data.extrasImpactNio) > 0
+                    ? "text-warning-700"
+                    : toFiniteNumber(data.extrasImpactNio) < 0
+                      ? "text-secondary-700"
+                      : ""
+                }`}
+              >
+                {formatCurrency(toFiniteNumber(data.extrasImpactNio))}
+                {data.extrasImpactPct != null &&
+                  ` (${formatPercent(toFiniteNumber(data.extrasImpactPct))})`}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                incluye el efecto de los extras y el cambio de los costos de
+                los insumos
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {!hasDishes && skipped.length === 0 ? (
         // §29 first-use empty: what belongs here, why it matters, next action.
@@ -348,6 +452,21 @@ export function DishMarginsPage() {
                           <TableCell className="text-right tabular-nums">
                             {formatCurrency(
                               toFiniteNumber(dish.unitTheoreticalCostNio),
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {dish.unitActualCostNio == null ? (
+                              // Not sold in the period is NOT a zero cost
+                              // (§27, AP-02).
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <span
+                                title={`${toFiniteNumber(dish.unitsSold)} unidades vendidas en el período`}
+                              >
+                                {formatCurrency(
+                                  toFiniteNumber(dish.unitActualCostNio),
+                                )}
+                              </span>
                             )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">

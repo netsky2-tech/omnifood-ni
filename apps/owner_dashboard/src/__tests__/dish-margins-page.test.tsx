@@ -60,11 +60,26 @@ function dish(overrides: Partial<DishMargin> & { productId: string; productName:
     grossMarginNio: 20,
     grossMarginPct: 16.6667,
     components: [],
+    // R28 / M5: the second figure (what the dish actually cost). Absent
+    // by default, which is the honest empty for a dish nobody sold.
+    unitsSold: null,
+    unitActualCostNio: null,
+    actualCostNio: null,
+    costGapNio: null,
     ...overrides,
   };
 }
 
-const emptyResult: DishMarginsResult = { dishes: [], skipped: [] };
+const emptyResult: DishMarginsResult = {
+  dishes: [],
+  skipped: [],
+  period: { from: null, to: null },
+  unitsSold: 0,
+  totalActualCostNio: 0,
+  totalTheoreticalCostNio: 0,
+  extrasImpactNio: 0,
+  extrasImpactPct: null,
+};
 
 describe("DishMarginsPage (R8)", () => {
   beforeEach(() => {
@@ -259,8 +274,14 @@ describe("DishMarginsPage (R8)", () => {
     renderPage();
     await screen.findByText("Barato");
 
-    const costHeader = screen.getByRole("columnheader", { name: /Costo/ });
-    const costButton = within(costHeader).getByRole("button", { name: /Costo/ });
+    // R28 / M5: there are TWO cost columns now (the recipe as written and
+    // the real one), so the header is addressed by its exact label.
+    const costHeader = screen.getByRole("columnheader", {
+      name: /^Costo receta/,
+    });
+    const costButton = within(costHeader).getByRole("button", {
+      name: /^Costo receta/,
+    });
     // §15: the default sort is visible.
     expect(costHeader).toHaveAttribute("aria-sort", "ascending");
 
@@ -356,4 +377,101 @@ describe("DishMarginsPage (R8)", () => {
     expect(screen.queryByText("Tacos al Pastor")).toBeNull();
   });
 
+
+  describe("R28 / M5 — the two figures", () => {
+    it("shows the recipe cost AND the real cost of what was sold", async () => {
+      mockedFetch.mockResolvedValue({
+        dishes: [
+          dish({
+            productId: "prod-1",
+            productName: "Capuccino",
+            unitTheoreticalCostNio: 20,
+            unitsSold: 3,
+            unitActualCostNio: 25,
+            actualCostNio: 75,
+            costGapNio: 5,
+          }),
+        ],
+        skipped: [],
+        period: { from: "2026-09-20", to: "2026-10-19" },
+        unitsSold: 3,
+        totalActualCostNio: 75,
+        totalTheoreticalCostNio: 60,
+        extrasImpactNio: 15,
+        extrasImpactPct: 25,
+      });
+
+      renderPage();
+
+      // Both columns carry their own figure: the recipe's and the real one.
+      await screen.findByText("Capuccino");
+      expect(screen.getAllByText("C$20.00").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("C$25.00").length).toBeGreaterThan(0);
+    });
+
+    it("shows a dash, never a zero, for a dish that was not sold", async () => {
+      mockedFetch.mockResolvedValue({
+        dishes: [
+          dish({
+            productId: "prod-1",
+            productName: "Capuccino",
+            unitTheoreticalCostNio: 20,
+            unitsSold: null,
+            unitActualCostNio: null,
+            actualCostNio: null,
+            costGapNio: null,
+          }),
+        ],
+        skipped: [],
+        period: { from: null, to: null },
+        unitsSold: 0,
+        totalActualCostNio: 0,
+        totalTheoreticalCostNio: 0,
+        extrasImpactNio: 0,
+        extrasImpactPct: null,
+      });
+
+      renderPage();
+
+      await screen.findByText("Capuccino");
+      expect(screen.getAllByText("C$20.00").length).toBeGreaterThan(0);
+      // "Not sold" is not "cost zero" (AP-02).
+      const cells = screen.getAllByText("—");
+      expect(cells.length).toBeGreaterThan(0);
+    });
+
+    it("surfaces the gap between the two figures over the period", async () => {
+      mockedFetch.mockResolvedValue({
+        dishes: [
+          dish({
+            productId: "prod-1",
+            productName: "Capuccino",
+            unitTheoreticalCostNio: 20,
+            unitsSold: 3,
+            unitActualCostNio: 25,
+            actualCostNio: 75,
+            costGapNio: 5,
+          }),
+        ],
+        skipped: [],
+        period: { from: "2026-09-20", to: "2026-10-19" },
+        unitsSold: 3,
+        totalActualCostNio: 75,
+        totalTheoreticalCostNio: 60,
+        extrasImpactNio: 15,
+        extrasImpactPct: 25,
+      });
+
+      renderPage();
+
+      // The headline the industry surfaces: what the sales cost MINUS what
+      // the recipes said they would cost.
+      const impact = await screen.findByTestId("dish-margins-impact");
+      expect(impact).toHaveTextContent("C$15.00");
+      expect(impact).toHaveTextContent("25.00%");
+      // And the copy says what the difference carries, so nobody reads it
+      // as "the extras cost exactly this".
+      expect(impact).toHaveTextContent(/extras y el cambio de los costos/i);
+    });
+  });
 });
