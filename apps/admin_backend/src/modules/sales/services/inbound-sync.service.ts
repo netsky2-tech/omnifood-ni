@@ -1389,6 +1389,21 @@ export class InboundSyncService {
         isDefault: option.is_default,
         sortOrder: option.sort_order,
         isActive: option.is_active,
+        // R28: the inventory effect travels with the option so the POS can
+        // resolve the demand of the line. `NONE` (the default) means the
+        // option is price-only, exactly as before R28 — an old terminal
+        // simply ignores these fields.
+        inventoryEffect: option.inventory_effect ?? 'NONE',
+        effectInsumoId: option.effect_insumo_id ?? null,
+        effectTargetInsumoId: option.effect_target_insumo_id ?? null,
+        effectQuantity:
+          option.effect_quantity === null || option.effect_quantity === undefined
+            ? null
+            : Number(option.effect_quantity),
+        effectFactor:
+          option.effect_factor === null || option.effect_factor === undefined
+            ? null
+            : Number(option.effect_factor),
       });
       optionsByGroupId.set(option.group_id, list);
     }

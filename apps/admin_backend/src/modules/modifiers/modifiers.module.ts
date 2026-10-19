@@ -7,6 +7,7 @@ import { ProductModifierGroup } from './entities/product-modifier-group.entity';
 import { ModifiersService } from './services/modifiers.service';
 import { ModifiersController } from './controllers/modifiers.controller';
 import { IdentityModule } from '../identity/identity.module';
+import { Insumo } from '../inventory/entities/insumo.entity';
 
 /**
  * Reusable modifier groups (extras/modifiers, ODD tasks T1.1 + T1.2).
@@ -24,6 +25,11 @@ import { IdentityModule } from '../identity/identity.module';
       ModifierOption,
       CategoryModifierGroup,
       ProductModifierGroup,
+      // R28: the insumo an inventory effect points at. The entity is
+      // registered here (cross-module entity registration is the established
+      // pattern) because the guard that validates the effect needs to prove
+      // the insumo belongs to THIS tenant.
+      Insumo,
     ]),
     IdentityModule,
   ],

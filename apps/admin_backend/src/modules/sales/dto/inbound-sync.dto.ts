@@ -353,6 +353,24 @@ export interface InboundSyncModifierOptionDto {
   isDefault: boolean;
   sortOrder: number;
   isActive: boolean;
+  /**
+   * R28 — the option's INVENTORY effect, so the POS can resolve the demand
+   * of the line (an extra shot adds coffee; almond milk replaces the recipe's
+   * whole milk). `NONE` is the default and means "price only", which is what
+   * every option that never declared an effect does.
+   */
+  inventoryEffect: string;
+  /** The insumo the effect acts ON: added (ADD) or substituted in (SWAP). */
+  effectInsumoId: string | null;
+  /** The insumo of the recipe component the effect affects. */
+  effectTargetInsumoId: string | null;
+  /**
+   * The quantity to apply per sold unit, in the affected insumo's own
+   * consumption unit. NULL means INHERIT it from the target component.
+   */
+  effectQuantity: number | null;
+  /** The multiplier of a SCALE (2 = double). */
+  effectFactor: number | null;
 }
 
 /** One reusable modifier group with its FULL option closure. */

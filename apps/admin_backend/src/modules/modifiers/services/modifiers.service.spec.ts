@@ -18,6 +18,7 @@ import { ProductModifierGroup } from '../entities/product-modifier-group.entity'
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Product } from '../../inventory/entities/product.entity';
+import { Insumo } from '../../inventory/entities/insumo.entity';
 
 describe('ModifiersService', () => {
   let service: ModifiersService;
@@ -59,6 +60,10 @@ describe('ModifiersService', () => {
     getRepository: jest.Mock;
   };
   let transactionalDataSource: { transaction: jest.Mock };
+  // R28: the insumo an inventory effect points at.
+  let insumoRepo: {
+    find: jest.Mock;
+  };
 
   const mockGroup = (overrides: Partial<ModifierGroup> = {}): ModifierGroup =>
     ({
@@ -93,6 +98,16 @@ describe('ModifiersService', () => {
     }) as ModifierOption;
 
   beforeEach(async () => {
+    insumoRepo = {
+      // Every insumo the tenant has, by default. A spec narrows it to prove
+      // the guard rejects an insumo that does not belong to the tenant.
+      find: jest.fn().mockImplementation((args: { where?: { id?: unknown } }) => {
+        const ids = (args?.where?.id as { value?: string[] } | undefined)?.value;
+        return Promise.resolve(
+          (ids ?? []).map((id) => ({ id, name: `Insumo ${id}` })),
+        );
+      }),
+    };
     groupRepo = {
       find: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
@@ -156,6 +171,8 @@ describe('ModifiersService', () => {
             return catalogRepo;
           case Product:
             return productRepo;
+          case Insumo:
+            return insumoRepo;
           default:
             throw new Error(
               `Unexpected entity: ${(entity as { name?: string }).name ?? 'unknown'}`,
@@ -591,6 +608,78 @@ describe('ModifiersService', () => {
       expect(optionRepo.save).not.toHaveBeenCalled();
     });
 
+    // --- R28: the optional inventory effect -------------------------------
+
+    it('creates a price-only option by default (NONE, R28)', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      const created = await service.createOption('tenant-1', 'group-uuid-1', {
+        name: 'Entera',
+        price_delta: 5.5,
+      });
+      expect(created.inventory_effect).toBe('NONE');
+      expect(created.effect_insumo_id).toBeNull();
+      expect(created.effect_target_insumo_id).toBeNull();
+      expect(created.effect_quantity).toBeNull();
+      expect(created.effect_factor).toBeNull();
+    });
+
+    it('persists a SWAP effect (almond milk replaces the recipe\'s whole milk)', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      const created = await service.createOption('tenant-1', 'group-uuid-1', {
+        name: 'Almendras',
+        price_delta: 10,
+        inventory_effect: 'SWAP',
+        effect_target_insumo_id: 'ins-leche-entera',
+        effect_insumo_id: 'ins-leche-almendras',
+      });
+      expect(created.inventory_effect).toBe('SWAP');
+      expect(created.effect_target_insumo_id).toBe('ins-leche-entera');
+      expect(created.effect_insumo_id).toBe('ins-leche-almendras');
+      // No explicit quantity: the resolution INHERITS the recipe's own
+      // quantity for the replaced component.
+      expect(created.effect_quantity).toBeNull();
+    });
+
+    it('persists an ADD effect that inherits the target component quantity', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      const created = await service.createOption('tenant-1', 'group-uuid-1', {
+        name: 'Extra shot',
+        price_delta: 15,
+        inventory_effect: 'ADD',
+        effect_insumo_id: 'ins-cafe',
+        effect_target_insumo_id: 'ins-cafe',
+      });
+      expect(created.inventory_effect).toBe('ADD');
+      expect(created.effect_insumo_id).toBe('ins-cafe');
+      expect(created.effect_quantity).toBeNull();
+    });
+
+    it('rejects a half-configured effect with 400 (nothing is written)', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      await expect(
+        service.createOption('tenant-1', 'group-uuid-1', {
+          name: 'Extra shot',
+          inventory_effect: 'ADD',
+          effect_insumo_id: 'ins-cafe',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(optionRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects an effect that points at an insumo of another tenant', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      insumoRepo.find.mockResolvedValue([]);
+      await expect(
+        service.createOption('tenant-1', 'group-uuid-1', {
+          name: 'Almendras',
+          inventory_effect: 'SWAP',
+          effect_target_insumo_id: 'ins-leche-entera',
+          effect_insumo_id: 'ins-de-otro-tenant',
+        }),
+      ).rejects.toThrow(/no existe en esta empresa/);
+      expect(optionRepo.save).not.toHaveBeenCalled();
+    });
+
     it('rejects a blank option name with 400', async () => {
       groupRepo.findOne.mockResolvedValue(mockGroup());
       await expect(
@@ -692,6 +781,63 @@ describe('ModifiersService', () => {
           name: 'X',
         }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    // --- R28: the inventory effect on update ------------------------------
+
+    it('takes the effect back off an option when it is set back to NONE', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      optionRepo.findOne.mockResolvedValue(
+        mockOption({
+          inventory_effect: 'SWAP',
+          effect_target_insumo_id: 'ins-leche-entera',
+          effect_insumo_id: 'ins-leche-almendras',
+        }),
+      );
+      const updated = await service.updateOption(
+        'tenant-1',
+        'group-uuid-1',
+        'option-uuid-1',
+        { inventory_effect: 'NONE' },
+      );
+      // Declaring NONE is an explicit "make this option price-only": the
+      // effect fields are CLEARED, otherwise the operator could never take
+      // an effect back.
+      expect(updated.inventory_effect).toBe('NONE');
+      expect(updated.effect_target_insumo_id).toBeNull();
+      expect(updated.effect_insumo_id).toBeNull();
+      expect(updated.effect_quantity).toBeNull();
+      expect(updated.effect_factor).toBeNull();
+    });
+
+    it('validates the MERGED effect (an insumo alone is not enough)', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      optionRepo.findOne.mockResolvedValue(mockOption());
+      await expect(
+        service.updateOption('tenant-1', 'group-uuid-1', 'option-uuid-1', {
+          effect_insumo_id: 'ins-cafe',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(optionRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('keeps the stored effect when the update does not touch it', async () => {
+      groupRepo.findOne.mockResolvedValue(mockGroup());
+      optionRepo.findOne.mockResolvedValue(
+        mockOption({
+          inventory_effect: 'ADD',
+          effect_insumo_id: 'ins-cafe',
+          effect_target_insumo_id: 'ins-cafe',
+        }),
+      );
+      const updated = await service.updateOption(
+        'tenant-1',
+        'group-uuid-1',
+        'option-uuid-1',
+        { price_delta: 20 },
+      );
+      expect(updated.inventory_effect).toBe('ADD');
+      expect(updated.effect_insumo_id).toBe('ins-cafe');
     });
 
     it('throws 404 when the group does not exist', async () => {
@@ -1194,6 +1340,14 @@ describe('ModifiersService', () => {
               price_delta: 5,
               is_default: true,
               sort_order: 0,
+              // R28: the option carries its inventory effect in the read
+              // model. An option that never declared one reads as NONE:
+              // price only, exactly as before.
+              inventory_effect: 'NONE',
+              effect_insumo_id: null,
+              effect_target_insumo_id: null,
+              effect_quantity: null,
+              effect_factor: null,
             },
           ],
         },

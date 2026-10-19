@@ -2364,6 +2364,14 @@ describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () =
         is_default: true,
         sort_order: 0,
         is_active: true,
+        // R28: the inventory effect travels with the option so the POS can
+        // resolve the demand of the line. A row that never declared one
+        // reads as NONE (price only).
+        inventory_effect: 'NONE',
+        effect_insumo_id: null,
+        effect_target_insumo_id: null,
+        effect_quantity: null,
+        effect_factor: null,
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-01T00:00:00Z'),
         ...overrides,
@@ -2552,6 +2560,11 @@ describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () =
               isDefault: true,
               sortOrder: 0,
               isActive: true,
+              inventoryEffect: 'NONE',
+              effectInsumoId: null,
+              effectTargetInsumoId: null,
+              effectQuantity: null,
+              effectFactor: null,
             },
             {
               id: 'opt-2',
@@ -2561,6 +2574,11 @@ describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () =
               isDefault: false,
               sortOrder: 1,
               isActive: false,
+              inventoryEffect: 'NONE',
+              effectInsumoId: null,
+              effectTargetInsumoId: null,
+              effectQuantity: null,
+              effectFactor: null,
             },
           ],
         },
