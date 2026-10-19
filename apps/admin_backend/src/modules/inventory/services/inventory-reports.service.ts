@@ -23,6 +23,12 @@ import {
 } from '../dto/inventory-reports.dto';
 import { Invoice } from '../../sales/entities/invoice.entity';
 import { isCogsCoverageRelevantSale } from '../../../core/reporting/sales-reporting-semantics';
+import {
+  currentLocalDateKey,
+  localDayEndExclusiveUtc,
+  localDayStartUtc,
+  resolveReportingBounds,
+} from '../../../core/reporting/reporting-period';
 
 const round4 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 10000) / 10000).toFixed(4));
@@ -193,12 +199,17 @@ export class InventoryReportsService {
     fromDate?: string,
     toDate?: string,
   ): Promise<CogsReportDto> {
-    const from = fromDate
-      ? new Date(fromDate)
-      : new Date(new Date().setHours(0, 0, 0, 0));
-    const to = toDate
-      ? new Date(toDate)
-      : new Date(new Date().setHours(23, 59, 59, 999));
+    // Same local-calendar-day contract as the Kardex report: a bare
+    // YYYY-MM-DD is a Managua day, resolved by the canonical reporting
+    // module instead of `new Date(str)` (UTC midnight = previous local
+    // evening). Without a bound the window stays "today, local".
+    const bounds = resolveReportingBounds(fromDate, toDate);
+    const todayKey = currentLocalDateKey();
+    const from =
+      bounds.startInclusiveUtc ?? localDayStartUtc(todayKey);
+    const to =
+      bounds.endInclusiveUtc ??
+      new Date(localDayEndExclusiveUtc(todayKey).getTime() - 1);
 
     const { movements, insumos, salesInvoices } = await runInTenantTransaction(
       this.dataSource,
@@ -474,19 +485,27 @@ export class InventoryReportsService {
           .where('mov.tenant_id = :tenantId', { tenantId });
 
         if (query.from) {
-          qb.andWhere('mov.timestamp >= :from', { from: new Date(query.from) });
-        }
-        if (query.to) {
-          const rawTo = query.to.trim();
-          let toDate: Date;
-          if (rawTo.length === 10) {
-            // YYYY-MM-DD: make end-of-day inclusive (23:59:59.999 UTC) so movements
-            // occurring on that day are not silently excluded (R20 / S17).
-            toDate = new Date(`${rawTo}T23:59:59.999Z`);
-          } else {
-            toDate = new Date(rawTo);
+          // A bare YYYY-MM-DD is a LOCAL calendar day (America/Managua), not a
+          // UTC day. `new Date('2026-10-19')` is UTC midnight, which in
+          // Managua (UTC-6) is 18:00 of the PREVIOUS day — so the "Hoy"
+          // shortcut leaked yesterday's evening movements into the result and
+          // dropped today's evening trade. The canonical reporting-period
+          // module resolves the bound; this service was the only reporting
+          // route that still parsed dates on its own.
+          const bounds = resolveReportingBounds(query.from, query.to);
+          if (bounds.startInclusiveUtc) {
+            qb.andWhere('mov.timestamp >= :from', {
+              from: bounds.startInclusiveUtc,
+            });
           }
-          qb.andWhere('mov.timestamp <= :to', { to: toDate });
+          if (bounds.endInclusiveUtc) {
+            qb.andWhere('mov.timestamp <= :to', { to: bounds.endInclusiveUtc });
+          }
+        } else if (query.to) {
+          const bounds = resolveReportingBounds(undefined, query.to);
+          if (bounds.endInclusiveUtc) {
+            qb.andWhere('mov.timestamp <= :to', { to: bounds.endInclusiveUtc });
+          }
         }
         if (query.insumoId) {
           qb.andWhere('mov.insumoId = :insumoId', {

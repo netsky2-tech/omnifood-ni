@@ -1040,7 +1040,7 @@ describe('InventoryReportsService', () => {
   });
 
   describe('getKardexReport', () => {
-    it('treats YYYY-MM-DD to date as end-of-day inclusive (R20 / S17)', async () => {
+    it('treats YYYY-MM-DD as a LOCAL (Managua) calendar day, not a UTC day', async () => {
       const qb: any = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
@@ -1066,13 +1066,22 @@ describe('InventoryReportsService', () => {
         to: '2026-10-16',
       });
 
-      // The 'to' clause must pass an end-of-day timestamp (23:59:59.999), not 00:00:00.000
+      // The 'to' clause must pass the last local millisecond of the day
+      // (23:59:59.999 America/Managua = 05:59:59.999Z of the next day).
       const toCall = qb.andWhere.mock.calls.find(([sql]: [string]) => sql.includes('mov.timestamp <= :to'));
       expect(toCall).toBeDefined();
       const boundTo: Date = toCall[1].to;
-      expect(boundTo.getUTCHours()).toBe(23);
-      expect(boundTo.getUTCMinutes()).toBe(59);
-      expect(boundTo.getUTCSeconds()).toBe(59);
+      expect(boundTo.toISOString()).toBe('2026-10-17T05:59:59.999Z');
+
+      // The 'from' clause must pass the FIRST local instant of the day
+      // (00:00:00.000 America/Managua = 06:00:00.000Z). It used to pass
+      // `new Date('2026-10-16')` = UTC midnight = 18:00 of the PREVIOUS
+      // local day, so the "Hoy" shortcut leaked yesterday's evening
+      // movements into the result and dropped today's evening trade.
+      const fromCall = qb.andWhere.mock.calls.find(([sql]: [string]) => sql.includes('mov.timestamp >= :from'));
+      expect(fromCall).toBeDefined();
+      const boundFrom: Date = fromCall[1].from;
+      expect(boundFrom.toISOString()).toBe('2026-10-16T06:00:00.000Z');
     });
 
     it('queries and maps movements with multi-filters and pagination', async () => {

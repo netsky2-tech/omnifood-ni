@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from "react";
+import { Fragment, useRef, useState, useMemo } from "react";
 import { Search, X, AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -430,34 +430,45 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
               <thead>
                 <tr className="border-b border-border bg-muted/60">
                   {KARDEX_SORT_COLUMNS.map((col) => (
-                    <th
-                      key={col.key}
-                      className={`px-4 py-3 uppercase text-xs text-muted-foreground font-semibold ${
-                        col.align === "right" ? "text-right" : "text-left"
-                      }`}
-                      aria-sort={
-                        sortKey === col.key
-                          ? sortDir === "asc"
-                            ? "ascending"
-                            : "descending"
-                          : "none"
-                      }
-                    >
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(col.key)}
-                        className={`inline-flex items-center gap-1 font-semibold hover:text-foreground cursor-pointer ${
-                          sortKey === col.key ? "text-foreground" : "text-muted-foreground"
+                    <Fragment key={col.key}>
+                      <th
+                        className={`px-4 py-3 uppercase text-xs text-muted-foreground font-semibold ${
+                          col.align === "right" ? "text-right" : "text-left"
                         }`}
+                        aria-sort={
+                          sortKey === col.key
+                            ? sortDir === "asc"
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                        }
                       >
-                        {col.label}
-                        {sortKey === col.key && (
-                          <span aria-hidden="true">
-                            {sortDir === "asc" ? "↑" : "↓"}
-                          </span>
-                        )}
-                      </button>
-                    </th>
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.key)}
+                          className={`inline-flex items-center gap-1 font-semibold hover:text-foreground cursor-pointer ${
+                            sortKey === col.key ? "text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          {col.label}
+                          {sortKey === col.key && (
+                            <span aria-hidden="true">
+                              {sortDir === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      {col.key === "item" && (
+                        // The unit of measure travels with the amounts: a
+                        // quantity and a unit cost without a unit are not
+                        // reviewable figures (the operator reported exactly
+                        // this). The API already returns it; the sibling
+                        // Valoración and COGS tabs already show it.
+                        <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                          UoM
+                        </th>
+                      )}
+                    </Fragment>
                   ))}
                   <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
                     Antes
@@ -487,6 +498,9 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs whitespace-nowrap">
+                        {m.consumptionUom || "—"}
                       </td>
                       <td className="px-4 py-3">
                         <span
