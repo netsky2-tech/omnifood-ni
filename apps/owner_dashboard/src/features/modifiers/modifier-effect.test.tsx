@@ -275,6 +275,41 @@ describe("the inventory effect of a modifier option (R28)", () => {
     expect(call.input.effect_quantity).toBeNull();
   });
 
+  it("warns what happens when the quantity is left undefined (owner decision: the backoffice owns the quantity)", async () => {
+    renderForm(mockGroup);
+    fireEvent.click(
+      screen.getByRole("button", { name: /efecto de inventario de la opción/i }),
+    );
+    await screen.findByTestId("modifier-effect-select");
+    fireEvent.click(screen.getByTestId("modifier-effect-select"));
+    fireEvent.click(
+      await screen.findByRole("option", { name: /Aporta un insumo/ }),
+    );
+
+    // The consequence is ENUNCIATED (§39.3): without a quantity the extra
+    // does not deduct stock on its own, and the sale never stops for it.
+    const notice = await screen.findByTestId(
+      "modifier-effect-quantity-pending",
+    );
+    expect(notice.textContent).toMatch(/no descuenta inventario por su cuenta/i);
+    expect(notice.textContent).toMatch(/la venta nunca se detiene/i);
+
+    // With the insumo chosen, the helper text names the unit the quantity
+    // is expressed in (§17.4): the operator must not have to guess it.
+    const insumoList = screen.getByRole("listbox", {
+      name: /insumo que aporta/i,
+    });
+    const insumoSearch = document.getElementById("modifier-effect-insumo");
+    expect(insumoSearch).not.toBeNull();
+    fireEvent.change(insumoSearch!, { target: { value: "cafe" } });
+    fireEvent.click(
+      await within(insumoList).findByRole("option", {
+        name: /Café en grano/,
+      }),
+    );
+    expect(screen.getByText(/expresada en G/i)).toBeTruthy();
+  });
+
   it("§20 — asks before discarding the edits of the effect", async () => {
     renderForm(mockGroup);
     fireEvent.click(

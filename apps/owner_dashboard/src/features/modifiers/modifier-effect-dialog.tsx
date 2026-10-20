@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Boxes, ShieldCheck } from "lucide-react";
+import { Boxes, ShieldCheck, TriangleAlert } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -49,9 +49,12 @@ interface ModifierEffectDialogProps {
  * search (§17.5, §17.6): the insumo is a foreign key, so it is never a
  * free-text field and the operator never transcribes an identifier.
  *
- * The quantity is INHERITED from the recipe component unless the operator
- * marks one (D2): the field says so, because "hereda" is the normal case
- * and an explicit number is the exception.
+ * The quantity is the CONFIGURATION of the extra (owner decision, 2026-10-20:
+ * "the backoffice owns the quantity, the waiter marks the option"): the
+ * field says what it means in business terms — how much stock the extra
+ * takes per sold unit — and leaving it undefined is a legitimate choice
+ * (the recipe's quantity is then used), so the dialog SAYS what happens
+ * instead of hiding it (§39.3: enunciar la consecuencia).
  */
 export function ModifierEffectDialog({
   open,
@@ -105,6 +108,17 @@ export function ModifierEffectDialog({
 
   const targetName = (id: string | null): string | undefined =>
     id ? insumoList.find((i) => i.id === id)?.name : undefined;
+
+  /**
+   * The consumption unit of the insumo the effect acts on: the quantity the
+   * operator marks is expressed in THAT unit, so the copy has to name it
+   * (§17.4: the helper text prevents a likely mistake).
+   */
+  const affectedUnit = useMemo(() => {
+    const id = draft.effect_insumo_id ?? draft.effect_target_insumo_id;
+    if (!id) return null;
+    return insumoList.find((i) => i.id === id)?.consumptionUom ?? null;
+  }, [draft.effect_insumo_id, draft.effect_target_insumo_id, insumoList]);
 
   const update = (patch: Partial<ModifierEffectSpec>) => {
     setDraft((prev) => ({ ...prev, ...patch }));
@@ -255,7 +269,7 @@ export function ModifierEffectDialog({
           {needsQuantity && (
             <div className="space-y-1.5">
               <Label htmlFor="modifier-effect-quantity">
-                Cantidad a aplicar
+                Cantidad que descuenta este extra
               </Label>
               <Input
                 id="modifier-effect-quantity"
@@ -263,7 +277,7 @@ export function ModifierEffectDialog({
                 type="number"
                 step="any"
                 min="0"
-                placeholder="Heredar de la receta"
+                placeholder="Sin definir"
                 value={draft.effect_quantity ?? ""}
                 onChange={(e) =>
                   update({
@@ -273,9 +287,11 @@ export function ModifierEffectDialog({
                 }
               />
               <p className="text-xs text-muted-foreground">
-                Déjelo vacío para heredar la cantidad que la receta ya declara
-                para ese componente. Si la marca, esa cantidad es la que se
-                aplica, expresada en la unidad de consumo del insumo.
+                Es la cantidad de inventario que este extra saca por cada
+                unidad vendida
+                {affectedUnit ? `, expresada en ${affectedUnit}` : ""}. Si la
+                deja sin definir, se usará la que la receta del producto ya
+                declara para ese componente.
               </p>
             </div>
           )}
@@ -303,6 +319,22 @@ export function ModifierEffectDialog({
                 el doble).
               </p>
             </div>
+          )}
+
+          {needsQuantity && draft.effect_quantity === null && (
+            <Alert
+              variant="warning"
+              className="py-2.5 px-3 text-xs"
+              data-testid="modifier-effect-quantity-pending"
+            >
+              <TriangleAlert className="h-4 w-4" />
+              <AlertDescription>
+                Sin cantidad definida, este extra no descuenta inventario por
+                su cuenta: el terminal sólo lo hará si el producto tiene una
+                receta que aporte la cantidad. La venta nunca se detiene por
+                esto.
+              </AlertDescription>
+            </Alert>
           )}
 
           {draft.effect !== MODIFIER_EFFECT.NONE && (
