@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
@@ -28,6 +30,7 @@ import 'widgets/product_card.dart';
 import 'widgets/product_card_thumbnail.dart';
 import 'widgets/product_grid_geometry.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
+import 'widgets/modifier_quantity_override_content.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
@@ -1313,6 +1316,54 @@ class _InsumoFact {
   final String? unit;
 }
 
+/// The affordance that opens the supervisor override for an option whose
+/// effect has no quantity of its own.
+///
+/// A verb and its object (§39.1): the operator reads what the button does.
+class _QuantityOverrideAction extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _QuantityOverrideAction({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        key: const Key('modifier_override_action'),
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          // The target tactile size (§18.3): the button is a control the
+          // operator uses with a wet finger, not a caption.
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+        child: const Text('AJUSTAR CANTIDAD'),
+      ),
+    );
+  }
+}
+
+/// A quantity a SUPERVISOR authorized for an option whose effect had no
+/// quantity of its own.
+///
+/// The override is the only way the cashier can put a number on an extra, and
+/// it is never the cashier's decision alone: it needs a supervisor, a reason,
+/// and a forensic trace.
+class _EffectOverride {
+  const _EffectOverride({
+    required this.quantity,
+    required this.supervisorId,
+    required this.method,
+    required this.reason,
+  });
+
+  final double quantity;
+  final String supervisorId;
+  final String method;
+  final String reason;
+}
+
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   String? _selectedVariantId;
   // Legacy flat modifiers: unreachable today, but never a silent sink.
@@ -1323,10 +1374,12 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   final Map<String, String> _selectedRadioOption = {};
   final Map<String, bool> _checkedOptions = {};
   final Map<String, int> _optionQuantities = {};
-  // R28 (decision D2): the quantity the CASHIER marks for an option whose
-  // effect adds or replaces stock. Absent = the quantity is INHERITED from
-  // the recipe component the effect targets.
-  final Map<String, double> _markedEffectQuantities = {};
+  // R28 (decisión del owner: "el backoffice manda"): el cajero NO escribe
+  // cantidades de extras. La cantidad la configura el backoffice
+  // (`effectQuantity` de la opción) y, cuando no hay ninguna, la hereda del
+  // componente de la receta. El ÚNICO caso en el que alguien pone un número
+  // es un override de supervisor, con motivo y autorización.
+  final Map<String, _EffectOverride> _effectOverrides = {};
   // R28: the facts the dialog needs to tell the operator what the option
   // does to the stock: the live recipe's components (the inherited
   // quantity) and the insumos' names and units.
@@ -1426,111 +1479,138 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   }
 
   /// R28: the line under an option that declares an inventory effect — what
-  /// it does to the stock, and (for the effects that take a quantity) the
-  /// field where the cashier MARKS the quantity to apply.
+  /// it does to the stock, and how much.
   ///
   /// A price-only option shows nothing: the overwhelming majority of the
   /// options in a food park are just a price, and a line under every one of
   /// them would be noise (the restraint filter).
+  ///
+  /// The number announced is ALWAYS the one that will be applied: the one the
+  /// backoffice configured, or — when it configured none — the one the recipe
+  /// component consumes. The cashier never writes a quantity: the field that
+  /// used to live here is gone, and what remains is a sentence about the stock
+  /// and, when the effect has no quantity of its own, a supervisor's way to
+  /// authorize one.
   Widget? _effectSubtitle(EffectiveModifierOption option) {
     final preview = _previewOf(option);
     if (preview == null) return null;
-    final marked = _markedEffectQuantities[option.id];
+    final theme = Theme.of(context);
+    final override = _effectOverrides[option.id];
     return Padding(
-      padding: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.only(top: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(preview.explanation, style: const TextStyle(fontSize: 11)),
-          if (preview.acceptsMarkedQuantity)
+          Text(
+            preview.explanation,
+            style: theme.textTheme.bodySmall,
+          ),
+          if (override != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              // The row stays inside the subtitle's bounded width: a
-              // flexible child inside a `MainAxisSize.min` row has no
-              // bounded space to flex into, and the dialog overflowed
-              // ("RIGHT OVERFLOWED BY 21 PIXELS") with the inherited
-              // quantity on screen. The inherited quantity moved to its
-              // own line instead of fighting for horizontal space.
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // A Wrap, not a Row: the label is never cut. When the
-                  // column is narrow (the radio group inside the modal),
-                  // the field moves to its own line instead of the label
-                  // losing its tail.
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 6,
-                    runSpacing: 2,
-                    children: [
-                      const Text(
-                        'Cantidad a aplicar: ',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                      SizedBox(
-                        width: 86,
-                        // Nhilos POS §46: every control the operator uses
-                        // carries an accessible name. The visible label
-                        // lives next to the field, so the association is
-                        // made programmatic here (a screen reader announces
-                        // what the number is FOR, not just "text field").
-                        child: Semantics(
-                          label: 'Cantidad a aplicar',
-                          child: TextField(
-                            key: Key('modifier_effect_quantity_${option.id}'),
-                            keyboardType:
-                                const TextInputType.numberWithOptions(decimal: true),
-                            style: const TextStyle(fontSize: 12),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              border: const OutlineInputBorder(),
-                              // The hint is what the operator types: the
-                              // inherited number when it can be inherited,
-                              // the insumo's OWN unit when it cannot (the
-                              // units do not match), and "Heredar" when
-                              // there is no recipe to inherit from.
-                              hintText: preview.quantityHint,
-                              hintStyle: const TextStyle(fontSize: 12),
-                            ),
-                            onChanged: (value) {
-                              final parsed = double.tryParse(value.trim());
-                              setState(() {
-                                if (parsed == null || parsed <= 0) {
-                                  _markedEffectQuantities.remove(option.id);
-                                } else {
-                                  _markedEffectQuantities[option.id] = parsed;
-                                }
-                              });
-                            },
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (preview.inheritedQuantity != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        '${_trimQuantity(preview.inheritedQuantity!)}${preview.inheritedUnit == null ? '' : ' ${preview.inheritedUnit}'} (heredada de la receta)',
-                        style: const TextStyle(fontSize: 10),
-                      ),
-                    ),
-                ],
+              child: Text(
+                'Cantidad ajustada a ${_trimQuantity(override.quantity)}'
+                '${_effectUnitOf(option) == null ? '' : ' ${_effectUnitOf(option)}'} '
+                'con autorización de supervisor.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: NhilosColors.brandTealLight,
+                ),
               ),
             ),
-          if (marked != null)
-            Text(
-              // The marked number is expressed in the AFFECTED insumo's own
-              // unit, so the line says which unit: the operator must not
-              // read "150" and assume grams.
-              'Se aplicará $marked${_effectUnitOf(option) == null ? '' : ' ${_effectUnitOf(option)}'} por unidad vendida.',
-              style: const TextStyle(fontSize: 10),
+          if (preview.isPending && override == null) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                preview.pendingNote,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: NhilosColors.warning,
+                ),
+              ),
             ),
+            const SizedBox(height: 4),
+            _QuantityOverrideAction(
+              onPressed: () => _requestQuantityOverride(option),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Asks a supervisor to authorize the quantity of an option that has none.
+  ///
+  /// The override needs three things and the product does not give it up
+  /// without them: the AMOUNT, the REASON and the SUPERVISOR. The amount and
+  /// the reason travel with the authorization dialog; the supervisor's
+  /// credentials are checked by the auth repository, and the whole act leaves
+  /// a forensic trace.
+  ///
+  /// It never blocks the sale: the extra sells with its effect pending, and
+  /// this is the way to make the stock move NOW.
+  Future<void> _requestQuantityOverride(EffectiveModifierOption option) async {
+    final preview = _previewOf(option);
+    if (preview == null) return;
+    final authRepo = context.read<AuthRepository>();
+    final auditRepo = context.read<AuditRepository>();
+    var draft = const ModifierQuantityOverrideDraft();
+    String supervisorId = '';
+    String method = '';
+    final authorized = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => SupervisorOverrideModal(
+        title: 'Cantidad autorizada para este extra',
+        submitLabel: 'AUTORIZAR',
+        content: ModifierQuantityOverrideContent(
+          unit: preview.markingUnit,
+          insumoLabel: _insumoFacts[option.effectInsumoId]?.name ??
+              _insumoFacts[option.effectTargetInsumoId]?.name ??
+              'la opción',
+          onChanged: (value) => draft = value,
+        ),
+        canSubmit: () => draft.isComplete,
+        onAuthorize: (request) {
+          supervisorId = request.supervisorId;
+          method = request.method == SupervisorAuthorizationMethod.pin
+              ? 'PIN'
+              : 'TOTP';
+          final pin = request.method == SupervisorAuthorizationMethod.pin
+              ? request.credential
+              : null;
+          final totp = request.method == SupervisorAuthorizationMethod.totp
+              ? request.credential
+              : null;
+          return authRepo.authorizeOverride(
+            supervisorId: request.supervisorId,
+            pin: pin,
+            totpCode: totp,
+          );
+        },
+        onAuditSuccess: (request) {
+          return auditRepo.logForensic(
+            'MODIFIER_EFFECT_QUANTITY_OVERRIDE',
+            metodoAutorizacion: method,
+            usuarioAutorizadorId: request.supervisorId,
+            metadata: jsonEncode({
+              'action': 'modifier_effect_quantity_override',
+              'option_id': option.id,
+              'quantity': draft.quantity,
+              'unit': preview.markingUnit,
+              'reason': draft.reason,
+            }),
+          );
+        },
+      ),
+    );
+    if (!mounted || authorized != true) return;
+    setState(() {
+      _effectOverrides[option.id] = _EffectOverride(
+        quantity: draft.quantity!,
+        supervisorId: supervisorId,
+        method: method,
+        reason: draft.reason.trim(),
+      );
+    });
   }
 
   static String _trimQuantity(double value) {
@@ -1581,10 +1661,11 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
       unit: affectedUnit,
       inheritedQuantity: target?.quantityPerSaleUnit,
       inheritedUnit: target?.unit,
-      quantityIsMarked: _markedEffectQuantities.containsKey(option.id),
-      // The number the cashier MARKED is the one that will be applied,
-      // and it is expressed in the affected insumo's own unit.
-      markedQuantity: _markedEffectQuantities[option.id],
+      // A supervisor's authorized quantity wins over everything: it is the
+      // one that will be applied, and it is expressed in the affected
+      // insumo's own unit.
+      quantityIsMarked: _effectOverrides.containsKey(option.id),
+      markedQuantity: _effectOverrides[option.id]?.quantity,
       unitsMismatch: unitsMismatch,
     );
   }
@@ -1608,6 +1689,18 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
       }
     }
   }
+
+  /// The width the dialog's content may take.
+  ///
+  /// It follows the DEVICE instead of a fixed number: the same dialog has to
+  /// work on the handheld terminal (360-411 dp) and on the food park's
+  /// tablet (800 dp), and it must not overflow in either.
+  double get _dialogContentWidth => ResponsiveBreakpoints.value(
+        context,
+        mobile: 400,
+        tablet: 520,
+        desktop: 600,
+      );
 
   /// Whole-price display for deltas ('+C$ 5'), consistent with the variant
   /// idiom but without the trailing '.0' doubles would print.
@@ -1665,9 +1758,15 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         _showMissingGroupError ? _firstUnsatisfiedGroupName() : null;
     return AlertDialog(
       title: Text(widget.product.name),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.outline, width: 2)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NhilosRadii.modal),
+        side: BorderSide(color: colorScheme.outline, width: 2),
+      ),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
+        // El ancho sigue al dispositivo (§48): la tableta del food park
+        // aprovecha el room que tiene, el terminal de mano conserva su
+        // columna cómoda, y en ninguno de los dos hay desbordamiento.
+        constraints: BoxConstraints(maxWidth: _dialogContentWidth),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1719,10 +1818,19 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 const SizedBox(height: 8),
               ],
               for (final group in widget.product.availableModifierGroups) ...[
-                Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  group.name,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 Text(
                   _groupHint(group),
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 4),
                 if (group.maxSelected == 1)
@@ -1740,7 +1848,8 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                       children: group.options
                           .map(
                             (option) => RadioListTile<String>(
-                              dense: true,
+                              // Sin `dense`: la fila completa es el target
+                              // táctil (§18.3), no una línea comprimida de 32.
                               title: Text(
                                 '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                               ),
@@ -1755,7 +1864,9 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                   Column(
                     children: [
                       for (final option in group.options)
-                        Row(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Row(
                           children: [
                             Expanded(
                               child: Column(
@@ -1794,6 +1905,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                               onPressed: () => _incrementQuantity(group, option),
                             ),
                           ],
+                          ),
                         ),
                     ],
                   )
@@ -1802,7 +1914,6 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                     children: group.options
                         .map(
                           (option) => CheckboxListTile(
-                            dense: true,
                             title: Text(
                               '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                             ),
@@ -1876,12 +1987,15 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                       inventoryEffect: option.inventoryEffect,
                       effectInsumoId: option.effectInsumoId,
                       effectTargetInsumoId: option.effectTargetInsumoId,
-                      // R28 (D2): the quantity the cashier MARKED wins;
-                      // with no mark the option's own declared quantity
-                      // applies, and with neither the resolution INHERITS
-                      // the recipe component's quantity.
+                      // R28 (decisión del owner): la cantidad la manda el
+                      // backoffice. La del supervisor (override autorizado)
+                      // gana; sin ella, la que configuró el backoffice; sin
+                      // ninguna, la que se hereda del componente de la
+                      // receta — y esa última la resuelve el resolver, no
+                      // el cajero.
                       effectQuantity:
-                          _markedEffectQuantities[option.id] ?? option.effectQuantity,
+                          _effectOverrides[option.id]?.quantity ??
+                              option.effectQuantity,
                       effectFactor: option.effectFactor,
                     );
 
