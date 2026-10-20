@@ -36,10 +36,9 @@ class _CapturingSaleViewModel extends ChangeNotifier
 
 /// The authorization of a supervisor, as the override flow asks for it.
 class _FakeAuthRepository extends Fake implements AuthRepository {
-  bool authorized;
   String? lastSupervisorId;
 
-  _FakeAuthRepository({this.authorized = true});
+  _FakeAuthRepository();
 
   @override
   Future<List<CredentialMatch>> identifyByCredential({
@@ -47,7 +46,6 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
     required SupervisionPolicy policy,
     String? userId,
   }) async {
-    if (!authorized) return const [];
     if (credential.trim().isEmpty) return const [];
     return [
       CredentialMatch(
@@ -88,7 +86,7 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
     String? totpCode,
   }) async {
     lastSupervisorId = supervisorId;
-    return authorized;
+    return true;
   }
 }
 

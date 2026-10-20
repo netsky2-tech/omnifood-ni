@@ -13,7 +13,6 @@ import 'package:pos_app/domain/models/config/supervision_policy.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
-import 'package:pos_app/domain/models/config/supervision_policy.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
