@@ -46,6 +46,26 @@ abstract class AuthorityProjectionDao {
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertInsumo(AuthorityInsumoEntity insumo);
 
+  /// Refresh the LIVE state of an authority insumo.
+  ///
+  /// The identity facts (name, uom) are append-only: a cloud replay must
+  /// never overwrite a hydrated row. The state is the opposite — an insumo
+  /// can be deactivated at any moment, and a terminal that keeps believing
+  /// it is active would offer stock that is not for sale (the SOHO
+  /// guarantee, D6). Insert-if-absent would freeze the state at the
+  /// moment of the first delivery, so the state is updated in place.
+  @Query(
+    'UPDATE authority_insumos '
+    'SET isActive = :isActive, negative_stock_policy = :negativeStockPolicy '
+    'WHERE tenant_id = :tenantId AND id = :id',
+  )
+  Future<int?> updateInsumoState(
+    String tenantId,
+    String id,
+    int isActive,
+    String negativeStockPolicy,
+  );
+
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertRecipeVersion(AuthorityRecipeVersionEntity version);
 

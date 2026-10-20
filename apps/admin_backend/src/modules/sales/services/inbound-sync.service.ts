@@ -1003,11 +1003,20 @@ export class InboundSyncService {
           }
           // Identity facts only: stock, averageCost and par levels stay in
           // the incremental `insumos` delta.
+          //
+          // R28 (M4.1): the LIVE state travels with the closure too. The
+          // terminal resolves an effect against these rows, and an effect
+          // that points at a DEACTIVATED insumo must not apply (the SOHO
+          // guarantee, D6). Without the state the terminal sees every
+          // insumo as active and applies an effect the cloud refuses — a
+          // divergence the sale carries as RECIPE_DEVIATION_MISMATCH.
           return {
             id: insumo.id,
             tenantId: insumo.tenant_id,
             name: insumo.name,
             uom: insumo.consumptionUom,
+            isActive: insumo.is_active,
+            negativeStockPolicy: insumo.negativeStockPolicy,
           };
         }),
       };

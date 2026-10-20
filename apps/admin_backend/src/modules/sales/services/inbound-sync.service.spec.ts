@@ -1651,6 +1651,8 @@ describe('InboundSyncService', () => {
         name: 'Leche',
         purchaseUom: 'L',
         consumptionUom: 'ml',
+        is_active: true,
+        negativeStockPolicy: 'RESTRICT',
         ...overrides,
       } as unknown as Insumo;
     }
@@ -1684,6 +1686,32 @@ describe('InboundSyncService', () => {
           tenantId: 'tenant-abc',
           name: 'Leche',
           uom: 'ml',
+          // R28 (M4.1): the LIVE state travels with the closure, so the
+          // terminal sees a deactivated insumo as deactivated and does not
+          // apply an effect the cloud refuses.
+          isActive: true,
+          negativeStockPolicy: 'RESTRICT',
+        },
+      ]);
+    });
+
+    it('states the LIVE state of a deactivated insumo (R28 M4.1)', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([buildRecipeVersionRow()]);
+      recipeDetailQb.getMany.mockResolvedValue([buildComponentRow()]);
+      insumoQb.getMany.mockResolvedValue([
+        buildComponentInsumoRow({ is_active: false }),
+      ]);
+
+      const response = await pullRecipeVersions();
+
+      expect(response.deltas.recipeVersions[0].insumos).toEqual([
+        {
+          id: 'ins-1',
+          tenantId: 'tenant-abc',
+          name: 'Leche',
+          uom: 'ml',
+          isActive: false,
+          negativeStockPolicy: 'RESTRICT',
         },
       ]);
     });
@@ -1722,10 +1750,26 @@ describe('InboundSyncService', () => {
       // Per-version, not a global sibling delta key: each version carries
       // only the insumos its own components reference.
       expect(rv1.insumos).toEqual([
-        { id: 'ins-1', tenantId: 'tenant-abc', name: 'Leche', uom: 'ml' },
+        {
+          id: 'ins-1',
+          tenantId: 'tenant-abc',
+          name: 'Leche',
+          uom: 'ml',
+          // R28 (M4.1): the live state travels with the closure.
+          isActive: true,
+          negativeStockPolicy: 'RESTRICT',
+        },
       ]);
       expect(rv2.insumos).toEqual([
-        { id: 'ins-2', tenantId: 'tenant-abc', name: 'Café', uom: 'g' },
+        {
+          id: 'ins-2',
+          tenantId: 'tenant-abc',
+          name: 'Café',
+          uom: 'g',
+          // R28 (M4.1): the live state travels with the closure.
+          isActive: true,
+          negativeStockPolicy: 'RESTRICT',
+        },
       ]);
       // A version with no components has an empty closure, never a missing
       // field.

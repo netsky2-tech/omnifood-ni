@@ -109,6 +109,115 @@ void main() {
   );
 
   test(
+    'R28 (M4.1): an effect that points at a DEACTIVATED insumo leaves the '
+    'demand alone',
+    () {
+      // THE SOHO GUARANTEE, second face: the company DEACTIVATED the
+      // substitute. The terminal must not demand a stock that is not for
+      // sale — the effect does not apply, the recipe's demand is unchanged,
+      // and the sale is NOT blocked. (The cloud reaches the same verdict
+      // from the catalog; the terminal only knows it because the authority
+      // carries the live state.)
+      final authority = ValidatedSaleInventoryAuthority.validate(
+        context: const CheckoutAuthorityContext(
+          checkoutId: 'checkout',
+          offlineUserId: 'user',
+          offlineTenantId: 'tenant',
+          provisionedTenantId: 'tenant',
+        ),
+        products: const [
+          AuthorityProduct(
+            id: 'meal',
+            tenantId: 'tenant',
+            inventoryKind: AuthorityInventoryKind.prepared,
+          ),
+        ],
+        insumos: const [
+          AuthorityInsumo(id: 'insumo-a', tenantId: 'tenant'),
+          AuthorityInsumo(
+            id: 'insumo-leche',
+            tenantId: 'tenant',
+            consumptionUom: 'ML',
+          ),
+          AuthorityInsumo(
+            id: 'insumo-almendras',
+            tenantId: 'tenant',
+            consumptionUom: 'ML',
+            isActive: false,
+          ),
+        ],
+        mappings: const [],
+        recipes: const [
+          AuthorityRecipe(
+            id: 'recipe-1',
+            tenantId: 'tenant',
+            productId: 'meal',
+            isPublished: true,
+          ),
+        ],
+        components: const [
+          AuthorityComponent(
+            id: 'component-a',
+            tenantId: 'tenant',
+            recipeId: 'recipe-1',
+            insumoId: 'insumo-a',
+            quantityPerSaleUnit: 1.5,
+          ),
+          AuthorityComponent(
+            id: 'component-leche',
+            tenantId: 'tenant',
+            recipeId: 'recipe-1',
+            insumoId: 'insumo-leche',
+            quantityPerSaleUnit: 150,
+          ),
+        ],
+      );
+
+      final result = builder.build(
+        authority: authority,
+        plan: planner.plan(
+          authority: authority,
+          lines: const [
+            SaleInventoryLine(
+              id: 'line-swap',
+              productId: 'meal',
+              quantity: 1,
+              modifiers: [
+                Modifier(
+                  id: 'opt-almendras',
+                  name: 'Leche: Almendras',
+                  extraPrice: 10,
+                  optionId: 'opt-almendras',
+                  groupId: 'grp-leche',
+                  inventoryEffect: 'SWAP',
+                  effectTargetInsumoId: 'insumo-leche',
+                  effectInsumoId: 'insumo-almendras',
+                ),
+              ],
+            ),
+          ],
+        ),
+        terminalId: 'terminal-1',
+        invoiceId: 'invoice-1',
+        catalogRevision: 'revision-1',
+        movementKind: 'SALE',
+      );
+
+      final bindings = result.lines.first.snapshot.bindings;
+      // The deactivated substitute is NOT consumed...
+      expect(
+        bindings.any((binding) => binding.insumoId == 'insumo-almendras'),
+        isFalse,
+      );
+      // ...and the recipe's own demand is untouched.
+      final wholeMilk = bindings.firstWhere(
+        (binding) => binding.insumoId == 'insumo-leche',
+      );
+      expect(wholeMilk.quantityPerSaleUnit, 150);
+    },
+  );
+
+  test(
     'R28: an effect whose insumo is not in the catalog leaves the demand alone',
     () {
       // THE SOHO GUARANTEE: a company that has not registered the insumo

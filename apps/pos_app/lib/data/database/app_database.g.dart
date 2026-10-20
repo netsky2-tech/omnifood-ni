@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 79,
+      version: 80,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -7900,6 +7900,19 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
         'SELECT COUNT(*) FROM authority_insumos WHERE tenant_id = ?1',
         mapper: (Map<String, Object?> row) => row.values.first as int,
         arguments: [tenantId]);
+  }
+
+  @override
+  Future<int?> updateInsumoState(
+    String tenantId,
+    String id,
+    int isActive,
+    String negativeStockPolicy,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE authority_insumos SET isActive = ?3, negative_stock_policy = ?4 WHERE tenant_id = ?1 AND id = ?2',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, id, isActive, negativeStockPolicy]);
   }
 
   @override

@@ -4029,6 +4029,18 @@ class SyncService {
             if (tenantId.isEmpty || id.isEmpty || name.isEmpty || uom.isEmpty) {
               continue;
             }
+            // R28 (M4.1): the delta carries the LIVE state of the insumo.
+            // A deactivated insumo must be visible as deactivated, or an
+            // effect pointing at it would be applied by the terminal while
+            // the cloud refuses it (a divergence the sale would carry as
+            // RECIPE_DEVIATION_MISMATCH).
+            final isActive = map['isActive'] as bool? ?? true;
+            final negativeStockPolicy =
+                (map['negativeStockPolicy'] as String?)?.trim();
+            final effectivePolicy =
+                (negativeStockPolicy != null && negativeStockPolicy.isNotEmpty)
+                    ? negativeStockPolicy
+                    : 'RESTRICT';
             final existing = await authorityDao.findInsumoById(tenantId, id);
             if (existing == null) {
               await authorityDao.insertInsumo(
@@ -4037,7 +4049,18 @@ class SyncService {
                   id: id,
                   name: name,
                   uom: uom,
+                  isActive: isActive,
+                  negativeStockPolicy: effectivePolicy,
                 ),
+              );
+            } else if (existing.isActive != isActive ||
+                existing.negativeStockPolicy != effectivePolicy) {
+              // The identity stays append-only; only the state is refreshed.
+              await authorityDao.updateInsumoState(
+                tenantId,
+                id,
+                isActive ? 1 : 0,
+                effectivePolicy,
               );
             }
           }

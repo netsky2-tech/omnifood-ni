@@ -1,5 +1,5 @@
 import { QueryResult, type QueryRunner } from 'typeorm';
-import { AddModifierInventoryEffects1810050000000 } from './1810030000000-AddModifierInventoryEffects';
+import { AddModifierInventoryEffects1810050000000 } from './1810050000000-AddModifierInventoryEffects';
 
 /**
  * R28 — the migration that gives a modifier option its optional inventory

@@ -66,8 +66,15 @@ void main() {
     String tenantId = 'tenant-alpha',
     String name = 'Mozzarella',
     String uom = 'KG',
+    bool? isActive,
   }) {
-    return {'id': id, 'tenantId': tenantId, 'name': name, 'uom': uom};
+    return {
+      'id': id,
+      'tenantId': tenantId,
+      'name': name,
+      'uom': uom,
+      if (isActive != null) 'isActive': isActive,
+    };
   }
 
   group('rename table (delta wire names -> hydrator flat names)', () {
@@ -468,6 +475,51 @@ void main() {
       expect(adaptation.payload, isNull);
       expect(adaptation.failureReason, contains('component'));
       expect(adaptation.inertRecipes, isEmpty);
+    });
+  });
+
+  group('R28 (M4.1) the LIVE state of the closure insumo', () {
+    test('a deactivated insumo travels into the payload as deactivated',
+        () {
+      final adaptation = adaptAuthorityDelta([
+        versionRow(
+          insumos: [
+            closureInsumoRow(id: 'ins-off', isActive: false),
+          ],
+        ),
+      ]);
+
+      expect(adaptation.isSuccess, isTrue, reason: adaptation.failureReason);
+      expect(adaptation.payload!.insumos.single.isActive, isFalse);
+    });
+
+    test('an insumo without the state stays active (backward compatible)',
+        () {
+      final adaptation = adaptAuthorityDelta([
+        versionRow(insumos: [closureInsumoRow(id: 'ins-old')]),
+      ]);
+
+      expect(adaptation.isSuccess, isTrue, reason: adaptation.failureReason);
+      expect(adaptation.payload!.insumos.single.isActive, isTrue);
+    });
+
+    test(
+        'the same insumo with two different states refuses the payload '
+        '(contradictory facts are a wire defect)', () {
+      final adaptation = adaptAuthorityDelta([
+        versionRow(
+          id: 'rv-1',
+          insumos: [closureInsumoRow(id: 'ins-x', isActive: true)],
+        ),
+        versionRow(
+          id: 'rv-2',
+          insumos: [closureInsumoRow(id: 'ins-x', isActive: false)],
+        ),
+      ]);
+
+      expect(adaptation.isSuccess, isFalse);
+      expect(adaptation.payload, isNull);
+      expect(adaptation.failureReason, contains('conflicting'));
     });
   });
 }

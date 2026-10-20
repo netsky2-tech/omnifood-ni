@@ -111,6 +111,10 @@ class CheckoutInventoryPreparationService {
               // deviation can tell whether an inherited quantity means the
               // same thing in the insumo it applies to.
               consumptionUom: directInsumo.uom,
+              // R28 (M4.1): the live state travels too, or a deactivated
+              // insumo would look available and an effect pointing at it
+              // would apply on the terminal while the cloud refuses it.
+              isActive: directInsumo.isActive,
             );
           }
         }
@@ -189,6 +193,8 @@ class CheckoutInventoryPreparationService {
                   id: insumo.id,
                   tenantId: tenantId,
                   consumptionUom: insumo.uom,
+                  // R28 (M4.1): the live state travels with the closure.
+                  isActive: insumo.isActive,
                 ),
               );
             }
@@ -460,6 +466,8 @@ class CheckoutInventoryPreparationService {
             id: leaf.id,
             tenantId: tenantId,
             consumptionUom: leaf.uom,
+            // R28 (M4.1): the live state travels with the closure.
+            isActive: leaf.isActive,
           ),
         );
       }

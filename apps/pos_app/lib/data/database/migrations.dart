@@ -3527,6 +3527,36 @@ final migration78_79 = Migration(78, 79, (database) async {
   }
 });
 
+/// R28 (M4.1): the authority insumo's ACTIVE state travels with it, so a
+/// deactivated insumo is not offered as stock to the terminal (an effect
+/// that points at one must not apply — the SOHO guarantee, D6).
+///
+/// The entity grew the `isActive` column, but no migration carried it: a
+/// terminal already at schema 76 therefore kept the old table shape and
+/// EVERY insert into `authority_insumos` failed with
+/// "table authority_insumos has no column named isActive" — the whole
+/// authority projection stayed empty, so the terminal resolved neither the
+/// recipe components nor the insumo names, and the inventory effect of a
+/// line could not be resolved at all. A fresh install hid the defect
+/// (Floor creates the table from the entity); only an upgrade exposed it.
+///
+/// The column is NOT NULL with a default of 1, matching the entity default:
+/// an existing row that predates the state is treated as active, and the
+/// next delta re-delivers the real state for it.
+final migration79_80 = Migration(79, 80, (database) async {
+  final authorityColumns = await database.rawQuery(
+    'PRAGMA table_info(authority_insumos)',
+  );
+  final hasIsActive = authorityColumns.any(
+    (column) => column['name'] == 'isActive',
+  );
+  if (!hasIsActive) {
+    await database.execute(
+      "ALTER TABLE authority_insumos ADD COLUMN isActive INTEGER NOT NULL DEFAULT 1",
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3597,6 +3627,7 @@ final allMigrations = [
   migration76_77,
   migration77_78,
   migration78_79,
+  migration79_80,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

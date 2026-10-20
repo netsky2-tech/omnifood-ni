@@ -177,9 +177,15 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(
         return AuthorityDeltaAdaptation.failure(
             'missing_closure_insumo_identity[version=$versionId]');
       }
+      // R28 (M4.1): the live state travels with the closure. An insumo
+      // that is no longer for sale must be visible as such, or the
+      // terminal applies an effect the cloud refuses.
+      final isActive = insumo['isActive'] as bool? ?? true;
       final existing = flatInsumos[insumoId];
       if (existing != null &&
-          (existing['name'] != name || existing['uom'] != uom)) {
+          (existing['name'] != name ||
+              existing['uom'] != uom ||
+              existing['isActive'] != isActive)) {
         return AuthorityDeltaAdaptation.failure(
             'conflicting_closure_insumo_facts[insumoId=$insumoId]');
       }
@@ -190,6 +196,7 @@ AuthorityDeltaAdaptation adaptAuthorityDelta(
           'tenantId': tenant,
           'name': name,
           'uom': uom,
+          'isActive': isActive,
           'negativeStockPolicy': insumo['negativeStockPolicy'] ?? 'RESTRICT',
         },
       );
