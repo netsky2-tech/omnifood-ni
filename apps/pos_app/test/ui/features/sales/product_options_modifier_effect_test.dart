@@ -7,6 +7,7 @@ import 'package:pos_app/data/models/inventory/authority_projection_entities.dart
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
@@ -37,6 +38,28 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
   String? lastSupervisorId;
 
   _FakeAuthRepository({this.authorized = true});
+
+  @override
+  Future<List<User>> getAllUsers() async => const [
+        User(
+          id: 'usr-owner',
+          name: 'Maxwell Orozco',
+          role: UserRole.owner,
+          isActive: true,
+        ),
+        User(
+          id: 'usr-encargado',
+          name: 'Mateo Rojas',
+          role: UserRole.manager,
+          isActive: true,
+        ),
+        User(
+          id: 'usr-cajero',
+          name: 'Cajero Temporal',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      ];
 
   @override
   Future<bool> authorizeOverride({
@@ -222,6 +245,14 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
     }
+    // The tree is unmounted at the end of the test: a field still mounted
+    // when the NEXT test changes the metrics would look up its ancestor in a
+    // deactivated tree and fail with an error that has nothing to do with
+    // what the test is checking.
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    });
     await tester.pumpWidget(
       ChangeNotifierProvider<SaleViewModel>.value(
         value: _CapturingSaleViewModel(),
@@ -344,8 +375,71 @@ void main() {
         find.text('Cantidad autorizada para este extra'),
         findsOneWidget,
       );
-      // The credentials are the supervisor's, never the cashier's.
-      expect(find.text('ID supervisor'), findsOneWidget);
+      // The supervisor is CHOSEN BY NAME: no identifier reaches the screen
+      // (Nhilos backoffice §17.6: an uuid is not something an operator
+      // memorizes or transcribes).
+      expect(find.text('ID supervisor'), findsNothing);
+      expect(find.byKey(const Key('supervisor_search')), findsOneWidget);
+      expect(find.text('Maxwell Orozco'), findsOneWidget);
+      expect(find.text('Mateo Rojas'), findsOneWidget);
+      // The cashier can NOT be the one who authorizes.
+      expect(find.text('Cajero Temporal'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'the supervisor is searched by name and the submit waits for the '
+    'credential (the owner: nobody memorizes a uuid)',
+    (tester) async {
+      final auth = _FakeAuthRepository();
+      await pumpDialog(
+        tester,
+        product: productWithPendingEffect(),
+        authRepository: auth,
+      );
+
+      await tester.tap(find.byKey(const Key('modifier_override_action')));
+      await tester.pumpAndSettle();
+
+      // A partial, accent-free search finds the person.
+      await tester.enterText(find.byKey(const Key('supervisor_search')), 'maxw');
+      await tester.pumpAndSettle();
+      expect(find.text('Maxwell Orozco'), findsOneWidget);
+      expect(find.text('Mateo Rojas'), findsNothing);
+
+      // The amount and the reason are part of what is being authorized.
+      await tester.enterText(
+        find.byKey(const Key('modifier_override_quantity')),
+        '30',
+      );
+      await tester.enterText(
+        find.byKey(const Key('modifier_override_reason')),
+        'Doble jarabe',
+      );
+      await tester.pumpAndSettle();
+
+      // Choosing the person is not enough: the credential is required too.
+      var submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'AUTORIZAR'),
+      );
+      expect(submit.onPressed, isNull, reason: 'falta la persona');
+
+      await tester.tap(find.byKey(const Key('supervisor_option_usr-owner')));
+      await tester.pumpAndSettle();
+      submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'AUTORIZAR'),
+      );
+      expect(submit.onPressed, isNull, reason: 'falta la credencial');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'PIN'),
+        '123456',
+      );
+      await tester.pumpAndSettle();
+      submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'AUTORIZAR'),
+      );
+      expect(submit.onPressed, isNotNull);
     },
   );
 
@@ -353,10 +447,12 @@ void main() {
     'an authorized override is recorded with its forensic trace',
     (tester) async {
       final audit = _FakeAuditRepository();
+      final auth = _FakeAuthRepository();
       await pumpDialog(
         tester,
         product: productWithPendingEffect(),
         auditRepository: audit,
+        authRepository: auth,
       );
 
       await tester.tap(find.byKey(const Key('modifier_override_action')));
@@ -372,11 +468,31 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The submit stays disabled until the amount AND the reason are there.
-      final submit = tester.widget<FilledButton>(
+      // The submit waits for the person AND the credential: an amount with
+      // nobody authorizing it is not an authorization.
+      var submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'AUTORIZAR'),
+      );
+      expect(submit.onPressed, isNull, reason: 'falta la persona');
+
+      await tester.tap(find.byKey(const Key('supervisor_option_usr-owner')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'PIN'),
+        '123456',
+      );
+      await tester.pumpAndSettle();
+
+      submit = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'AUTORIZAR'),
       );
       expect(submit.onPressed, isNotNull);
+
+      // And the authorization carries the CHOSEN person, not a typed id.
+      await tester.tap(find.widgetWithText(FilledButton, 'AUTORIZAR'));
+      await tester.pumpAndSettle();
+      expect(auth.lastSupervisorId, 'usr-owner');
+      expect(audit.actions, contains('MODIFIER_EFFECT_QUANTITY_OVERRIDE'));
     },
   );
 

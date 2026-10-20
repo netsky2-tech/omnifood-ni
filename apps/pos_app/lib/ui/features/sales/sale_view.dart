@@ -21,6 +21,7 @@ import '../../../core/localization/label_map.dart';
 import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
+import '../../features/identity/supervisor_candidates.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
@@ -827,10 +828,12 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
     }
 
     final auditRepo = context.read<AuditRepository>();
+    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
 
     final authorized = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
+        candidates: candidates,
         onAuthorize: (request) {
           final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
           final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
@@ -873,10 +876,12 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
 
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
+    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
 
     final authorized = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
+        candidates: candidates,
         onAuthorize: (request) {
           final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
           final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
@@ -1559,11 +1564,13 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     // The submit button follows the extra fields: it stays disabled until the
     // amount AND the reason are there (the modal rebuilds on this notifier).
     final extraValid = ValueNotifier<bool>(false);
+    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
     final authorized = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
         title: 'Cantidad autorizada para este extra',
         submitLabel: 'AUTORIZAR',
+        candidates: candidates,
         content: ModifierQuantityOverrideContent(
           unit: preview.markingUnit,
           insumoLabel: _insumoFacts[option.effectInsumoId]?.name ??
@@ -2783,10 +2790,12 @@ class CartSummary extends StatelessWidget {
 
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
+    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
 
     final authorized = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
+        candidates: candidates,
         onAuthorize: (request) {
           final pin = request.method == SupervisorAuthorizationMethod.pin
               ? request.credential

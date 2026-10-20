@@ -136,7 +136,23 @@ void main() {
     when(mockViewModel.supportsBuzzerPager).thenReturn(false);
     when(mockViewModel.businessModeEvaluator).thenReturn(const BusinessModeEvaluator(TenantConfig()));
     when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => currentUser);
-    when(mockAuthRepository.getAllUsers()).thenAnswer((_) async => [currentUser]);
+    // The LOCAL staff template: the override is chosen BY NAME from it
+    // (an uuid is not something an operator memorizes).
+    when(mockAuthRepository.getAllUsers()).thenAnswer((_) async => [
+          currentUser,
+          const User(
+            id: 'supervisor-1',
+            name: 'Encargada de Turno',
+            role: UserRole.manager,
+            isActive: true,
+          ),
+          const User(
+            id: 'supervisor-totp',
+            name: 'Segundo Supervisor',
+            role: UserRole.manager,
+            isActive: true,
+          ),
+        ]);
     when(mockAuditRepository.logForensic(any, metadata: anyNamed('metadata'), metodoAutorizacion: anyNamed('metodoAutorizacion'), usuarioAutorizadorId: anyNamed('usuarioAutorizadorId')))
         .thenAnswer((_) async {});
   });
@@ -634,12 +650,25 @@ void main() {
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
 
-    final fields = find.descendant(
-      of: find.byType(AlertDialog).first,
-      matching: find.byType(TextField),
+    // The person is picked BY NAME from the list; it may sit below the
+    // fold of the dialog's scroll view.
+    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
+    // test would answer a global finder.
+    final option = find.descendant(
+      of: find.byType(AlertDialog).last,
+      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
     );
-    await tester.enterText(fields.at(0), 'supervisor-1');
-    await tester.enterText(fields.at(1), '1234');
+    await tester.ensureVisible(option);
+    await tester.pumpAndSettle();
+    await tester.tap(option);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byWidgetPredicate((widget) {
+      return widget is TextField && widget.decoration?.labelText == 'PIN';
+    }), '1234');
+    // The modal rebuilds when the credential lands: the submit button
+    // follows it, and a tap without a frame would fall on the old one.
+    await tester.pumpAndSettle();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
@@ -680,12 +709,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
-    }), 'supervisor-1');
+    // The person is picked BY NAME from the list; it may sit below the
+    // fold of the dialog's scroll view.
+    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
+    // test would answer a global finder.
+    final option = find.descendant(
+      of: find.byType(AlertDialog).last,
+      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
+    );
+    await tester.ensureVisible(option);
+    await tester.pumpAndSettle();
+    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
       return widget is TextField && widget.decoration?.labelText == 'PIN';
     }), '1234');
+    // The modal rebuilds when the credential lands: the submit button
+    // follows it, and a tap without a frame would fall on the old one.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
@@ -737,12 +777,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
-    }), 'supervisor-1');
+    // The person is picked BY NAME from the list; it may sit below the
+    // fold of the dialog's scroll view.
+    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
+    // test would answer a global finder.
+    final option = find.descendant(
+      of: find.byType(AlertDialog).last,
+      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
+    );
+    await tester.ensureVisible(option);
+    await tester.pumpAndSettle();
+    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
       return widget is TextField && widget.decoration?.labelText == 'PIN';
     }), '1234');
+    // The modal rebuilds when the credential lands: the submit button
+    // follows it, and a tap without a frame would fall on the old one.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
@@ -795,9 +846,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
-    }), 'supervisor-totp');
+    // The person is picked BY NAME from the list; it may sit below the
+    // fold of the dialog's scroll view.
+    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
+    // test would answer a global finder.
+    final option = find.descendant(
+      of: find.byType(AlertDialog).last,
+      matching: find.byKey(const Key('supervisor_option_supervisor-totp')),
+    );
+    await tester.ensureVisible(option);
+    await tester.pumpAndSettle();
+    await tester.tap(option);
 
     await tester.tap(find.byType(DropdownButtonFormField<SupervisorAuthorizationMethod>));
     await tester.pumpAndSettle();
@@ -807,6 +866,7 @@ void main() {
     await tester.enterText(find.byWidgetPredicate((widget) {
       return widget is TextField && widget.decoration?.labelText == 'Código TOTP';
     }), '654321');
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
@@ -852,12 +912,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
-    }), 'supervisor-1');
+    // The person is picked BY NAME from the list; it may sit below the
+    // fold of the dialog's scroll view.
+    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
+    // test would answer a global finder.
+    final option = find.descendant(
+      of: find.byType(AlertDialog).last,
+      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
+    );
+    await tester.ensureVisible(option);
+    await tester.pumpAndSettle();
+    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
       return widget is TextField && widget.decoration?.labelText == 'PIN';
     }), '1234');
+    // The modal rebuilds when the credential lands: the submit button
+    // follows it, and a tap without a frame would fall on the old one.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
@@ -926,12 +997,23 @@ void main() {
     await tester.tap(find.text('Aplicar'));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'ID supervisor';
-    }), 'supervisor-1');
+    // The person is picked BY NAME from the list; it may sit below the
+    // fold of the dialog's scroll view.
+    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
+    // test would answer a global finder.
+    final option = find.descendant(
+      of: find.byType(AlertDialog).last,
+      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
+    );
+    await tester.ensureVisible(option);
+    await tester.pumpAndSettle();
+    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
       return widget is TextField && widget.decoration?.labelText == 'PIN';
     }), '1234');
+    // The modal rebuilds when the credential lands: the submit button
+    // follows it, and a tap without a frame would fall on the old one.
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
