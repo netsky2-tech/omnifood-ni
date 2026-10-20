@@ -68,14 +68,14 @@ Chain strategy: stacked-to-main
 - [ ] 3.2 `build_runner` y el mapeo de la línea (`sales_mapper.dart`) con los campos nuevos.
 - [ ] 3.3 Migración nube (TypeORM) con las mismas columnas (nullable, sin tocar RLS).
 - [ ] 3.4 El backend guarda el estado del efecto al sincronizar la venta.
-- [ ] 3.5 `GET /modifier-groups/pending-configuration`: opciones con efecto no resoluble.
-      **Una sola verdad**: el backend NO replica la resolución del POS (eso sería
-      una segunda verdad que divergiría); el pendiente lo sabe el terminal, que
-      es quien resuelve, y viaja en la línea (3.1–3.4). El endpoint lista las
-      opciones con efecto y sin cantidad configurada **y** las que se vendieron
-      con el efecto `PENDING`, con el producto y la razón.
-- [ ] 3.6 Dashboard: pestaña «Pendientes de configurar» en Modificadores, con acceso
-      directo a la configuración de la opción.
+- [x] 3.5 `GET /modifier-groups/pending-configuration`: opciones con efecto no resoluble.
+      **Una sola verdad**: el veredicto sale del MISMO `resolveDeviations` que la
+      nube usa para recalcular la demanda de una venta, alimentado con la receta
+      publicada del producto — no de una heurística aparte, que sería una segunda
+      verdad y divergiría. Verificado contra la réplica del rig.
+- [x] 3.6 Dashboard: pestaña «Pendientes de configurar» en Modificadores, con la
+      razón en palabras del owner y acceso directo a la configuración del grupo.
+      Solo para quien puede configurar (`modifiers.write`).
 - [ ] 3.7 El diálogo del backoffice explica la cantidad en lenguaje de negocio y deja
       explícito el «sin definir» (heredar de la receta).
 - [ ] 3.8 Vectores de conformidad (`fixtures/modifier-deviation/v1/vectors.json`) para el
