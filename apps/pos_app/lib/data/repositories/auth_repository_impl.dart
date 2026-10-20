@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:developer' as developer;
 import '../../domain/models/auth/terminal_linking.dart';
+import '../../domain/models/config/supervision_policy.dart';
 import '../../domain/models/user.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../daos/user_dao.dart';
@@ -653,6 +654,49 @@ class AuthRepositoryImpl implements AuthRepository {
       debugPrint('[AuthRepository] Exception during PIN verification: $e');
     }
     return null;
+  }
+
+  /// Identifies who a credential belongs to, from the LOCAL staff template.
+  ///
+  /// The operator types their PIN: the terminal checks it against the
+  /// downloaded security profiles and says who it is. Nobody transcribes an
+  /// identifier, and the answer is available with the WiFi down.
+  ///
+  /// When [userId] is given, the credential is checked against THAT person
+  /// only — the case where the same PIN is shared by more than one member of
+  /// the staff and the operator had to say which one they are.
+  @override
+  Future<List<CredentialMatch>> identifyByCredential({
+    required String credential,
+    required SupervisionPolicy policy,
+    String? userId,
+  }) async {
+    final normalized = credential.trim();
+    if (normalized.isEmpty) return const [];
+    final userEntities = await _userDao.findAllUsers();
+    final users = userEntities
+        .map((entity) => entity.toDomain())
+        .toList(growable: false);
+    final candidates = userId == null
+        ? users
+        : users.where((user) => user.id == userId).toList(growable: false);
+    final matches = <CredentialMatch>[];
+    for (final user in candidates) {
+      if (!user.isActive) continue;
+      final profile = await _securityProfileDao.findByUserId(user.id);
+      if (profile == null) continue;
+      if (!profile.isPinEnabled) continue;
+      final hash = profile.pinHash;
+      if (hash == null || hash.isEmpty) continue;
+      if (!_localAuth.verifyPin(normalized, hash)) continue;
+      matches.add(
+        CredentialMatch.of(
+          user,
+          isAuthorizingRole: policy.authorizes(user.role.name),
+        ),
+      );
+    }
+    return matches;
   }
 
   @override

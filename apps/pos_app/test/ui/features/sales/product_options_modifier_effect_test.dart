@@ -7,9 +7,11 @@ import 'package:pos_app/data/models/inventory/authority_projection_entities.dart
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/models/config/supervision_policy.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
 
 /// R28 (decisión del owner: "el backoffice manda, el cajero marca") — el
@@ -38,6 +40,24 @@ class _FakeAuthRepository extends Fake implements AuthRepository {
   String? lastSupervisorId;
 
   _FakeAuthRepository({this.authorized = true});
+
+  @override
+  Future<List<CredentialMatch>> identifyByCredential({
+    required String credential,
+    required SupervisionPolicy policy,
+    String? userId,
+  }) async {
+    if (!authorized) return const [];
+    if (credential.trim().isEmpty) return const [];
+    return [
+      CredentialMatch(
+        userId: userId ?? 'usr-owner',
+        userName: 'Maxwell Orozco',
+        userRole: 'OWNER',
+        isAuthorizingRole: policy.authorizes('OWNER'),
+      ),
+    ];
+  }
 
   @override
   Future<List<User>> getAllUsers() async => const [
@@ -266,6 +286,12 @@ void main() {
               Provider<AuditRepository>.value(
                 value: auditRepository ?? _FakeAuditRepository(),
               ),
+              // The tenant's policy: the default for the mode, which never
+              // dead-ends the close box and treats the quantity of an extra
+              // as data, not as a control.
+              Provider<TenantConfigService>.value(
+                value: TenantConfigService(database.localConfigDao),
+              ),
             ],
             child: MaterialApp(
               home: Scaffold(
@@ -358,96 +384,99 @@ void main() {
   );
 
   testWidgets(
-    'the supervisor override asks for the amount and the reason (the rig: '
-    'the override must not be a free field for the cashier)',
+    'the quantity is marked with the amount and the reason, and NO credential '
+    '(it is a data question, not a control one)',
     (tester) async {
       await pumpDialog(tester, product: productWithPendingEffect());
 
       await tester.tap(find.byKey(const Key('modifier_override_action')));
+      // The policy is read from the LOCAL SQLite: the read is real async
+      // I/O, so it needs the real event loop (the same reason the
+      // authority read above needs runAsync).
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
       await tester.pumpAndSettle();
 
-      // The amount and the reason, in the insumo's own unit.
-      expect(find.text('Cantidad que descuenta este extra'), findsNothing);
-      expect(find.byKey(const Key('modifier_override_quantity')), findsOneWidget);
-      expect(find.byKey(const Key('modifier_override_reason')), findsOneWidget);
-      expect(find.text('Autorización de supervisor'), findsNothing);
-      expect(
-        find.text('Cantidad autorizada para este extra'),
-        findsOneWidget,
-      );
-      // The supervisor is CHOSEN BY NAME: no identifier reaches the screen
-      // (Nhilos backoffice §17.6: an uuid is not something an operator
-      // memorizes or transcribes).
-      expect(find.text('ID supervisor'), findsNothing);
-      expect(find.byKey(const Key('supervisor_search')), findsOneWidget);
-      expect(find.text('Maxwell Orozco'), findsOneWidget);
-      expect(find.text('Mateo Rojas'), findsOneWidget);
-      // The cashier can NOT be the one who authorizes.
-      expect(find.text('Cajero Temporal'), findsNothing);
+      // The amount and the reason, in the insumo's own unit. No PIN: the
+      // operator knows their own numbers.
+      expect(find.byKey(const Key('modifier_quantity_value')), findsOneWidget);
+      expect(find.byKey(const Key('modifier_quantity_reason')), findsOneWidget);
+      expect(find.textContaining('Jarabe de fresa'), findsWidgets);
+      expect(find.widgetWithText(TextField, 'Su PIN'), findsNothing);
     },
   );
 
   testWidgets(
-    'the supervisor is searched by name and the submit waits for the '
-    'credential (the owner: nobody memorizes a uuid)',
+    'the amount and the reason are required before the quantity applies',
     (tester) async {
       final auth = _FakeAuthRepository();
+      final audit = _FakeAuditRepository();
       await pumpDialog(
         tester,
         product: productWithPendingEffect(),
         authRepository: auth,
+        auditRepository: audit,
       );
 
       await tester.tap(find.byKey(const Key('modifier_override_action')));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
       await tester.pumpAndSettle();
 
-      // A partial, accent-free search finds the person.
-      await tester.enterText(find.byKey(const Key('supervisor_search')), 'maxw');
-      await tester.pumpAndSettle();
-      expect(find.text('Maxwell Orozco'), findsOneWidget);
-      expect(find.text('Mateo Rojas'), findsNothing);
+      // The submit waits for the amount AND the reason.
+      var submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'APLICAR'),
+      );
+      expect(submit.onPressed, isNull);
 
-      // The amount and the reason are part of what is being authorized.
       await tester.enterText(
-        find.byKey(const Key('modifier_override_quantity')),
+        find.byKey(const Key('modifier_quantity_value')),
         '30',
       );
+      await tester.pumpAndSettle();
+      submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'APLICAR'),
+      );
+      expect(submit.onPressed, isNull, reason: 'falta el motivo');
+
       await tester.enterText(
-        find.byKey(const Key('modifier_override_reason')),
+        find.byKey(const Key('modifier_quantity_reason')),
         'Doble jarabe',
       );
       await tester.pumpAndSettle();
-
-      // Choosing the person is not enough: the credential is required too.
-      var submit = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'AUTORIZAR'),
-      );
-      expect(submit.onPressed, isNull, reason: 'falta la persona');
-
-      await tester.tap(find.byKey(const Key('supervisor_option_usr-owner')));
-      await tester.pumpAndSettle();
       submit = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'AUTORIZAR'),
-      );
-      expect(submit.onPressed, isNull, reason: 'falta la credencial');
-
-      await tester.enterText(
-        find.widgetWithText(TextField, 'PIN'),
-        '123456',
-      );
-      await tester.pumpAndSettle();
-      submit = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'AUTORIZAR'),
+        find.widgetWithText(FilledButton, 'APLICAR'),
       );
       expect(submit.onPressed, isNotNull);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'APLICAR'));
+      await tester.pumpAndSettle();
+
+      // The line now carries the authorized amount, and the evidence says who
+      // did it and why.
+      expect(
+        find.text('Saca 30 ml de Jarabe de fresa del inventario.'),
+        findsOneWidget,
+      );
+      expect(audit.actions, contains('MODIFIER_EFFECT_QUANTITY_ADJUSTED'));
     },
   );
 
   testWidgets(
-    'an authorized override is recorded with its forensic trace',
+    'a supervisor-authorized quantity is recorded with its forensic trace '
+    '(the tenant policy can require one)',
     (tester) async {
       final audit = _FakeAuditRepository();
       final auth = _FakeAuthRepository();
+      // The tenant's policy asks for a supervisor on this flow.
+      final configService = TenantConfigService(database.localConfigDao);
+      await tester.runAsync(() async {
+        await configService.setSupervisionPolicy(
+          const SupervisionPolicy(supervisorRequiredForModifierQuantity: true),
+        );
+      });
       await pumpDialog(
         tester,
         product: productWithPendingEffect(),
@@ -456,6 +485,9 @@ void main() {
       );
 
       await tester.tap(find.byKey(const Key('modifier_override_action')));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
       await tester.pumpAndSettle();
 
       await tester.enterText(
@@ -468,17 +500,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The submit waits for the person AND the credential: an amount with
-      // nobody authorizing it is not an authorization.
+      // The submit waits for the credential: an amount with nobody
+      // authorizing it is not an authorization.
       var submit = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'AUTORIZAR'),
       );
-      expect(submit.onPressed, isNull, reason: 'falta la persona');
+      expect(submit.onPressed, isNull, reason: 'falta la credencial');
 
-      await tester.tap(find.byKey(const Key('supervisor_option_usr-owner')));
-      await tester.pumpAndSettle();
       await tester.enterText(
-        find.widgetWithText(TextField, 'PIN'),
+        find.widgetWithText(TextField, 'Su PIN'),
         '123456',
       );
       await tester.pumpAndSettle();
@@ -488,11 +518,13 @@ void main() {
       );
       expect(submit.onPressed, isNotNull);
 
-      // And the authorization carries the CHOSEN person, not a typed id.
       await tester.tap(find.widgetWithText(FilledButton, 'AUTORIZAR'));
       await tester.pumpAndSettle();
-      expect(auth.lastSupervisorId, 'usr-owner');
       expect(audit.actions, contains('MODIFIER_EFFECT_QUANTITY_OVERRIDE'));
+      expect(
+        find.text('Saca 30 ml de Jarabe de fresa del inventario.'),
+        findsOneWidget,
+      );
     },
   );
 

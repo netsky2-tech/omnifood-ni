@@ -6,10 +6,10 @@ enum SupervisorAuthorizationMethod { pin, totp }
 /// A person who may authorize an override, as the operator sees them: BY
 /// NAME.
 ///
-/// The id never reaches the screen: it is an opaque UUID that nobody memorizes
-/// and nobody should transcribe (Nhilos backoffice §17.6: a field whose datum
-/// is a foreign key is never a free-text input; the control must be a
-/// selector with a flexible textual search).
+/// The id never reaches the screen: it is an opaque UUID that nobody
+/// memorizes and nobody should transcribe (Nhilos backoffice §17.6: a field
+/// whose datum is a foreign key is never a free-text input; the control must
+/// be a selector with a flexible textual search).
 class SupervisorCandidate {
   final String id;
   final String name;
@@ -26,6 +26,8 @@ class SupervisorCandidate {
 }
 
 class SupervisorOverrideRequest {
+  /// The person, when the credential was ambiguous and the operator already
+  /// said which one they are. Empty when the credential identified them.
   final String supervisorId;
   final String credential;
   final SupervisorAuthorizationMethod method;
@@ -37,8 +39,62 @@ class SupervisorOverrideRequest {
   });
 }
 
+/// What the authorization came back as.
+///
+/// The credential (the PIN) identifies the person: nobody types an
+/// identifier. When the SAME PIN belongs to more than one member of the
+/// staff, the operation asks WHICH one — by name, never by id.
+class SupervisorOverrideOutcome {
+  const SupervisorOverrideOutcome.authorized({
+    required this.userId,
+    required this.userName,
+    required this.isAuthorizingRole,
+    required this.method,
+  })  : authorized = true,
+        ambiguous = false,
+        candidates = const [];
+
+  const SupervisorOverrideOutcome.ambiguous(
+    this.candidates, {
+    required this.userId,
+    required this.userName,
+    required this.isAuthorizingRole,
+    required this.method,
+  })  : ambiguous = true,
+        authorized = false;
+
+  const SupervisorOverrideOutcome.invalid()
+      : ambiguous = false,
+        authorized = false,
+        candidates = const [],
+        userId = null,
+        userName = null,
+        isAuthorizingRole = false,
+        method = 'PIN';
+
+  /// The operation may proceed.
+  final bool authorized;
+
+  /// The credential belongs to more than one person: ask which.
+  final bool ambiguous;
+
+  /// The people the credential could be.
+  final List<SupervisorCandidate> candidates;
+
+  final String? userId;
+  final String? userName;
+
+  /// The person counts as a supervisor under the tenant's policy.
+  final bool isAuthorizingRole;
+
+  /// How the person proved it: PIN or TOTP. The record says which.
+  final String method;
+}
+
 class SupervisorOverrideModal extends StatefulWidget {
-  final Future<bool> Function(SupervisorOverrideRequest request) onAuthorize;
+  final Future<SupervisorOverrideOutcome> Function(
+    SupervisorOverrideRequest request,
+  ) onAuthorize;
   final Future<void> Function(SupervisorOverrideRequest request)? onAuditSuccess;
 
   /// The title of the dialog. The default is the generic authorization one;
@@ -64,13 +120,6 @@ class SupervisorOverrideModal extends StatefulWidget {
   /// The label of the submit button.
   final String submitLabel;
 
-  /// The people who may authorize, FROM THE LOCAL STAFF TEMPLATE.
-  ///
-  /// The operator picks the person by name and proves it with the credential.
-  /// Nothing about the identity is transcribed: the id is the template's, and
-  /// it never reaches the screen.
-  final List<SupervisorCandidate> candidates;
-
   const SupervisorOverrideModal({
     super.key,
     required this.onAuthorize,
@@ -79,7 +128,6 @@ class SupervisorOverrideModal extends StatefulWidget {
     this.content,
     this.extraValid,
     this.submitLabel = 'Autorizar',
-    this.candidates = const [],
   });
 
   @override
@@ -88,35 +136,17 @@ class SupervisorOverrideModal extends StatefulWidget {
 
 class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
   final _credentialCtrl = TextEditingController();
-  final _searchCtrl = TextEditingController();
   SupervisorAuthorizationMethod _method = SupervisorAuthorizationMethod.pin;
   bool _submitting = false;
   String? _error;
 
-  /// The supervisor the operator chose BY NAME. Null = nobody chosen yet.
+  /// The people the credential could belong to, when the SAME PIN is shared
+  /// by more than one member of the staff: the operator says which one they
+  /// are, by name.
+  List<SupervisorCandidate> _candidates = const [];
+
+  /// The person the operator picked among the candidates.
   String? _selectedId;
-
-  /// The candidates that match what the operator typed.
-  ///
-  /// The search is tolerant: case, accents and partial names all work, so
-  /// "max" finds "Maxwell" and "máx" finds "Maxwell" too.
-  List<SupervisorCandidate> get _matchingCandidates {
-    final query = _normalize(_searchCtrl.text);
-    if (query.isEmpty) return widget.candidates;
-    return widget.candidates
-        .where((c) => _normalize(c.name).contains(query))
-        .toList(growable: false);
-  }
-
-  static String _normalize(String value) {
-    const accents = 'áàäâãåéèëêíìïîóòöôõúùüûñç';
-    const plain = 'aaaaaaeeeeiiiiooooouuuun c';
-    var out = value.toLowerCase();
-    for (var i = 0; i < accents.length; i++) {
-      out = out.replaceAll(accents[i], plain[i]);
-    }
-    return out.trim();
-  }
 
   @override
   void initState() {
@@ -133,7 +163,6 @@ class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
   @override
   void dispose() {
     widget.extraValid?.removeListener(_onExtraValidChanged);
-    _searchCtrl.dispose();
     _credentialCtrl.dispose();
     super.dispose();
   }
@@ -159,92 +188,77 @@ class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
       method: _method,
     );
 
-    final ok = await widget.onAuthorize(request);
+    final outcome = await widget.onAuthorize(request);
     if (!mounted) return;
 
-    if (!ok) {
+    if (outcome.authorized) {
+      if (widget.onAuditSuccess != null) {
+        await widget.onAuditSuccess!(request);
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(outcome);
+      return;
+    }
+
+    if (outcome.ambiguous) {
+      // The same PIN belongs to more than one person: ask which one, by
+      // NAME. The identifier never reaches the screen.
       setState(() {
+        _candidates = outcome.candidates;
+        _selectedId = null;
         _submitting = false;
-        _error = 'Credenciales de supervisor inválidas.';
       });
       return;
     }
 
-    if (widget.onAuditSuccess != null) {
-      await widget.onAuditSuccess!(request);
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).pop(true);
+    setState(() {
+      _submitting = false;
+      _error = 'Credenciales de supervisor inválidas.';
+    });
   }
 
-  /// WHO authorizes, chosen by NAME.
-  ///
-  /// A search box and the matching people, each one a target of its own. The
-  /// operator never sees, nor types, an identifier: the uuid stays in the
-  /// template and travels with the request.
-  Widget _supervisorSelector() {
-    if (widget.candidates.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _searchCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Buscar supervisor',
-              hintText: 'Escriba el nombre',
+  @override
+  Widget build(BuildContext context) {
+    final canSubmit = widget.extraValid?.value ?? true;
+    // Nothing is authorized without a credential.
+    final canAuthorize = _credentialCtrl.text.trim().isNotEmpty;
+    return AlertDialog(
+      title: Text(widget.title),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.content != null) ...[
+              widget.content!,
+              const SizedBox(height: 12),
+            ],
+            DropdownButtonFormField<SupervisorAuthorizationMethod>(
+              initialValue: _method,
+              items: const [
+                DropdownMenuItem(value: SupervisorAuthorizationMethod.pin, child: Text('PIN')),
+                DropdownMenuItem(value: SupervisorAuthorizationMethod.totp, child: Text('TOTP')),
+              ],
+              onChanged: _submitting ? null : (value) => setState(() => _method = value ?? SupervisorAuthorizationMethod.pin),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'No hay supervisores cargados en este terminal: pida al '
-            'encargado que configure la plantilla de usuarios.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ],
-      );
-    }
-    final matching = _matchingCandidates;
-    final selected = widget.candidates
-        .where((c) => c.id == _selectedId)
-        .cast<SupervisorCandidate?>()
-        .firstWhere((_) => true, orElse: () => null);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          key: const Key('supervisor_search'),
-          controller: _searchCtrl,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            labelText: 'Supervisor que autoriza',
-            hintText: 'Escriba el nombre',
-            prefixIcon: const Icon(Icons.search),
-          ),
-        ),
-        const SizedBox(height: 4),
-        if (matching.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(
-              'Ningún supervisor coincide con «${_searchCtrl.text.trim()}».',
-              style: Theme.of(context).textTheme.bodySmall,
+            const SizedBox(height: 8),
+            TextField(
+              controller: _credentialCtrl,
+              obscureText: true,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: _method == SupervisorAuthorizationMethod.pin
+                    ? 'Su PIN'
+                    : 'Su código TOTP',
+                helperText: _candidates.isEmpty
+                    ? null
+                    : 'Su PIN es el mismo de varias personas: diga cuál es.',
+              ),
             ),
-          )
-        else
-          // A plain column, not a lazy list: the dialog's own scroll view
-          // handles the overflow, and a shrink-wrapping viewport cannot
-          // report intrinsic dimensions inside an AlertDialog.
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final candidate in matching)
-                ListTile(
+            if (_candidates.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              ..._candidates.map(
+                (candidate) => ListTile(
                   key: Key('supervisor_option_${candidate.id}'),
-                  // The row IS the target: a name, a role, and a 48 dp
-                  // height (§18.3).
                   minTileHeight: 48,
                   selected: candidate.id == _selectedId,
                   leading: Icon(
@@ -259,61 +273,8 @@ class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
                   subtitle: Text(candidate.role),
                   onTap: () => setState(() => _selectedId = candidate.id),
                 ),
+              ),
             ],
-          ),
-        if (selected != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              children: [
-                const Icon(Icons.verified_user_outlined, size: 18),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Autoriza: ${selected.name} (${selected.role})',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final canSubmit = widget.extraValid?.value ?? true;
-    // Nothing is authorized without a person and a credential.
-    final canAuthorize = _selectedId != null &&
-        _credentialCtrl.text.trim().isNotEmpty;
-    return AlertDialog(
-      title: Text(widget.title),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (widget.content != null) ...[
-              widget.content!,
-              const SizedBox(height: 12),
-            ],
-            _supervisorSelector(),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<SupervisorAuthorizationMethod>(
-              initialValue: _method,
-              items: const [
-                DropdownMenuItem(value: SupervisorAuthorizationMethod.pin, child: Text('PIN')),
-                DropdownMenuItem(value: SupervisorAuthorizationMethod.totp, child: Text('TOTP')),
-              ],
-              onChanged: _submitting ? null : (value) => setState(() => _method = value ?? SupervisorAuthorizationMethod.pin),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _credentialCtrl,
-              obscureText: true,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(labelText: _method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'Código TOTP'),
-            ),
             if (_error != null) ...[
               const SizedBox(height: 8),
               Text(_error!, style: const TextStyle(color: Colors.red)),

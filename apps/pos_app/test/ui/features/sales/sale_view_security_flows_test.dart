@@ -9,6 +9,11 @@ import 'package:pos_app/domain/models/sales/hold_ticket.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/models/config/supervision_policy.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+import 'package:pos_app/data/daos/local_config_dao.dart';
+import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/domain/models/config/supervision_policy.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
 import 'package:pos_app/data/daos/sales/payment_dao.dart';
@@ -91,6 +96,25 @@ class _StubCashShiftViewModel extends CashShiftViewModel {
   MockSpec<AuditRepository>(),
   MockSpec<SyncService>(),
 ])
+/// The local configuration of a terminal: empty until something writes to
+/// it (the policy falls back to the default for the tenant's operation mode).
+class _EmptyLocalConfigDao implements LocalConfigDao {
+  final Map<String, LocalConfigEntity> _values = {};
+
+  @override
+  Future<LocalConfigEntity?> getConfigByKey(String key) async => _values[key];
+
+  @override
+  Future<void> saveConfig(LocalConfigEntity config) async {
+    _values[config.key] = config;
+  }
+
+  @override
+  Future<void> deleteConfig(String key) async {
+    _values.remove(key);
+  }
+}
+
 void main() {
   late MockSaleViewModel mockViewModel;
   late MockAuthRepository mockAuthRepository;
@@ -136,8 +160,8 @@ void main() {
     when(mockViewModel.supportsBuzzerPager).thenReturn(false);
     when(mockViewModel.businessModeEvaluator).thenReturn(const BusinessModeEvaluator(TenantConfig()));
     when(mockAuthRepository.getCurrentUser()).thenAnswer((_) async => currentUser);
-    // The LOCAL staff template: the override is chosen BY NAME from it
-    // (an uuid is not something an operator memorizes).
+    // The LOCAL staff template. The credential (the PIN) identifies the
+    // person: nobody types an identifier.
     when(mockAuthRepository.getAllUsers()).thenAnswer((_) async => [
           currentUser,
           const User(
@@ -153,6 +177,34 @@ void main() {
             isActive: true,
           ),
         ]);
+    when(mockAuthRepository.identifyByCredential(
+      credential: anyNamed('credential'),
+      policy: anyNamed('policy'),
+      userId: anyNamed('userId'),
+    )).thenAnswer((invocation) async {
+      // The credential identifies the person: the TOTP one belongs to the
+      // second supervisor, the PIN to the first.
+      final credential =
+          invocation.namedArguments[#credential] as String? ?? '';
+      if (credential == '654321') {
+        return const [
+          CredentialMatch(
+            userId: 'supervisor-totp',
+            userName: 'Segundo Supervisor',
+            userRole: 'MANAGER',
+            isAuthorizingRole: true,
+          ),
+        ];
+      }
+      return const [
+        CredentialMatch(
+          userId: 'supervisor-1',
+          userName: 'Encargada de Turno',
+          userRole: 'MANAGER',
+          isAuthorizingRole: true,
+        ),
+      ];
+    });
     when(mockAuditRepository.logForensic(any, metadata: anyNamed('metadata'), metodoAutorizacion: anyNamed('metodoAutorizacion'), usuarioAutorizadorId: anyNamed('usuarioAutorizadorId')))
         .thenAnswer((_) async {});
   });
@@ -167,6 +219,11 @@ void main() {
         Provider<AuthRepository>.value(value: mockAuthRepository),
         Provider<AuditRepository>.value(value: mockAuditRepository),
         Provider<SyncService>.value(value: mockSyncService),
+        // The tenant's supervision policy: the default for the mode, which
+        // never dead-ends the close box.
+        Provider<TenantConfigService>.value(
+          value: TenantConfigService(_EmptyLocalConfigDao()),
+        ),
       ],
       child: const MaterialApp(home: SaleView()),
     );
@@ -650,20 +707,10 @@ void main() {
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
 
-    // The person is picked BY NAME from the list; it may sit below the
-    // fold of the dialog's scroll view.
-    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
-    // test would answer a global finder.
-    final option = find.descendant(
-      of: find.byType(AlertDialog).last,
-      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
-    );
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
-    await tester.pumpAndSettle();
+    // The credential identifies the person: the operator types their PIN and
+    // nobody transcribes an identifier.
     await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'PIN';
+      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
     }), '1234');
     // The modal rebuilds when the credential lands: the submit button
     // follows it, and a tap without a frame would fall on the old one.
@@ -672,10 +719,10 @@ void main() {
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
-    verify(mockAuthRepository.authorizeOverride(
-      supervisorId: 'supervisor-1',
-      pin: '1234',
-      totpCode: null,
+    verify(mockAuthRepository.identifyByCredential(
+      credential: '1234',
+      policy: anyNamed('policy'),
+      userId: anyNamed('userId'),
     )).called(1);
     verify(mockAuditRepository.logForensic(
       'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
@@ -709,19 +756,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    // The person is picked BY NAME from the list; it may sit below the
-    // fold of the dialog's scroll view.
-    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
-    // test would answer a global finder.
-    final option = find.descendant(
-      of: find.byType(AlertDialog).last,
-      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
-    );
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'PIN';
+      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
     }), '1234');
     // The modal rebuilds when the credential lands: the submit button
     // follows it, and a tap without a frame would fall on the old one.
@@ -777,19 +813,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    // The person is picked BY NAME from the list; it may sit below the
-    // fold of the dialog's scroll view.
-    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
-    // test would answer a global finder.
-    final option = find.descendant(
-      of: find.byType(AlertDialog).last,
-      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
-    );
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'PIN';
+      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
     }), '1234');
     // The modal rebuilds when the credential lands: the submit button
     // follows it, and a tap without a frame would fall on the old one.
@@ -846,17 +871,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    // The person is picked BY NAME from the list; it may sit below the
-    // fold of the dialog's scroll view.
-    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
-    // test would answer a global finder.
-    final option = find.descendant(
-      of: find.byType(AlertDialog).last,
-      matching: find.byKey(const Key('supervisor_option_supervisor-totp')),
-    );
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
 
     await tester.tap(find.byType(DropdownButtonFormField<SupervisorAuthorizationMethod>));
     await tester.pumpAndSettle();
@@ -864,16 +878,16 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'Código TOTP';
+      return widget is TextField && widget.decoration?.labelText == 'Su código TOTP';
     }), '654321');
     await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();
 
-    verify(mockAuthRepository.authorizeOverride(
-      supervisorId: 'supervisor-totp',
-      pin: null,
-      totpCode: '654321',
+    verify(mockAuthRepository.identifyByCredential(
+      credential: '654321',
+      policy: anyNamed('policy'),
+      userId: anyNamed('userId'),
     )).called(1);
     verify(mockAuditRepository.logForensic(
       'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
@@ -885,6 +899,147 @@ void main() {
     expect(find.text('Arqueo Ciego y Cierre de Turno'), findsOneWidget);
     expect(find.text('Cierre de Caja - Arqueo'), findsNothing);
   });
+
+  testWidgets(
+    'the PIN identifies the person: nobody types an identifier (the owner: a '
+    'uuid is not something an operator memorizes)',
+    (tester) async {
+      when(mockAuthRepository.identifyByCredential(
+        credential: anyNamed('credential'),
+        policy: anyNamed('policy'),
+        userId: anyNamed('userId'),
+      )).thenAnswer((_) async => const [
+            CredentialMatch(
+              userId: 'supervisor-1',
+              userName: 'Encargada de Turno',
+              userRole: 'MANAGER',
+              isAuthorizingRole: true,
+            ),
+          ]);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Cerrar Caja'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Autorización de supervisor'), findsOneWidget);
+      // No identifier input, and no list to pick from: the credential IS
+      // the identity.
+      expect(find.text('ID supervisor'), findsNothing);
+      expect(find.widgetWithText(TextField, 'Su PIN'), findsOneWidget);
+      expect(find.byKey(const Key('supervisor_search')), findsNothing);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Su PIN'), '1234');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Autorizar'));
+      await tester.pumpAndSettle();
+
+      // The record names the person the PIN belongs to.
+      verify(mockAuditRepository.logForensic(
+        'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
+        metadata: argThat(contains('close_box'), named: 'metadata'),
+        metodoAutorizacion: 'PIN',
+        usuarioAutorizadorId: 'supervisor-1',
+      )).called(1);
+    },
+  );
+
+  testWidgets(
+    'a food park with no manager on the floor can still close its shift: the '
+    'operator signs it and the record says so (the override must not trap '
+    'the till)',
+    (tester) async {
+      when(mockAuthRepository.identifyByCredential(
+        credential: anyNamed('credential'),
+        policy: anyNamed('policy'),
+        userId: anyNamed('userId'),
+      )).thenAnswer((_) async => const [
+            CredentialMatch(
+              userId: 'usr-cashier',
+              userName: 'Cajero Temporal',
+              userRole: 'CASHIER',
+              isAuthorizingRole: false,
+            ),
+          ]);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Cerrar Caja'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Su PIN'), '9999');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Autorizar'));
+      await tester.pumpAndSettle();
+
+      // The shift close PROCEEDS: an unclosed shift is a worse fiscal
+      // problem than a self-authorized one.
+      verify(mockAuditRepository.logForensic(
+        'SELF_AUTHORIZED_CLOSE_SESSION',
+        metadata: argThat(contains('self_authorized'), named: 'metadata'),
+        metodoAutorizacion: 'PIN',
+        usuarioAutorizadorId: 'usr-cashier',
+      )).called(1);
+    },
+  );
+
+  testWidgets(
+    'a tenant that does not allow the self-authorization refuses it (the '
+    'control is the tenant choice, not ours)',
+    (tester) async {
+      when(mockAuthRepository.identifyByCredential(
+        credential: anyNamed('credential'),
+        policy: anyNamed('policy'),
+        userId: anyNamed('userId'),
+      )).thenAnswer((_) async => const [
+            CredentialMatch(
+              userId: 'usr-cashier',
+              userName: 'Cajero Temporal',
+              userRole: 'CASHIER',
+              isAuthorizingRole: false,
+            ),
+          ]);
+      // The tenant policy: the close box needs a supervisor.
+      final configService = TenantConfigService(_EmptyLocalConfigDao());
+      await tester.runAsync(() async {
+        await configService.setSupervisionPolicy(
+          const SupervisionPolicy(selfAuthorizationAllowedCloseBox: false),
+        );
+      });
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<SaleViewModel>.value(value: mockViewModel),
+            ChangeNotifierProvider<CashShiftViewModel>.value(
+              value: _StubCashShiftViewModel(),
+            ),
+            Provider<AuthRepository>.value(value: mockAuthRepository),
+            Provider<AuditRepository>.value(value: mockAuditRepository),
+            Provider<SyncService>.value(value: mockSyncService),
+            Provider<TenantConfigService>.value(value: configService),
+          ],
+          child: const MaterialApp(home: SaleView()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Cerrar Caja'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Su PIN'), '9999');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Autorizar'));
+      await tester.pumpAndSettle();
+
+      // Refused: no close happened.
+      verifyNever(mockAuditRepository.logForensic(
+        'SELF_AUTHORIZED_CLOSE_SESSION',
+        metadata: anyNamed('metadata'),
+        metodoAutorizacion: anyNamed('metodoAutorizacion'),
+        usuarioAutorizadorId: anyNamed('usuarioAutorizadorId'),
+      ));
+    },
+  );
 
   testWidgets('requires supervisor + justification and logs DRAWER_OPENED_MANUALLY', (tester) async {
     tester.view.physicalSize = const Size(1920, 1080);
@@ -912,19 +1067,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Autorización de supervisor'), findsOneWidget);
-    // The person is picked BY NAME from the list; it may sit below the
-    // fold of the dialog's scroll view.
-    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
-    // test would answer a global finder.
-    final option = find.descendant(
-      of: find.byType(AlertDialog).last,
-      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
-    );
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'PIN';
+      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
     }), '1234');
     // The modal rebuilds when the credential lands: the submit button
     // follows it, and a tap without a frame would fall on the old one.
@@ -997,19 +1141,8 @@ void main() {
     await tester.tap(find.text('Aplicar'));
     await tester.pumpAndSettle();
 
-    // The person is picked BY NAME from the list; it may sit below the
-    // fold of the dialog's scroll view.
-    // Scoped to the CURRENT dialog: a modal left in the tree by an earlier
-    // test would answer a global finder.
-    final option = find.descendant(
-      of: find.byType(AlertDialog).last,
-      matching: find.byKey(const Key('supervisor_option_supervisor-1')),
-    );
-    await tester.ensureVisible(option);
-    await tester.pumpAndSettle();
-    await tester.tap(option);
     await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'PIN';
+      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
     }), '1234');
     // The modal rebuilds when the credential lands: the submit button
     // follows it, and a tap without a frame would fall on the old one.

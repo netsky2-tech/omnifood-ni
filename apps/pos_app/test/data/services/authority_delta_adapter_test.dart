@@ -68,13 +68,20 @@ void main() {
     String uom = 'KG',
     bool? isActive,
   }) {
-    return {
+    // The row carries 'isActive' ONLY when the value is there. Written
+    // without the null-aware element (`?isActive`) because that syntax
+    // breaks the build_runner's parser and the codegen command of the
+    // project (`flutter pub run build_runner build`) failed on it.
+    final row = <String, dynamic>{
       'id': id,
       'tenantId': tenantId,
       'name': name,
       'uom': uom,
-      'isActive': ?isActive,
     };
+    if (isActive != null) {
+      row['isActive'] = isActive;
+    }
+    return row;
   }
 
   group('rename table (delta wire names -> hydrator flat names)', () {

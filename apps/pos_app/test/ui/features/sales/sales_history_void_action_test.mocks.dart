@@ -79,17 +79,18 @@ import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart'
     as _i80;
 import 'package:pos_app/data/models/inventory/kardex_recalculate_queue_entity.dart'
     as _i81;
-import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i83;
-import 'package:pos_app/data/models/sales/hold_ticket_entity.dart' as _i88;
-import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i84;
-import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i85;
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i84;
+import 'package:pos_app/data/models/sales/hold_ticket_entity.dart' as _i89;
+import 'package:pos_app/data/models/sales/invoice_entity.dart' as _i85;
+import 'package:pos_app/data/models/sales/invoice_item_entity.dart' as _i86;
 import 'package:pos_app/data/models/sales/invoice_item_modifier_entity.dart'
-    as _i86;
-import 'package:pos_app/data/models/sales/payment_entity.dart' as _i87;
-import 'package:pos_app/data/models/sales/promotion_entity.dart' as _i89;
+    as _i87;
+import 'package:pos_app/data/models/sales/payment_entity.dart' as _i88;
+import 'package:pos_app/data/models/sales/promotion_entity.dart' as _i90;
 import 'package:pos_app/domain/models/auth/terminal_linking.dart' as _i4;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i76;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i75;
+import 'package:pos_app/domain/models/config/supervision_policy.dart' as _i83;
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart'
     as _i61;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i73;
@@ -1819,6 +1820,26 @@ class MockAuthRepository extends _i1.Mock implements _i82.AuthRepository {
       ) as _i56.Future<bool>);
 
   @override
+  _i56.Future<List<_i82.CredentialMatch>> identifyByCredential({
+    required String? credential,
+    required _i83.SupervisionPolicy? policy,
+    String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #identifyByCredential,
+          [],
+          {
+            #credential: credential,
+            #policy: policy,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i56.Future<List<_i82.CredentialMatch>>.value(
+            <_i82.CredentialMatch>[]),
+      ) as _i56.Future<List<_i82.CredentialMatch>>);
+
+  @override
   _i56.Future<_i62.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
@@ -2425,27 +2446,27 @@ class MockCashierSessionDao extends _i1.Mock implements _i33.CashierSessionDao {
   }
 
   @override
-  _i56.Future<_i83.CashierSessionEntity?> getSessionById(String? id) =>
+  _i56.Future<_i84.CashierSessionEntity?> getSessionById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getSessionById,
           [id],
         ),
-        returnValue: _i56.Future<_i83.CashierSessionEntity?>.value(),
-      ) as _i56.Future<_i83.CashierSessionEntity?>);
+        returnValue: _i56.Future<_i84.CashierSessionEntity?>.value(),
+      ) as _i56.Future<_i84.CashierSessionEntity?>);
 
   @override
-  _i56.Future<_i83.CashierSessionEntity?> getActiveSession() =>
+  _i56.Future<_i84.CashierSessionEntity?> getActiveSession() =>
       (super.noSuchMethod(
         Invocation.method(
           #getActiveSession,
           [],
         ),
-        returnValue: _i56.Future<_i83.CashierSessionEntity?>.value(),
-      ) as _i56.Future<_i83.CashierSessionEntity?>);
+        returnValue: _i56.Future<_i84.CashierSessionEntity?>.value(),
+      ) as _i56.Future<_i84.CashierSessionEntity?>);
 
   @override
-  _i56.Future<_i83.CashierSessionEntity?> getActiveSessionForUserAndTerminal(
+  _i56.Future<_i84.CashierSessionEntity?> getActiveSessionForUserAndTerminal(
     String? userId,
     String? terminalId,
   ) =>
@@ -2457,11 +2478,11 @@ class MockCashierSessionDao extends _i1.Mock implements _i33.CashierSessionDao {
             terminalId,
           ],
         ),
-        returnValue: _i56.Future<_i83.CashierSessionEntity?>.value(),
-      ) as _i56.Future<_i83.CashierSessionEntity?>);
+        returnValue: _i56.Future<_i84.CashierSessionEntity?>.value(),
+      ) as _i56.Future<_i84.CashierSessionEntity?>);
 
   @override
-  _i56.Future<void> insertSession(_i83.CashierSessionEntity? session) =>
+  _i56.Future<void> insertSession(_i84.CashierSessionEntity? session) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertSession,
@@ -2472,7 +2493,7 @@ class MockCashierSessionDao extends _i1.Mock implements _i33.CashierSessionDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> updateSession(_i83.CashierSessionEntity? session) =>
+  _i56.Future<void> updateSession(_i84.CashierSessionEntity? session) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateSession,
@@ -2483,15 +2504,15 @@ class MockCashierSessionDao extends _i1.Mock implements _i33.CashierSessionDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<List<_i83.CashierSessionEntity>> getAllSessions() =>
+  _i56.Future<List<_i84.CashierSessionEntity>> getAllSessions() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllSessions,
           [],
         ),
-        returnValue: _i56.Future<List<_i83.CashierSessionEntity>>.value(
-            <_i83.CashierSessionEntity>[]),
-      ) as _i56.Future<List<_i83.CashierSessionEntity>>);
+        returnValue: _i56.Future<List<_i84.CashierSessionEntity>>.value(
+            <_i84.CashierSessionEntity>[]),
+      ) as _i56.Future<List<_i84.CashierSessionEntity>>);
 
   @override
   _i56.Future<int?> countClosedSessions() => (super.noSuchMethod(
@@ -2512,37 +2533,37 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
   }
 
   @override
-  _i56.Future<_i84.InvoiceEntity?> getInvoiceById(String? id) =>
+  _i56.Future<_i85.InvoiceEntity?> getInvoiceById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceById,
           [id],
         ),
-        returnValue: _i56.Future<_i84.InvoiceEntity?>.value(),
-      ) as _i56.Future<_i84.InvoiceEntity?>);
+        returnValue: _i56.Future<_i85.InvoiceEntity?>.value(),
+      ) as _i56.Future<_i85.InvoiceEntity?>);
 
   @override
-  _i56.Future<_i84.InvoiceEntity?> getInvoiceByNumber(String? number) =>
+  _i56.Future<_i85.InvoiceEntity?> getInvoiceByNumber(String? number) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceByNumber,
           [number],
         ),
-        returnValue: _i56.Future<_i84.InvoiceEntity?>.value(),
-      ) as _i56.Future<_i84.InvoiceEntity?>);
+        returnValue: _i56.Future<_i85.InvoiceEntity?>.value(),
+      ) as _i56.Future<_i85.InvoiceEntity?>);
 
   @override
-  _i56.Future<List<_i84.InvoiceEntity>> getAllInvoices() => (super.noSuchMethod(
+  _i56.Future<List<_i85.InvoiceEntity>> getAllInvoices() => (super.noSuchMethod(
         Invocation.method(
           #getAllInvoices,
           [],
         ),
         returnValue:
-            _i56.Future<List<_i84.InvoiceEntity>>.value(<_i84.InvoiceEntity>[]),
-      ) as _i56.Future<List<_i84.InvoiceEntity>>);
+            _i56.Future<List<_i85.InvoiceEntity>>.value(<_i85.InvoiceEntity>[]),
+      ) as _i56.Future<List<_i85.InvoiceEntity>>);
 
   @override
-  _i56.Future<List<_i84.InvoiceEntity>> getInvoicesBySyncStatus(
+  _i56.Future<List<_i85.InvoiceEntity>> getInvoicesBySyncStatus(
           String? status) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2550,11 +2571,11 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
           [status],
         ),
         returnValue:
-            _i56.Future<List<_i84.InvoiceEntity>>.value(<_i84.InvoiceEntity>[]),
-      ) as _i56.Future<List<_i84.InvoiceEntity>>);
+            _i56.Future<List<_i85.InvoiceEntity>>.value(<_i85.InvoiceEntity>[]),
+      ) as _i56.Future<List<_i85.InvoiceEntity>>);
 
   @override
-  _i56.Future<List<_i84.InvoiceEntity>> getInvoicesByTimeRange(
+  _i56.Future<List<_i85.InvoiceEntity>> getInvoicesByTimeRange(
     int? startTime,
     int? endTime,
   ) =>
@@ -2567,22 +2588,22 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
           ],
         ),
         returnValue:
-            _i56.Future<List<_i84.InvoiceEntity>>.value(<_i84.InvoiceEntity>[]),
-      ) as _i56.Future<List<_i84.InvoiceEntity>>);
+            _i56.Future<List<_i85.InvoiceEntity>>.value(<_i85.InvoiceEntity>[]),
+      ) as _i56.Future<List<_i85.InvoiceEntity>>);
 
   @override
-  _i56.Future<List<_i84.InvoiceEntity>> getInvoicesByUserId(String? userId) =>
+  _i56.Future<List<_i85.InvoiceEntity>> getInvoicesByUserId(String? userId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoicesByUserId,
           [userId],
         ),
         returnValue:
-            _i56.Future<List<_i84.InvoiceEntity>>.value(<_i84.InvoiceEntity>[]),
-      ) as _i56.Future<List<_i84.InvoiceEntity>>);
+            _i56.Future<List<_i85.InvoiceEntity>>.value(<_i85.InvoiceEntity>[]),
+      ) as _i56.Future<List<_i85.InvoiceEntity>>);
 
   @override
-  _i56.Future<void> insertInvoice(_i84.InvoiceEntity? invoice) =>
+  _i56.Future<void> insertInvoice(_i85.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertInvoice,
@@ -2593,7 +2614,7 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> updateInvoice(_i84.InvoiceEntity? invoice) =>
+  _i56.Future<void> updateInvoice(_i85.InvoiceEntity? invoice) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateInvoice,
@@ -2613,13 +2634,13 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
       ) as _i56.Future<String?>);
 
   @override
-  _i56.Future<_i84.InvoiceEntity?> getLastInvoice() => (super.noSuchMethod(
+  _i56.Future<_i85.InvoiceEntity?> getLastInvoice() => (super.noSuchMethod(
         Invocation.method(
           #getLastInvoice,
           [],
         ),
-        returnValue: _i56.Future<_i84.InvoiceEntity?>.value(),
-      ) as _i56.Future<_i84.InvoiceEntity?>);
+        returnValue: _i56.Future<_i85.InvoiceEntity?>.value(),
+      ) as _i56.Future<_i85.InvoiceEntity?>);
 
   @override
   _i56.Future<void> updateSyncStatusForIds(
@@ -2639,14 +2660,14 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<_i84.InvoiceEntity?> getInvoiceByIdempotencyKey(String? key) =>
+  _i56.Future<_i85.InvoiceEntity?> getInvoiceByIdempotencyKey(String? key) =>
       (super.noSuchMethod(
         Invocation.method(
           #getInvoiceByIdempotencyKey,
           [key],
         ),
-        returnValue: _i56.Future<_i84.InvoiceEntity?>.value(),
-      ) as _i56.Future<_i84.InvoiceEntity?>);
+        returnValue: _i56.Future<_i85.InvoiceEntity?>.value(),
+      ) as _i56.Future<_i85.InvoiceEntity?>);
 
   @override
   _i56.Future<int?> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
@@ -2667,31 +2688,31 @@ class MockInvoiceItemDao extends _i1.Mock implements _i29.InvoiceItemDao {
   }
 
   @override
-  _i56.Future<List<_i85.InvoiceItemEntity>> getItemsByInvoiceId(
+  _i56.Future<List<_i86.InvoiceItemEntity>> getItemsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getItemsByInvoiceId,
           [invoiceId],
         ),
-        returnValue: _i56.Future<List<_i85.InvoiceItemEntity>>.value(
-            <_i85.InvoiceItemEntity>[]),
-      ) as _i56.Future<List<_i85.InvoiceItemEntity>>);
+        returnValue: _i56.Future<List<_i86.InvoiceItemEntity>>.value(
+            <_i86.InvoiceItemEntity>[]),
+      ) as _i56.Future<List<_i86.InvoiceItemEntity>>);
 
   @override
-  _i56.Future<List<_i86.InvoiceItemModifierEntity>> getModifierRowsByInvoiceId(
+  _i56.Future<List<_i87.InvoiceItemModifierEntity>> getModifierRowsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getModifierRowsByInvoiceId,
           [invoiceId],
         ),
-        returnValue: _i56.Future<List<_i86.InvoiceItemModifierEntity>>.value(
-            <_i86.InvoiceItemModifierEntity>[]),
-      ) as _i56.Future<List<_i86.InvoiceItemModifierEntity>>);
+        returnValue: _i56.Future<List<_i87.InvoiceItemModifierEntity>>.value(
+            <_i87.InvoiceItemModifierEntity>[]),
+      ) as _i56.Future<List<_i87.InvoiceItemModifierEntity>>);
 
   @override
-  _i56.Future<void> insertItems(List<_i85.InvoiceItemEntity>? items) =>
+  _i56.Future<void> insertItems(List<_i86.InvoiceItemEntity>? items) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertItems,
@@ -2711,7 +2732,7 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
   }
 
   @override
-  _i56.Future<List<_i87.PaymentEntity>> getPaymentsByInvoiceId(
+  _i56.Future<List<_i88.PaymentEntity>> getPaymentsByInvoiceId(
           String? invoiceId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2719,11 +2740,11 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
           [invoiceId],
         ),
         returnValue:
-            _i56.Future<List<_i87.PaymentEntity>>.value(<_i87.PaymentEntity>[]),
-      ) as _i56.Future<List<_i87.PaymentEntity>>);
+            _i56.Future<List<_i88.PaymentEntity>>.value(<_i88.PaymentEntity>[]),
+      ) as _i56.Future<List<_i88.PaymentEntity>>);
 
   @override
-  _i56.Future<List<_i87.PaymentEntity>> getPaymentsByTimeRange(
+  _i56.Future<List<_i88.PaymentEntity>> getPaymentsByTimeRange(
     int? startTime,
     int? endTime,
   ) =>
@@ -2736,22 +2757,22 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
           ],
         ),
         returnValue:
-            _i56.Future<List<_i87.PaymentEntity>>.value(<_i87.PaymentEntity>[]),
-      ) as _i56.Future<List<_i87.PaymentEntity>>);
+            _i56.Future<List<_i88.PaymentEntity>>.value(<_i88.PaymentEntity>[]),
+      ) as _i56.Future<List<_i88.PaymentEntity>>);
 
   @override
-  _i56.Future<List<_i87.PaymentEntity>> getPendingCardPayments() =>
+  _i56.Future<List<_i88.PaymentEntity>> getPendingCardPayments() =>
       (super.noSuchMethod(
         Invocation.method(
           #getPendingCardPayments,
           [],
         ),
         returnValue:
-            _i56.Future<List<_i87.PaymentEntity>>.value(<_i87.PaymentEntity>[]),
-      ) as _i56.Future<List<_i87.PaymentEntity>>);
+            _i56.Future<List<_i88.PaymentEntity>>.value(<_i88.PaymentEntity>[]),
+      ) as _i56.Future<List<_i88.PaymentEntity>>);
 
   @override
-  _i56.Future<List<_i87.PaymentEntity>> getCashPaymentsForShift(
+  _i56.Future<List<_i88.PaymentEntity>> getCashPaymentsForShift(
           String? shiftId) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2759,8 +2780,8 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
           [shiftId],
         ),
         returnValue:
-            _i56.Future<List<_i87.PaymentEntity>>.value(<_i87.PaymentEntity>[]),
-      ) as _i56.Future<List<_i87.PaymentEntity>>);
+            _i56.Future<List<_i88.PaymentEntity>>.value(<_i88.PaymentEntity>[]),
+      ) as _i56.Future<List<_i88.PaymentEntity>>);
 
   @override
   _i56.Future<int?> countPendingCardPayments() => (super.noSuchMethod(
@@ -2802,15 +2823,15 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
       ) as _i56.Future<int?>);
 
   @override
-  _i56.Future<List<_i87.PaymentEntity>> getPendingReconciliations() =>
+  _i56.Future<List<_i88.PaymentEntity>> getPendingReconciliations() =>
       (super.noSuchMethod(
         Invocation.method(
           #getPendingReconciliations,
           [],
         ),
         returnValue:
-            _i56.Future<List<_i87.PaymentEntity>>.value(<_i87.PaymentEntity>[]),
-      ) as _i56.Future<List<_i87.PaymentEntity>>);
+            _i56.Future<List<_i88.PaymentEntity>>.value(<_i88.PaymentEntity>[]),
+      ) as _i56.Future<List<_i88.PaymentEntity>>);
 
   @override
   _i56.Future<void> updateReconciliationSyncStatus(
@@ -2830,7 +2851,7 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> updatePayment(_i87.PaymentEntity? payment) =>
+  _i56.Future<void> updatePayment(_i88.PaymentEntity? payment) =>
       (super.noSuchMethod(
         Invocation.method(
           #updatePayment,
@@ -2841,7 +2862,7 @@ class MockPaymentDao extends _i1.Mock implements _i30.PaymentDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> insertPayments(List<_i87.PaymentEntity>? payments) =>
+  _i56.Future<void> insertPayments(List<_i88.PaymentEntity>? payments) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertPayments,
@@ -2861,50 +2882,50 @@ class MockHoldTicketDao extends _i1.Mock implements _i35.HoldTicketDao {
   }
 
   @override
-  _i56.Future<List<_i88.HoldTicketEntity>> getAllHoldTickets() =>
+  _i56.Future<List<_i89.HoldTicketEntity>> getAllHoldTickets() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllHoldTickets,
           [],
         ),
-        returnValue: _i56.Future<List<_i88.HoldTicketEntity>>.value(
-            <_i88.HoldTicketEntity>[]),
-      ) as _i56.Future<List<_i88.HoldTicketEntity>>);
+        returnValue: _i56.Future<List<_i89.HoldTicketEntity>>.value(
+            <_i89.HoldTicketEntity>[]),
+      ) as _i56.Future<List<_i89.HoldTicketEntity>>);
 
   @override
-  _i56.Future<_i88.HoldTicketEntity?> getHoldTicketById(String? id) =>
+  _i56.Future<_i89.HoldTicketEntity?> getHoldTicketById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
           #getHoldTicketById,
           [id],
         ),
-        returnValue: _i56.Future<_i88.HoldTicketEntity?>.value(),
-      ) as _i56.Future<_i88.HoldTicketEntity?>);
+        returnValue: _i56.Future<_i89.HoldTicketEntity?>.value(),
+      ) as _i56.Future<_i89.HoldTicketEntity?>);
 
   @override
-  _i56.Future<_i88.HoldTicketEntity?> getHoldTicketByTableId(String? tableId) =>
+  _i56.Future<_i89.HoldTicketEntity?> getHoldTicketByTableId(String? tableId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getHoldTicketByTableId,
           [tableId],
         ),
-        returnValue: _i56.Future<_i88.HoldTicketEntity?>.value(),
-      ) as _i56.Future<_i88.HoldTicketEntity?>);
+        returnValue: _i56.Future<_i89.HoldTicketEntity?>.value(),
+      ) as _i56.Future<_i89.HoldTicketEntity?>);
 
   @override
-  _i56.Future<List<_i88.HoldTicketItemEntity>> getItemsByHoldTicketId(
+  _i56.Future<List<_i89.HoldTicketItemEntity>> getItemsByHoldTicketId(
           String? holdTicketId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getItemsByHoldTicketId,
           [holdTicketId],
         ),
-        returnValue: _i56.Future<List<_i88.HoldTicketItemEntity>>.value(
-            <_i88.HoldTicketItemEntity>[]),
-      ) as _i56.Future<List<_i88.HoldTicketItemEntity>>);
+        returnValue: _i56.Future<List<_i89.HoldTicketItemEntity>>.value(
+            <_i89.HoldTicketItemEntity>[]),
+      ) as _i56.Future<List<_i89.HoldTicketItemEntity>>);
 
   @override
-  _i56.Future<void> insertHoldTicket(_i88.HoldTicketEntity? ticket) =>
+  _i56.Future<void> insertHoldTicket(_i89.HoldTicketEntity? ticket) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertHoldTicket,
@@ -2916,7 +2937,7 @@ class MockHoldTicketDao extends _i1.Mock implements _i35.HoldTicketDao {
 
   @override
   _i56.Future<void> insertHoldTicketItems(
-          List<_i88.HoldTicketItemEntity>? items) =>
+          List<_i89.HoldTicketItemEntity>? items) =>
       (super.noSuchMethod(
         Invocation.method(
           #insertHoldTicketItems,
@@ -2927,7 +2948,7 @@ class MockHoldTicketDao extends _i1.Mock implements _i35.HoldTicketDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<int> updateHoldTicket(_i88.HoldTicketEntity? ticket) =>
+  _i56.Future<int> updateHoldTicket(_i89.HoldTicketEntity? ticket) =>
       (super.noSuchMethod(
         Invocation.method(
           #updateHoldTicket,
@@ -2959,8 +2980,8 @@ class MockHoldTicketDao extends _i1.Mock implements _i35.HoldTicketDao {
 
   @override
   _i56.Future<void> saveHoldTicket(
-    _i88.HoldTicketEntity? ticket,
-    List<_i88.HoldTicketItemEntity>? items,
+    _i89.HoldTicketEntity? ticket,
+    List<_i89.HoldTicketItemEntity>? items,
   ) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -2995,26 +3016,26 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
   }
 
   @override
-  _i56.Future<List<_i89.PromotionEntity>> getActivePromotions() =>
+  _i56.Future<List<_i90.PromotionEntity>> getActivePromotions() =>
       (super.noSuchMethod(
         Invocation.method(
           #getActivePromotions,
           [],
         ),
-        returnValue: _i56.Future<List<_i89.PromotionEntity>>.value(
-            <_i89.PromotionEntity>[]),
-      ) as _i56.Future<List<_i89.PromotionEntity>>);
+        returnValue: _i56.Future<List<_i90.PromotionEntity>>.value(
+            <_i90.PromotionEntity>[]),
+      ) as _i56.Future<List<_i90.PromotionEntity>>);
 
   @override
-  _i56.Future<List<_i89.PromotionEntity>> getAllPromotions() =>
+  _i56.Future<List<_i90.PromotionEntity>> getAllPromotions() =>
       (super.noSuchMethod(
         Invocation.method(
           #getAllPromotions,
           [],
         ),
-        returnValue: _i56.Future<List<_i89.PromotionEntity>>.value(
-            <_i89.PromotionEntity>[]),
-      ) as _i56.Future<List<_i89.PromotionEntity>>);
+        returnValue: _i56.Future<List<_i90.PromotionEntity>>.value(
+            <_i90.PromotionEntity>[]),
+      ) as _i56.Future<List<_i90.PromotionEntity>>);
 
   @override
   _i56.Future<void> setPromotionActive(
@@ -3034,7 +3055,7 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> savePromotion(_i89.PromotionEntity? promotion) =>
+  _i56.Future<void> savePromotion(_i90.PromotionEntity? promotion) =>
       (super.noSuchMethod(
         Invocation.method(
           #savePromotion,
@@ -3045,7 +3066,7 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> savePromotions(List<_i89.PromotionEntity>? promotions) =>
+  _i56.Future<void> savePromotions(List<_i90.PromotionEntity>? promotions) =>
       (super.noSuchMethod(
         Invocation.method(
           #savePromotions,
@@ -3056,7 +3077,7 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<void> updatePromotion(_i89.PromotionEntity? promotion) =>
+  _i56.Future<void> updatePromotion(_i90.PromotionEntity? promotion) =>
       (super.noSuchMethod(
         Invocation.method(
           #updatePromotion,
@@ -3067,16 +3088,16 @@ class MockPromotionDao extends _i1.Mock implements _i36.PromotionDao {
       ) as _i56.Future<void>);
 
   @override
-  _i56.Future<List<_i89.PromotionEntity>> getPromotionsByProduct(
+  _i56.Future<List<_i90.PromotionEntity>> getPromotionsByProduct(
           String? productId) =>
       (super.noSuchMethod(
         Invocation.method(
           #getPromotionsByProduct,
           [productId],
         ),
-        returnValue: _i56.Future<List<_i89.PromotionEntity>>.value(
-            <_i89.PromotionEntity>[]),
-      ) as _i56.Future<List<_i89.PromotionEntity>>);
+        returnValue: _i56.Future<List<_i90.PromotionEntity>>.value(
+            <_i90.PromotionEntity>[]),
+      ) as _i56.Future<List<_i90.PromotionEntity>>);
 
   @override
   _i56.Future<void> deletePromotionById(String? id) => (super.noSuchMethod(

@@ -29,6 +29,7 @@ import 'package:pos_app/domain/models/audit_log.dart' as _i8;
 import 'package:pos_app/domain/models/auth/terminal_linking.dart' as _i5;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i21;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i20;
+import 'package:pos_app/domain/models/config/supervision_policy.dart' as _i44;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i18;
 import 'package:pos_app/domain/models/inventory/batch_deduction.dart' as _i41;
 import 'package:pos_app/domain/models/inventory/count_session_document.dart'
@@ -1958,6 +1959,26 @@ class MockAuthRepository extends _i1.Mock implements _i42.AuthRepository {
         ),
         returnValue: _i7.Future<bool>.value(false),
       ) as _i7.Future<bool>);
+
+  @override
+  _i7.Future<List<_i42.CredentialMatch>> identifyByCredential({
+    required String? credential,
+    required _i44.SupervisionPolicy? policy,
+    String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #identifyByCredential,
+          [],
+          {
+            #credential: credential,
+            #policy: policy,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i7.Future<List<_i42.CredentialMatch>>.value(
+            <_i42.CredentialMatch>[]),
+      ) as _i7.Future<List<_i42.CredentialMatch>>);
 
   @override
   _i7.Future<_i43.User?> getCurrentUser() => (super.noSuchMethod(

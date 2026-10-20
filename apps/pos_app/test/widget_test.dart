@@ -8,6 +8,7 @@ import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/login_viewmodel.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/models/config/supervision_policy.dart';
 import 'package:pos_app/data/daos/user_dao.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/data/models/user_entity.dart';
@@ -61,6 +62,13 @@ class FakeAuthRepository implements AuthRepository {
   Future<void> saveUser(User user, {String? pin}) async {}
   @override
   Future<void> deleteUser(String userId) async {}
+
+  @override
+  Future<List<CredentialMatch>> identifyByCredential({
+    required String credential,
+    required SupervisionPolicy policy,
+    String? userId,
+  }) async => const [];
 }
 
 class FakeUserDao implements UserDao {

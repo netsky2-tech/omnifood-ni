@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import '../../../data/daos/local_config_dao.dart';
 import '../../../data/models/local_config_entity.dart';
+import '../../models/config/supervision_policy.dart';
 import '../../models/config/tenant_config.dart';
 import '../../models/config/tenant_operation_mode.dart';
 
@@ -24,6 +26,15 @@ class TenantConfigService {
   static const String maxDiscountAmountKey = 'max_discount_amount';
   static const String maxDiscountPercentKey = 'max_discount_percent';
 
+  /// The tenant's SUPERVISION policy: who may authorize a sensitive
+  /// operation here, and which flows accept a self-authorization.
+  ///
+  /// It is the tenant's decision, not ours (owner's decision, 2026-10-20): a
+  /// food park often has no manager on the floor, and a rule that says "only
+  /// an owner or a manager can authorize" does not create a control there, it
+  /// creates a DEAD END.
+  static const String supervisionPolicyKey = 'supervision_policy';
+
   final LocalConfigDao _configDao;
   final StreamController<TenantOperationMode> _modeStreamController =
       StreamController<TenantOperationMode>.broadcast();
@@ -39,6 +50,47 @@ class TenantConfigService {
   }) async {
     final entity = await _configDao.getConfigByKey(operationModeKey);
     return TenantOperationMode.fromString(entity?.value, defaultMode: defaultMode);
+  }
+
+  /// The tenant's supervision policy.
+  ///
+  /// Absent (or unreadable) = the default for the tenant's operation mode:
+  /// the mode already says how much bureaucracy the business has.
+  Future<SupervisionPolicy> getSupervisionPolicy() async {
+    final entity = await _configDao.getConfigByKey(supervisionPolicyKey);
+    final raw = entity?.value.trim();
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        return SupervisionPolicy.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+      } catch (_) {
+        // A corrupt policy must not trap the till: fall back to the default
+        // for the mode, which never dead-ends the close box.
+      }
+    }
+    return SupervisionPolicy.forOperationMode(await getOperationMode());
+  }
+
+  /// Persists the tenant's supervision policy.
+  Future<void> setSupervisionPolicy(SupervisionPolicy policy) async {
+    await _configDao.saveConfig(
+      LocalConfigEntity(
+        key: supervisionPolicyKey,
+        value: jsonEncode({
+          'authorizingRoles': policy.authorizingRoles.toList(),
+          'selfAuthorizationAllowedCloseBox':
+              policy.selfAuthorizationAllowedCloseBox,
+          'selfAuthorizationAllowedCashDrawer':
+              policy.selfAuthorizationAllowedCashDrawer,
+          'selfAuthorizationAllowedManualDiscount':
+              policy.selfAuthorizationAllowedManualDiscount,
+          'supervisorRequiredForModifierQuantity':
+              policy.supervisorRequiredForModifierQuantity,
+        }),
+        description: 'Supervision policy (who authorizes, and what accepts a self-authorization)',
+      ),
+    );
   }
 
   /// Persists the selected operational mode and notifies stream subscribers.

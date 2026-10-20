@@ -6,6 +6,8 @@ import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
 import '../../../domain/usecases/inventory/authority_sale_time.dart';
 import '../../../domain/usecases/inventory/modifier_effect_preview.dart';
+import '../../../domain/models/config/supervision_policy.dart';
+import '../../../domain/services/config/tenant_config_service.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../domain/services/config/discount_policy_service.dart';
 import '../../../domain/services/printer/kitchen_modifier_lines.dart';
@@ -21,7 +23,7 @@ import '../../../core/localization/label_map.dart';
 import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
-import '../../features/identity/supervisor_candidates.dart';
+import '../../features/identity/supervisor_authorization.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
@@ -32,6 +34,7 @@ import 'widgets/product_card_thumbnail.dart';
 import 'widgets/product_grid_geometry.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
 import 'widgets/modifier_quantity_override_content.dart';
+import 'widgets/modifier_quantity_dialog.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
@@ -828,37 +831,39 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
     }
 
     final auditRepo = context.read<AuditRepository>();
-    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
+    final policy = await tenantSupervisionPolicy(context);
 
-    final authorized = await showDialog<bool>(
+    // La credencial (el PIN) identifica a la persona; la politica del
+    // tenant decide si puede autorizar o si la operacion se auto-autoriza.
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
-        candidates: candidates,
-        onAuthorize: (request) {
-          final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          final method = request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
-          return auditRepo.logForensic(
-            'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: '{"action":"close_box"}',
-          );
-        },
+        onAuthorize: (request) => authorizeWithPolicy(
+          authRepository: authRepo,
+          policy: policy,
+          request: request,
+          selfAuthorizationAllowed: policy.selfAuthorizationAllowedCloseBox,
+        ),
       ),
     );
 
-    if (!mounted) return;
-    if (authorized == true) {
-      await _openUnifiedZClose();
-    }
+    if (!mounted || outcome == null || !outcome.authorized) return;
+    // La evidencia: quien firmo, con que credencial, y si hubo supervisor.
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'SUPERVISOR_OVERRIDE_CLOSE_SESSION'
+          : 'SELF_AUTHORIZED_CLOSE_SESSION',
+      metodoAutorizacion: outcome.method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'close_box',
+        'self_authorized': !outcome.isAuthorizingRole,
+        'policy': policy.selfAuthorizationAllowedCloseBox
+            ? 'SELF_ALLOWED'
+            : 'SUPERVISOR_ONLY',
+      }),
+    );
+    await _openUnifiedZClose();
   }
 
   /// T7 (unified close): the weak parallel close (CloseBoxDialog /
@@ -876,39 +881,43 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
 
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
-    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
+    final policy = await tenantSupervisionPolicy(context);
 
-    final authorized = await showDialog<bool>(
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
-        candidates: candidates,
-        onAuthorize: (request) {
-          final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          final method = request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
-          return auditRepo.logForensic(
-            'DRAWER_OPENED_MANUALLY',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: '{"action":"manual_drawer_open","justification":"$justification"}',
-          );
-        },
+        onAuthorize: (request) => authorizeWithPolicy(
+          authRepository: authRepo,
+          policy: policy,
+          request: request,
+          selfAuthorizationAllowed: policy.selfAuthorizationAllowedCashDrawer,
+        ),
       ),
     );
 
-    if (!mounted) return;
-    if (authorized == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Apertura manual de gaveta autorizada y auditada.')),
-      );
-    }
+    if (!mounted || outcome == null || !outcome.authorized) return;
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'DRAWER_OPENED_MANUALLY'
+          : 'SELF_AUTHORIZED_DRAWER_OPENED',
+      metodoAutorizacion: outcome.method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'manual_drawer_open',
+        'justification': justification,
+        'self_authorized': !outcome.isAuthorizingRole,
+      }),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          outcome.isAuthorizingRole
+              ? 'Apertura manual de gaveta autorizada y auditada.'
+              : 'Apertura manual de gaveta sin supervisor: queda auditada '
+                  'para su revisión.',
+        ),
+      ),
+    );
   }
 
   Future<String?> _promptJustification(BuildContext context) async {
@@ -1416,6 +1425,32 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
               '';
       if (tenantId.isEmpty) return;
 
+      // The INSUMO facts (name and unit) do NOT depend on the recipe: they
+      // are read first, and ALWAYS. A product without a recipe still has to
+      // say WHAT the extra takes out of the stock ("Saca 30 ml de jarabe"),
+      // not the vague "el insumo" — and the pending case (no recipe) is
+      // exactly where the operator most needs the name.
+      final insumoFacts = <String, _InsumoFact>{};
+      final referenced = <String>{};
+      for (final option in options) {
+        if (option.effectInsumoId != null) referenced.add(option.effectInsumoId!);
+        if (option.effectTargetInsumoId != null) {
+          referenced.add(option.effectTargetInsumoId!);
+        }
+      }
+      for (final insumoId in referenced) {
+        final insumo =
+            await database.authorityProjectionDao.findInsumoById(tenantId, insumoId);
+        if (insumo == null) continue;
+        insumoFacts[insumoId] = _InsumoFact(
+          name: insumo.name,
+          unit: insumo.uom.isEmpty ? null : insumo.uom,
+        );
+      }
+      if (insumoFacts.isNotEmpty && mounted) {
+        setState(() => _insumoFacts = insumoFacts);
+      }
+
       final versions =
           await database.authorityProjectionDao.findActivePublishedVersions(
         tenantId,
@@ -1452,28 +1487,9 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         );
       }
 
-      final insumoFacts = <String, _InsumoFact>{};
-      final referenced = <String>{};
-      for (final option in options) {
-        if (option.effectInsumoId != null) referenced.add(option.effectInsumoId!);
-        if (option.effectTargetInsumoId != null) {
-          referenced.add(option.effectTargetInsumoId!);
-        }
-      }
-      for (final insumoId in referenced) {
-        final insumo =
-            await database.authorityProjectionDao.findInsumoById(tenantId, insumoId);
-        if (insumo == null) continue;
-        insumoFacts[insumoId] = _InsumoFact(
-          name: insumo.name,
-          unit: insumo.uom.isEmpty ? null : insumo.uom,
-        );
-      }
-
       if (!mounted) return;
       setState(() {
         _recipeComponents = facts;
-        _insumoFacts = insumoFacts;
       });
     } catch (_) {
       // The facts are a convenience for the operator, never a gate.
@@ -1558,65 +1574,100 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     if (preview == null) return;
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
+    final policy = await tenantSupervisionPolicy(context);
+    final insumoLabel = _insumoFacts[option.effectInsumoId]?.name ??
+        _insumoFacts[option.effectTargetInsumoId]?.name ??
+        'la opción';
+
+    // The quantity of an extra is a DATA question, not a control one: the
+    // operator knows their own numbers, and the reason is what makes the
+    // adjustment explainable later. The tenant can still require a
+    // supervisor for it (its policy), and then the credential is asked for.
+    if (!policy.supervisorRequiredForModifierQuantity) {
+      final result = await showDialog<ModifierQuantityResult>(
+        context: context,
+        builder: (dialogContext) => ModifierQuantityDialog(
+          unit: preview.markingUnit,
+          insumoLabel: insumoLabel,
+        ),
+      );
+      if (!mounted || result == null) return;
+      await auditRepo.logForensic(
+        'MODIFIER_EFFECT_QUANTITY_ADJUSTED',
+        usuarioAutorizadorId: null,
+        metadata: jsonEncode({
+          'action': 'modifier_effect_quantity_adjusted',
+          'option_id': option.id,
+          'quantity': result.quantity,
+          'unit': preview.markingUnit,
+          'reason': result.reason,
+          'supervisor_required': false,
+        }),
+      );
+      if (!mounted) return;
+      setState(() {
+        _effectOverrides[option.id] = _EffectOverride(
+          quantity: result.quantity,
+          supervisorId: '',
+          method: '',
+          reason: result.reason,
+        );
+      });
+      return;
+    }
+
     var draft = const ModifierQuantityOverrideDraft();
     String supervisorId = '';
     String method = '';
     // The submit button follows the extra fields: it stays disabled until the
     // amount AND the reason are there (the modal rebuilds on this notifier).
     final extraValid = ValueNotifier<bool>(false);
-    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
-    final authorized = await showDialog<bool>(
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
         title: 'Cantidad autorizada para este extra',
         submitLabel: 'AUTORIZAR',
-        candidates: candidates,
         content: ModifierQuantityOverrideContent(
           unit: preview.markingUnit,
-          insumoLabel: _insumoFacts[option.effectInsumoId]?.name ??
-              _insumoFacts[option.effectTargetInsumoId]?.name ??
-              'la opción',
+          insumoLabel: insumoLabel,
           onChanged: (value) {
             draft = value;
             extraValid.value = value.isComplete;
           },
         ),
         extraValid: extraValid,
-        onAuthorize: (request) {
+        onAuthorize: (request) async {
           supervisorId = request.supervisorId;
           method = request.method == SupervisorAuthorizationMethod.pin
               ? 'PIN'
               : 'TOTP';
-          final pin = request.method == SupervisorAuthorizationMethod.pin
-              ? request.credential
-              : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp
-              ? request.credential
-              : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          return auditRepo.logForensic(
-            'MODIFIER_EFFECT_QUANTITY_OVERRIDE',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: jsonEncode({
-              'action': 'modifier_effect_quantity_override',
-              'option_id': option.id,
-              'quantity': draft.quantity,
-              'unit': preview.markingUnit,
-              'reason': draft.reason,
-            }),
+          return authorizeWithPolicy(
+            authRepository: authRepo,
+            policy: policy,
+            request: request,
+            selfAuthorizationAllowed: true,
           );
         },
       ),
     );
     extraValid.dispose();
-    if (!mounted || authorized != true) return;
+    if (!mounted || outcome == null || !outcome.authorized) return;
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'MODIFIER_EFFECT_QUANTITY_OVERRIDE'
+          : 'SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY',
+      metodoAutorizacion: method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'modifier_effect_quantity_override',
+        'option_id': option.id,
+        'quantity': draft.quantity,
+        'unit': preview.markingUnit,
+        'reason': draft.reason,
+        'self_authorized': !outcome.isAuthorizingRole,
+      }),
+    );
+    if (!mounted) return;
     setState(() {
       _effectOverrides[option.id] = _EffectOverride(
         quantity: draft.quantity!,
@@ -1626,6 +1677,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
       );
     });
   }
+
 
   static String _trimQuantity(double value) {
     final rounded = (value * 10000).roundToDouble() / 10000;
@@ -2790,39 +2842,34 @@ class CartSummary extends StatelessWidget {
 
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
-    final candidates = supervisorCandidatesFrom(await authRepo.getAllUsers());
+    final policy = await tenantSupervisionPolicy(context);
 
-    final authorized = await showDialog<bool>(
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
-        candidates: candidates,
-        onAuthorize: (request) {
-          final pin = request.method == SupervisorAuthorizationMethod.pin
-              ? request.credential
-              : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp
-              ? request.credential
-              : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          final method =
-              request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
-          return auditRepo.logForensic(
-            'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: '{"action":"manual_discount"}',
-          );
-        },
+        onAuthorize: (request) => authorizeWithPolicy(
+          authRepository: authRepo,
+          policy: policy,
+          request: request,
+          selfAuthorizationAllowed:
+              policy.selfAuthorizationAllowedManualDiscount,
+        ),
       ),
     );
 
-    if (!context.mounted || authorized != true) return;
+    if (!context.mounted || outcome == null || !outcome.authorized) return;
+
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT'
+          : 'SELF_AUTHORIZED_MANUAL_DISCOUNT',
+      metodoAutorizacion: outcome.method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'manual_discount',
+        'self_authorized': !outcome.isAuthorizingRole,
+      }),
+    );
 
     viewModel.grantSupervisorOverride();
     viewModel.applyManualDiscount(amount);
