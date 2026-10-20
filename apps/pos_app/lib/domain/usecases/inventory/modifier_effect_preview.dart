@@ -23,6 +23,8 @@ class ModifierEffectPreview {
     required this.inheritedUnit,
     required this.quantityIsMarked,
     required this.factor,
+    this.markedQuantity,
+    this.unitsMismatch = false,
   });
 
   /// ADD / REMOVE / SWAP / SCALE.
@@ -49,6 +51,36 @@ class ModifierEffectPreview {
   /// The multiplier of a SCALE.
   final double? factor;
 
+  /// The quantity the CASHIER MARKED for this option, when they marked one.
+  ///
+  /// It is the number that will really be applied, and it is expressed in
+  /// the AFFECTED insumo's own unit — not in the recipe component's unit.
+  /// The dialog announces it verbatim, so the cashier never reads a number
+  /// that the stock movement will not carry.
+  final double? markedQuantity;
+
+  /// The affected insumo and the recipe component are kept in DIFFERENT
+  /// units, so the inherited number means something else in the affected
+  /// insumo's unit: the quantity CANNOT be inherited and the operator has
+  /// to mark one (the resolver refuses the inherited number with
+  /// `UNIT_MISMATCH`).
+  ///
+  /// The dialog says so instead of announcing a number that will never be
+  /// applied — the operator must not read "18 g" and believe the almond
+  /// milk will leave in grams.
+  final bool unitsMismatch;
+
+  /// What the quantity field shows when it is empty.
+  ///
+  /// The affected insumo's unit when the inherited number cannot be used
+  /// (the operator types the number in THAT unit), the inherited number
+  /// when it can, and "Heredar" when there is no recipe to inherit from.
+  String get quantityHint {
+    if (unitsMismatch) return unit ?? '';
+    if (inheritedQuantity == null) return 'Heredar';
+    return _formatQuantity(inheritedQuantity!);
+  }
+
   /// Whether the effect has a quantity the operator may mark.
   ///
   /// ADD and SWAP do (they add or replace a quantity of stock). REMOVE and
@@ -62,7 +94,25 @@ class ModifierEffectPreview {
   ///
   /// Calm and concrete: what leaves the stock, what enters it, and how
   /// much. No implementation vocabulary (§39.4).
+  ///
+  /// The number it announces is ALWAYS the number that will be applied:
+  /// the marked one when the cashier marked it, the inherited one when it
+  /// can be inherited, and NO number (with an explicit request to mark
+  /// one) when the units do not allow inheriting.
   String get explanation {
+    final marked = markedQuantity;
+    if (marked != null) {
+      final amount =
+          '${_formatQuantity(marked)}${unit == null ? '' : ' $unit'}';
+      return 'Cantidad marcada por el cajero: $amount.';
+    }
+    if (quantityIsMarked) {
+      // The cashier marked a quantity the dialog does not know the number
+      // of: announce the fact, NEVER the inherited number (it would be
+      // read as the marked one).
+      return 'Cantidad marcada por el cajero.';
+    }
+    if (unitsMismatch) return _unitsMismatchSentence;
     final quantity = inheritedQuantity;
     final amount = quantity == null
         ? null
@@ -70,12 +120,9 @@ class ModifierEffectPreview {
     switch (effect) {
       case 'ADD':
         final what = insumoName ?? 'el insumo';
-        final verb = amount == null
+        return amount == null
             ? 'Suma $what al consumo de la receta.'
             : 'Suma $amount de $what al consumo de la receta.';
-        return quantityIsMarked
-            ? 'Cantidad marcada por el cajero: $amount.'
-            : verb;
       case 'REMOVE':
         final what = targetName ?? 'un componente';
         return amount == null
@@ -84,12 +131,9 @@ class ModifierEffectPreview {
       case 'SWAP':
         final out = targetName ?? 'el componente';
         final into = insumoName ?? 'el sustituto';
-        final verb = amount == null
+        return amount == null
             ? 'No se consume $out; entra $into en su lugar.'
             : 'No se consume $out; entran $amount de $into en su lugar.';
-        return quantityIsMarked
-            ? 'Cantidad marcada por el cajero: $amount.'
-            : verb;
       case 'SCALE':
         final what = targetName ?? 'el componente';
         final times = factor == null ? null : _formatQuantity(factor!);
@@ -99,6 +143,21 @@ class ModifierEffectPreview {
       default:
         return '';
     }
+  }
+
+  /// The units do not allow inheriting the recipe's number.
+  ///
+  /// It says WHY in the operator's own units (the component's and the
+  /// insumo's) and asks for the number, instead of announcing a quantity
+  /// that the stock movement will never carry.
+  String get _unitsMismatchSentence {
+    final what = insumoName ?? 'el insumo';
+    final into = unit == null ? 'la unidad del insumo' : unit!;
+    final from = inheritedUnit == null
+        ? 'la unidad del componente de la receta'
+        : inheritedUnit!;
+    return 'No se puede heredar la cantidad: $what se mide en $into y el '
+        'componente de la receta en $from. Marque la cantidad a aplicar.';
   }
 
   static String _formatQuantity(double value) {
@@ -127,15 +186,19 @@ ModifierEffectPreview buildModifierEffectPreview({
   required double? inheritedQuantity,
   required String? inheritedUnit,
   bool quantityIsMarked = false,
+  double? markedQuantity,
+  bool unitsMismatch = false,
 }) {
   return ModifierEffectPreview(
     effect: option.inventoryEffect,
     insumoName: insumoName,
     targetName: targetName,
     unit: unit,
-    inheritedQuantity: inheritedQuantity,
+    inheritedQuantity: unitsMismatch ? null : inheritedQuantity,
     inheritedUnit: inheritedUnit,
     quantityIsMarked: quantityIsMarked,
     factor: option.effectFactor,
+    markedQuantity: markedQuantity,
+    unitsMismatch: unitsMismatch,
   );
 }

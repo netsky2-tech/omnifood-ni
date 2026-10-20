@@ -117,7 +117,84 @@ void main() {
       inheritedQuantity: 18,
       inheritedUnit: 'g',
       quantityIsMarked: true,
+      markedQuantity: 30,
     );
     expect(preview.explanation, contains('marcada'));
+  });
+
+  test('a marked option NEVER announces the inherited number', () {
+    // The rig found this: the dialog said "Cantidad marcada por el cajero:
+    // 18 g" while the cashier had marked 30 — the inherited number was
+    // announced as the marked one. When the number is not known, the copy
+    // says so instead of announcing a number that will not be applied.
+    final preview = buildModifierEffectPreview(
+      option: option(),
+      insumoName: 'Café en Grano',
+      targetName: 'Café en Grano',
+      unit: 'g',
+      inheritedQuantity: 18,
+      inheritedUnit: 'g',
+      quantityIsMarked: true,
+    );
+    expect(preview.explanation, isNot(contains('18 g')));
+  });
+
+  test('a MARKED quantity is the number announced, in the insumo unit', () {
+    // The rig: the cashier marked 150 ml of almond milk and the dialog
+    // announced "Cantidad marcada por el cajero: 18 g" — the INHERITED
+    // number, in the component's unit. The number the stock movement
+    // carries is the marked one, in the insumo's unit.
+    final preview = buildModifierEffectPreview(
+      option: option(
+        insumoId: 'ins-almendras',
+        targetId: 'ins-cafe',
+      ),
+      insumoName: 'Leche de Almondras',
+      targetName: 'Café en Grano',
+      unit: 'ml',
+      inheritedQuantity: 18,
+      inheritedUnit: 'g',
+      quantityIsMarked: true,
+      markedQuantity: 150,
+    );
+    expect(preview.explanation, contains('150 ml'));
+    expect(preview.explanation, isNot(contains('18 g')));
+  });
+
+  test('mismatched units ask for a marked quantity instead of a number', () {
+    // The rig (V9): the option adds almond milk (ml) but inherits from the
+    // coffee component (g). The resolver refuses the inherited number
+    // (UNIT_MISMATCH), so the dialog must NOT announce "18 g" — it must
+    // ask the cashier for the number, in the insumo's unit.
+    final preview = buildModifierEffectPreview(
+      option: option(
+        insumoId: 'ins-almendras',
+        targetId: 'ins-cafe',
+      ),
+      insumoName: 'Leche de Almondras',
+      targetName: 'Café en Grano',
+      unit: 'ml',
+      inheritedQuantity: 18,
+      inheritedUnit: 'g',
+      unitsMismatch: true,
+    );
+    expect(preview.explanation, contains('No se puede heredar'));
+    expect(preview.explanation, contains('ml'));
+    expect(preview.explanation, contains('g'));
+    expect(preview.explanation, isNot(contains('18 g')));
+    // The number that will be applied is the marked one, in ml.
+    expect(preview.quantityHint, 'ml');
+  });
+
+  test('the quantity hint is the inherited number when it can be inherited', () {
+    final preview = buildModifierEffectPreview(
+      option: option(),
+      insumoName: 'Café en Grano',
+      targetName: 'Café en Grano',
+      unit: 'g',
+      inheritedQuantity: 18,
+      inheritedUnit: 'g',
+    );
+    expect(preview.quantityHint, '18');
   });
 }

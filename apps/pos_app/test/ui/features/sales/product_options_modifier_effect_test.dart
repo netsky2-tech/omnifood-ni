@@ -56,6 +56,14 @@ void main() {
         uom: 'ml',
       ),
     );
+    await dao.insertInsumo(
+      const AuthorityInsumoEntity(
+        tenantId: 'tenant-1',
+        id: 'insumo-cafe',
+        name: 'R23 Cafe en grano',
+        uom: 'g',
+      ),
+    );
     await dao.insertRecipeVersion(
       const AuthorityRecipeVersionEntity(
         tenantId: 'tenant-1',
@@ -124,7 +132,44 @@ void main() {
         ],
       );
 
-  Future<void> pumpDialog(WidgetTester tester) async {
+  /// The rig's V9 shape: an option that ADDS almond milk (ml) but inherits
+  /// from the coffee component (g). The resolver refuses the inherited
+  /// number (UNIT_MISMATCH), so the dialog must not announce it.
+  Product productWithMismatchedUnits() => Product(
+        id: 'p-2',
+        name: 'R28 Subreceta',
+        uom: 'UND',
+        stock: 5,
+        averageCost: 0,
+        sellPrice: 50,
+        availableModifierGroups: [
+          EffectiveModifierGroup(
+            id: 'grp-extras',
+            name: 'Extras',
+            minSelected: 0,
+            maxSelected: 3,
+            allowQuantities: true,
+            source: 'product',
+            options: [
+              EffectiveModifierOption(
+                id: 'opt-almendra-extra',
+                name: 'Leche de almendra extra',
+                priceDelta: 20,
+                isDefault: false,
+                inventoryEffect: 'ADD',
+                effectInsumoId: 'insumo-almendras',
+                effectTargetInsumoId: 'insumo-cafe',
+              ),
+            ],
+          ),
+        ],
+      );
+
+  Future<void> pumpDialog(
+    WidgetTester tester, {
+    Product? product,
+    DateTime? now,
+  }) async {
     await tester.pumpWidget(
       ChangeNotifierProvider<SaleViewModel>.value(
         value: _CapturingSaleViewModel(),
@@ -133,7 +178,10 @@ void main() {
           child: MaterialApp(
             home: Scaffold(
               body: Center(
-                child: ProductOptionsDialog(product: productWithSwap()),
+                child: ProductOptionsDialog(
+                  product: product ?? productWithSwap(),
+                  now: now,
+                ),
               ),
             ),
           ),
@@ -203,6 +251,111 @@ void main() {
         find.byKey(const Key('modifier_effect_quantity_opt-almendras')),
       );
       expect(semantics.label, contains('Cantidad a aplicar'));
+    },
+  );
+
+  testWidgets(
+    'the dialog shows the inherited quantity of a version published minutes '
+    'ago (the authority is read in UTC)',
+    (tester) async {
+      // The rig's shape: the version became effective at 03:46:35Z and the
+      // terminal read it at 04:00:00Z. Compared in the LOCAL frame the
+      // version looked "not yet in force" and the operator lost the
+      // inherited quantity AND the insumo's name.
+      final dao = database.authorityProjectionDao;
+      // The real SQLite read must run in the REAL async zone: inside the
+      // test's fake clock it would never complete.
+      await tester.runAsync(() async {
+        await dao.insertRecipeVersion(
+        const AuthorityRecipeVersionEntity(
+          tenantId: 'tenant-1',
+          id: 'ver-2',
+          productId: 'p-1',
+          versionNumber: 2,
+          isActive: true,
+          publicationState: 'PUBLISHED',
+          effectiveFrom: '2026-10-20T03:46:35.999Z',
+          yieldQuantity: 1.0,
+          technicalShrinkPct: 0.0,
+          createdAt: '2026-10-20T03:46:35.999Z',
+          updatedAt: '2026-10-20T03:46:35.999Z',
+        ),
+        );
+        await dao.insertComponent(
+          const AuthorityRecipeVersionComponentEntity(
+            tenantId: 'tenant-1',
+            id: 'comp-2',
+            versionId: 'ver-2',
+            ordinal: 0,
+            insumoId: 'insumo-leche',
+            grossQuantity: 150,
+            technicalShrinkPct: 0,
+            ingredientType: 'INSUMO',
+            componentName: 'R23 Leche entera',
+            componentUom: 'ml',
+          ),
+        );
+      });
+
+      await pumpDialog(tester, now: DateTime.utc(2026, 10, 20, 4));
+
+      expect(find.text('150 ml (heredada de la receta)'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'mismatched units ask for the quantity instead of announcing a number '
+    'that will not be applied',
+    (tester) async {
+      // The rig's V9: the option adds almond milk (ml) but the component
+      // it targets is coffee (g). The resolver refuses the inherited
+      // number, so the copy must not announce "18 g".
+      final dao = database.authorityProjectionDao;
+      await tester.runAsync(() async {
+        await dao.insertRecipeVersion(
+        const AuthorityRecipeVersionEntity(
+          tenantId: 'tenant-1',
+          id: 'ver-3',
+          productId: 'p-2',
+          versionNumber: 1,
+          isActive: true,
+          publicationState: 'PUBLISHED',
+          effectiveFrom: '2026-01-01T00:00:00Z',
+          yieldQuantity: 1.0,
+          technicalShrinkPct: 0.0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        ),
+        );
+        await dao.insertComponent(
+          const AuthorityRecipeVersionComponentEntity(
+            tenantId: 'tenant-1',
+            id: 'comp-3',
+            versionId: 'ver-3',
+            ordinal: 0,
+            insumoId: 'insumo-cafe',
+            grossQuantity: 18,
+            technicalShrinkPct: 0,
+            ingredientType: 'INSUMO',
+            componentName: 'R23 Cafe en grano',
+            componentUom: 'g',
+          ),
+        );
+      });
+
+      await pumpDialog(tester, product: productWithMismatchedUnits());
+
+      expect(
+        find.text(
+          'No se puede heredar la cantidad: Leche de Almondras se mide en ml '
+          'y el componente de la receta en g. Marque la cantidad a aplicar.',
+        ),
+        findsOneWidget,
+      );
+      final field = tester.widget<TextField>(
+        find.byKey(const Key('modifier_effect_quantity_opt-almendra-extra')),
+      );
+      expect(field.decoration?.hintText, 'ml');
     },
   );
 }

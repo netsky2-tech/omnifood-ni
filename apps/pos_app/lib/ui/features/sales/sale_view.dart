@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
+import '../../../domain/usecases/inventory/authority_sale_time.dart';
 import '../../../domain/usecases/inventory/modifier_effect_preview.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../domain/services/config/discount_policy_service.dart';
@@ -1268,7 +1269,22 @@ class ProductGrid extends StatelessWidget {
 
 class ProductOptionsDialog extends StatefulWidget {
   final Product product;
-  const ProductOptionsDialog({super.key, required this.product});
+
+  /// The instant the dialog resolves the ACTIVE recipe version against.
+  ///
+  /// Injectable so a test can pin the instant — and the timezone — it
+  /// asserts on. The authority stores `effective_from` in UTC; a LOCAL
+  /// wall-clock string compared against it makes the dialog believe a
+  /// version published minutes ago is not yet in force (the rig showed
+  /// exactly that: the inherited quantity never reached the operator in
+  /// Nicaragua's UTC-6).
+  final DateTime? now;
+
+  const ProductOptionsDialog({
+    super.key,
+    required this.product,
+    this.now,
+  });
 
   @override
   State<ProductOptionsDialog> createState() => _ProductOptionsDialogState();
@@ -1346,7 +1362,13 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
           await database.authorityProjectionDao.findActivePublishedVersions(
         tenantId,
         widget.product.id,
-        DateTime.now().toIso8601String(),
+        // The authority keeps `effective_from` in UTC and the checkout path
+        // compares in UTC (`invoice.createdAt.toUtc()`). The dialog must
+        // compare in the same frame: a LOCAL wall-clock string made a
+        // version published minutes ago look "not yet in force" in every
+        // timezone behind UTC — the operator lost the inherited quantity
+        // (and the names that come with it) exactly where they needed it.
+        authoritySaleTime(widget.now ?? DateTime.now()),
       );
       if (versions.isEmpty) return;
       final version = versions.first;
@@ -1464,9 +1486,12 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                             decoration: InputDecoration(
                               isDense: true,
                               border: const OutlineInputBorder(),
-                              hintText: preview.inheritedQuantity == null
-                                  ? 'Heredar'
-                                  : _trimQuantity(preview.inheritedQuantity!),
+                              // The hint is what the operator types: the
+                              // inherited number when it can be inherited,
+                              // the insumo's OWN unit when it cannot (the
+                              // units do not match), and "Heredar" when
+                              // there is no recipe to inherit from.
+                              hintText: preview.quantityHint,
                               hintStyle: const TextStyle(fontSize: 12),
                             ),
                             onChanged: (value) {
@@ -1497,7 +1522,10 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
             ),
           if (marked != null)
             Text(
-              'Se aplicará $marked por unidad vendida.',
+              // The marked number is expressed in the AFFECTED insumo's own
+              // unit, so the line says which unit: the operator must not
+              // read "150" and assume grams.
+              'Se aplicará $marked${_effectUnitOf(option) == null ? '' : ' ${_effectUnitOf(option)}'} por unidad vendida.',
               style: const TextStyle(fontSize: 10),
             ),
         ],
@@ -1514,11 +1542,33 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
 
   /// The preview of an option's effect, or null when the option declares
   /// none (the overwhelmingly common case: a price-only option).
+  /// The unit the insumo the effect acts on keeps its stock in.
+  String? _effectUnitOf(EffectiveModifierOption option) =>
+      option.effectInsumoId == null
+          ? null
+          : _insumoFacts[option.effectInsumoId]?.unit;
+
   ModifierEffectPreview? _previewOf(EffectiveModifierOption option) {
     if (option.inventoryEffect == 'NONE') return null;
     final target = option.effectTargetInsumoId == null
         ? null
         : _recipeComponents[option.effectTargetInsumoId];
+    // The unit the affected insumo keeps its stock in, and the unit of the
+    // recipe component the effect targets.
+    final affectedUnit = option.effectInsumoId == null
+        ? null
+        : _insumoFacts[option.effectInsumoId]?.unit;
+    final targetUnit = option.effectTargetInsumoId == null
+        ? null
+        : (_insumoFacts[option.effectTargetInsumoId]?.unit ??
+            _recipeComponents[option.effectTargetInsumoId]?.unit);
+    // The resolver refuses to inherit the recipe's number when the two
+    // units differ (`UNIT_MISMATCH`): the inherited number means something
+    // else in the affected insumo's unit. The dialog must say so instead
+    // of announcing a quantity the stock movement will never carry.
+    final unitsMismatch = affectedUnit != null &&
+        targetUnit != null &&
+        affectedUnit.toUpperCase() != targetUnit.toUpperCase();
     return buildModifierEffectPreview(
       option: option,
       insumoName: option.effectInsumoId == null
@@ -1528,12 +1578,14 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
           ? null
           : (_insumoFacts[option.effectTargetInsumoId]?.name ??
               _recipeComponents[option.effectTargetInsumoId]?.insumoId),
-      unit: option.effectInsumoId == null
-          ? null
-          : _insumoFacts[option.effectInsumoId]?.unit,
+      unit: affectedUnit,
       inheritedQuantity: target?.quantityPerSaleUnit,
       inheritedUnit: target?.unit,
       quantityIsMarked: _markedEffectQuantities.containsKey(option.id),
+      // The number the cashier MARKED is the one that will be applied,
+      // and it is expressed in the affected insumo's own unit.
+      markedQuantity: _markedEffectQuantities[option.id],
+      unitsMismatch: unitsMismatch,
     );
   }
 
