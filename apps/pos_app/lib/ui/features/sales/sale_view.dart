@@ -1434,14 +1434,18 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Row(
+                  // A Wrap, not a Row: the label is never cut. When the
+                  // column is narrow (the radio group inside the modal),
+                  // the field moves to its own line instead of the label
+                  // losing its tail.
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 6,
+                    runSpacing: 2,
                     children: [
-                      const Flexible(
-                        child: Text(
-                          'Cantidad a aplicar: ',
-                          style: TextStyle(fontSize: 11),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      const Text(
+                        'Cantidad a aplicar: ',
+                        style: TextStyle(fontSize: 11),
                       ),
                       SizedBox(
                         width: 86,

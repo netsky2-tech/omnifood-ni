@@ -5,6 +5,7 @@ import 'package:pos_app/data/models/inventory/authority_projection_entities.dart
 import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
 import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
@@ -1089,6 +1090,160 @@ void main() {
         terminalId: 'term-1',
       );
       expect(result.invoice.inventoryOutcome, 'APPLIED');
+    },
+  );
+
+  test(
+    'R28: a SWAP modifier replaces the component in the snapshot (the '
+    'substitute is not a recipe component, so the authority must resolve it '
+    'anyway)',
+    () async {
+      // The rig found this: the almond milk is NOT a component of the
+      // recipe, so the recipe's closure never carried it. The deviation
+      // resolver then skipped the effect as "insumo not in catalog" and
+      // the line consumed the RECIPE AS WRITTEN: the whole milk was
+      // downloaded and the almond milk never was.
+      final dao = database.authorityProjectionDao;
+      await dao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-beef',
+          name: 'Ground Beef',
+          uom: 'KG',
+        ),
+      );
+      await dao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-alternativa',
+          name: 'Ground Beef Alternative',
+          uom: 'KG',
+        ),
+      );
+      await dao.insertRecipeVersion(
+        const AuthorityRecipeVersionEntity(
+          tenantId: 'tenant-1',
+          id: 'ver-burger-1',
+          productId: 'prod-burger',
+          versionNumber: 1,
+          isActive: true,
+          publicationState: 'PUBLISHED',
+          effectiveFrom: '2026-01-01T00:00:00Z',
+          yieldQuantity: 1.0,
+          technicalShrinkPct: 0.0,
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z',
+        ),
+      );
+      await dao.insertComponent(
+        const AuthorityRecipeVersionComponentEntity(
+          tenantId: 'tenant-1',
+          id: 'comp-1',
+          versionId: 'ver-burger-1',
+          ordinal: 0,
+          insumoId: 'insumo-beef',
+          grossQuantity: 0.25,
+          technicalShrinkPct: 0.0,
+          ingredientType: 'DIRECT',
+          componentName: 'Patty',
+        ),
+      );
+      // A second component: the substitution APPENDS the substitute, so
+      // without the canonical order the bindings would not be sorted and
+      // the frozen snapshot would be invalid ("Invalid sale-time inventory
+      // snapshot") — the sale refused for a substitution the operator had
+      // just chosen.
+      await dao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-queso',
+          name: 'Cheese',
+          uom: 'KG',
+        ),
+      );
+      await dao.insertComponent(
+        const AuthorityRecipeVersionComponentEntity(
+          tenantId: 'tenant-1',
+          id: 'comp-2',
+          versionId: 'ver-burger-1',
+          ordinal: 1,
+          insumoId: 'insumo-queso',
+          grossQuantity: 0.1,
+          technicalShrinkPct: 0.0,
+          ingredientType: 'DIRECT',
+          componentName: 'Cheese',
+        ),
+      );
+      await database.database.execute(
+        "INSERT INTO products (id, name, uom, stock, average_cost, sell_price, is_active, is_prepared, product_type, tenant_id, tax_rate, is_tax_exempt) "
+        "VALUES ('prod-burger', 'Classic Burger', 'UNIT', 10.0, 50.0, 150.0, 1, 1, 'PREPARED', 'tenant-1', 0.15, 0)",
+      );
+
+      final invoice = Invoice(
+        id: 'inv-1',
+        number: 'PENDING',
+        createdAt: DateTime.parse('2026-09-01T12:00:00Z'),
+        userId: 'user-1',
+        subtotal: 160.0,
+        totalTax: 24.0,
+        total: 184.0,
+        terminalId: 'term-1',
+      );
+      final items = <InvoiceItem>[
+        const InvoiceItem(
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'prod-burger',
+          productName: 'Classic Burger',
+          quantity: 1.0,
+          unitPrice: 160.0,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: 24.0,
+          total: 184.0,
+          selectedModifiers: [
+            Modifier(
+              id: 'opt-alternativa',
+              name: 'Carne: Alternativa',
+              extraPrice: 10,
+              optionId: 'opt-alternativa',
+              groupId: 'grp-carne',
+              inventoryEffect: 'SWAP',
+              effectInsumoId: 'insumo-alternativa',
+              effectTargetInsumoId: 'insumo-beef',
+            ),
+          ],
+        ),
+      ];
+
+      final result = await service.prepare(
+        invoice: invoice,
+        items: items,
+        offlineUserId: 'user-1',
+        tenantId: 'tenant-1',
+        terminalId: 'term-1',
+      );
+
+      final snapshot = result.items.first.inventorySnapshot;
+      expect(snapshot, isNotNull);
+      final bindings = snapshot!.bindings;
+      // The replaced component is NOT consumed...
+      expect(
+        bindings.any((binding) => binding.insumoId == 'insumo-beef'),
+        isFalse,
+      );
+      // ...and the substitute IS, in the component's own quantity.
+      final substitute = bindings.firstWhere(
+        (binding) => binding.insumoId == 'insumo-alternativa',
+      );
+      expect(substitute.quantityPerSaleUnit, 0.25);
+      // The frozen document is in the CANONICAL order (by insumo id): the
+      // substitute is appended by the deviation, and the snapshot is only
+      // valid when the bindings are sorted.
+      expect(
+        bindings.map((binding) => binding.insumoId).toList(),
+        ['insumo-alternativa', 'insumo-queso'],
+      );
     },
   );
 }

@@ -198,7 +198,20 @@ class SaleTimeInventorySnapshotBuilder {
       insumosById: authority.insumosById,
     );
 
-    final resolved = resolution.leaves;
+    // The snapshot's CANONICAL ORDER is by insumo id (then by component
+    // id): the cloud compares the demand by key, and the frozen document
+    // must be stable. The recipe's leaves arrive sorted, but a deviation
+    // that REPLACES a component appends the substitute at the end — which
+    // broke the order and made the snapshot invalid ("Invalid sale-time
+    // inventory snapshot"), so the sale was refused for a substitution the
+    // operator had just chosen.
+    final resolved = [...resolution.leaves]
+      ..sort((a, b) {
+        final insumo = a.insumoId.compareTo(b.insumoId);
+        return insumo != 0
+            ? insumo
+            : (a.rootComponentId ?? '').compareTo(b.rootComponentId ?? '');
+      });
     return [
       for (var i = 0; i < resolved.length; i++)
         _binding(

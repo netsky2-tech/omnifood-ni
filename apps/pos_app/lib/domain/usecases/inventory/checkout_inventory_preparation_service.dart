@@ -203,6 +203,45 @@ class CheckoutInventoryPreparationService {
       }
     }
 
+    // R28: the insumos a line's modifier effect acts on must resolve in
+    // the authority. The SUBSTITUTE is not a component of the recipe, so
+    // the recipe's closure never carries it: without this the deviation
+    // resolver cannot resolve the effect and skips it as "insumo not in
+    // catalog" — the line would consume the RECIPE AS WRITTEN (the whole
+    // milk would be downloaded and the almond milk never would). The
+    // target is resolved too: it names the component the effect replaces.
+    //
+    // An insumo the projection does not carry is left unresolved on
+    // purpose: the effect then stays NO_IMPACT (the SOHO guarantee, D6)
+    // instead of being applied against a fact nobody can verify.
+    for (final item in items) {
+      final effectInsumoIds = <String>{
+        for (final modifier in item.selectedModifiers) ...[
+          if (modifier.effectInsumoId != null) modifier.effectInsumoId!,
+          if (modifier.effectTargetInsumoId != null)
+            modifier.effectTargetInsumoId!,
+        ],
+      };
+      for (final insumoId in effectInsumoIds) {
+        if (authorityInsumosById.containsKey(insumoId)) continue;
+        final insumo = await authorityDao.findInsumoById(tenantId, insumoId);
+        if (insumo == null) continue;
+        authorityInsumosById[insumo.id] = AuthorityInsumo(
+          id: insumo.id,
+          tenantId: tenantId,
+          // R28: the consumption unit travels into the authority so a
+          // deviation can tell whether an inherited quantity means the
+          // same thing in the insumo the effect applies to.
+          consumptionUom: insumo.uom,
+          // R28 (M4.1): the live state travels too, or a deactivated
+          // insumo would look available and an effect pointing at it
+          // would apply on the terminal while the cloud refuses it.
+          isActive: insumo.isActive,
+        );
+      }
+    }
+
+
     final authority = ValidatedSaleInventoryAuthority.validate(
       context: CheckoutAuthorityContext(
         checkoutId: invoice.id,
