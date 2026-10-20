@@ -7,6 +7,8 @@ import 'package:pos_app/data/models/inventory/authority_projection_entities.dart
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/ui/features/sales/sale_view.dart';
 
 /// R28 (decisión del owner: "el backoffice manda, el cajero marca") — el
@@ -27,6 +29,38 @@ class _CapturingSaleViewModel extends ChangeNotifier
     implements SaleViewModel {
   @override
   dynamic noSuchMethod(Invocation invocation) => null;
+}
+
+/// The authorization of a supervisor, as the override flow asks for it.
+class _FakeAuthRepository extends Fake implements AuthRepository {
+  bool authorized;
+  String? lastSupervisorId;
+
+  _FakeAuthRepository({this.authorized = true});
+
+  @override
+  Future<bool> authorizeOverride({
+    required String supervisorId,
+    String? pin,
+    String? totpCode,
+  }) async {
+    lastSupervisorId = supervisorId;
+    return authorized;
+  }
+}
+
+class _FakeAuditRepository extends Fake implements AuditRepository {
+  final List<String> actions = [];
+
+  @override
+  Future<void> logForensic(
+    String action, {
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  }) async {
+    actions.add(action);
+  }
 }
 
 void main() {
@@ -180,6 +214,8 @@ void main() {
     Product? product,
     DateTime? now,
     Size? surface,
+    _FakeAuthRepository? authRepository,
+    _FakeAuditRepository? auditRepository,
   }) async {
     if (surface != null) {
       tester.view.physicalSize = surface;
@@ -191,12 +227,22 @@ void main() {
         value: _CapturingSaleViewModel(),
         child: Provider<AppDatabase>.value(
           value: database,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: ProductOptionsDialog(
-                  product: product ?? productWithSwap(),
-                  now: now,
+          child: MultiProvider(
+            providers: [
+              Provider<AuthRepository>.value(
+                value: authRepository ?? _FakeAuthRepository(),
+              ),
+              Provider<AuditRepository>.value(
+                value: auditRepository ?? _FakeAuditRepository(),
+              ),
+            ],
+            child: MaterialApp(
+              home: Scaffold(
+                body: Center(
+                  child: ProductOptionsDialog(
+                    product: product ?? productWithSwap(),
+                    now: now,
+                  ),
                 ),
               ),
             ),
@@ -277,6 +323,60 @@ void main() {
       expect(find.byKey(const Key('modifier_override_action')), findsOneWidget);
       // And the sale is possible: the action button is there.
       expect(find.text('AGREGAR'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'the supervisor override asks for the amount and the reason (the rig: '
+    'the override must not be a free field for the cashier)',
+    (tester) async {
+      await pumpDialog(tester, product: productWithPendingEffect());
+
+      await tester.tap(find.byKey(const Key('modifier_override_action')));
+      await tester.pumpAndSettle();
+
+      // The amount and the reason, in the insumo's own unit.
+      expect(find.text('Cantidad que descuenta este extra'), findsNothing);
+      expect(find.byKey(const Key('modifier_override_quantity')), findsOneWidget);
+      expect(find.byKey(const Key('modifier_override_reason')), findsOneWidget);
+      expect(find.text('Autorización de supervisor'), findsNothing);
+      expect(
+        find.text('Cantidad autorizada para este extra'),
+        findsOneWidget,
+      );
+      // The credentials are the supervisor's, never the cashier's.
+      expect(find.text('ID supervisor'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'an authorized override is recorded with its forensic trace',
+    (tester) async {
+      final audit = _FakeAuditRepository();
+      await pumpDialog(
+        tester,
+        product: productWithPendingEffect(),
+        auditRepository: audit,
+      );
+
+      await tester.tap(find.byKey(const Key('modifier_override_action')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('modifier_override_quantity')),
+        '30',
+      );
+      await tester.enterText(
+        find.byKey(const Key('modifier_override_reason')),
+        'El cliente pidió doble jarabe',
+      );
+      await tester.pumpAndSettle();
+
+      // The submit stays disabled until the amount AND the reason are there.
+      final submit = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'AUTORIZAR'),
+      );
+      expect(submit.onPressed, isNotNull);
     },
   );
 

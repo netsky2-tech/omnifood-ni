@@ -1556,6 +1556,9 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     var draft = const ModifierQuantityOverrideDraft();
     String supervisorId = '';
     String method = '';
+    // The submit button follows the extra fields: it stays disabled until the
+    // amount AND the reason are there (the modal rebuilds on this notifier).
+    final extraValid = ValueNotifier<bool>(false);
     final authorized = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
@@ -1566,9 +1569,12 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
           insumoLabel: _insumoFacts[option.effectInsumoId]?.name ??
               _insumoFacts[option.effectTargetInsumoId]?.name ??
               'la opción',
-          onChanged: (value) => draft = value,
+          onChanged: (value) {
+            draft = value;
+            extraValid.value = value.isComplete;
+          },
         ),
-        canSubmit: () => draft.isComplete,
+        extraValid: extraValid,
         onAuthorize: (request) {
           supervisorId = request.supervisorId;
           method = request.method == SupervisorAuthorizationMethod.pin
@@ -1602,6 +1608,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         },
       ),
     );
+    extraValid.dispose();
     if (!mounted || authorized != true) return;
     setState(() {
       _effectOverrides[option.id] = _EffectOverride(

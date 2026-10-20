@@ -53,6 +53,7 @@ import 'core/navigation/route_observer.dart';
 import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
+import 'domain/repositories/audit_repository.dart';
 import 'data/services/fiscal_projection_repair_service.dart';
 import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
@@ -817,7 +818,14 @@ void main() async {
         ),
         Provider<AppDatabase>.value(value: database),
         Provider<AuthRepository>.value(value: authRepository),
-        Provider<AuditRepositoryImpl>.value(value: auditRepository),
+        // The INTERFACE, not the implementation: every read in the app asks
+        // for `AuditRepository` (`context.read<AuditRepository>()`), and
+        // Provider matches by EXACT type. Providing the implementation broke
+        // the supervisor override flows in production while the tests kept
+        // passing, because the tests wire the interface (the rig caught it:
+        // ProviderNotFoundException on the override of the modifier's
+        // quantity).
+        Provider<AuditRepository>.value(value: auditRepository),
         Provider<AlertService>.value(value: alertService),
         Provider<MovementEngineImpl>.value(value: movementEngine),
         Provider<SalesRepositoryImpl>.value(value: salesRepository),

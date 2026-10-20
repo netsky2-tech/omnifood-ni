@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 enum SupervisorAuthorizationMethod { pin, totp }
@@ -30,9 +31,13 @@ class SupervisorOverrideModal extends StatefulWidget {
   /// is being authorized before authorizing it.
   final Widget? content;
 
-  /// Extra validation: when it returns false, the submit button stays
-  /// disabled. The credentials alone are not always enough to authorize.
-  final bool Function()? canSubmit;
+  /// Extra validation: while it is false, the submit button stays disabled.
+  ///
+  /// It is a LISTENABLE, not a callback: the extra fields live in [content],
+  /// which owns its own state, and the modal has to REBUILD when that state
+  /// changes (otherwise the submit button would stay disabled forever after
+  /// the operator typed the missing field).
+  final ValueListenable<bool>? extraValid;
 
   /// The label of the submit button.
   final String submitLabel;
@@ -43,7 +48,7 @@ class SupervisorOverrideModal extends StatefulWidget {
     this.onAuditSuccess,
     this.title = 'Autorización de supervisor',
     this.content,
-    this.canSubmit,
+    this.extraValid,
     this.submitLabel = 'Autorizar',
   });
 
@@ -59,10 +64,32 @@ class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    widget.extraValid?.addListener(_onExtraValidChanged);
+  }
+
+  /// The extra fields changed their verdict: rebuild so the submit button
+  /// follows it (an authorization that cannot be submitted is a dead end).
+  void _onExtraValidChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    widget.extraValid?.removeListener(_onExtraValidChanged);
     _supervisorCtrl.dispose();
     _credentialCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant SupervisorOverrideModal oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.extraValid != widget.extraValid) {
+      oldWidget.extraValid?.removeListener(_onExtraValidChanged);
+      widget.extraValid?.addListener(_onExtraValidChanged);
+    }
   }
 
   Future<void> _submit() async {
@@ -98,7 +125,7 @@ class _SupervisorOverrideModalState extends State<SupervisorOverrideModal> {
 
   @override
   Widget build(BuildContext context) {
-    final canSubmit = widget.canSubmit?.call() ?? true;
+    final canSubmit = widget.extraValid?.value ?? true;
     return AlertDialog(
       title: Text(widget.title),
       content: SingleChildScrollView(
