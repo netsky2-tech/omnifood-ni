@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Put,
   UseGuards,
@@ -38,19 +39,33 @@ export class SupervisionPolicyController {
 
   /**
    * Writes the policy. The body is the WHOLE policy: a partial body would
-   * silently widen what the till accepts. A `null` body clears the policy
-   * so every terminal falls back to the default for its operation mode.
+   * silently widen what the till accepts.
    */
   @Put('policy')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   @RequirePermissions(AppPermission.SUPERVISION_CONFIGURE)
   async putPolicy(
     @GetTenantId() tenantId: string | undefined,
-    @Body() body: SupervisionPolicyDto | null,
+    @Body() body: SupervisionPolicyDto,
   ) {
     return this.supervisionPolicyService.configurePolicy(
       tenantId ?? '',
       body,
     );
+  }
+
+  /**
+   * Clears the policy: the tenant goes back to "no opinion", and every
+   * terminal falls back to the default for its operation mode.
+   *
+   * It is its OWN verb (not a null body) because clearing is an explicit,
+   * auditable act — and because a body-less request is the only shape that
+   * travels unambiguously through the HTTP client.
+   */
+  @Delete('policy')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.SUPERVISION_CONFIGURE)
+  async deletePolicy(@GetTenantId() tenantId: string | undefined) {
+    return this.supervisionPolicyService.configurePolicy(tenantId ?? '', null);
   }
 }

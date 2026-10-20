@@ -425,6 +425,7 @@ describe("W8 — Users & Permissions Management API & Schemas (TDD RED)", () => 
             "Reportes",
             "Lealtad",
             "Onboarding & Activación",
+            "Supervisión",
           ]).toContain(meta.category);
         }
       });

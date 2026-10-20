@@ -39,6 +39,7 @@ const CATEGORIES = [
   "Inventario",
   "Reportes",
   "Lealtad",
+  "Supervisión",
 ] as const;
 
 interface PermissionsContentProps {
