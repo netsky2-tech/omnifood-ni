@@ -8,6 +8,8 @@ import { ModifiersService } from './services/modifiers.service';
 import { ModifiersController } from './controllers/modifiers.controller';
 import { IdentityModule } from '../identity/identity.module';
 import { Insumo } from '../inventory/entities/insumo.entity';
+import { InventoryModule } from '../inventory/inventory.module';
+import { ModifierPendingConfigurationService } from './services/modifier-pending-configuration.service';
 
 /**
  * Reusable modifier groups (extras/modifiers, ODD tasks T1.1 + T1.2).
@@ -32,9 +34,13 @@ import { Insumo } from '../inventory/entities/insumo.entity';
       Insumo,
     ]),
     IdentityModule,
+    // The pending-configuration list reuses the cloud's OWN resolver and
+    // explosion (the same ones that recompute a sale's demand), so the list
+    // and the terminal can never disagree about what "resolvable" means.
+    InventoryModule,
   ],
   controllers: [ModifiersController],
-  providers: [ModifiersService],
-  exports: [ModifiersService, TypeOrmModule],
+  providers: [ModifiersService, ModifierPendingConfigurationService],
+  exports: [ModifiersService, ModifierPendingConfigurationService, TypeOrmModule],
 })
 export class ModifiersModule {}

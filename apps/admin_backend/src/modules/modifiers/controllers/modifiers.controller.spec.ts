@@ -6,6 +6,7 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { ModifiersController } from './modifiers.controller';
 import { ModifiersService } from '../services/modifiers.service';
+import { ModifierPendingConfigurationService } from '../services/modifier-pending-configuration.service';
 import { ModifierGroup } from '../entities/modifier-group.entity';
 import { ModifierOption } from '../entities/modifier-option.entity';
 import { CreateModifierOptionDto } from '../dto/create-modifier-option.dto';
@@ -76,6 +77,14 @@ describe('ModifiersController', () => {
         {
           provide: ModifiersService,
           useValue: service,
+        },
+        {
+          // The pending-configuration list: the controller injects it, and
+          // the route is part of the module's public surface.
+          provide: ModifierPendingConfigurationService,
+          useValue: {
+            findPendingConfiguration: jest.fn().mockResolvedValue([]),
+          },
         },
       ],
     })

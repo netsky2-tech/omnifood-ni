@@ -121,6 +121,40 @@ export function fetchModifierGroups(
     .then<ModifierGroup[], never>(normalizeModifierGroupList);
 }
 
+/**
+ * The options whose inventory effect cannot be applied as they stand.
+ *
+ * The backoffice's half of the owner's decision ("the backoffice owns the
+ * quantity"): the terminal never asks the cashier for a number, so the
+ * missing number has to be visible HERE, with the reason and the product
+ * where it bites.
+ */
+export interface PendingModifierProduct {
+  product_id: string;
+  product_name: string;
+  reason: string;
+}
+
+export interface PendingModifierConfiguration {
+  option_id: string;
+  option_name: string;
+  group_id: string;
+  group_name: string;
+  inventory_effect: string;
+  effect_insumo_id: string | null;
+  effect_target_insumo_id: string | null;
+  products: PendingModifierProduct[];
+}
+
+export function fetchPendingConfiguration(
+  opts?: ApiClientMethodOptions,
+): Promise<PendingModifierConfiguration[]> {
+  return api.get<PendingModifierConfiguration[]>(
+    "/modifier-groups/pending-configuration",
+    opts,
+  );
+}
+
 export function fetchEffectiveGroups(
   productId: string,
   opts?: ApiClientMethodOptions,

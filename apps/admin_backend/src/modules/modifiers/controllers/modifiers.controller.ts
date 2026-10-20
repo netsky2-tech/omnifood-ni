@@ -15,6 +15,7 @@ import {
   ModifiersService,
   ModifierGroupStatusFilter,
 } from '../services/modifiers.service';
+import { ModifierPendingConfigurationService } from '../services/modifier-pending-configuration.service';
 import { CreateModifierGroupDto } from '../dto/create-modifier-group.dto';
 import { UpdateModifierGroupDto } from '../dto/update-modifier-group.dto';
 import { CreateModifierOptionDto } from '../dto/create-modifier-option.dto';
@@ -40,7 +41,10 @@ import { UserRole } from '../../identity/entities/user.entity';
 @UseGuards(AuthGuard, RolesGuard)
 @UseInterceptors(TenantInterceptor)
 export class ModifiersController {
-  constructor(private readonly modifiersService: ModifiersService) {}
+  constructor(
+    private readonly modifiersService: ModifiersService,
+    private readonly pendingConfigurationService: ModifierPendingConfigurationService,
+  ) {}
 
   private requireTenant(tenantId?: string): string {
     if (!tenantId) {
@@ -88,6 +92,22 @@ export class ModifiersController {
       productId ?? '',
     );
     return serializeEffectiveGroups(groups);
+  }
+
+  // NOTE: declared BEFORE @Get(':id'), like 'effective' above, so the
+  // literal is not captured as an :id.
+  //
+  // The options whose inventory effect cannot be applied as they stand: the
+  // configuration the tenant still owes, named. It is the backoffice's half
+  // of the owner's decision ("the backoffice owns the quantity"): the
+  // terminal never asks the cashier for a number, so the missing number has
+  // to be visible HERE.
+  @Get('pending-configuration')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getPendingConfiguration(@GetTenantId() tenantId?: string) {
+    return this.pendingConfigurationService.findPendingConfiguration(
+      this.requireTenant(tenantId),
+    );
   }
 
   @Get(':id')
