@@ -18,6 +18,7 @@ import { ProductModifierGroup } from '../../modules/modifiers/entities/product-m
 import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { OnboardingModule } from '../../modules/onboarding/onboarding.module';
+import { SupervisionModule } from '../../modules/supervision/supervision.module';
 import { CustomersModule } from '../../modules/customers/customers.module';
 import { Customer } from '../../modules/customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../modules/customers/entities/customer-point-transaction.entity';
@@ -246,6 +247,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     SalesModule,
     NotificationsModule,
     OnboardingModule,
+    SupervisionModule,
     CustomersModule,
     LoyaltyModule,
     PromotionsModule,

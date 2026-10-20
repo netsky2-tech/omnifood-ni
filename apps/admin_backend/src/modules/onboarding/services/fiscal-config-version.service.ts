@@ -33,6 +33,10 @@ import {
   FiscalConfigVersion,
 } from '../dto/fiscal-config-version.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
+import {
+  parseSupervisionPolicy,
+  SUPERVISION_POLICY_PARAM_KEY,
+} from '../../supervision/contracts/supervision-policy.contract';
 
 /**
  * D-21 (#554): resolves a DGI authorization string parameter. A governing
@@ -187,6 +191,14 @@ export class FiscalConfigVersionService {
       FISCAL_PARAM_KEYS.MAX_DISCOUNT_PERCENT,
     );
 
+    // The tenant's supervision policy: null when it never configured one.
+    // Absence is meaningful and must stay distinguishable from a corrupt
+    // row (both read as null) so the terminal falls back to the default
+    // for its operation mode instead of enforcing a half-read rule.
+    const supervisionPolicy = parseSupervisionPolicy(
+      paramMap.get(SUPERVISION_POLICY_PARAM_KEY),
+    );
+
     return {
       tenantId: tenant.id,
       businessName: tenant.name,
@@ -220,6 +232,7 @@ export class FiscalConfigVersionService {
       dgiAuthorizationExpiresAt,
       maxDiscountAmount,
       maxDiscountPercent,
+      supervisionPolicy,
     };
   }
 
@@ -362,6 +375,7 @@ export class FiscalConfigVersionService {
         dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
         maxDiscountAmount: payload.maxDiscountAmount,
         maxDiscountPercent: payload.maxDiscountPercent,
+        supervisionPolicy: payload.supervisionPolicy,
         configVersion: version,
         generatedAt: new Date().toISOString(),
       };
@@ -386,6 +400,7 @@ export class FiscalConfigVersionService {
       dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
       maxDiscountAmount: payload.maxDiscountAmount,
       maxDiscountPercent: payload.maxDiscountPercent,
+      supervisionPolicy: payload.supervisionPolicy,
       configVersion: {
         revision: latest.revision,
         fingerprint: latest.fingerprint,

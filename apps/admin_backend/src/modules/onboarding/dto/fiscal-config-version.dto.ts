@@ -3,6 +3,7 @@ import {
   FiscalRegime,
   TenantOperationMode,
 } from './fiscal-setup.dto';
+import type { SupervisionPolicy } from '../../supervision/contracts/supervision-policy.contract';
 
 export interface FiscalConfigVersion {
   revision: number;
@@ -60,6 +61,18 @@ export interface EffectiveFiscalPayload {
    */
   maxDiscountAmount: number | null;
   maxDiscountPercent: number | null;
+  /**
+   * The tenant's SUPERVISION policy: who may authorize a sensitive
+   * operation here, and which flows accept a self-authorization.
+   *
+   * It rides this payload because this snapshot is the ONLY versioned,
+   * fingerprinted, acknowledged channel to the terminal (the S2 rule: no
+   * second sync mechanism) — the same reason the operation mode and the
+   * discount caps ride it. null = the tenant never configured one: the
+   * terminal keeps the default for its operation mode, which never
+   * dead-ends the shift close.
+   */
+  supervisionPolicy: SupervisionPolicy | null;
 }
 
 export interface FiscalConfigSnapshot {
@@ -93,6 +106,8 @@ export interface FiscalConfigSnapshot {
   /** SOHO P3 (D-A): null = no cap configured (optional so existing builders keep compiling). */
   maxDiscountAmount?: number | null;
   maxDiscountPercent?: number | null;
+  /** The tenant's supervision policy (null = never configured). */
+  supervisionPolicy?: SupervisionPolicy | null;
   configVersion: FiscalConfigVersion;
   generatedAt: string;
 }

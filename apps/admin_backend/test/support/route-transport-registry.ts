@@ -526,6 +526,12 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'OnboardingSessionController', transport: 'human' },
   { controller: 'TerminalPrimingController', transport: 'human' },
   { controller: 'FiscalSetupController', transport: 'human' },
+  {
+    controller: 'SupervisionPolicyController',
+    transport: 'human',
+    reason:
+      'the tenant supervision policy is edited by a person in the backoffice; no device transport',
+  },
   // Company identity parity P3/P4: the dashboard logo read/upload is a human
   // surface (OWNER/MANAGER session); it was served but never declared when
   // slice 1 landed, which left the registry red on HEAD.

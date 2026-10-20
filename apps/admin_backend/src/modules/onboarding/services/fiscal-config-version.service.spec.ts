@@ -200,6 +200,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         // P3 slice 1: no brand asset seeded in this mock — the logo
         // REFERENCE rides as null (never the bytes).
         logoSha256: null,
+        // The tenant's supervision policy rides the same fingerprinted
+        // payload: unconfigured reads as null (the terminal keeps the
+        // default for its operation mode).
+        supervisionPolicy: null,
       });
 
       const fingerprint = service.computeCanonicalFingerprint(payload);
@@ -656,6 +660,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         dgiAuthorizationExpiresAt: null,
         maxDiscountAmount: null,
         maxDiscountPercent: null,
+        supervisionPolicy: null,
       };
       const oldFingerprint = service.computeCanonicalFingerprint(oldPayload);
 
