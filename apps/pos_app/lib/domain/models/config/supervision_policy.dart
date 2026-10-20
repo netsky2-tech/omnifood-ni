@@ -50,6 +50,52 @@ class SupervisionPolicy with _$SupervisionPolicy {
   factory SupervisionPolicy.fromJson(Map<String, dynamic> json) =>
       _$SupervisionPolicyFromJson(json);
 
+  /// Strictly parses a policy from an UNTRUSTED source (the cloud payload).
+  ///
+  /// Returns null for anything that is not a complete, well-typed policy:
+  /// absence and corruption must both read as "never configured", so the
+  /// terminal falls back to the default for its operation mode instead of
+  /// enforcing a half-understood rule.
+  static SupervisionPolicy? tryParse(Object? raw) {
+    if (raw is! Map) return null;
+    final map = raw.map((key, value) => MapEntry(key.toString(), value));
+
+    final roles = map['authorizingRoles'];
+    if (roles is! List) return null;
+    final parsedRoles = <String>{};
+    for (final role in roles) {
+      if (role is! String) return null;
+      final normalized = role.trim().toUpperCase();
+      if (normalized.isEmpty) return null;
+      parsedRoles.add(normalized);
+    }
+
+    bool? readFlag(String key) {
+      final value = map[key];
+      if (value is bool) return value;
+      return null;
+    }
+
+    final closeBox = readFlag('selfAuthorizationAllowedCloseBox');
+    final cashDrawer = readFlag('selfAuthorizationAllowedCashDrawer');
+    final manualDiscount = readFlag('selfAuthorizationAllowedManualDiscount');
+    final modifierQuantity = readFlag('supervisorRequiredForModifierQuantity');
+    if (closeBox == null ||
+        cashDrawer == null ||
+        manualDiscount == null ||
+        modifierQuantity == null) {
+      return null;
+    }
+
+    return SupervisionPolicy(
+      authorizingRoles: parsedRoles,
+      selfAuthorizationAllowedCloseBox: closeBox,
+      selfAuthorizationAllowedCashDrawer: cashDrawer,
+      selfAuthorizationAllowedManualDiscount: manualDiscount,
+      supervisorRequiredForModifierQuantity: modifierQuantity,
+    );
+  }
+
   /// The policy a tenant gets when it never configured one.
   ///
   /// The DEFAULT follows the operation mode, because the mode already says
@@ -72,4 +118,15 @@ extension SupervisionPolicyRules on SupervisionPolicy {
   /// Whether [role] is one of the roles that can authorize here.
   bool authorizes(String role) =>
       authorizingRoles.map((r) => r.toUpperCase()).contains(role.toUpperCase());
+
+  /// Whether applying this policy would leave the shift close IMPOSSIBLE.
+  ///
+  /// The shift close (Corte Z) is a fiscal duty: an unclosed shift is a
+  /// worse fiscal problem than a self-authorized one. The backoffice
+  /// refuses to save a policy that breaks it, but the TERMINAL is the last
+  /// line of defense: a till stuck at 6pm is worse than a stale policy, so
+  /// a policy that fails this check is never applied — the terminal keeps
+  /// the default for its operation mode, which never dead-ends the close.
+  bool get keepsShiftCloseCompletable =>
+      authorizingRoles.isNotEmpty || selfAuthorizationAllowedCloseBox;
 }

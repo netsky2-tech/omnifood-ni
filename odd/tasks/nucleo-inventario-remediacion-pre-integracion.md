@@ -573,6 +573,23 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
     5. La evidencia queda en la cadena de auditoría forense: `SELF_AUTHORIZED_CLOSE_SESSION | PIN | <usuario> | {"action":"close_box","self_authorized":true,"policy":"SELF_ALLOWED"}` — **quién firmó, con qué credencial, y que no hubo supervisor**.
   - **Lo que falta para cerrar el pedido del owner del todo**: el editor de la política **en el backoffice** (hoy la política vive en la configuración local del terminal, con su defecto derivado del **modo de operación**; el backoffice todavía no la edita). Y el resto de la Unidad 3: que la verdad del efecto de inventario viaje a la nube (la línea con `APPLIED`/`PENDING` y el motivo) para que un extra vendido sin efecto quede reconciliable, no sólo visible en el mostrador.
 
+- **L64** 2026-10-20 — **LA POLÍTICA DE SUPERVISIÓN YA LA EDITA EL BACKOFFICE, Y LA TERMINAL LA OBEDECE.**
+  - **El hueco que quedaba abierto**: la política existía (L62) pero vivía en la configuración local de la terminal, con su defecto derivado del modo de operación. El backoffice no podía tocarla: "configurable" era una promesa, no una realidad.
+  - **El modelo, en dos preguntas** (esto es lo que faltaba, y no era un formulario):
+    - **Capacidad**: ¿puede esta persona *operar* esto? → el rol y los permisos.
+    - **Autorización**: ¿hace falta la *firma de otro* para esta operación? → **la política del tenant**.
+    - Atar las dos al `OWNER||MANAGER` producía el callejón sin salida por los dos lados: se le exigía supervisor y luego ni siquiera se le dejaba cerrar su turno.
+  - **El canal: el MISMO snapshot de configuración, no un segundo mecanismo.** La regla de la casa («el snapshot es el ÚNICO canal de entrega») manda: la política viaja en el snapshot versionado y con acuse (revisión + fingerprint), junto al modo de operación y los topes de descuento. Guardarla SIEMPRE bumpea la revisión → las terminales la reciben.
+  - **El invariante, en tres capas** (cada una por una razón distinta):
+    1. **El backoffice lo explica ANTES de guardar**: si la combinación dejara el corte de caja imposible, lo dice en palabras y no deja guardar.
+    2. **El servidor lo rechaza**: una política guardada a mano tampoco se cuela.
+    3. **La terminal NO la aplica (fallo seguro)**: un mostrador atascado a las 6pm es peor que una política vieja; la terminal conserva el valor por defecto de su modo.
+  - **Sólo el cierre de turno es una obligación** (fiscal). El descuento, la gaveta y la cantidad de un extra pueden rechazarse legítimamente (el cliente paga el precio completo): avisan, pero no bloquean.
+  - **El backoffice habla como las personas**: «Quién puede autorizar» (Dueño/Gerente/Cajero/Mesero), «Cerrar el turno (Corte Z)», y el valor por defecto **se nombra** (con su modo) en vez de esconderse tras un centinela. La entrega se dice honrada: «las terminales la aplican en su próxima sincronización».
+  - **Sin permiso (`supervision:configure`) no hay pestaña, no hay tarjeta y no hay consulta** — ni marcador de «sin permiso».
+  - **Un límite honesto**: la política trabaja con **roles**, no con permisos por persona, porque la terminal recibe el rol de cada cual por el sync de entrada pero **no** sus permisos. Llevar los permisos al terminal es un change propio.
+  - Change de SDD: `openspec/changes/supervision-policy-tenant-owned/` (propuesta, contrato, diseño, tareas). Unidades: `ace7e0d1` (nube) · `4f5821a0` (backoffice) · esta (terminal).
+
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)
 
 La matriz de L47 medía el comportamiento **pre-R28** (los extras NO consumían inventario). Con R28 los extras **sí** mueven stock, así que la matriz vigente separa explícitamente lo que **no cambia** (la estructura de la venta, las secuencias, la factura) de lo que **cambia** (el consumo del extra). Medir la nueva conducta contra el contrato viejo sería un falso negativo.

@@ -5,6 +5,7 @@ import '../database/app_database.dart';
 import '../models/fiscal_config_local_entity.dart';
 import '../models/local_config_entity.dart';
 import '../models/sales/tax_config_entity.dart';
+import '../../domain/models/config/supervision_policy.dart';
 
 enum FiscalInboxStatus {
   applied,
@@ -73,7 +74,7 @@ class FiscalProjectionKeys {
   ///
   /// Increment this version whenever a mandatory local projection is added,
   /// removed, or changes semantics so existing installations are repaired.
-  static const int currentVersion = 1;
+  static const int currentVersion = 2;
   static const String fiscalProjectionVersion = 'fiscal_projection_version';
   static const String businessName = 'business_name';
   static const String tenantName = 'tenant_name';
@@ -149,6 +150,19 @@ class FiscalProjectionKeys {
   /// corrupt value normalizes to "no cap" (delete), never stored.
   static const String maxDiscountAmount = 'max_discount_amount';
   static const String maxDiscountPercent = 'max_discount_percent';
+
+  /// The tenant's SUPERVISION policy, projected from the fiscal snapshot
+  /// (the same key the tenant config service reads: `supervision_policy`).
+  ///
+  /// FULL snapshot semantics, like the discount caps: the cloud is the
+  /// master. A policy in the snapshot SETS the local key; a snapshot
+  /// without one CLEARS it, so the terminal falls back to the default for
+  /// its operation mode — the default never dead-ends the shift close.
+  ///
+  /// The projection is NOT a marker-managed mirror: no terminal screen
+  /// writes this key (the policy is the office's decision), so a clearing
+  /// revision can safely remove it.
+  static const String supervisionPolicy = 'supervision_policy';
 
   /// Comma-joined local key names the cloud currently asserts for the
   /// business profile (deterministic order, no spaces, matched by token).
@@ -846,6 +860,40 @@ class FiscalInboxHandler {
         assertedBusinessProfileKeys.add(key);
       }
     });
+
+    // The tenant's SUPERVISION policy: who may authorize a sensitive
+    // operation here, and which flows accept a self-authorization (the
+    // owner's decision, 2026-10-20 — in a food park there is often no
+    // manager on the floor, and a rule that demands one does not create a
+    // control, it creates a dead end).
+    //
+    // FULL snapshot semantics: a policy SETS the key; a snapshot without
+    // one CLEARS it (the terminal then applies the default for its
+    // operation mode, which never dead-ends the shift close).
+    //
+    // FAIL-SAFE: a policy that would make the shift close impossible is
+    // NOT applied. The backoffice refuses to save one, but the terminal is
+    // the last line of defense: a till stuck at 6pm is worse than a stale
+    // policy, so the safe default wins.
+    final parsedSupervisionPolicy = SupervisionPolicy.tryParse(
+      rawEnvelope['supervisionPolicy'],
+    );
+    if (parsedSupervisionPolicy != null &&
+        parsedSupervisionPolicy.keepsShiftCloseCompletable) {
+      projections.add(LocalConfigEntity(
+        key: FiscalProjectionKeys.supervisionPolicy,
+        value: jsonEncode(parsedSupervisionPolicy.toJson()),
+        description: 'Projected supervision policy from fiscal snapshot',
+      ));
+    } else {
+      if (parsedSupervisionPolicy != null) {
+        developer.log(
+          '[FISCAL_PROJECTION] supervision_policy_refused=true reason=close_box_not_completable',
+          name: 'FiscalInboxHandler',
+        );
+      }
+      keysToDelete.add(FiscalProjectionKeys.supervisionPolicy);
+    }
 
     if (assertedBusinessProfileKeys.isEmpty) {
       // R-3: no field asserted -> remove any stale marker so absence looks

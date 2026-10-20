@@ -9,6 +9,16 @@ import 'package:pos_app/data/daos/fiscal_config_local_dao.dart';
 import 'package:pos_app/data/services/fiscal_inbox_handler.dart';
 import 'package:pos_app/domain/services/config/tenant_config_service.dart';
 
+/// A policy as the cloud serves it: the same field names the terminal
+/// stores locally.
+const Map<String, dynamic> _supervisionPolicyFixture = {
+  'authorizingRoles': ['MANAGER', 'OWNER'],
+  'selfAuthorizationAllowedCloseBox': true,
+  'selfAuthorizationAllowedCashDrawer': true,
+  'selfAuthorizationAllowedManualDiscount': true,
+  'supervisorRequiredForModifierQuantity': false,
+};
+
 void main() {
   late AppDatabase database;
   late FiscalInboxHandler handler;
@@ -790,7 +800,7 @@ void main() {
         expect(tokens, containsAll(['operation_mode', 'checkout_fx_mode']));
       });
 
-      test('guard rails: projection version stays 1 and isProjectionComplete ignores managed keys', () async {
+      test('guard rails: projection version stays 2 and isProjectionComplete ignores managed keys', () async {
         final envelope = bpEnvelope(
           operationMode: 'FOODPARK_QSR',
           checkoutFxMode: 'BCN_OFFICIAL',
@@ -799,10 +809,10 @@ void main() {
         final outcome = await handler.handleFiscalEnvelope(envelope);
         expect(outcome.status, FiscalInboxStatus.applied);
 
-        expect(FiscalProjectionKeys.currentVersion, 1);
+        expect(FiscalProjectionKeys.currentVersion, 2);
         final versionMarker = await database.localConfigDao
             .getConfigByKey(FiscalProjectionKeys.fiscalProjectionVersion);
-        expect(versionMarker?.value, '1');
+        expect(versionMarker?.value, '2');
 
         // Conditional fields are NOT completeness obligations: a terminal with
         // cloud-managed modes and an otherwise complete projection is complete.
@@ -966,7 +976,7 @@ void main() {
       expect(tn?.value, q80BusinessName);
 
       final pv = await database.localConfigDao.getConfigByKey('fiscal_projection_version');
-      expect(pv?.value, '1');
+      expect(pv?.value, '2');
 
       final taxes = await database.taxConfigDao.getActiveTaxConfigs();
       expect(taxes, isNotEmpty);
@@ -1136,9 +1146,9 @@ void main() {
 
       final versionMarker =
           await database.localConfigDao.getConfigByKey('fiscal_projection_version');
-      expect(versionMarker?.value, '1');
+      expect(versionMarker?.value, '2');
 
-      // Simulate accidental deletion of a required key (business_name) while version marker remains current '1'
+      // Simulate accidental deletion of a required key (business_name) while the version marker stays current
       await database.localConfigDao.deleteConfig('business_name');
       expect(await database.localConfigDao.getConfigByKey('business_name'), isNull);
 
@@ -1461,7 +1471,7 @@ void main() {
 
       final completionMarker =
           await database.localConfigDao.getConfigByKey('fiscal_projection_version');
-      expect(completionMarker?.value, '1');
+      expect(completionMarker?.value, '2');
 
       // Second replay is idempotentNoOp
       final secondReplay = await handler.handleFiscalEnvelope(envelope);
@@ -1575,7 +1585,7 @@ void main() {
       expect(markerRev1?.value, '1');
       final markerVer1 =
           await database.localConfigDao.getConfigByKey('fiscal_projection_version');
-      expect(markerVer1?.value, '1');
+      expect(markerVer1?.value, '2');
 
       // 2. Apply Rev 2 (N+1)
       final rev2Envelope = {
@@ -1620,7 +1630,7 @@ void main() {
       expect(markerFp2?.value, '2222222222222222222222222222222222222222222222222222222222222222');
       final markerVer2 =
           await database.localConfigDao.getConfigByKey('fiscal_projection_version');
-      expect(markerVer2?.value, '1');
+      expect(markerVer2?.value, '2');
 
       final taxes2 = await database.taxConfigDao.getActiveTaxConfigs();
       expect(taxes2.first.rate, 0.15);
@@ -2186,6 +2196,104 @@ void main() {
         // Nothing was stored: the envelope never passed validation.
         expect(await database.localConfigDao.getConfigByKey('max_discount_amount'), isNull);
         expect(await database.localConfigDao.getConfigByKey('max_discount_percent'), isNull);
+      });
+
+      group('The tenant SUPERVISION policy is projected from the snapshot', () {
+        Map<String, dynamic> policyEnvelope({
+          Object? policy = _supervisionPolicyFixture,
+          Map<String, dynamic>? configVersion,
+        }) {
+          final envelope = <String, dynamic>{...sampleEnvelope};
+          if (configVersion != null) {
+            envelope['configVersion'] = configVersion;
+          }
+          if (policy != null) {
+            envelope['supervisionPolicy'] = policy;
+          } else {
+            envelope.remove('supervisionPolicy');
+          }
+          return envelope;
+        }
+
+        test('a policy in the snapshot SETS the local key the tenant config service reads', () async {
+          final outcome = await handler.handleFiscalEnvelope(policyEnvelope());
+          expect(outcome.status, FiscalInboxStatus.applied);
+
+          final stored = await database.localConfigDao
+              .getConfigByKey(FiscalProjectionKeys.supervisionPolicy);
+          expect(stored, isNotNull);
+
+          final decoded = jsonDecode(stored!.value) as Map<String, dynamic>;
+          expect(decoded['authorizingRoles'], containsAll(['OWNER', 'MANAGER']));
+          expect(decoded['selfAuthorizationAllowedCloseBox'], isTrue);
+          expect(decoded['selfAuthorizationAllowedCashDrawer'], isTrue);
+          expect(decoded['selfAuthorizationAllowedManualDiscount'], isTrue);
+          expect(decoded['supervisorRequiredForModifierQuantity'], isFalse);
+        });
+
+        test('a snapshot WITHOUT a policy CLEARS the key: the terminal falls back to the mode default', () async {
+          await handler.handleFiscalEnvelope(policyEnvelope());
+          expect(
+            await database.localConfigDao
+                .getConfigByKey(FiscalProjectionKeys.supervisionPolicy),
+            isNotNull,
+          );
+
+          // A later revision without the policy retracts it: the office
+          // went back to "no opinion".
+          final cleared = await handler.handleFiscalEnvelope(
+            policyEnvelope(
+              policy: null,
+              configVersion: {
+                'revision': 2,
+                'fingerprint':
+                    'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+              },
+            ),
+          );
+          expect(cleared.status, FiscalInboxStatus.applied);
+
+          expect(
+            await database.localConfigDao
+                .getConfigByKey(FiscalProjectionKeys.supervisionPolicy),
+            isNull,
+          );
+        });
+
+        test('FAIL-SAFE: a policy that would make the shift close impossible is NOT applied', () async {
+          final outcome = await handler.handleFiscalEnvelope(
+            policyEnvelope(
+              policy: {
+                'authorizingRoles': <String>[],
+                'selfAuthorizationAllowedCloseBox': false,
+                'selfAuthorizationAllowedCashDrawer': false,
+                'selfAuthorizationAllowedManualDiscount': false,
+                'supervisorRequiredForModifierQuantity': false,
+              },
+            ),
+          );
+          expect(outcome.status, FiscalInboxStatus.applied);
+
+          // The terminal keeps the default for its operation mode: a till
+          // stuck at 6pm is worse than a stale policy.
+          expect(
+            await database.localConfigDao
+                .getConfigByKey(FiscalProjectionKeys.supervisionPolicy),
+            isNull,
+          );
+        });
+
+        test('a corrupt policy is never stored (absence and corruption read the same)', () async {
+          await handler.handleFiscalEnvelope(
+            policyEnvelope(policy: {'authorizingRoles': 'OWNER'}),
+          );
+
+          expect(
+            await database.localConfigDao
+                .getConfigByKey(FiscalProjectionKeys.supervisionPolicy),
+            isNull,
+          );
+        });
       });
 
       test('repair: corrupt cap value in a stored snapshot CLEARS the key instead of storing garbage', () async {
