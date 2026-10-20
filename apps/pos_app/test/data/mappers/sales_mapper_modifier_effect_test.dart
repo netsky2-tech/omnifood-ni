@@ -17,7 +17,7 @@ import 'package:pos_app/domain/models/sales/invoice.dart';
 /// local modifiers) must produce the same bytes it produced before, because
 /// the backend's payload hash is what makes a replayed receipt idempotent.
 void main() {
-  final _invoice = Invoice(
+  final invoice = Invoice(
     id: 'inv-1',
     number: 'F-1',
     createdAt: DateTime.parse('2026-07-13T10:00:00Z'),
@@ -57,7 +57,7 @@ void main() {
   group('el cable de la venta (R28)', () {
     test('lleva la identidad de la opción y su efecto', () {
       final payload = SalesMapper.toSyncJson(
-        _invoice,
+        invoice,
         [invoiceItem],
         const [],
       );
@@ -97,7 +97,7 @@ void main() {
       );
 
       final payload = SalesMapper.toSyncJson(
-        _invoice,
+        invoice,
         [priceOnly],
         const [],
       );
@@ -121,7 +121,7 @@ void main() {
       final rows = SalesMapper.toItemModifierEntities(invoiceItem);
 
       expect(rows, hasLength(1));
-      final row = rows.first as InvoiceItemModifierEntity;
+      final row = rows.first;
       // The row's own key is still a local UUID, but the CATALOGUE option
       // id travels in its own column.
       expect(row.id, isNot('opt-almendras'));
@@ -149,8 +149,7 @@ void main() {
         ],
       );
 
-      final row = SalesMapper.toItemModifierEntities(priceOnly).first
-          as InvoiceItemModifierEntity;
+      final row = SalesMapper.toItemModifierEntities(priceOnly).first;
       // The legacy local modifiers have no catalogue identity and no
       // effect: that is recorded as ABSENT, never invented.
       expect(row.optionId, isNull);
@@ -159,8 +158,7 @@ void main() {
     });
 
     test('la fila se relee con la identidad y el efecto', () {
-      final row = SalesMapper.toItemModifierEntities(invoiceItem).first
-          as InvoiceItemModifierEntity;
+      final row = SalesMapper.toItemModifierEntities(invoiceItem).first;
       final domain = SalesMapper.toModifierDomain(row);
 
       expect(domain.optionId, 'opt-almendras');
