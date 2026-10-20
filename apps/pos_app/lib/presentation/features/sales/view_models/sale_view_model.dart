@@ -1153,9 +1153,28 @@ class SaleViewModel extends ChangeNotifier {
 
   UserRole? _currentUserRole;
   UserRole? get currentUserRole => _currentUserRole;
+  String? _currentUserId;
+  String? get currentUserId => _currentUserId;
   bool get canManageCashDrawer =>
       _currentUserRole == UserRole.owner ||
       _currentUserRole == UserRole.manager;
+
+  /// Whether this operator may close THEIR OWN cash shift.
+  ///
+  /// The CAPABILITY is not the AUTHORIZATION. Whoever opened the shift may
+  /// close it: a food park has one person selling and preparing, and there
+  /// is no manager on the floor to come and sign. Whether that closure needs
+  /// somebody else's sign-off is the TENANT's policy (the supervision
+  /// policy), not a role check baked into the code.
+  ///
+  /// Closing somebody ELSE's shift is a different matter: that stays with
+  /// the owner and the manager ([canManageCashDrawer]).
+  bool get canCloseOwnShift {
+    final session = _activeSession;
+    final userId = _currentUserId;
+    if (session == null || userId == null) return false;
+    return session.userId == userId;
+  }
 
   /// D-15: the void gate is permission-based (SalesPermission resolver),
   /// never a role-label check. Owner/manager hold sales.void.any, cashier
@@ -1315,6 +1334,7 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> _loadCurrentUserRole() async {
     final user = await _authRepository.getCurrentUser();
     _currentUserRole = user?.role;
+    _currentUserId = user?.id;
     notifyListeners();
   }
 

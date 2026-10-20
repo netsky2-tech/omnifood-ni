@@ -507,7 +507,9 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                         dense: true,
                       ),
                     ),
-                    if (hasActiveSession && viewModel.canManageCashDrawer)
+                    if (hasActiveSession &&
+                        (viewModel.canManageCashDrawer ||
+                            viewModel.canCloseOwnShift))
                       const PopupMenuItem(
                         value: 'manual_drawer',
                         child: ListTile(
@@ -517,7 +519,9 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                           dense: true,
                         ),
                       ),
-                    if (hasActiveSession && viewModel.canManageCashDrawer)
+                    if (hasActiveSession &&
+                        (viewModel.canManageCashDrawer ||
+                            viewModel.canCloseOwnShift))
                       const PopupMenuItem(
                         value: 'close_box',
                         child: ListTile(
@@ -564,13 +568,15 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                   tooltip: 'Poner en Espera',
                 ),
                 const CloudSyncStatusBadge(),
-                if (hasActiveSession && viewModel.canManageCashDrawer)
+                if (hasActiveSession &&
+                    (viewModel.canManageCashDrawer || viewModel.canCloseOwnShift))
                   IconButton(
                     icon: const Icon(Icons.point_of_sale),
                     onPressed: () => _requestSupervisorOverrideForManualDrawer(),
                     tooltip: 'Abrir Gaveta Manual',
                   ),
-                if (hasActiveSession && viewModel.canManageCashDrawer)
+                if (hasActiveSession &&
+                    (viewModel.canManageCashDrawer || viewModel.canCloseOwnShift))
                   IconButton(
                     icon: const Icon(Icons.lock_open),
                     onPressed: () => _requestSupervisorOverrideForCloseBox(),

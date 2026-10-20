@@ -368,6 +368,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as bool);
 
   @override
+  bool get canCloseOwnShift => (super.noSuchMethod(
+        Invocation.getter(#canCloseOwnShift),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   bool get canVoidInvoice => (super.noSuchMethod(
         Invocation.getter(#canVoidInvoice),
         returnValue: false,
