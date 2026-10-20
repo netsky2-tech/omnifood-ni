@@ -560,6 +560,19 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
   - **Defecto de herramientas encontrado de paso**: `flutter pub run build_runner build` (el comando de codegen del proyecto) **fallaba** por un `?isActive` (elemento null-aware en un literal de mapa) en un test: el parser del builder no lo acepta. Corregido; la codegen del proyecto vuelve a pasar.
   - **Verificado**: 26 pruebas de los flujos de seguridad (la credencial identifica a la persona; el food park cierra su turno sin manager y la traza lo dice; el tenant que no lo admite lo rechaza) y 16 del diálogo de modificadores. Suite completa: 3782+ verdes, los 2 fallos son los preexistentes y los fallos de carga intermitentes son el ruido de herramienta documentado.
 
+- **L63** 2026-10-20 — **EL CAJERO YA PUEDE CERRAR SU TURNO SIN QUE HAYA UN MANAGER EN EL PISO.** (Verificado en el S23 con un cajero, sin owner ni manager presentes.)
+  - **El botón ni siquiera existía.** La capacidad estaba atada al rol en el código (`canManageCashDrawer` = `OWNER` || `MANAGER`): un cajero **no veía** «Cerrar Caja» ni «Abrir Gaveta Manual». Con la nueva decisión de la política (L62) eso era el mismo callejón sin salida por el otro lado: primero le exigías un supervisor, y después ni siquiera le dejabas operar.
+  - **La separación que lo resuelve**: **la capacidad NO es la autorización**.
+    - **Capacidad**: quien **abrió** el turno puede **cerrarlo** (`canCloseOwnShift`): el cierre del turno de OTRO sigue siendo del owner y el manager.
+    - **Autorización**: la **política del tenant** — si ese cierre necesita la firma de un supervisor o si basta la del propio operador, con la traza de que no hubo supervisor.
+  - **Verificado en el aparato, de punta a punta, con un CAJERO** (usuario `Cajero Temporal`, sin owner ni manager en el turno):
+    1. El «Cerrar Caja» **aparece** en el menú de la caja (antes, para un cajero, no existía).
+    2. El diálogo pide **«Su PIN»**: **ningún identificador en pantalla**.
+    3. Como en el rig el PIN está compartido por tres personas, el diálogo pregunta **cuál, POR NOMBRE** («Mateo / cashier», «Cajero Temporal / cashier») — nunca un uuid.
+    4. Autorizado, el cierre **procede**: aparece el «Arqueo Ciego y Cierre de Turno». Un cajero puede cerrar su turno.
+    5. La evidencia queda en la cadena de auditoría forense: `SELF_AUTHORIZED_CLOSE_SESSION | PIN | <usuario> | {"action":"close_box","self_authorized":true,"policy":"SELF_ALLOWED"}` — **quién firmó, con qué credencial, y que no hubo supervisor**.
+  - **Lo que falta para cerrar el pedido del owner del todo**: el editor de la política **en el backoffice** (hoy la política vive en la configuración local del terminal, con su defecto derivado del **modo de operación**; el backoffice todavía no la edita). Y el resto de la Unidad 3: que la verdad del efecto de inventario viaje a la nube (la línea con `APPLIED`/`PENDING` y el motivo) para que un extra vendido sin efecto quede reconciliable, no sólo visible en el mostrador.
+
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)
 
 La matriz de L47 medía el comportamiento **pre-R28** (los extras NO consumían inventario). Con R28 los extras **sí** mueven stock, así que la matriz vigente separa explícitamente lo que **no cambia** (la estructura de la venta, las secuencias, la factura) de lo que **cambia** (el consumo del extra). Medir la nueva conducta contra el contrato viejo sería un falso negativo.
