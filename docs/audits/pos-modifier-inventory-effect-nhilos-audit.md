@@ -4,7 +4,7 @@
 **Fecha:** 2026-10-19
 **Auditor:** agente (campaña R28 en el rig del S23)
 **Módulo:** Catálogo-Venta (diálogo de modificadores de producto)
-**Hardware target:** MIRAY Q80 / iPOS (Android 12) — **la evidencia se levantó en el S23 del rig** (Android 16, 1080x2316), que es el terminal disponible; el Q80 queda como verificación pendiente de hardware.
+**Hardware target:** MIRAY Q80 / iPOS (Android 12) — **la evidencia se levantó en el S23 del rig** (Android 16, 1080x2316) y, desde el 2026-10-20, **la certificación es independiente del hardware** (pruebas de widget a 360×640, 800×1280 y 1280×800). El Q80 real se entregó a SOHO y ya no se necesita para cerrar este módulo.
 **Autoridad del módulo:** `docs/Product_Requirement_Document.md` · `docs/nhilos/nhilos_pos_experience_standard_v1.0.md` · decisiones D1–D6 de L49 en `odd/tasks/nucleo-inventario-remediacion-pre-integracion.md` · `docs/inventario_marco_normativo.md` (R-01, R-06)
 **Widgets / views revisadas:** `ProductOptionsDialog` (`apps/pos_app/lib/ui/features/sales/sale_view.dart`), la fila de opción con efecto (`_effectSubtitle`), el campo de cantidad marcada, el badge de nube del encabezado de venta.
 **Evidencia revisada:** capturas ADB directas del S23 (`/tmp/opencode/s25d.png`, `s32.png`, `s51.png`), base SQLite local del terminal leída con `run-as` (`authority_insumos`, `authority_recipe_versions`, `modifier_options`), logcat del dispositivo (`E/SQLiteLog`), código y tests de la rama `feat/modifier-inventory-effect`.
@@ -13,9 +13,9 @@
 
 ## 1. Autoridad y conflictos (§0)
 
-- **Autoridad de producto identificada:** D2 del owner (L49) — *"Hereda y en el modal de modificadores … se marca la cantidad a aplicar"*. El efecto es **opt-in por opción** y **jamás bloquea la venta** (D6, garantía de SOHO).
+- **Autoridad de producto identificada:** D2 del owner (L49) — *"Hereda y en el modal de modificadores … se marca la cantidad a aplicar"* — **SUSTITUIDA el 2026-10-20 por la decisión del owner** tras la investigación de mercado (Square, Toast, Lightspeed, Aloha: *el servidor marca, el backoffice configura*): **la cantidad del extra la configura el backoffice** (`effect_quantity`) y, si no la hay, la hereda de la receta; el cajero **no escribe cantidades**. El único número en juego es un **override de supervisor** (cantidad + motivo + autorización, con traza forense). El efecto sigue siendo **opt-in por opción** y **jamás bloquea la venta** (D6, garantía de SOHO). Decisión y diseño: `openspec/changes/modifier-effect-amount-backoffice-owned/`.
 - **Autoridades de experiencia aplicadas:** Brand Part B + POS Standard §0–§62.
-- **Conflictos autoridad-producto vs. autoridad-experiencia detectados:** ninguno. La decisión D2 (el modal dice qué sale y qué entra, y el operador marca la cantidad) **coincide** con el estándar: es §7.3 (*¿qué estoy viendo?*), §41 (divulgación progresiva) y §49 +1.6 (*explicar impacto*).
+- **Conflictos autoridad-producto vs. autoridad-experiencia detectados:** ninguno. La decisión vigente (el modal dice qué sale y qué entra, con la cantidad **que se va a aplicar**, y el cajero no escribe cantidades) **coincide** con el estándar: es §7.3 (*¿qué estoy viendo?*), §39.4 (sin vocabulario de implementación), §40 (defaults humanos), §41 (divulgación progresiva) y §49 +1.6 (*explicar impacto*).
 
 ---
 
@@ -24,7 +24,7 @@
 **Usuario primario:** Cajero (SOHO, barra de food park, hora pico).
 **Trabajo primario (Core Promise):** cobrar rápido **sin que el cajero tenga que saber de inventario**: el modificador se cobra, la verdad fiscal es exacta y el stock baja solo.
 **Usuarios/trabajos secundarios:** Encargado de turno (audita el consumo), Propietario (ve el costo y la desviación en el dashboard).
-**Requisito de velocidad en hora pico:** el diálogo de modificadores no puede añadir toques ni leitura: el efecto **se继承** y sólo se marca si hace falta.
+**Requisito de velocidad en hora pico:** el diálogo de modificadores no puede añadir toques ni lectura: el efecto **se aplica solo** (la cantidad la puso el backoffice) y sólo se toca un supervisor cuando el efecto no tiene cantidad.
 **Riesgo si falla:** cobro correcto con stock incorrecto (descuenta insumo que no debe, o no descuenta el que sí) → descuadre de inventario y costo de plato irreal.
 **Blockers de Core Promise revisados (§4.1):** verdad financiera (el extra cambia el total y el IVA: la factura lo cubre), permisos (n/a en este diálogo), efectos colaterales (el efecto toca stock: **es el corazón de R28**), pérdida de trabajo (n/a), ambigüedad destructiva (n/a), contexto reconstruido a mano (el diálogo **lee** la autoridad proyectada, no la reconstruye), desconocido como válido (un insumo desconocido ⇒ `NO_IMPACT`, nunca un cobro dudoso), contradicción PRD (ninguna), flujo crítico inaccesible (el cajero con lector de pantalla debe poder cobrar: ver PX-002).
 
@@ -35,8 +35,8 @@
 | Superficie / Pantalla | Flutter View / Widget | Trabajo | Lectura / Escritura | Densidad táctil | Variantes de permiso | Estados offline | Evidencia |
 |---|---|---|---|---|---|---|---|
 | Diálogo de modificadores | `ProductOptionsDialog` | Elegir opción y cobrar | Lectura del catálogo local + de la autoridad proyectada | Un toque por opción; el campo de cantidad es opcional | Igual para cajero y propietario | **Offline**: los hechos vienen de la autoridad local; sin autoridad el diálogo **no muestra** el efecto y la venta sigue igual | `s51.png` (con hechos), `s32.png` (sin autoridad) |
-| Fila de opción con efecto | `_effectSubtitle` | Saber qué sale/entra del stock | Lectura | 1 toque (radio/check) | — | Igual | `s51.png` |
-| Campo «Cantidad a aplicar» | `TextField` denso, 86 dp | **Marcar** una cantidad (D2) | Escritura (sólo si el operador marca) | Objetivo **< 48 dp** (ver PX-003) | — | Igual | `s51.png` |
+| Fila de opción con efecto | `_effectSubtitle` | Saber qué sale/entra del stock | Lectura | 1 toque (radio/check), fila de **≥48 dp** | — | Igual | `s51.png` |
+| Cantidad del efecto | **No hay campo en el flujo normal**: la cantidad la configura el backoffice (`effect_quantity`) y, si no la hay, la hereda de la receta | Sólo lectura | El único campo numérico vive en el **override de supervisor** (`ModifierQuantityOverrideContent`), con altura estándar | El override exige supervisor + motivo | Igual | `s51.png` |
 | Encabezado de venta | badge de nube | Estado de sincronización | Lectura | — | — | Sí | `s49.png` |
 
 ---
@@ -45,15 +45,15 @@
 
 | ID | Dimensión | Pregunta central | Estado | Evidencia | Hallazgos |
 |---|---|---|---|---|---|
-| EX-01 | Propósito y alcance | ¿El diálogo dice qué hace la opción? | **PASS** | `s51.png`: *«No se consume R23 Leche entera; entran 150 ml de Leche de Almondras en su lugar.»* | — |
+| EX-01 | Propósito y alcance | ¿El diálogo dice qué hace la opción? | **PASS** | *«No sale R23 Leche entera; entran 150 ml de Leche de Almondras en su lugar.»* (la cantidad **configurada** en el backoffice manda sobre la de la receta) | — |
 | EX-02 | Anatomía de pantalla | ¿El cajero sabe dónde está y qué sigue? | **PASS** | Título del producto, grupos con su regla (`Elige una opción`, `Elige hasta 3 · puedes repetir`), `AGREGAR`/`CANCELAR` | — |
-| EX-03 | Jerarquía | ¿Lo importante manda? | **PASS** | Precio del extra, luego el efecto, luego la cantidad heredada | — |
+| EX-03 | Jerarquía | ¿Lo importante manda? | **PASS** | Precio del extra, luego el efecto (con la cantidad que se va a aplicar) | — |
 | EX-04 | Microcopy | ¿El copy está en el idioma del operador? | **PASS** | Español, sin vocabulario de backend; la unidad es la del insumo (`ml`) | — |
-| EX-05 | Teclados y montos | ¿El campo numérico es cómodo? | **PARTIAL** | Teclado numérico con decimales; **el campo es de 86 dp de ancho y ~30 dp de alto** | PX-003 |
+| EX-05 | Teclados y montos | ¿El campo numérico es cómodo? | **PASS** | **No hay campo numérico en el flujo normal**: el cajero marca la opción. El único número en juego (override de supervisor) usa el campo estándar del tema, con teclado de decimales y objetivo táctil ≥48 dp | PX-003 (cerrado) |
 | EX-06 | Guardas y doble envío | ¿Se puede cobrar dos veces? | **PARTIAL** | `AGREGAR` es único; la confirmación de cobro vive fuera de este diálogo (no auditado aquí) | — |
 | EX-07 | Estados vacíos | ¿Qué pasa sin autoridad? | **PASS** | Sin hechos, el diálogo **no muestra** el subtítulo: el cajero cobra igual (§7.3 honesto) | — |
 | EX-08 | Errores y recuperación | ¿Un fallo de la feature bloquea la venta? | **PASS** | D6: el efecto degrada el inventario, nunca la venta (`NO_IMPACT`) | — |
-| EX-09 | Accesibilidad | ¿Todo control crítico tiene nombre accesible? | **FAIL → corregido** | El campo de cantidad no tenía etiqueta programática | PX-002 (corregido) |
+| EX-09 | Accesibilidad | ¿Todo control crítico tiene nombre accesible? | **FAIL → corregido** | El campo de cantidad no tenía etiqueta programática; **hoy el campo ya no existe en el flujo normal** y el del override usa `labelText` del tema | PX-002 (corregido) |
 | EX-10 | Integridad visual | ¿La pantalla se dibuja limpia? | **FAIL → corregido** | *«RIGHT OVERFLOWED BY 21 PIXELS»* sobre la opción con cantidad heredada | PX-001 (corregido) |
 | EX-11 | Performance | ¿Responde al toque? | **PASS** | Hechos leídos de SQLite local en `initState`; sin espera | — |
 | EX-12 | Consistencia | ¿Usa el vocabulario de componentes del POS? | **PASS** | Radio/check, `InputDecoration` densa, tipografía del tema | — |
@@ -71,7 +71,7 @@
 
 - **§7.3 ¿Qué estoy viendo?** — el efecto se anuncia en la fila de la opción, no en un toast ni en un modal aparte ✓.
 - **§8 Jerarquía** — P0: el precio y el nombre de la opción; P1: el efecto (una línea, la que el cajero necesita para no surprises); P2: la cantidad heredada y el campo para marcarla ✓.
-- **§18.3 Targets táctiles** — el radio/check de la opción cumple; **el campo de cantidad no** (PX-003).
+- **§18.3 Targets táctiles** — el radio/check de la opción cumple y **la fila mide ≥48 dp**; el campo de cantidad ya no está en el flujo normal (PX-003 cerrado).
 - **§46 Accesibilidad** — el campo de cantidad ya tiene nombre accesible (PX-002 corregido); el radio/check announce su estado ✓.
 
 ---
@@ -79,7 +79,7 @@
 ## 6. Marca, sobriedad e identidad (§3, §12.6, §42)
 
 - §42.1 Paleta: sólo navy/esmeralda/slate; el efecto **no** introduce color nuevo (es texto) ✓ — decisión deliberada: el efecto no es una alerta, es información.
-- §42.7 Tipografía: el subtítulo del efecto va en 11 px y la cantidad heredada en 10 px — **por debajo del cuerpo legible**; hoy el tamaño va atado al espacio disponible, no a una escala (§42.7 pide jerarquía legible). Registrado como PX-005 (REFINEMENT).
+- §42.7 Tipografía: **corregido** — el subtítulo del efecto usa la escala del tema (`bodySmall`, 12 dp) y la cantidad heredada dejó de ser una línea aparte; la jerarquía la da el tema, no un tamaño suelto (PX-005 cerrado).
 - §39 Microcopy: sin vocabulario de backend (`NO_IMPACT`, `insumo_id`, `recipeComponentId` no aparecen en pantalla) ✓.
 
 ---
@@ -114,7 +114,7 @@
 ## 10. Hardware y periféricos (§45)
 
 - No aplica al diálogo (sin impresión ni gaveta). El ticket térmico de la venta con el extra (precio + IVA) se audita en el módulo de cobro.
-- **Pendiente de hardware**: la ergonomía del campo de cantidad (PX-003) debe medirse en el Q80 real (800x1280 vertical, 72 dp de tecla) — el S23 del rig es de 1080x2316 y mucho más ancho, así que **el desbordamiento del campo se midió en un terminal más ancho que el de destino**: en el Q80 el texto se partirá en más líneas (el arreglo es *envolver*, no *cortar*, así que el comportamiento es correcto, pero la evidencia de legibilidad debe repetirse en el Q80).
+- **El diferido por hardware se disolvió (2026-10-20)**: PX-003 y PX-005 ya no dependen de un aparato. El Q80 real se entregó a SOHO y, más importante, el criterio correcto no es «cómo queda en este terminal» sino «**no desborda y no hay target bajo 48 dp en ningún tamaño soportado**». El diálogo pasó a seguir al dispositivo (`ResponsiveBreakpoints`, sin `maxWidth` fijo) y la evidencia son **pruebas de widget a 360×640, 800×1280 y 1280×800** que fallan si el diálogo desborda o si una fila de opción baja de 48 dp (`product_options_modifier_effect_test.dart`). Un aparato nuevo no exige otra medición: exige otro tamaño en la lista de pruebas.
 
 ---
 
@@ -130,9 +130,9 @@
 |---|---|---|---|---|---|
 | PX-001 | **REQUIRED** | §42.2/§42.7/§46 | Fila de opción con efecto | El subtítulo del efecto se desbordaba 21 px («RIGHT OVERFLOWED BY 21 PIXELS»): la cantidad heredada competía por el ancho con la etiqueta y el texto de la opción quedaba **tapado** por la franja de desbordamiento | **Corregido**: la cantidad heredada pasa a su propia línea y la etiqueta usa `Flexible` con elipsis; test de widget que falla si el diálogo vuelve a desbordar |
 | PX-002 | **REQUIRED** | §46 | Campo «Cantidad a aplicar» | El campo no tenía nombre accesible: un lector de pantalla anunciaba «campo de texto» sin decir de qué es el número | **Corregido**: `Semantics(label: 'Cantidad a aplicar')`; test de semántica |
-| PX-003 | **REFINEMENT** | §18.3/§46 | Campo «Cantidad a aplicar» | Objetivo táctil de ~30 dp de alto (muy por debajo del mínimo de 48 dp) | Subir altura del campo (`contentPadding`) y el ancho a 96 dp; medir en el Q80 |
+| PX-003 | **REFINEMENT** | §18.3/§46 | Campo «Cantidad a aplicar» | Objetivo táctil de ~30 dp de alto (muy por debajo del mínimo de 48 dp) | **Cerrado por eliminación (2026-10-20)**: el campo salió del flujo normal —la cantidad la configura el backoffice— y el único campo numérico (el override de supervisor) usa la altura estándar del tema. Verificado por test de widget: la fila de opción mide ≥48 dp en los tres tamaños |
 | PX-004 | **+1 OPPORTUNITY** | §49 +1.6 | Diálogo de modificadores | Un cajero nuevo no tiene forma de saber si una opción «toca el stock» sin leer el subtítulo | Chip discreto en la opción con efecto («toca inventario») con la misma voz del dashboard |
-| PX-005 | **REFINEMENT** | §42.7 | Fila de opción con efecto | El subtítulo (11 px) y la cantidad heredada (10 px) están por debajo del cuerpo legible del POS | Escalar a 12/11 px cuando el ancho del Q80 lo permita, o mover la cantidad heredada al cuerpo del subtítulo |
+| PX-005 | **REFINEMENT** | §42.7 | Fila de opción con efecto | El subtítulo (11 px) y la cantidad heredada (10 px) están por debajo del cuerpo legible del POS | **Cerrado (2026-10-20)**: el subtítulo del efecto usa `textTheme.bodySmall` (12 dp) y la cantidad dejó de ser una línea aparte; la jerarquía la da el tema, no un tamaño suelto |
 
 ### PX-001 — REQUIRED — §42.2, §42.7, §46
 
@@ -226,21 +226,24 @@ El test de semántica pasa.
 | PX-001 | REQUIRED | POS | `product_options_modifier_effect_test.dart` — «lays out without overflowing» |
 | PX-002 | REQUIRED | POS | `product_options_modifier_effect_test.dart` — «carries an accessible name» |
 
-**Refinamientos diferidos (con justificación):**
+**Refinamientos diferidos:** ninguno.
 
-| ID | Justificación del diferimiento |
+| ID | Estado |
 |---|---|
-| PX-003 | El campo es **opcional** (el valor por defecto es heredar, D2); tocarlo es la excepción, no el camino común. Se difiere hasta medir el Q80 (el campo no puede crecer sin empobrecer la fila en vertical de 800 dp) |
-| PX-005 | Depende de la medición de tipografía real en el Q80 (el S23 no es el terminal de destino) |
+| PX-003 | **Cerrado** (2026-10-20): el campo de cantidad salió del flujo normal; el override de supervisor usa la altura estándar y las filas cumplen 48 dp |
+| PX-005 | **Cerrado** (2026-10-20): el subtítulo del efecto usa la escala del tema (`bodySmall`, 12 dp) |
+
+**Por qué el diferimiento ya no depende del hardware**: el criterio pasó de «cómo queda en el Q80» a «no desborda y no hay target bajo 48 dp en ningún tamaño soportado», y ese criterio se certifica con pruebas de widget a tres resoluciones (360×640, 800×1280, 1280×800). Un terminal nuevo es otro tamaño en la lista de pruebas, no otra medición de campo.
 
 ---
 
 ## 15. Veredicto de la auditoría (§6 Fase H)
 
-- [x] **READY_AFTER_REQUIRED_FIXES** — Núcleo sólido: el diálogo explica el efecto con los nombres reales y la cantidad heredada (D2), nunca bloquea la venta (D6) y no dibuja texto cortado. **PX-001 y PX-002 están cerrados y verificados por test**; PX-003 y PX-005 quedan diferidos con medición pendiente en el Q80.
-- [ ] READY — sólo tras cerrar PX-003/PX-005 con evidencia del Q80.
+- [x] **READY** — El diálogo dice la verdad (la cantidad que se va a aplicar: la del backoffice, o la de la receta si no la hay), nunca pide una cantidad al cajero, nunca bloquea la venta y no dibuja texto cortado. **PX-001 a PX-005 están cerrados y verificados por test**, incluidos PX-003/PX-005, que se certificaron por resolución (tres tamaños) y no por una medición en un aparato.
 - [ ] NOT_READY
 - [ ] BLOCKED_BY_PRODUCT_DECISION
-- [ ] BLOCKED_BY_MISSING_EVIDENCE — la ergonomía del campo de cantidad (PX-003) y la escala tipográfica (PX-005) necesitan el **Q80 real**: el rig es un S23 de 1080x2316, más ancho que el destino.
+- [ ] BLOCKED_BY_MISSING_EVIDENCE — cerrado: el diferimiento por hardware (Q80 entregado a SOHO) se sustituyó por el criterio de independencia de la resolución.
+
+**Alcance que queda fuera de este módulo** (no es un hallazgo, es otra capacidad): el listado de **opciones con efecto de inventario cuya cantidad no se puede resolver**, que el backoffice debe mostrar para que el tenant configure lo que falta. Vive en el change de SDD `modifier-effect-amount-backoffice-owned` (Unidad 3).
 
 **Nota de campaña (P0 corregido fuera de este módulo):** la campaña de R28 encontró que la entidad de autoridad creció una columna sin migración local (`32f9098e`); el efecto se auditaba bien pero **no llegaba a pantalla** porque la autoridad entera quedaba vacía en los terminales actualizados. LaLesson: *auditar la pantalla no basta — hay que auditar que los hechos lleguen*.
