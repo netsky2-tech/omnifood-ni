@@ -1424,45 +1424,70 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
           if (preview.acceptsMarkedQuantity)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Row(
+              // The row stays inside the subtitle's bounded width: a
+              // flexible child inside a `MainAxisSize.min` row has no
+              // bounded space to flex into, and the dialog overflowed
+              // ("RIGHT OVERFLOWED BY 21 PIXELS") with the inherited
+              // quantity on screen. The inherited quantity moved to its
+              // own line instead of fighting for horizontal space.
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Cantidad a aplicar: ', style: TextStyle(fontSize: 11)),
-                  SizedBox(
-                    width: 86,
-                    child: TextField(
-                      key: Key('modifier_effect_quantity_${option.id}'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        border: const OutlineInputBorder(),
-                        hintText: preview.inheritedQuantity == null
-                            ? 'Heredar'
-                            : _trimQuantity(preview.inheritedQuantity!),
-                        hintStyle: const TextStyle(fontSize: 12),
+                  Row(
+                    children: [
+                      const Flexible(
+                        child: Text(
+                          'Cantidad a aplicar: ',
+                          style: TextStyle(fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                      onChanged: (value) {
-                        final parsed = double.tryParse(value.trim());
-                        setState(() {
-                          if (parsed == null || parsed <= 0) {
-                            _markedEffectQuantities.remove(option.id);
-                          } else {
-                            _markedEffectQuantities[option.id] = parsed;
-                          }
-                        });
-                      },
-                    ),
+                      SizedBox(
+                        width: 86,
+                        // Nhilos POS §46: every control the operator uses
+                        // carries an accessible name. The visible label
+                        // lives next to the field, so the association is
+                        // made programmatic here (a screen reader announces
+                        // what the number is FOR, not just "text field").
+                        child: Semantics(
+                          label: 'Cantidad a aplicar',
+                          child: TextField(
+                            key: Key('modifier_effect_quantity_${option.id}'),
+                            keyboardType:
+                                const TextInputType.numberWithOptions(decimal: true),
+                            style: const TextStyle(fontSize: 12),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              border: const OutlineInputBorder(),
+                              hintText: preview.inheritedQuantity == null
+                                  ? 'Heredar'
+                                  : _trimQuantity(preview.inheritedQuantity!),
+                              hintStyle: const TextStyle(fontSize: 12),
+                            ),
+                            onChanged: (value) {
+                              final parsed = double.tryParse(value.trim());
+                              setState(() {
+                                if (parsed == null || parsed <= 0) {
+                                  _markedEffectQuantities.remove(option.id);
+                                } else {
+                                  _markedEffectQuantities[option.id] = parsed;
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  if (preview.inheritedQuantity != null) ...[
-                    const SizedBox(width: 6),
-                    Expanded(
+                  if (preview.inheritedQuantity != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         '${_trimQuantity(preview.inheritedQuantity!)}${preview.inheritedUnit == null ? '' : ' ${preview.inheritedUnit}'} (heredada de la receta)',
                         style: const TextStyle(fontSize: 10),
                       ),
                     ),
-                  ],
                 ],
               ),
             ),

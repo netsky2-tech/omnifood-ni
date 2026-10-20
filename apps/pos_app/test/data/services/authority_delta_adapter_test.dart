@@ -73,7 +73,7 @@ void main() {
       'tenantId': tenantId,
       'name': name,
       'uom': uom,
-      if (isActive != null) 'isActive': isActive,
+      'isActive': ?isActive,
     };
   }
 
