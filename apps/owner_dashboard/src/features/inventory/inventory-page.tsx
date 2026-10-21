@@ -19,6 +19,7 @@ import {
   useAlerts,
 } from "./use-inventory-reports";
 import { InsumosTab } from "./insumos-tab";
+import { InventoryDivergencePanel } from "./divergence-panel";
 import { SuppliersTab } from "./suppliers-tab";
 import { PurchasesTab } from "./purchases-tab";
 import type { MovementType, AlertSeverity, KardexFilters } from "./types";
@@ -30,7 +31,8 @@ type TabId =
   | "purchases"
   | "cogs"
   | "kardex"
-  | "alerts";
+  | "alerts"
+  | "conciliacion";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "valuation", label: "Valoración" },
@@ -40,6 +42,9 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "cogs", label: "COGS / Margen" },
   { id: "kardex", label: "Kardex" },
   { id: "alerts", label: "Alertas" },
+  // FD-01: what did not add up between a sale and the inventory that backed
+  // it, and which insumo caused it.
+  { id: "conciliacion", label: "Conciliación" },
 ];
 
 function formatCurrency(amount: number): string {
@@ -803,6 +808,7 @@ export function InventoryPage() {
           <KardexTab startDate={range.startDate} endDate={range.endDate} />
         )}
         {activeTab === "alerts" && <AlertsTab initialSeverity={severityFilter} />}
+        {activeTab === "conciliacion" && <InventoryDivergencePanel />}
       </div>
     </div>
   );

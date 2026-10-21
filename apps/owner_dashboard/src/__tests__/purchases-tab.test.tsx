@@ -802,7 +802,8 @@ describe("InventoryPage tab bar (AT-08 / BX-013)", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Secciones de inventario" });
     const tabs = within(tablist).getAllByRole("tab");
-    expect(tabs).toHaveLength(7);
+    // 7 sections + the reconciliation tab (FD-01: what did not add up).
+    expect(tabs).toHaveLength(8);
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(tabs[1]).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tabpanel")).toBeInTheDocument();
@@ -824,7 +825,7 @@ describe("InventoryPage tab bar (AT-08 / BX-013)", () => {
 
     await user.keyboard("{End}");
     await waitFor(() => {
-      expect(tabs[6]).toHaveAttribute("aria-selected", "true");
+      expect(tabs[7]).toHaveAttribute("aria-selected", "true");
     });
 
     await user.keyboard("{Home}");
