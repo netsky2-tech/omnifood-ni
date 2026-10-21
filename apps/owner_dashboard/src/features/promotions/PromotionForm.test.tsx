@@ -386,7 +386,9 @@ describe('PromotionForm', () => {
     const whitelist = [
       'name',
       'type',
-      'target_product_id',
+      // target_product_id is omitted when no product is selected ('' → omit),
+      // same contract as target_category_id. When a product IS selected its
+      // uuid is included; that case is covered by the product-selector tests.
       'buy_quantity',
       'get_quantity',
       'discount_value',
@@ -635,7 +637,11 @@ describe('PromotionForm', () => {
         expect(mockUpdatePromotion.mutateAsync).toHaveBeenCalled();
       });
       const dto = mockUpdatePromotion.mutateAsync.mock.calls[0]![0].dto;
-      expect(dto.target_product_id).toBe('');
+      // Bug fix: clearing the product selection sends undefined (key omitted),
+      // not '' — same contract as target_category_id cleared to global.
+      // Sending '' would store a blank string in PostgreSQL and break the POS
+      // engine's isGlobal check ('' != null).
+      expect(dto.target_product_id).toBeUndefined();
     });
 
     it('the schema rejects free text for target_product_id, like the category field does', () => {

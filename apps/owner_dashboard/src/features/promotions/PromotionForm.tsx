@@ -234,7 +234,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
             <Label htmlFor="type">Tipo de Promoción *</Label>
             <Select
               onValueChange={(value) => form.setValue('type', value as PromotionType, { shouldValidate: true })}
-              defaultValue={form.getValues('type')}
+              value={watchedType}
             >
               <SelectTrigger aria-label="Tipo de Promoción">
                 <SelectValue placeholder="Seleccione tipo" />
