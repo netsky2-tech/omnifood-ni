@@ -46,7 +46,7 @@ import {
 /** The reason, in the owner's words — never the resolver's vocabulary. */
 const REASON_COPY: Record<string, string> = {
   PRODUCT_WITHOUT_RECIPE:
-    "El producto no tiene receta activa: no hay cantidad que heredar.",
+    "El producto no tiene receta activa: el extra no se aplica al inventario.",
   COMPONENT_NOT_IN_RECIPE:
     "El producto no consume ese componente: no hay cantidad que heredar.",
   UNIT_MISMATCH:

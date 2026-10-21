@@ -2,6 +2,7 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
 import 'package:pos_app/domain/usecases/inventory/modifier_deviation_resolver.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_inventory_outcome_planner.dart';
@@ -357,7 +358,14 @@ class CheckoutInventoryPreparationService {
         inventorySnapshotVersion: 'SALE_TIME_V1',
         inventorySnapshot: snapshot,
         selectedModifiers: item.selectedModifiers
-            .map((modifier) => _stampEffectTruth(modifier, effects))
+            .map(
+              (modifier) => _stampEffectTruth(
+                modifier,
+                effects,
+                hasRecipe:
+                    snapshot?.disposition == SaleInventoryDisposition.recipe,
+              ),
+            )
             .toList(growable: false),
       );
     }).toList();
@@ -394,13 +402,21 @@ class CheckoutInventoryPreparationService {
   /// Stamps the resolved truth of ONE modifier's effect onto it.
   ///
   /// A modifier with no inventory effect (a price-only option) keeps its
-  /// absence: there is nothing to say about it. A modifier whose effect the
-  /// resolver never saw (a line with no recipe to correct) also keeps its
-  /// absence — the terminal says nothing it cannot prove.
+  /// absence: there is nothing to say about it.
+  ///
+  /// A modifier whose effect the resolver DID judge takes that verdict: it
+  /// applied, or it did not (with the reason).
+  ///
+  /// A modifier whose effect was NEVER JUDGED is not left silent: the line
+  /// says PENDING, because the effect demonstrably did not touch the stock
+  /// (there was no recipe to correct it). The reason says which case it
+  /// was — a product without a recipe, or a verdict the resolver could not
+  /// produce (fail-safe, never a silent absence).
   static Modifier _stampEffectTruth(
     Modifier modifier,
-    List<AppliedModifierEffect> effects,
-  ) {
+    List<AppliedModifierEffect> effects, {
+    required bool hasRecipe,
+  }) {
     if (!modifier.hasInventoryEffect) return modifier;
     final optionId = modifier.optionId ?? modifier.id;
     AppliedModifierEffect? match;
@@ -410,7 +426,15 @@ class CheckoutInventoryPreparationService {
         break;
       }
     }
-    if (match == null) return modifier;
+    if (match == null) {
+      // The effect was declared and the stock did not move for it.
+      return modifier.copyWith(
+        effectStatus: 'PENDING',
+        effectSkipReason: hasRecipe
+            ? ModifierEffectSkipReason.incomplete.wireName
+            : ModifierEffectSkipReason.productWithoutRecipe.wireName,
+      );
+    }
     return modifier.copyWith(
       effectStatus: match.applied ? 'APPLIED' : 'PENDING',
       effectSkipReason: match.skipReason?.wireName,

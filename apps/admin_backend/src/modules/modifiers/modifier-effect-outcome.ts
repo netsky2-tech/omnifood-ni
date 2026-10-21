@@ -40,6 +40,15 @@ export const MODIFIER_EFFECT_SKIP_REASON = {
   INSUMSO_NOT_IN_CATALOG: 'INSUMSO_NOT_IN_CATALOG',
   /** The effect names a component the recipe does not have. */
   COMPONENT_NOT_IN_RECIPE: 'COMPONENT_NOT_IN_RECIPE',
+  /**
+   * The product has no recipe to correct: there is nothing for the effect
+   * to apply to.
+   *
+   * It is the reason the cloud already names in its pending-configuration
+   * list, so the vocabulary stays shared between the configuration gap and
+   * the sold line that carries it.
+   */
+  PRODUCT_WITHOUT_RECIPE: 'PRODUCT_WITHOUT_RECIPE',
 } as const;
 
 export type ModifierEffectSkipReason =

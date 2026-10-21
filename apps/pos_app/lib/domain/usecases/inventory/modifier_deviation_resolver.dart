@@ -24,7 +24,16 @@ enum ModifierEffectSkipReason {
   componentNotInRecipe,
 
   /// The effect is incomplete: it names neither a component nor a quantity.
-  incomplete;
+  incomplete,
+
+  /// The product has no recipe to correct: there is nothing for the effect
+  /// to apply to.
+  ///
+  /// It is a fail-soft outcome like the others: the sale goes through, the
+  /// stock does not move for that effect, and the reason is reported so the
+  /// owner can see it in the backoffice. The cloud already names this
+  /// reason in its pending-configuration list, so the vocabulary is shared.
+  productWithoutRecipe;
 
   /// The vocabulary of the SHARED conformance contract
   /// (`fixtures/modifier-deviation/v1/vectors.json`), which the cloud's
@@ -36,6 +45,8 @@ enum ModifierEffectSkipReason {
         ModifierEffectSkipReason.componentNotInRecipe =>
           'COMPONENT_NOT_IN_RECIPE',
         ModifierEffectSkipReason.incomplete => 'INCOMPLETE',
+        ModifierEffectSkipReason.productWithoutRecipe =>
+          'PRODUCT_WITHOUT_RECIPE',
       };
 }
 

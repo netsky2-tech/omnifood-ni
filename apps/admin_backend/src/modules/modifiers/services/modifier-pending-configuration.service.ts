@@ -160,55 +160,59 @@ export class ModifierPendingConfigurationService {
           );
 
     return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      // The read is EXPLICIT (a projection, not an entity hydration): the
+      // line's truth travels with the sale, and the owner reads the sale it
+      // belongs to. The tenant is reached through the invoice: the modifier
+      // table carries no tenant column of its own (the line hangs off the
+      // item, and the item off the invoice), so the INVOICE's tenant is the
+      // isolation boundary, inside the tenant-bound transaction.
       const rows = await manager
         .getRepository(InvoiceItemModifier)
         .createQueryBuilder('modifier')
         .innerJoin(InvoiceItem, 'item', 'item.id = modifier.invoice_item_id')
         .innerJoin(Invoice, 'invoice', 'invoice.id = item.invoice_id')
-        .where('modifier.tenant_id = :tenantId', { tenantId })
+        .where('invoice.tenant_id = :tenantId', { tenantId })
         .andWhere("modifier.effect_status = 'PENDING'")
+        .select([
+          'modifier.id AS modifier_id',
+          'modifier.name AS modifier_name',
+          'modifier.option_id AS option_id',
+          'modifier.effect_skip_reason AS effect_skip_reason',
+          'modifier.quantity AS modifier_quantity',
+          'item.product_id AS product_id',
+          'item.product_name AS product_name',
+          'invoice.id AS invoice_id',
+          'invoice.invoice_number AS invoice_number',
+          'invoice.created_at AS invoice_created_at',
+        ])
         .orderBy('invoice.created_at', 'DESC')
         .addOrderBy('modifier.id', 'DESC')
         // One probe row beyond the cap so `truncated` is provable.
         .take(limit + 1)
-        .getManyAndCount();
+        .getRawMany();
 
-      const modifiers = rows[0];
-      const truncated = modifiers.length > limit;
-      const page = truncated ? modifiers.slice(0, limit) : modifiers;
+      // One probe row beyond the cap: `truncated` is provable, and the
+      // page never claims completeness it does not have.
+      const truncated = rows.length > limit;
+      const page = truncated ? rows.slice(0, limit) : rows;
 
-      // The item and the invoice are read for the page's lines only (the
-      // join above filters, the names are what the owner reads).
-      const itemIds = [...new Set(page.map((m) => m.invoiceItemId))];
-      const items = itemIds.length
-        ? await manager.getRepository(InvoiceItem).find({
-            where: { id: In(itemIds) },
-          })
-        : [];
-      const invoiceIds = [
-        ...new Set(items.map((item) => item.invoiceId)),
-      ];
-      const invoices = invoiceIds.length
-        ? await manager.getRepository(Invoice).find({
-            where: { id: In(invoiceIds) },
-          })
-        : [];
-      const itemById = new Map(items.map((item) => [item.id, item]));
-      const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
-
-      const lines: PendingModifierEffectLine[] = page.map((modifier) => {
-        const item = itemById.get(modifier.invoiceItemId);
-        const invoice = item ? invoiceById.get(item.invoiceId) : undefined;
+      const lines: PendingModifierEffectLine[] = page.map((row) => {
+        const soldAt = row['invoice_created_at'];
         return {
-          invoice_id: invoice?.id ?? '',
-          invoice_number: invoice?.number ?? null,
-          sold_at: (invoice?.created_at ?? new Date(0)).toISOString(),
-          product_id: item?.productId ?? '',
-          product_name: item?.productName ?? modifier.name,
-          option_id: modifier.optionId ?? null,
-          option_name: modifier.name,
-          reason: modifier.effectSkipReason ?? 'INCOMPLETE',
-          quantity: modifier.quantity ?? 1,
+          invoice_id: String(row['invoice_id'] ?? ''),
+          invoice_number: row['invoice_number']
+            ? String(row['invoice_number'])
+            : null,
+          sold_at:
+            soldAt instanceof Date
+              ? soldAt.toISOString()
+              : new Date(String(soldAt ?? 0)).toISOString(),
+          product_id: String(row['product_id'] ?? ''),
+          product_name: String(row['product_name'] ?? row['modifier_name'] ?? ''),
+          option_id: row['option_id'] ? String(row['option_id']) : null,
+          option_name: String(row['modifier_name'] ?? ''),
+          reason: String(row['effect_skip_reason'] ?? 'INCOMPLETE'),
+          quantity: Number(row['modifier_quantity'] ?? 1),
         };
       });
 

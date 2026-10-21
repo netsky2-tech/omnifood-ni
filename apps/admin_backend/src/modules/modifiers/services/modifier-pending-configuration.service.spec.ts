@@ -281,6 +281,19 @@ describe('ModifierPendingConfigurationService · efectos pendientes vendidos', (
     effectAuthorizationReason: null,
   };
 
+  const rawPendingRow = {
+    modifier_id: 'mod-1',
+    modifier_name: 'Leche: Almendras',
+    option_id: 'opt-almendras',
+    effect_skip_reason: 'INSUMSO_NOT_IN_CATALOG',
+    modifier_quantity: '1',
+    product_id: 'prod-1',
+    product_name: 'Capuccino',
+    invoice_id: 'inv-1',
+    invoice_number: '001-001-01-00000042',
+    invoice_created_at: new Date('2026-10-20T15:00:00.000Z'),
+  };
+
   it('devuelve la línea vendida con su motivo, y pagina con honestidad', async () => {
     const qb: Record<string, jest.Mock> = {};
     for (const method of [
@@ -290,38 +303,16 @@ describe('ModifierPendingConfigurationService · efectos pendientes vendidos', (
       'orderBy',
       'addOrderBy',
       'take',
+      'select',
     ]) {
       qb[method] = jest.fn(() => qb);
     }
-    qb.getManyAndCount = jest
-      .fn()
-      .mockResolvedValue([[pendingModifier], 1]);
+    qb.getRawMany = jest.fn().mockResolvedValue([rawPendingRow]);
 
     const modifierRepo = { createQueryBuilder: jest.fn(() => qb) };
-    const itemRepo = {
-      find: jest.fn().mockResolvedValue([
-        {
-          id: 'item-1',
-          invoiceId: 'inv-1',
-          productId: 'prod-1',
-          productName: 'Capuccino',
-        },
-      ]),
-    };
-    const invoiceRepo = {
-      find: jest.fn().mockResolvedValue([
-        {
-          id: 'inv-1',
-          number: '001-001-01-00000042',
-          created_at: new Date('2026-10-20T15:00:00.000Z'),
-        },
-      ]),
-    };
 
     manager.getRepository.mockImplementation((entity: unknown) => {
       if (entity === InvoiceItemModifier) return modifierRepo;
-      if (entity === InvoiceItem) return itemRepo;
-      if (entity === Invoice) return invoiceRepo;
       throw new Error('unexpected repository');
     });
 
@@ -344,19 +335,18 @@ describe('ModifierPendingConfigurationService · efectos pendientes vendidos', (
       'orderBy',
       'addOrderBy',
       'take',
+      'select',
     ]) {
       qb[method] = jest.fn(() => qb);
     }
-    qb.getManyAndCount = jest
+    qb.getRawMany = jest
       .fn()
-      .mockResolvedValue([[pendingModifier, pendingModifier], 2]);
+      .mockResolvedValue([rawPendingRow, rawPendingRow]);
 
     manager.getRepository.mockImplementation((entity: unknown) => {
       if (entity === InvoiceItemModifier) {
         return { createQueryBuilder: jest.fn(() => qb) };
       }
-      if (entity === InvoiceItem) return { find: jest.fn().mockResolvedValue([]) };
-      if (entity === Invoice) return { find: jest.fn().mockResolvedValue([]) };
       throw new Error('unexpected repository');
     });
 

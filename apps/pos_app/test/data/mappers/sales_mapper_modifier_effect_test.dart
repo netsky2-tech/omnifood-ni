@@ -260,6 +260,20 @@ void main() {
       expect(modifier.containsKey('effectAuthorizedBy'), isFalse);
     });
 
+    test('el motivo de un producto sin receta viaja con su nombre compartido', () {
+      final rows = SalesMapper.toItemModifierEntities(
+        itemWith(
+          modifierWithTruth(
+            status: 'PENDING',
+            reason: 'PRODUCT_WITHOUT_RECIPE',
+          ),
+        ),
+      );
+
+      expect(rows.single.effectStatus, 'PENDING');
+      expect(rows.single.effectSkipReason, 'PRODUCT_WITHOUT_RECIPE');
+    });
+
     test('la fila local guarda y devuelve la verdad (ida y vuelta)', () {
       final rows = SalesMapper.toItemModifierEntities(
         itemWith(
