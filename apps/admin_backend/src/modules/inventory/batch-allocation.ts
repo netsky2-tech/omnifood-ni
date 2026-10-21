@@ -10,6 +10,35 @@ import {
 const round4 = (value: number): number => Number(value.toFixed(4));
 
 /**
+ * WHY A TYPED ERROR: the sync path reports a REJECTED record with a
+ * machine-readable code, and that code is what a terminal, a dashboard and
+ * a support ticket group by. A bare `ConflictException` used to be caught
+ * by a catch-all and reported as `LOYALTY_IDEMPOTENCY_CONFLICT` — a
+ * loyalty code for an INVENTORY conflict, which sent the triage (and the
+ * owner) looking at the points ledger instead of at the batches.
+ *
+ * The reason travels with the error, so the surface can name the cause it
+ * actually is.
+ */
+export type BatchAllocationConflictReason =
+  /** The batches cannot cover the outflow: reconcile them before recording it. */
+  | 'BALANCE_INSUFFICIENT'
+  /** The movement references a batch that does not exist. */
+  | 'UNKNOWN_SOURCE_BATCH'
+  /** The trace references a batch that does not exist. */
+  | 'UNKNOWN_TRACE_BATCH';
+
+export class BatchAllocationConflictException extends ConflictException {
+  constructor(
+    readonly reason: BatchAllocationConflictReason,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'BatchAllocationConflictException';
+  }
+}
+
+/**
  * `BatchCostingService` holds no state and injects nothing, so a single
  * module-level instance is equivalent to a pure function. That is what lets
  * this stay a plain function instead of a new constructor parameter threaded
@@ -101,7 +130,8 @@ export const drawBatchOutflow = async (input: {
   );
 
   if (covered < required) {
-    throw new ConflictException(
+    throw new BatchAllocationConflictException(
+      'BALANCE_INSUFFICIENT',
       `Batch balances cannot cover the outflow for insumo ${input.insumoId}: ` +
         `required ${required}, batch balances total ${covered}. The aggregate ` +
         `stock and the batch balances have diverged; reconcile them before ` +
@@ -114,7 +144,8 @@ export const drawBatchOutflow = async (input: {
   for (const consumed of trace) {
     const batch = byId.get(consumed.batchId);
     if (!batch) {
-      throw new ConflictException(
+      throw new BatchAllocationConflictException(
+        'UNKNOWN_SOURCE_BATCH',
         `Outflow referenced an unknown source batch: ${consumed.batchId}`,
       );
     }
@@ -174,7 +205,8 @@ export const restoreBatchInflow = async (input: {
         where: { id: trace.batch_id, tenant_id: input.tenantId },
       });
       if (!batch) {
-        throw new ConflictException(
+        throw new BatchAllocationConflictException(
+          'UNKNOWN_TRACE_BATCH',
           `Batch trace referenced an unknown batch: ${trace.batch_id}`,
         );
       }

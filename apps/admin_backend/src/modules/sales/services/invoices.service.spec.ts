@@ -146,7 +146,10 @@ describe('InvoicesService', () => {
         // `drawBatchOutflow` returns early, and the assertions on the kardex
         // rows stay exactly as they were.
         if (target === Batch) {
-          return { find: jest.fn().mockResolvedValue([]), save: jest.fn() };
+          return {
+            find: jest.fn().mockResolvedValue(batchRows),
+            save: jest.fn(),
+          };
         }
         // R3: the sale-cancellation restore reads the outflow trace. Reporting
         // no traces lets the restore return early, exactly like a pre-R3 sale.
@@ -353,6 +356,13 @@ describe('InvoicesService', () => {
       expect(txManager.findOne).not.toHaveBeenCalled();
     });
   });
+
+  /**
+   * The batch rows the harness reports. Empty by default (the insumo of
+   * this suite is not batch-managed, so `drawBatchOutflow` returns early).
+   * A test that needs the batch discipline sets it.
+   */
+  let batchRows: unknown[] = [];
 
   describe('syncInvoices', () => {
     const creditNoteInvoice: SyncInvoiceDto = {
@@ -1532,6 +1542,10 @@ describe('InvoicesService', () => {
   });
 
   describe('syncBatch', () => {
+    beforeEach(() => {
+      batchRows = [];
+    });
+
     const baseInvoice: SyncInvoiceDto = {
       id: 'inv-1',
       number: '001',
@@ -1606,6 +1620,53 @@ describe('InvoicesService', () => {
           averageCostAfterNio: 2,
         }),
       );
+    });
+
+    it('reports a batch-balance conflict with ITS OWN code (never a loyalty one)', async () => {
+      // The insumo's batches cannot cover the outflow: the movement is
+      // refused. The code the terminal receives MUST name the inventory
+      // cause — a loyalty code here sent the triage (and the owner) to the
+      // points ledger instead of to the batches.
+      batchRows = [
+        {
+          id: 'batch-1',
+          tenant_id: 'tenant-1',
+          insumo_id: 'ins-1',
+          batch_number: 'LOT-1',
+          remaining_stock: '1',
+          cost: '2',
+          expiration_date: null,
+          received_date: null,
+        },
+      ];
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        stock: 10,
+        averageCost: 2,
+        id: 'ins-1',
+        tenant_id: 'tenant-1',
+      });
+      txManager.findOne.mockResolvedValue({ id: '2001' });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'k-batch',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          documentType: 'SALE',
+          // The v1 path (the one the deployed terminals use): it reports a
+          // per-record rejection with a code, instead of failing the batch.
+          flowType: 'sales',
+          invoice: { ...baseInvoice, id: 'inv-batch' },
+        },
+      ]);
+
+      const rejected = (result.results ?? []).find(
+        (entry) => entry.status !== 'ACCEPTED',
+      );
+      expect(rejected?.code).toBe('INVENTORY_BATCH_BALANCE_INSUFFICIENT');
+      expect(rejected?.code).not.toBe('LOYALTY_IDEMPOTENCY_CONFLICT');
     });
 
     it('stamps SALE movements with the invoice business timestamp, not ingestion time (AG-02)', async () => {

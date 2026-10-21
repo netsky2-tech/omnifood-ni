@@ -29,7 +29,11 @@ import {
   BomExplosionService,
   hasSubRecipeComponent,
 } from '../../inventory/bom-explosion.service';
-import { drawBatchOutflow, restoreBatchInflow } from '../../inventory/batch-allocation';
+import {
+  BatchAllocationConflictException,
+  drawBatchOutflow,
+  restoreBatchInflow,
+} from '../../inventory/batch-allocation';
 import {
   toCalendarDay,
   todayCalendarDay,
@@ -1563,11 +1567,62 @@ export class InvoicesService {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
       const dbErr = error as { code?: string; constraint?: string };
-      if (error instanceof ConflictException) {
+      // The conflicts each get their OWN code. A catch-all used to report
+      // every one of them as `LOYALTY_IDEMPOTENCY_CONFLICT` — a LOYALTY
+      // code for an INVENTORY conflict — which sent the triage (and the
+      // owner) to the points ledger instead of to the batches. The code is
+      // what a terminal, a dashboard and a support ticket group by, so it
+      // has to name the cause it actually is.
+      if (error instanceof BatchAllocationConflictException) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code:
+              error.reason === 'BALANCE_INSUFFICIENT'
+                ? 'INVENTORY_BATCH_BALANCE_INSUFFICIENT'
+                : 'INVENTORY_BATCH_UNKNOWN_SOURCE',
+            // NOT retryable: it needs a reconciliation (the batches have to
+            // cover the movement), not another attempt.
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof ConflictException &&
+        message.includes('CREDIT_NOTE_NUMBER_CONFLICT')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CREDIT_NOTE_NUMBER_CONFLICT',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof ConflictException &&
+        message.includes('Integrity conflict: idempotency key')
+      ) {
+        // The loyalty ledger's own conflict: the one case the old catch-all
+        // was written for, and the only one it named correctly.
         return {
           accepted: false,
           result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
             code: 'LOYALTY_IDEMPOTENCY_CONFLICT',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (error instanceof ConflictException) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            // An unnamed conflict is reported as such: a code that claims
+            // a cause we cannot prove is worse than a generic one.
+            code: 'SYNC_CONFLICT',
             retryable: false,
             message,
           }),

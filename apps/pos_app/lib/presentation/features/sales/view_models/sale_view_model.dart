@@ -1338,6 +1338,20 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Reloads the operator's identity (role and id) from the session.
+  ///
+  /// WHY IT IS NOT JUST A CONSTRUCTOR TASK: the view model is created ONCE
+  /// per app run, but the operator can change (the food park's offline
+  /// operator switch, "Cambiar operador"). The role-gated operations
+  /// (the manual discount's supervisor requirement, the reprint, the credit
+  /// note) would then keep using the PREVIOUS operator's role: a cashier
+  /// could apply a manual discount with no signature AND no forensic
+  /// record, because the gate still believed the operator was the owner.
+  ///
+  /// The sale screen calls this when it is entered, so the identity that
+  /// the gates use is always the operator who is actually at the till.
+  Future<void> reloadOperatorContext() => _loadCurrentUserRole();
+
   static const _fiscalCalculator = InvoiceFiscalCalculator();
 
   FiscalCalculationResult get currentFiscalCalculation {

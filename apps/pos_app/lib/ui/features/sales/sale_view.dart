@@ -262,6 +262,11 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
       if (mounted) {
         context.read<SaleViewModel>().setSearchQuery('');
         context.read<SaleViewModel>().checkActiveSession();
+        // The operator can change (the offline operator switch) while this
+        // screen's view model survives: the role-gated operations must use
+        // the operator who is ACTUALLY at the till, not the one who was
+        // there when the app started.
+        context.read<SaleViewModel>().reloadOperatorContext();
       }
     });
   }

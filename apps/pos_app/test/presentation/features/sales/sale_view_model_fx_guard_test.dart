@@ -141,6 +141,40 @@ void main() {
     );
   }
 
+  group('the operator identity is reloaded when the screen is entered', () {
+    // The operator can change (the food park's offline operator switch)
+    // while this view model SURVIVES: the role-gated operations (the manual
+    // discount's supervisor requirement, the reprint, the credit note) must
+    // use the operator who is actually at the till, not the one who was
+    // there when the app started. A stale role let a CASHIER apply a manual
+    // discount with no signature AND no forensic record.
+    test('reloadOperatorContext picks up the operator who just signed in', () async {
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'user-owner',
+          name: 'Dueño',
+          role: UserRole.owner,
+          isActive: true,
+        ),
+      );
+
+      await viewModel.reloadOperatorContext();
+      expect(viewModel.currentUserRole, UserRole.owner);
+
+      when(mockAuthRepo.getCurrentUser()).thenAnswer(
+        (_) async => const User(
+          id: 'user-cashier',
+          name: 'Cajero',
+          role: UserRole.cashier,
+          isActive: true,
+        ),
+      );
+
+      await viewModel.reloadOperatorContext();
+      expect(viewModel.currentUserRole, UserRole.cashier);
+    });
+  });
+
   group('sale blocked when a recorded rate is unreliable (#67/T2a)', () {
     test('absent commercial rate row blocks the sale and names the fix', () async {
       configDao.saveConfig(
