@@ -1202,6 +1202,63 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Removes the manual discount from the current cart.
+  ///
+  /// The operator must be able to undo a discount they applied by mistake:
+  /// the device-reported defect was "there is no way to remove it" — the
+  /// only way back was to complete the sale or discard the whole cart.
+  ///
+  /// Removing a discount RAISES what the customer pays, so it is never a
+  /// restricted action: it needs no supervisor override and is not subject
+  /// to the owner's discount cap, which limits how much can be GIVEN away.
+  void removeManualDiscount() {
+    if (_manualDiscount == 0.0) return;
+    _manualDiscount = 0.0;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// A manual discount is a cart-scoped value: it is authorized against ONE
+  /// order and must never survive into the next.
+  ///
+  /// Two rules keep it honest against the cart it discounts:
+  ///
+  /// 1. The cart EMPTIED → the discount is VOID. The operator emptying the
+  ///    cart item by item never reaches [clearCart], so without this the
+  ///    discount survived into the next sale, already applied to products
+  ///    nobody authorized it on — the device-reported defect.
+  /// 2. The cart SHRANK → the discount is reduced to what the owner's cap
+  ///    still allows. The cap is a share of the order's GROSS subtotal, so
+  ///    a smaller cart can leave a retained discount above the limit the
+  ///    owner configured: it was authorized against a bigger order than the
+  ///    one now being charged.
+  ///
+  /// This mirrors how the promotions already behave: a cart-scoped value is
+  /// re-evaluated on every cart mutation and the cart panel shows the
+  /// result. It is never raised — a cart that grows only loosens the cap.
+  void _reconcileManualDiscountWithCart() {
+    if (_manualDiscount <= 0) return;
+
+    if (_cart.isEmpty) {
+      _manualDiscount = 0.0;
+      return;
+    }
+
+    final decision = const DiscountPolicyService().evaluateManualDiscount(
+      requestedAmount: 0.0,
+      accumulatedManualDiscount: _manualDiscount,
+      grossSubtotal: grossSubtotal,
+      maxDiscountAmount: _maxDiscountAmountCap,
+      maxDiscountPercent: _maxDiscountPercentCap,
+    );
+    if (decision.allowed) return;
+
+    final cap = decision.effectiveCap ?? 0.0;
+    if (cap < _manualDiscount) {
+      _manualDiscount = cap;
+    }
+  }
+
   Future<void> _loadCurrentUserRole() async {
     final user = await _authRepository.getCurrentUser();
     _currentUserRole = user?.role;
@@ -1745,6 +1802,10 @@ class SaleViewModel extends ChangeNotifier {
     _applyPromotions();
     // R-4: a cart change supersedes a stale checkout failure banner.
     _lastCheckoutError = null;
+    // The manual discount is scoped to THIS cart: re-evaluate it against the
+    // cart that survived the mutation (void when the cart emptied, reduced
+    // to the owner's cap when the cart shrank).
+    _reconcileManualDiscountWithCart();
     // Re-evaluate loyalty when cart changes (fire-and-forget async)
     if (_selectedCustomer != null &&
         _rewardInteraction?.selectedRewardId != null) {
@@ -1767,6 +1828,7 @@ class SaleViewModel extends ChangeNotifier {
     _applyPromotions();
     // R-4: a cart change supersedes a stale checkout failure banner.
     _lastCheckoutError = null;
+    _reconcileManualDiscountWithCart();
     _clearCustomerWhenCartEmptied();
     notifyListeners();
   }
@@ -1792,6 +1854,7 @@ class SaleViewModel extends ChangeNotifier {
       _applyPromotions();
       // R-4: a cart change supersedes a stale checkout failure banner.
       _lastCheckoutError = null;
+      _reconcileManualDiscountWithCart();
       _clearCustomerWhenCartEmptied();
       notifyListeners();
     }

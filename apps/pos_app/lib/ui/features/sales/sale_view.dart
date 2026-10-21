@@ -2003,12 +2003,34 @@ class CartSummary extends StatelessWidget {
                 'Descuento manual',
                 style: TextStyle(color: NhilosColors.success),
               ),
-              Text(
-                '-C\$ ${(viewModel.manualDiscount).toStringAsFixed(2)}',
-                style: const TextStyle(
-                  color: NhilosColors.success,
-                  fontFeatures: [FontFeature.tabularFigures()],
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '-C\$ ${(viewModel.manualDiscount).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: NhilosColors.success,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  // The device-reported defect: the operator had NO way to
+                  // take back a discount they did not want. Removing a
+                  // discount RAISES what the customer pays, so it is not a
+                  // restricted action (no supervisor override) and it is not
+                  // destructive (the sale was never invoiced) — it needs no
+                  // confirmation, exactly like the customer chip's delete.
+                  IconButton(
+                    key: const Key('cart_remove_manual_discount'),
+                    onPressed: viewModel.removeManualDiscount,
+                    icon: const Icon(Icons.undo, size: 18),
+                    color: NhilosColors.success,
+                    tooltip: 'Quitar descuento manual',
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

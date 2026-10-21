@@ -267,6 +267,58 @@ void main() {
   );
 
   testWidgets(
+    'the operator can take back an applied manual discount (device-reported)',
+    (tester) async {
+      when(mockViewModel.cart).thenReturn([
+        const CartItem(
+          productId: 'p-1',
+          productName: 'Producto 1',
+          quantity: 1,
+          unitPrice: 155,
+          taxRate: 0.15,
+        ),
+      ]);
+      when(mockViewModel.manualDiscount).thenReturn(30.0);
+      when(mockViewModel.promoDiscounts).thenReturn(0.0);
+      when(mockViewModel.loyaltyDiscount).thenReturn(0.0);
+      when(mockViewModel.grossSubtotal).thenReturn(155.0);
+      when(mockViewModel.subtotal).thenReturn(125.0);
+      when(mockViewModel.totalDiscounts).thenReturn(30.0);
+      when(mockViewModel.totalTax).thenReturn(0.0);
+      when(mockViewModel.total).thenReturn(125.0);
+      when(mockViewModel.companyTaxRegime).thenReturn(null);
+
+      tester.platformDispatcher.textScaleFactorTestValue = 0.5;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      await tester.pumpWidget(buildTestApp());
+      await tester.pumpAndSettle();
+
+      // The device-reported defect: the discount was applied and there was NO
+      // way to take it back. The cart panel now carries an explicit affordance
+      // next to the rendered amount.
+      expect(find.text('Descuento manual'), findsOneWidget);
+      final removeButton = find.byKey(const Key('cart_remove_manual_discount'));
+      expect(removeButton, findsOneWidget);
+
+      await tester.tap(removeButton);
+      await tester.pumpAndSettle();
+
+      // Removing a discount RAISES what the customer pays, so it is never a
+      // restricted action: no supervisor override is requested, and nothing
+      // is denied.
+      verify(mockViewModel.removeManualDiscount()).called(1);
+      verifyNever(
+        mockAuthRepository.authorizeOverride(
+          supervisorId: anyNamed('supervisorId'),
+          pin: anyNamed('pin'),
+          totpCode: anyNamed('totpCode'),
+        ),
+      );
+    },
+  );
+
+  testWidgets(
     'manual discount prompt shows the configured cap BEFORE typing (SOHO-P3 S1b)',
     (tester) async {
       when(mockViewModel.cart).thenReturn([

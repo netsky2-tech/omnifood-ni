@@ -2379,6 +2379,194 @@ void main() {
       expect(viewModel.totalDiscounts, 125.0);
     });
   });
+
+  // The device-reported defect (client, SOHO pilot terminal): a manual
+  // discount applied to one cart survived the operator emptying that cart
+  // item by item, so the NEXT sale opened with the previous sale's
+  // discount already applied — and there was no way to remove it.
+  //
+  // The discount is cart-scoped state, exactly like the selected customer
+  // (round-2 D-2) and the promotion weights (D-7/S1a). A value that
+  // belongs to ONE cart must not survive into the next.
+  group('Manual discount is cart-scoped state (device-reported defect)', () {
+    const pA = Product(
+      id: 'p-scope-a',
+      sku: 'SKU-SA',
+      name: 'Producto Scope A',
+      uom: 'unit',
+      sellPrice: 100,
+      stock: 10,
+      averageCost: 10,
+    );
+    const pB = Product(
+      id: 'p-scope-b',
+      sku: 'SKU-SB',
+      name: 'Producto Scope B',
+      uom: 'unit',
+      sellPrice: 80,
+      stock: 10,
+      averageCost: 10,
+    );
+
+    test(
+      'emptying the cart item by item voids the manual discount',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pA);
+        viewModel.applyManualDiscount(50.0);
+        expect(viewModel.manualDiscount, 50.0);
+
+        // The operator removes the only product.
+        viewModel.removeFromCart('p-scope-a');
+
+        expect(
+          viewModel.manualDiscount,
+          0.0,
+          reason:
+              'a manual discount belongs to ONE cart: emptying that cart must '
+              'void it, exactly as the selected customer context is voided '
+              '(round-2 D-2). Otherwise the next sale opens with the previous '
+              "sale's discount already applied.",
+        );
+        expect(viewModel.totalDiscounts, 0.0);
+      },
+    );
+
+    test(
+      'emptying the cart through updateQuantity to zero voids the manual discount',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pA);
+        viewModel.applyManualDiscount(50.0);
+
+        viewModel.updateQuantity('p-scope-a', 0);
+
+        expect(
+          viewModel.manualDiscount,
+          0.0,
+          reason:
+              'updateQuantity to zero removes the last product: the discount '
+              'must not survive into the next sale.',
+        );
+        expect(viewModel.totalDiscounts, 0.0);
+      },
+    );
+
+    test(
+      'the next sale opens with NO discount after the previous cart was emptied',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pA);
+        viewModel.applyManualDiscount(50.0);
+        viewModel.removeFromCart('p-scope-a');
+
+        // The operator starts the next sale.
+        viewModel.addToCart(pB);
+
+        expect(
+          viewModel.manualDiscount,
+          0.0,
+          reason:
+              "the new sale must not inherit the previous sale's discount — "
+              'this is the exact symptom the client reported.',
+        );
+        expect(viewModel.totalDiscounts, 0.0);
+        expect(viewModel.grossSubtotal, 80.0);
+      },
+    );
+
+    test(
+      'a manual discount survives a cart mutation that leaves the cart NOT empty',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pA);
+        viewModel.addToCart(pB);
+        viewModel.applyManualDiscount(50.0);
+
+        viewModel.removeFromCart('p-scope-b');
+
+        expect(
+          viewModel.manualDiscount,
+          50.0,
+          reason:
+              'the discount is scoped to the cart, not to the cart SIZE: while '
+              'the cart is still open the discount stays applied.',
+        );
+      },
+    );
+
+    test(
+      'the operator can remove an applied manual discount from a live cart',
+      () async {
+        await viewModel.loadPromotions();
+        viewModel.addToCart(pA);
+        viewModel.applyManualDiscount(50.0);
+        expect(viewModel.manualDiscount, 50.0);
+
+        // The client reported having NO way to remove a discount they did not
+        // want. The removal must not require the supervisor override: removing
+        // a discount RAISES what the customer pays, so it is never a
+        // restricted action.
+        viewModel.removeManualDiscount();
+
+        expect(viewModel.manualDiscount, 0.0);
+        expect(viewModel.totalDiscounts, 0.0);
+        expect(
+          viewModel.errorMessage,
+          isNull,
+          reason: 'removing a discount is not a refusal: nothing is denied.',
+        );
+      },
+    );
+
+    test(
+      'a manual discount is reduced to what the owner cap allows when the cart shrinks',
+      () async {
+        // The owner configured a 25% manual discount cap. The cap's base is
+        // the order's GROSS subtotal, so a cart that shrinks can leave a
+        // retained discount above the cap the owner configured.
+        await fakeLocalConfigDao.saveConfig(
+          LocalConfigEntity(key: 'max_discount_percent', value: '25'),
+        );
+        final vm = SaleViewModel(
+          mockSalesRepo,
+          mockInventoryRepo,
+          mockAuthRepo,
+          mockDb,
+          null,
+          true,
+          fakeTenantConfigService,
+          fakeKitchenOrderService,
+        );
+        await Future<void>.delayed(Duration.zero);
+
+        vm.addToCart(pA); // C$ 100 gross -> 25% cap = C$ 25
+        vm.applyManualDiscount(25.0);
+        expect(vm.manualDiscount, 25.0);
+
+        vm.addToCart(pB); // C$ 180 gross -> 25% cap = C$ 45
+        vm.updateQuantity('p-scope-b', 0); // back to C$ 100 gross -> cap C$ 25
+        expect(
+          vm.manualDiscount,
+          25.0,
+          reason:
+              'the retained discount still fits the 25% cap on the C\$ 100 '
+              'gross, so it is untouched.',
+        );
+
+        // Now shrink below the discount: C$ 50 gross allows only C$ 12.50.
+        vm.updateQuantity('p-scope-a', 0.5);
+        expect(
+          vm.manualDiscount,
+          12.5,
+          reason:
+              'the owner cap is a share of the GROSS subtotal, so a discount '
+              'that no longer fits the cap must be reduced to what the cap '
+              'still allows — it must never exceed the configured limit.',
+        );
+      },
+    );
+  });
 }
 
 /// Minimal data-layer invoice for the D-15 guard inputs (the domain Invoice
