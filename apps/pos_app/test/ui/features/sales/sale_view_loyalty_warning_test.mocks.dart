@@ -882,6 +882,16 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       );
 
   @override
+  _i18.Future<void> reloadOperatorContext() => (super.noSuchMethod(
+        Invocation.method(
+          #reloadOperatorContext,
+          [],
+        ),
+        returnValue: _i18.Future<void>.value(),
+        returnValueForMissingStub: _i18.Future<void>.value(),
+      ) as _i18.Future<void>);
+
+  @override
   double getCartItemLineAmount(_i14.CartItem? item) => (super.noSuchMethod(
         Invocation.method(
           #getCartItemLineAmount,

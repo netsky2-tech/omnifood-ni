@@ -1350,7 +1350,14 @@ class SaleViewModel extends ChangeNotifier {
   ///
   /// The sale screen calls this when it is entered, so the identity that
   /// the gates use is always the operator who is actually at the till.
-  Future<void> reloadOperatorContext() => _loadCurrentUserRole();
+  Future<void> reloadOperatorContext() async {
+    try {
+      await _loadCurrentUserRole();
+    } catch (_) {
+      // Refreshing the identity must NEVER break the sale screen: if the
+      // session cannot be read, the previous identity simply stands.
+    }
+  }
 
   static const _fiscalCalculator = InvoiceFiscalCalculator();
 

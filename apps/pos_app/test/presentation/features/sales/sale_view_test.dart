@@ -62,6 +62,9 @@ void main() {
     mockAuditRepository = MockAuditRepository();
     mockSyncService = MockSyncService();
 
+    // The sale screen reloads the operator's identity when it is entered (the
+    // operator can change while the view model survives).
+    when(mockViewModel.reloadOperatorContext()).thenAnswer((_) async {});
     when(mockViewModel.errorMessage).thenReturn(null);
     when(mockViewModel.activeSession).thenReturn(activeSession);
     when(mockViewModel.isLoading).thenReturn(false);
