@@ -1,5 +1,13 @@
 import { api, type ApiClientMethodOptions } from "@/lib/api";
-import type { AuditEvent, AuditEventsResponse, AuditSeverity } from "./types";
+import type {
+  AuditEvent,
+  AuditEventsResponse,
+  AuditSeverity,
+  SupervisionFlow,
+  SupervisionReviewClassCount,
+  SupervisionReviewEntry,
+  SupervisionReviewResponse,
+} from "./types";
 
 function toQueryParams(
   params: Record<string, string | number | undefined>,
@@ -138,6 +146,92 @@ export function normalizeAuditLedger(raw: unknown): AuditLedgerResponse {
   };
 }
 
+/**
+ * Normalizes the supervision review queue. A row that does not carry the
+ * minimum evidence (when, what, who) is DROPPED rather than shown as a
+ * half-row: a review line without its evidence is worse than no line.
+ */
+const SUPERVISION_FLOWS: readonly SupervisionFlow[] = [
+  "CLOSE_BOX",
+  "MANUAL_DISCOUNT",
+  "CASH_DRAWER",
+  "MODIFIER_QUANTITY",
+];
+
+/**
+ * A flow the backend does not know is NOT guessed: it falls back to
+ * CLOSE_BOX only when the value is one of the known members; anything else
+ * is dropped by the caller (the row is skipped, never half-rendered).
+ */
+function toSupervisionFlow(raw: unknown): SupervisionFlow {
+  return (SUPERVISION_FLOWS as string[]).includes(raw as string)
+    ? (raw as SupervisionFlow)
+    : "CLOSE_BOX";
+}
+
+export function normalizeSupervisionReview(
+  raw: unknown,
+): SupervisionReviewResponse {
+  const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const rows = Array.isArray(r.entries) ? r.entries : [];
+  const entries: SupervisionReviewEntry[] = [];
+  for (const entry of rows) {
+    const e = (typeof entry === "object" && entry !== null
+      ? entry
+      : {}) as Record<string, unknown>;
+    if (typeof e.occurredAt !== "string" || e.occurredAt === "") continue;
+    if (typeof e.action !== "string" || e.action === "") continue;
+    entries.push({
+      occurredAt: e.occurredAt,
+      actorEmail:
+        typeof e.actorEmail === "string" && e.actorEmail !== ""
+          ? e.actorEmail
+          : null,
+      authorizerEmail:
+        typeof e.authorizerEmail === "string" && e.authorizerEmail !== ""
+          ? e.authorizerEmail
+          : null,
+      hadSupervisor: e.hadSupervisor === true,
+      method: typeof e.method === "string" && e.method !== "" ? e.method : null,
+      flow: toSupervisionFlow(e.flow),
+      action: e.action,
+      severity: toSeverity(e.severity),
+      deviceId: typeof e.deviceId === "string" ? e.deviceId : "",
+    });
+  }
+
+  const byClass: SupervisionReviewClassCount[] = [];
+  for (const entry of Array.isArray(r.byClass) ? r.byClass : []) {
+    const c = (typeof entry === "object" && entry !== null
+      ? entry
+      : {}) as Record<string, unknown>;
+    const flow = toSupervisionFlow(c.flow);
+    if (!flow) continue;
+    byClass.push({
+      flow,
+      supervised: typeof c.supervised === "number" ? c.supervised : 0,
+      selfAuthorized:
+        typeof c.selfAuthorized === "number" ? c.selfAuthorized : 0,
+    });
+  }
+
+  return {
+    startDate: typeof r.startDate === "string" ? r.startDate : null,
+    endDate: typeof r.endDate === "string" ? r.endDate : null,
+    total: typeof r.total === "number" ? r.total : 0,
+    selfAuthorizedTotal:
+      typeof r.selfAuthorizedTotal === "number" ? r.selfAuthorizedTotal : 0,
+    byClass,
+    entries,
+    limit: typeof r.limit === "number" ? r.limit : 0,
+    truncated: r.truncated === true,
+    generatedAt: typeof r.generatedAt === "string" ? r.generatedAt : "",
+  };
+}
+
 export function normalizeAuditIntegrity(raw: unknown): AuditIntegrityResponse {
   const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
   const rows = Array.isArray(r.alerts) ? r.alerts : [];
@@ -199,6 +293,21 @@ export function fetchAuditIntegrity(opts?: ApiClientMethodOptions) {
         .get<unknown>("/operations/audit/integrity", opts)
         .then(normalizeAuditIntegrity)
     : api.get<unknown>("/operations/audit/integrity").then(normalizeAuditIntegrity);
+}
+
+/**
+ * The owner's review queue for the tenant's supervision policy
+ * (GET /operations/audit/supervision-review). Same period contract as the
+ * rest of the reporting surfaces.
+ */
+export function fetchSupervisionReview(
+  filters: { startDate?: string; endDate?: string; limit?: number },
+  opts?: ApiClientMethodOptions,
+) {
+  const url = `/operations/audit/supervision-review${toQueryParams(filters)}`;
+  return opts
+    ? api.get<unknown>(url, opts).then(normalizeSupervisionReview)
+    : api.get<unknown>(url).then(normalizeSupervisionReview);
 }
 
 /**

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -364,10 +365,23 @@ export function SupervisionPolicyCard() {
             </fieldset>
 
             <div className="flex items-center justify-between gap-3 pt-4 border-t">
-              <p className="text-xs text-muted-foreground max-w-md">
-                Las terminales aplican la política en su próxima sincronización. Mientras
-                no haya conexión, siguen con la que ya tenían.
-              </p>
+              <div className="max-w-md space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Las terminales aplican la política en su próxima sincronización. Mientras
+                  no haya conexión, siguen con la que ya tenían.
+                </p>
+                {/* Contextual navigation: the configuration and the review of
+                what it produced live one click apart, and the review carries
+                the period with it. */}
+                <p className="text-xs">
+                  <Link
+                    to="/audit?view=supervision"
+                    className="text-primary underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  >
+                    Ver qué se firmó en sus cajas
+                  </Link>
+                </p>
+              </div>
               <div className="flex items-center gap-3">
                 {data?.configured && (
                   <Button

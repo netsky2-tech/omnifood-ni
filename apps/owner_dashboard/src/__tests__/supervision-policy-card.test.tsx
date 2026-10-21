@@ -13,6 +13,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { SupervisionPolicyCard } from "@/features/supervision/supervision-policy-card";
 import { useAuthStore } from "@/features/auth/auth-store";
@@ -27,7 +28,9 @@ function renderCard() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <SupervisionPolicyCard />
+      <MemoryRouter>
+        <SupervisionPolicyCard />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

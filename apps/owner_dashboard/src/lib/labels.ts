@@ -210,6 +210,23 @@ export const auditLedgerActionLabels: Record<string, string> = {
  * SUPERVISOR_OVERRIDE, USER). Unknown values pass through untouched via
  * `localize`.
  */
+/**
+ * The operations the tenant's supervision policy governs, in the owner's
+ * words. The codes travel on the wire; the screen never shows them raw.
+ */
+export const supervisionFlowLabels: Record<string, string> = {
+  CLOSE_BOX: "Cierre de turno (Corte Z)",
+  MANUAL_DISCOUNT: "Descuento manual",
+  CASH_DRAWER: "Apertura de gaveta",
+  MODIFIER_QUANTITY: "Cantidad de un extra",
+};
+
+/** The credential a signature was made with. */
+export const credentialMethodLabels: Record<string, string> = {
+  PIN: "PIN del operador",
+  TOTP: "Código TOTP",
+};
+
 export const auditLedgerTargetTypeLabels: Record<string, string> = {
   // Round-2 F-4a's derivation (audit-target-derivation.ts) writes the type
   // UPPERCASE at ingestion; the pre-existing lowercase key stays for rows

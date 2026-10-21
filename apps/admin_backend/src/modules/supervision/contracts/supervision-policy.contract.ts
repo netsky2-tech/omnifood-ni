@@ -64,6 +64,47 @@ export type SupervisionFlow =
  * role, never a permission list, so a policy that named permissions could
  * not be enforced on an offline terminal at all).
  */
+/**
+ * The forensic action codes the terminal writes when a sensitive operation
+ * is signed, mapped to the FLOW they belong to.
+ *
+ * This is the vocabulary the owner's review queue reads: the queue answers
+ * "what happened, who signed it, and was a supervisor involved" by
+ * classifying the ledger rows, never by reading the metadata blob.
+ */
+export const SUPERVISION_FLOW_BY_ACTION: Readonly<Record<string, SupervisionFlow>> =
+  {
+    SUPERVISOR_OVERRIDE_CLOSE_SESSION: SUPERVISION_FLOW.CLOSE_BOX,
+    SELF_AUTHORIZED_CLOSE_SESSION: SUPERVISION_FLOW.CLOSE_BOX,
+    SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT: SUPERVISION_FLOW.MANUAL_DISCOUNT,
+    SELF_AUTHORIZED_MANUAL_DISCOUNT: SUPERVISION_FLOW.MANUAL_DISCOUNT,
+    DRAWER_OPENED_MANUALLY: SUPERVISION_FLOW.CASH_DRAWER,
+    SELF_AUTHORIZED_DRAWER_OPENED: SUPERVISION_FLOW.CASH_DRAWER,
+    MODIFIER_EFFECT_QUANTITY_OVERRIDE: SUPERVISION_FLOW.MODIFIER_QUANTITY,
+    SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY: SUPERVISION_FLOW.MODIFIER_QUANTITY,
+    MODIFIER_EFFECT_QUANTITY_ADJUSTED: SUPERVISION_FLOW.MODIFIER_QUANTITY,
+  };
+
+/**
+ * The action codes the review queue reads. It is the INVERSE of the map
+ * above: the queue asks the store for exactly these rows.
+ */
+export const SUPERVISION_REVIEW_ACTIONS: readonly string[] = Object.keys(
+  SUPERVISION_FLOW_BY_ACTION,
+);
+
+/**
+ * Whether the given action code is a SELF-authorization: the operator
+ * signed their own operation because nobody else was on the floor.
+ *
+ * It is read from the ACTION CODE, never from the metadata: the code is
+ * what the terminal wrote at the moment of the operation, and the metadata
+ * is a payload this surface does not expose.
+ */
+export function isSelfAuthorizedAction(action: string): boolean {
+  return String(action ?? '').trim().toUpperCase().startsWith('SELF_AUTHORIZED_');
+}
+
 export interface SupervisionPolicy {
   readonly authorizingRoles: readonly UserRole[];
   readonly selfAuthorizationAllowedCloseBox: boolean;

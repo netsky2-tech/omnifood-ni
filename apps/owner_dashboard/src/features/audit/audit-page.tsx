@@ -21,12 +21,14 @@ import { formatDateTime } from "@/lib/utils";
 import { parseDashboardNavigationContext } from "@/features/dashboard/domain/navigation-context";
 import {
   useAuditEvents,
+  useSupervisionReview,
   useAuditSummary,
   useAuditLedger,
   useAuditIntegrity,
   useAuditActors,
 } from "./use-audit-events";
 import type { AuditEvent, AuditSeverity } from "./types";
+import { SupervisionReviewPanel } from "./supervision-review-panel";
 import type { AuditLedgerEntry, AuditIntegrityAlert } from "./audit-api";
 
 type SeverityFilter = AuditSeverity | undefined;
@@ -37,7 +39,7 @@ type SeverityFilter = AuditSeverity | undefined;
  * (GET /operations/audit/ledger). The owner picks the source explicitly;
  * a filtered view never silently swaps stores underneath them.
  */
-type AuditView = "platform" | "ledger";
+type AuditView = "platform" | "ledger" | "supervision";
 
 // NHILOS §15: the backend defaults to 50 rows (max 100) with no total-count
 // contract, so the page sends an explicit `limit` and, whenever the response
@@ -93,8 +95,9 @@ function readAuditFilters(searchParams: URLSearchParams): {
     severityParam === "INFO"
       ? severityParam
       : undefined;
+  const rawView = searchParams.get("view");
   const view: AuditView =
-    searchParams.get("view") === "ledger" ? "ledger" : "platform";
+    rawView === "ledger" || rawView === "supervision" ? rawView : "platform";
   return {
     // Only well-formed calendar keys reach the API; anything else is treated
     // as absent instead of triggering a backend 400 on a pasted URL.
@@ -410,6 +413,7 @@ export function AuditPage() {
   // Deep-link origin (consumed per the contract; no data effect).
   parseDashboardNavigationContext(searchParams);
   const isLedgerView = view === "ledger";
+  const isSupervisionView = view === "supervision";
 
   const hasDateFilter = startDate !== undefined || endDate !== undefined;
   const isFiltered = severity !== undefined || hasDateFilter;
@@ -432,6 +436,12 @@ export function AuditPage() {
   const integrityQuery = useAuditIntegrity(isLedgerView);
   const actorsQuery = useAuditActors(isLedgerView);
   const summaryQuery = useAuditSummary(startDate, endDate, !isLedgerView);
+  // The review queue is its own read: only the supervision view pays for it.
+  const supervisionQuery = useSupervisionReview(
+    { startDate, endDate },
+    EVENTS_PAGE_LIMIT,
+    isSupervisionView,
+  );
 
   const events = eventsQuery.data?.events ?? [];
   const ledgerEntries = ledgerQuery.data?.entries ?? [];
@@ -450,11 +460,15 @@ export function AuditPage() {
 
   const setView = (next: AuditView) => {
     updateParams((p) => {
-      if (next === "ledger") {
-        p.set("view", "ledger");
+      if (next === "ledger" || next === "supervision") {
+        p.set("view", next);
         // Filters that do not apply to the target view are stripped, never
         // left invisible in the URL (AP-13 mystery filtering).
         p.delete("severity");
+        if (next === "supervision") {
+          p.delete("actorUserId");
+          p.delete("targetType");
+        }
       } else {
         p.delete("view");
         p.delete("actorUserId");
@@ -506,15 +520,22 @@ export function AuditPage() {
             Auditoría
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isLedgerView
-              ? "Registro de lo que ocurrió en las cajas del local: anulaciones, notas de crédito, descuentos autorizados, aperturas de gaveta y reimpresiones — quién, cuándo y desde qué dispositivo."
-              : "Revisá la actividad y los eventos de seguridad de tu comercio: qué cambió, quién lo hizo y cuándo."}
+            {isSupervisionView
+              ? "Las operaciones sensibles que se firmaron en sus cajas: quién las firmó, con qué credencial y si hubo un supervisor presente."
+              : isLedgerView
+                ? "Registro de lo que ocurrió en las cajas del local: anulaciones, notas de crédito, descuentos autorizados, aperturas de gaveta y reimpresiones — quién, cuándo y desde qué dispositivo."
+                : "Revisá la actividad y los eventos de seguridad de tu comercio: qué cambió, quién lo hizo y cuándo."}
           </p>
         </div>
         {/* §35: generated reports show their generation time as metadata,
         never as a synchronization-freshness claim. Each view reports the
         generation time of the report it actually shows. */}
-        {isLedgerView ? (
+        {isSupervisionView ? (
+          <FreshnessBadge
+            generatedAt={supervisionQuery.data?.generatedAt}
+            isLoading={supervisionQuery.isLoading}
+          />
+        ) : isLedgerView ? (
           <FreshnessBadge
             generatedAt={ledgerQuery.data?.generatedAt}
             isLoading={ledgerQuery.isLoading}
@@ -555,11 +576,26 @@ export function AuditPage() {
         >
           Bitácora del mostrador (POS)
         </button>
+        <button
+          type="button"
+          aria-pressed={isSupervisionView}
+          onClick={() => setView("supervision")}
+          data-testid="audit-view-supervision"
+          className={
+            isSupervisionView
+              ? SOURCE_CHIP_ACTIVE_CLASS
+              : SOURCE_CHIP_IDLE_CLASS
+          }
+        >
+          Revisión de supervisiones
+        </button>
       </div>
       <p className="text-xs text-muted-foreground -mt-3">
-        {isLedgerView
-          ? "Entradas escritas por los terminales POS del local. No incluye los cambios de administración de la plataforma."
-          : "Eventos registrados por la plataforma de administración (activaciones, catálogo, usuarios). Las operaciones en cajas del POS están en la bitácora del mostrador."}
+        {isSupervisionView
+          ? "Las operaciones sensibles que se firmaron en sus cajas: quién las firmó, con qué credencial y si hubo un supervisor presente."
+          : isLedgerView
+            ? "Entradas escritas por los terminales POS del local. No incluye los cambios de administración de la plataforma."
+            : "Eventos registrados por la plataforma de administración (activaciones, catálogo, usuarios). Las operaciones en cajas del POS están en la bitácora del mostrador."}
       </p>
 
       {!isLedgerView && (
@@ -731,6 +767,48 @@ export function AuditPage() {
               </>
             )
           )}
+        </>
+      )}
+
+      {isSupervisionView && (
+        <>
+          {/* The period is the context of a review: it is shown as a
+          resettable chip, never as an invisible filter. */}
+          <div
+            className="flex flex-wrap items-center gap-2"
+            role="group"
+            aria-label="Filtros de la revisión de supervisiones"
+          >
+            {hasDateFilter ? (
+              <span className={FILTER_CHIP_CLASS}>
+                Período: {startDate ?? "inicio"} – {endDate ?? "hoy"}
+                <button
+                  type="button"
+                  onClick={clearDateFilter}
+                  aria-label="Quitar filtro de período"
+                  className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                >
+                  ✕
+                </button>
+              </span>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Sin filtro de período: se revisan todas las operaciones
+                firmadas hasta hoy.
+              </p>
+            )}
+          </div>
+
+          <SupervisionReviewPanel
+            isLoading={supervisionQuery.isLoading}
+            error={supervisionQuery.error}
+            total={supervisionQuery.data?.total ?? 0}
+            selfAuthorizedTotal={supervisionQuery.data?.selfAuthorizedTotal ?? 0}
+            byClass={supervisionQuery.data?.byClass ?? []}
+            entries={supervisionQuery.data?.entries ?? []}
+            truncated={supervisionQuery.data?.truncated ?? false}
+            onRetry={() => supervisionQuery.refetch()}
+          />
         </>
       )}
 

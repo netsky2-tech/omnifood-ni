@@ -33,3 +33,54 @@ export interface AuditEventsResponse {
 
 /** Severity filter values accepted by GET /operations/audit/events. */
 export type AuditSeverityFilter = AuditSeverity;
+
+/**
+ * The owner's REVIEW QUEUE for the tenant's supervision policy
+ * (GET /operations/audit/supervision-review).
+ *
+ * It answers the question the policy exists for: what happened, who signed
+ * it, with which credential, and whether a supervisor was involved. The
+ * flow and the self-authorization are DERIVED server-side from the action
+ * code, so the dashboard never has to guess them.
+ */
+export type SupervisionFlow =
+  | "CLOSE_BOX"
+  | "MANUAL_DISCOUNT"
+  | "CASH_DRAWER"
+  | "MODIFIER_QUANTITY";
+
+export interface SupervisionReviewEntry {
+  occurredAt: string;
+  /** Who performed the operation at the till. */
+  actorEmail: string | null;
+  /** Who signed it: the supervisor, or the operator themselves. */
+  authorizerEmail: string | null;
+  /** False means the operator signed their own operation. */
+  hadSupervisor: boolean;
+  /** The credential used to sign: PIN or TOTP; null when none was needed. */
+  method: string | null;
+  flow: SupervisionFlow;
+  action: string;
+  severity: AuditSeverity;
+  deviceId: string;
+}
+
+export interface SupervisionReviewClassCount {
+  flow: SupervisionFlow;
+  supervised: number;
+  selfAuthorized: number;
+}
+
+export interface SupervisionReviewResponse {
+  startDate: string | null;
+  endDate: string | null;
+  /** Total signed operations in the period (not just the returned page). */
+  total: number;
+  /** How many of them the operator signed alone — the number to review. */
+  selfAuthorizedTotal: number;
+  byClass: SupervisionReviewClassCount[];
+  entries: SupervisionReviewEntry[];
+  limit: number;
+  truncated: boolean;
+  generatedAt: string;
+}

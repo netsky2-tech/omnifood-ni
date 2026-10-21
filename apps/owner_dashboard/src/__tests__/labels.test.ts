@@ -20,6 +20,8 @@ import {
   normalizeMenuImportIssueMessage,
   onboardingBlockerLabels,
   onboardingWarningLabels,
+  supervisionFlowLabels,
+  credentialMethodLabels,
 } from "@/lib/labels";
 import * as labelsLib from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
@@ -58,6 +60,8 @@ const families: Record<string, Record<string, string>> = {
   publicationStateLabels,
   onboardingBlockerLabels,
   onboardingWarningLabels,
+  supervisionFlowLabels,
+  credentialMethodLabels,
 };
 
 describe("label families — guard coverage", () => {

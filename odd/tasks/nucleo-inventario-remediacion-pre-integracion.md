@@ -598,6 +598,11 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
     - **La severidad sigue al EVENTO, no al firmante**: la misma clase conserva la misma severidad con o sin supervisor, y una auto-autorización (el control MÁS débil) nunca puede ser más suave que su gemelo supervisado. Cierre de turno y descuento manual = `CRITICAL`; gaveta fuera de venta y cantidad de un extra = `WARNING`.
     - Los seis códigos nuevos (`SELF_AUTHORIZED_*`, `MODIFIER_EFFECT_QUANTITY_*`) entran también en la **guarda S4a** (dinero/privilegio/permiso nunca degradan a `INFO`).
     - Y el backoffice les pone palabras: «Cierre de turno firmado por el operador», «Cantidad de un extra ajustada con supervisor», etc.
+  - **LA COLA DE REVISIÓN (el «registro» que la política promete, por fin, consultable)**: nueva vista de Auditoría → «Revisión de supervisiones» (`/audit?view=supervision`), con el endpoint `GET /operations/audit/supervision-review`.
+    - **Dos lecturas, a propósito**: los RECUENTOS cubren todo el período (el dueño lee «3 cierres, 1 descuento») y las FILAS van paginadas. Una lectura sin tope traería el período entero a memoria; una lectura paginada no podría decir un total honesto.
+    - El flujo y el «¿hubo supervisor?» se **derivan del código de acción** (lo que la terminal escribió en el momento), **nunca del `metadata`** ni de las columnas de la cadena de hash: el detalle forense crudo no sale a esta superficie.
+    - **Verificado en vivo contra la réplica** con el rastro real de la campaña del rig: 1 cierre de turno auto-autorizado, firmado por el propio operador con **PIN**, en el dispositivo `S23-REHEARSAL`, con la cuenta separada («1 en total · 1 lo firmó el propio operador, sin supervisor presente»).
+    - El enlace de contexto: la tarjeta de Configuración → Supervisión dice «Ver qué se firmó en sus cajas» y lleva a la cola con el período.
   - Change de SDD: `openspec/changes/supervision-policy-tenant-owned/` (propuesta, contrato, diseño, tareas). Unidades: `ace7e0d1` (nube) · `4f5821a0` (backoffice) · esta (terminal).
 
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)
