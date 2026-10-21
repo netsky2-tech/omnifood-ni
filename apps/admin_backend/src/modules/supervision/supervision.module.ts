@@ -5,6 +5,7 @@ import {
   SystemParametersConfigActiveView,
 } from '../inventory/entities/system-parameters-config.entity';
 import { OnboardingModule } from '../onboarding/onboarding.module';
+import { IdentityModule } from '../identity/identity.module';
 import { SupervisionPolicyService } from './services/supervision-policy.service';
 import { SupervisionPolicyController } from './controllers/supervision-policy.controller';
 
@@ -22,6 +23,9 @@ import { SupervisionPolicyController } from './controllers/supervision-policy.co
       SystemParametersConfigActiveView,
     ]),
     OnboardingModule,
+    // The guards (AuthGuard → JwtService, RolesGuard, PermissionsGuard) live
+    // in the identity module: without it the controller cannot be wired.
+    IdentityModule,
   ],
   controllers: [SupervisionPolicyController],
   providers: [SupervisionPolicyService],

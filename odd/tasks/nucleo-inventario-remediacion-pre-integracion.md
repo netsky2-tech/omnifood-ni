@@ -588,6 +588,12 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
   - **El backoffice habla como las personas**: «Quién puede autorizar» (Dueño/Gerente/Cajero/Mesero), «Cerrar el turno (Corte Z)», y el valor por defecto **se nombra** (con su modo) en vez de esconderse tras un centinela. La entrega se dice honrada: «las terminales la aplican en su próxima sincronización».
   - **Sin permiso (`supervision:configure`) no hay pestaña, no hay tarjeta y no hay consulta** — ni marcador de «sin permiso».
   - **Un límite honesto**: la política trabaja con **roles**, no con permisos por persona, porque la terminal recibe el rol de cada cual por el sync de entrada pero **no** sus permisos. Llevar los permisos al terminal es un change propio.
+  - **VERIFICADO EN VIVO, DE PUNTA A PUNTA (nube + terminal real), contra la réplica `omnifood_prod_rehearsal` y el S23:**
+    1. La API del backoffice escribe la política → la revisión del snapshot **sube** (1 → 2) y el **payload fingerprinted** lleva `supervisionPolicy` dentro.
+    2. El **pull del dispositivo** (exactamente lo que hace la terminal) devuelve esa revisión con la política **en el cable**.
+    3. La terminal (APK de esta rama, instalado con `adb install -r -d`) la **proyecta**: `local_configs['supervision_policy']` = la política escrita, `last_applied_fiscal_revision` = 2 y `fiscal_projection_version` = 2 (la reparación de las instalaciones v1 corrió sola).
+    4. **La retracción también, de punta a punta**: al restablecer en el backoffice (revision 3), la terminal aplicó la 3 y **borró** la clave local → vuelve al valor por defecto de su modo. Sin dejarresiduo.
+    5. El invariante, en vivo: la política que dejaría el corte de caja imposible la **rechaza el servidor** (400) con el mensaje en palabras, y la terminal **nunca** aplica una así (prueba del dominio).
   - Change de SDD: `openspec/changes/supervision-policy-tenant-owned/` (propuesta, contrato, diseño, tareas). Unidades: `ace7e0d1` (nube) · `4f5821a0` (backoffice) · esta (terminal).
 
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)
