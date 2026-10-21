@@ -233,7 +233,23 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           <div>
             <Label htmlFor="type">Tipo de Promoción *</Label>
             <Select
-              onValueChange={(value) => form.setValue('type', value as PromotionType, { shouldValidate: true })}
+              onValueChange={(value) => {
+                // Radix emits '' on its own when its hidden native <select>
+                // has no <option> matching the current value — which is the
+                // case while the dropdown is closed, because the items are
+                // unmounted. Writing that '' into the form wiped the type
+                // that form.reset() had just restored, so the picker fell
+                // back to its placeholder and NO type-dependent field
+                // rendered (device-reported).
+                //
+                // '' is never a legitimate type: the four PromotionType
+                // values are the only valid ones, and the schema rejects
+                // anything else. So an empty emission is Radix talking to
+                // itself, never an operator action — ignore it instead of
+                // letting it erase the real value.
+                if (!value) return;
+                form.setValue('type', value as PromotionType, { shouldValidate: true });
+              }}
               value={watchedType}
             >
               <SelectTrigger aria-label="Tipo de Promoción">

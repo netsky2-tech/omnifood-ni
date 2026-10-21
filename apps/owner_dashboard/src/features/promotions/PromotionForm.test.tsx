@@ -240,6 +240,50 @@ describe('PromotionForm', () => {
     expect(screen.getByLabelText('Prioridad')).toHaveValue(10);
   });
 
+  // REGRESSION (device-reported): editing a promotion showed the type
+  // picker on its placeholder ("Seleccione tipo") instead of the saved
+  // type, and NO type-dependent field rendered at all.
+  //
+  // Root cause: Radix's Select fires onValueChange('') on its own when
+  // its hidden native <select> has no <option> to match (the dropdown is
+  // closed, so the items are unmounted). That '' was written straight
+  // into the form, wiping the type that form.reset() had just restored.
+  // The pre-existing 'pre-fills form with initialData' test never
+  // asserted the select, which is why it passed with the defect present.
+  it('pre-fills the TYPE picker with the saved type when editing', async () => {
+    renderForm({ ...mockPromotion, type: PromotionType.PERCENTAGE_DISCOUNT });
+
+    const selectTrigger = screen.getByRole('combobox', { name: /tipo de promoci/i });
+
+    // The saved type must be VISIBLE, not the placeholder.
+    await waitFor(() => {
+      expect(selectTrigger).not.toHaveTextContent('Seleccione tipo');
+    });
+    expect(selectTrigger).toHaveTextContent('Descuento Porcentaje');
+
+    // And the type-dependent fields must render for that saved type.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Porcentaje de Descuento *')).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText('Cantidad a Comprar *')).not.toBeInTheDocument();
+  });
+
+  it('keeps the type picker on the saved type after the async reset settles', async () => {
+    // The defect was a RACE: the reset restored the type and Radix's
+    // '' came a beat later. Asserting only the first paint would miss it.
+    renderForm({ ...mockPromotion, type: PromotionType.FIXED_DISCOUNT });
+
+    const selectTrigger = screen.getByRole('combobox', { name: /tipo de promoci/i });
+    await waitFor(() => {
+      expect(screen.getByLabelText('Descuento Fijo *')).toBeInTheDocument();
+    });
+
+    // Let the late '' land, then re-assert.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(selectTrigger).toHaveTextContent('Descuento Fijo');
+    expect(screen.getByLabelText('Descuento Fijo *')).toBeInTheDocument();
+  });
+
   it('toggles days of week correctly', () => {
     renderForm(null);
     
