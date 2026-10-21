@@ -28,6 +28,7 @@ export function formatPercent(value: number): string {
 
 export function formatDate(date: Date | string | number): string {
   const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("es-NI", {
     year: "numeric",
     month: "2-digit",
@@ -37,6 +38,7 @@ export function formatDate(date: Date | string | number): string {
 
 export function formatDateTime(date: Date | string | number): string {
   const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+  if (!(d instanceof Date) || isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("es-NI", {
     // NHILOS §38: auditable date-times render in the PRODUCT timezone so the
     // owner sees one canonical wall-clock regardless of where the browser or
