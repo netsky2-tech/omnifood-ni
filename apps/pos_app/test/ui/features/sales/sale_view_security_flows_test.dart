@@ -754,15 +754,10 @@ void main() {
     await tester.tap(find.byTooltip('Cerrar Caja'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Autorización de supervisor'), findsOneWidget);
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
-    }), '1234');
-    // The modal rebuilds when the credential lands: the submit button
-    // follows it, and a tap without a frame would fall on the old one.
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Autorizar'));
-    await tester.pumpAndSettle();
+    // The FISCAL gate comes first: the operator is not asked for a
+    // credential when the close was impossible anyway. The signature is
+    // only asked once the act can actually happen.
+    expect(find.text('Autorización de supervisor'), findsNothing);
 
     expect(find.text('Bloqueo de Corte Z Fiscal'), findsOneWidget);
     expect(find.text('IR A RECONCILIACIÓN'), findsOneWidget);
@@ -811,15 +806,10 @@ void main() {
     await tester.tap(find.byTooltip('Cerrar Caja'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Autorización de supervisor'), findsOneWidget);
-    await tester.enterText(find.byWidgetPredicate((widget) {
-      return widget is TextField && widget.decoration?.labelText == 'Su PIN';
-    }), '1234');
-    // The modal rebuilds when the credential lands: the submit button
-    // follows it, and a tap without a frame would fall on the old one.
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Autorizar'));
-    await tester.pumpAndSettle();
+    // The FISCAL gate comes first: the operator is not asked for a
+    // credential when the close was impossible anyway. The signature is
+    // only asked once the act can actually happen.
+    expect(find.text('Autorización de supervisor'), findsNothing);
 
     // Even a supervisor authorization cannot pass the open-accounts gate:
     // the hard block names the account, its line count and its total.
@@ -1065,12 +1055,13 @@ void main() {
     await tester.tap(find.text('Continuar'));
     await tester.pumpAndSettle();
 
+    // The drawer is a DIFFERENT act: the justification comes first, then the
+    // credential (the drawer is not a fiscal close, so there is no fiscal
+    // pre-gate to run before the signature).
     expect(find.text('Autorización de supervisor'), findsOneWidget);
     await tester.enterText(find.byWidgetPredicate((widget) {
       return widget is TextField && widget.decoration?.labelText == 'Su PIN';
     }), '1234');
-    // The modal rebuilds when the credential lands: the submit button
-    // follows it, and a tap without a frame would fall on the old one.
     await tester.pumpAndSettle();
     await tester.tap(find.text('Autorizar'));
     await tester.pumpAndSettle();

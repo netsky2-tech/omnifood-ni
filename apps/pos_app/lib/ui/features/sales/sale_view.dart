@@ -831,50 +831,16 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
+  /// The Corte Z close.
+  ///
+  /// The credential gate and the forensic record live in the SHARED close
+  /// flow (`showCloseShiftFlow`), so both doors of the same fiscal act —
+  /// this one and the Control de Caja button — behave identically: the
+  /// operator who is not an owner/manager identifies with their credential,
+  /// the tenant's policy decides whether they may sign it alone, and the
+  /// act is always recorded. Asking here as well would ask twice.
   Future<void> _requestSupervisorOverrideForCloseBox() async {
-    final authRepo = context.read<AuthRepository>();
-    final currentUser = await authRepo.getCurrentUser();
-
-    // Si el usuario ya es Owner o Manager, abrir directamente el corte Z
-    if (currentUser?.role == UserRole.owner || currentUser?.role == UserRole.manager) {
-      if (mounted) await _openUnifiedZClose();
-      return;
-    }
-
-    final auditRepo = context.read<AuditRepository>();
-    final policy = await tenantSupervisionPolicy(context);
-
-    // La credencial (el PIN) identifica a la persona; la politica del
-    // tenant decide si puede autorizar o si la operacion se auto-autoriza.
-    final outcome = await showDialog<SupervisorOverrideOutcome>(
-      context: context,
-      builder: (dialogContext) => SupervisorOverrideModal(
-        onAuthorize: (request) => authorizeWithPolicy(
-          authRepository: authRepo,
-          policy: policy,
-          request: request,
-          selfAuthorizationAllowed: policy.selfAuthorizationAllowedCloseBox,
-        ),
-      ),
-    );
-
-    if (!mounted || outcome == null || !outcome.authorized) return;
-    // La evidencia: quien firmo, con que credencial, y si hubo supervisor.
-    await auditRepo.logForensic(
-      outcome.isAuthorizingRole
-          ? 'SUPERVISOR_OVERRIDE_CLOSE_SESSION'
-          : 'SELF_AUTHORIZED_CLOSE_SESSION',
-      metodoAutorizacion: outcome.method,
-      usuarioAutorizadorId: outcome.userId,
-      metadata: jsonEncode({
-        'action': 'close_box',
-        'self_authorized': !outcome.isAuthorizingRole,
-        'policy': policy.selfAuthorizationAllowedCloseBox
-            ? 'SELF_ALLOWED'
-            : 'SUPERVISOR_ONLY',
-      }),
-    );
-    await _openUnifiedZClose();
+    if (mounted) await _openUnifiedZClose();
   }
 
   /// T7 (unified close): the weak parallel close (CloseBoxDialog /

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../design_system/responsive_layout.dart';
@@ -11,6 +13,12 @@ import 'card_voucher_reconciliation_dialog.dart';
 import 'z_report_dialog.dart';
 import '../../../design_system/nhilos_tokens.dart';
 import '../../../../presentation/features/sales/view_models/sale_view_model.dart';
+import '../../../../domain/repositories/auth_repository.dart';
+import '../../../../domain/repositories/audit_repository.dart';
+import '../../../../domain/models/config/supervision_policy.dart';
+import '../../../../domain/models/user.dart';
+import '../../identity/supervisor_authorization.dart';
+import '../../identity/supervisor_override_modal.dart';
 
 /// T7 (unified close): THE single Corte Z close entry point. Both the
 /// Control de Caja button and the sale screen's ⋮ Cerrar Caja (after its
@@ -107,6 +115,68 @@ Future<void> showCloseShiftFlow(
     // re-entering the whole close flow. Vouchers still pending → back out;
     // the operator can re-enter (the gate re-reads on every invocation).
     if (vm.hasPendingVouchers) return;
+  }
+
+  // THE CREDENTIAL AND THE RECORD LIVE HERE, so BOTH doors of the same
+  // fiscal act behave the same.
+  //
+  // The Corte Z is ONE act with TWO doors (the Control de Caja button and
+  // the sale screen's ⋮ Cerrar Caja). The gate used to live only in the
+  // sale screen's door: the Control de Caja button closed the shift
+  // WITHOUT asking who signed and WITHOUT leaving a forensic record, so a
+  // Z could be issued with no trace of who closed it. The control the
+  // tenant's policy defines has to apply to the act, not to the door.
+  //
+  // An owner or a manager closes without a second signature (they ARE the
+  // authorizer); anyone else identifies with their credential, and the
+  // tenant's policy decides whether they may sign it alone.
+  final authRepo = context.read<AuthRepository>();
+  final auditRepo = context.read<AuditRepository>();
+  final currentUser = await authRepo.getCurrentUser();
+  final isAuthorizingRole = currentUser?.role == UserRole.owner ||
+      currentUser?.role == UserRole.manager;
+  if (!isAuthorizingRole) {
+    final policy = await tenantSupervisionPolicy(context);
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
+      context: context,
+      builder: (dialogContext) => SupervisorOverrideModal(
+        onAuthorize: (request) => authorizeWithPolicy(
+          authRepository: authRepo,
+          policy: policy,
+          request: request,
+          selfAuthorizationAllowed: policy.selfAuthorizationAllowedCloseBox,
+        ),
+      ),
+    );
+    if (!context.mounted || outcome == null || !outcome.authorized) return;
+
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'SUPERVISOR_OVERRIDE_CLOSE_SESSION'
+          : 'SELF_AUTHORIZED_CLOSE_SESSION',
+      metodoAutorizacion: outcome.method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'close_box',
+        'self_authorized': !outcome.isAuthorizingRole,
+        'policy': policy.selfAuthorizationAllowedCloseBox
+            ? 'SELF_ALLOWED'
+            : 'SUPERVISOR_ONLY',
+      }),
+    );
+  } else {
+    // The owner/manager closes their own shift: the act is recorded too —
+    // the record is the control, whatever the signer.
+    await auditRepo.logForensic(
+      'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
+      metodoAutorizacion: null,
+      usuarioAutorizadorId: currentUser?.id,
+      metadata: jsonEncode({
+        'action': 'close_box',
+        'self_authorized': false,
+        'policy': 'AUTHORIZED_ROLE',
+      }),
+    );
   }
 
   await showDialog<bool>(
