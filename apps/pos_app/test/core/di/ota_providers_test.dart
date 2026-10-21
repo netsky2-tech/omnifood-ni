@@ -57,9 +57,16 @@ final ReleaseManifest _sampleManifest = ReleaseManifest(
   publishedAt: DateTime.utc(2026),
 );
 
-CashierSessionEntity _session({bool isClosed = false}) => CashierSessionEntity(
-      id: 'session-1',
-      userId: 'user-1',
+CashierSessionEntity _session({
+  bool isClosed = false,
+  String id = 'session-1',
+  String userId = 'user-1',
+  String terminalId = 'TERM-01',
+}) =>
+    CashierSessionEntity(
+      id: id,
+      userId: userId,
+      terminalId: terminalId,
       openedAt: 0,
       isClosed: isClosed,
     );
@@ -101,6 +108,8 @@ void main() {
         getStorageDirectory: () async => Directory.systemTemp,
         getPackageInfo: () async => _testPackageInfo(),
         resolveAbi: () => TargetAbi.arm64v8a,
+        resolveActingUserId: () async => 'user-1',
+        resolveTerminalId: () async => 'TERM-01',
       );
 
   group('ota_providers — build-time API_URL define (T5, V13)', () {
@@ -165,9 +174,10 @@ void main() {
 
     test('wires the fiscal gate to fail closed on an open cashier shift',
         () async {
-      when(() => cashierSessionDao.getAllSessions()).thenAnswer(
-        (_) async => [_session()],
-      );
+      when(() => cashierSessionDao.getActiveSessionForUserAndTerminal(
+            any(),
+            any(),
+          )).thenAnswer((_) async => _session());
 
       final deps = buildDeps();
 
@@ -178,7 +188,84 @@ void main() {
       final state = deps.otaCoordinator.state;
       expect(state, isA<OtaUpdateAvailable>());
       expect((state as OtaUpdateAvailable).canInstallNow, isFalse);
-      verify(() => cashierSessionDao.getAllSessions()).called(1);
+      verify(() => cashierSessionDao.getActiveSessionForUserAndTerminal(
+            any(),
+            any(),
+          )).called(1);
+    });
+
+    // REGRESSION (device-reported): the operator closed the cash register
+    // and the OTA card kept saying "close the cash register before
+    // updating" — forever, because the gate asked for ANY session in the
+    // table that was still open (getAllSessions().any(!isClosed)), while
+    // the real shift had already been closed. An abandoned/orphaned
+    // session from another operator kept the terminal from ever
+    // updating again.
+    //
+    // The DAO itself forbids the unscoped query in production
+    // (cashier_session_dao.dart: "DEPRECATED for topology blindness...
+    // Production code MUST NOT call this"). The gate must resolve the
+    // session the SAME way the rest of the app does: scoped to the
+    // acting user AND the terminal.
+    test(
+        'the fiscal gate scopes the open-shift check to the acting user and '
+        'terminal, so an unrelated open session never blocks the update',
+        () async {
+      // A stale session belonging to ANOTHER operator on the same
+      // terminal. The scoped lookup must not see it.
+      when(() => cashierSessionDao.getActiveSessionForUserAndTerminal(
+            any(),
+            any(),
+          )).thenAnswer((_) async => null);
+
+      final deps = buildDeps();
+
+      await deps.otaCoordinator.downloadAndInstall(_sampleManifest);
+
+      // With no open shift for THIS operator, the gate must be clear and
+      // the install must proceed past the guard.
+      final state = deps.otaCoordinator.state;
+      expect(
+        state,
+        isNot(isA<OtaUpdateAvailable>()),
+        reason: 'an unrelated open session must not block the update',
+      );
+    });
+
+    test(
+        'the fiscal gate still blocks when THIS operator has an open shift',
+        () async {
+      when(() => cashierSessionDao.getActiveSessionForUserAndTerminal(
+            any(),
+            any(),
+          )).thenAnswer((_) async => _session(isClosed: false));
+
+      final deps = buildDeps();
+
+      await deps.otaCoordinator.downloadAndInstall(_sampleManifest);
+
+      final state = deps.otaCoordinator.state;
+      expect(state, isA<OtaUpdateAvailable>());
+      expect((state as OtaUpdateAvailable).canInstallNow, isFalse);
+    });
+
+    test(
+        'the fiscal gate resolves the open shift with the acting user id '
+        'and the terminal id, not an unscoped table scan',
+        () async {
+      when(() => cashierSessionDao.getActiveSessionForUserAndTerminal(
+            any(),
+            any(),
+          )).thenAnswer((_) async => null);
+
+      final deps = buildDeps();
+      await deps.otaCoordinator.downloadAndInstall(_sampleManifest);
+
+      verify(() => cashierSessionDao.getActiveSessionForUserAndTerminal(
+            'user-1',
+            'TERM-01',
+          )).called(1);
+      verifyNever(() => cashierSessionDao.getAllSessions());
     });
   });
 

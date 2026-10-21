@@ -124,6 +124,95 @@ void main() {
     );
   }
 
+  // REGRESSION (device-reported): the operator closed the cash register
+  // and the OTA card kept demanding "close the cash register before
+  // updating". The verdict carried by the offer is a SNAPSHOT taken at
+  // discovery time; nothing re-read the live terminal state, so the stale
+  // message survived the operator's action.
+  group('OtaUpdateCoordinator — refreshFiscalVerdict', () {
+    test(
+        're-evaluates the gate against live state so a closed register '
+        'clears the stale blocked verdict',
+        () async {
+      when(() => mockDio.get(any(), options: any(named: 'options'))).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(),
+          statusCode: 200,
+          data: sampleManifestPayload(versionCode: 2002),
+        ),
+      );
+      // At discovery time the terminal was NOT quiet (open register).
+      when(() => mockFiscalGate.evaluateSafety()).thenAnswer(
+        (_) async => const FiscalGateBlocked(
+          reasons: [FiscalBlockReason.shiftOpen],
+        ),
+      );
+
+      final coordinator = createCoordinator();
+      await coordinator.checkForUpdate();
+
+      expect(coordinator.state, isA<OtaUpdateAvailable>());
+      expect((coordinator.state as OtaUpdateAvailable).canInstallNow, isFalse);
+
+      // The operator closes the register. The live state is now quiet.
+      when(() => mockFiscalGate.evaluateSafety()).thenAnswer(
+        (_) async => const FiscalGateClear(),
+      );
+
+      await coordinator.refreshFiscalVerdict();
+
+      final refreshed = coordinator.state as OtaUpdateAvailable;
+      expect(refreshed.canInstallNow, isTrue);
+      // The OFFERED version must not change — only the verdict does.
+      expect(refreshed.manifest.versionCode, 2002);
+    });
+
+    test('is a no-op when there is no offer to re-evaluate', () async {
+      // The coordinator starts in OtaInitial: no offer, nothing to
+      // re-evaluate. (A discovery is NOT run here on purpose: any
+      // non-offer outcome would be a different state and would muddy
+      // what this test asserts.)
+      final coordinator = createCoordinator();
+
+      expect(coordinator.state, isA<OtaInitial>());
+
+      await coordinator.refreshFiscalVerdict();
+
+      // It must never fabricate an offer out of nothing.
+      expect(coordinator.state, isA<OtaInitial>());
+      verifyNever(() => mockFiscalGate.evaluateSafety());
+    });
+
+    test(
+        'does not notify listeners when the verdict did not actually change',
+        () async {
+      when(() => mockDio.get(any(), options: any(named: 'options'))).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(),
+          statusCode: 200,
+          data: sampleManifestPayload(versionCode: 2002),
+        ),
+      );
+      when(() => mockFiscalGate.evaluateSafety()).thenAnswer(
+        (_) async => const FiscalGateBlocked(
+          reasons: [FiscalBlockReason.shiftOpen],
+        ),
+      );
+
+      final coordinator = createCoordinator();
+      await coordinator.checkForUpdate();
+
+      var notifications = 0;
+      coordinator.addListener(() => notifications++);
+
+      await coordinator.refreshFiscalVerdict();
+
+      // An unchanged verdict must not rebuild the card for nothing.
+      expect(notifications, 0);
+      expect((coordinator.state as OtaUpdateAvailable).canInstallNow, isFalse);
+    });
+  });
+
   group('OtaUpdateCoordinator — Discovery & Decision', () {
     test('fails closed if ABI cannot be resolved on the device', () async {
       final coordinator = createCoordinator(resolveAbi: () => null);

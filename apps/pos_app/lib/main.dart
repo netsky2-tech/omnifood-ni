@@ -581,6 +581,12 @@ void main() async {
     cashierSessionDao: database.cashierSessionDao,
     discoveryDio: dio,
     getStorageDirectory: getApplicationSupportDirectory,
+    // The fiscal gate scopes its open-shift lookup to the acting user and
+    // this terminal, the same resolution the cash-shift opener uses
+    // (deviceId below). Resolved at ACTION time so a login that happens
+    // after the coordinator was built is honoured.
+    resolveActingUserId: () async => (await authRepository.getCurrentUser())?.id,
+    resolveTerminalId: () async => deviceId,
   );
 
   // T2 (OTA automatic discovery): silent discovery loop. Lifetime is the app

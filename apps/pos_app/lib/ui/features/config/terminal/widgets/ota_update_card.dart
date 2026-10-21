@@ -68,6 +68,19 @@ class _OtaUpdateCardState extends State<OtaUpdateCard>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // The fiscal verdict is a snapshot taken when the offer was
+    // discovered. The operator closes the cash register on ANOTHER screen
+    // and comes back here: without this refresh the card keeps showing
+    // the stale "cierra la caja antes de actualizar" message even though
+    // the terminal is quiet now (device-reported).
+    //
+    // Re-evaluating the VERDICT only — no network I/O, no re-discovery.
+    widget.coordinator.refreshFiscalVerdict();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Listenable.merge([widget.coordinator, widget.discoveryService]),

@@ -21,6 +21,11 @@ void main() {
     mockDiscovery = _MockOtaDiscoveryService();
     when(() => mockDiscovery.suppressOffer(any()))
         .thenAnswer((_) async {});
+    // The card re-evaluates the fiscal verdict when it is shown (live
+    // terminal state). Stub it by default so every existing case keeps
+    // working; the dedicated case below asserts the call.
+    when(() => mockCoordinator.refreshFiscalVerdict())
+        .thenAnswer((_) async {});
   });
 
   Widget createWidget({
@@ -53,6 +58,25 @@ void main() {
     publishedAt: DateTime.utc(2026, 10, 2),
     notes: 'Mejoras en estabilidad fiscal',
   );
+
+  // REGRESSION (device-reported): the operator closed the cash register on
+  // another screen and came back to the OTA card, which kept showing the
+  // stale "cierra la caja antes de actualizar" message. The card must
+  // re-read the live terminal state when it is shown.
+  group('OtaUpdateCard — live fiscal verdict', () {
+    testWidgets(
+        're-evaluates the fiscal verdict when the card is shown',
+        (tester) async {
+      when(() => mockCoordinator.state).thenReturn(const OtaInitial());
+      when(() => mockCoordinator.refreshFiscalVerdict())
+          .thenAnswer((_) async {});
+
+      await tester.pumpWidget(createWidget());
+      await tester.pump();
+
+      verify(() => mockCoordinator.refreshFiscalVerdict()).called(1);
+    });
+  });
 
   group('OtaUpdateCard — state rendering', () {
     testWidgets('renders check button in OtaInitial state', (tester) async {

@@ -243,6 +243,37 @@ class OtaUpdateCoordinator extends ChangeNotifier {
     return _discover(channel: channel);
   }
 
+  /// Re-evaluates the fiscal gate against the LIVE terminal state and
+  /// updates the current offer's verdict.
+  ///
+  /// The verdict captured at discovery time is a SNAPSHOT: the operator
+  /// may close the cash register (or clear the cart) after the offer was
+  /// surfaced, and the card would keep showing the stale "cierra la caja
+  /// antes de actualizar" message even though the terminal is now quiet
+  /// (device-reported).
+  ///
+  /// Only the VERDICT is refreshed — no network I/O, no re-discovery. The
+  /// manifest is untouched, so this can never change WHICH version is
+  /// offered; it only answers "is the terminal safe to install it NOW".
+  ///
+  /// A no-op when the current state carries no offer: there is nothing to
+  /// re-evaluate, and this must never fabricate an offer out of thin air.
+  Future<void> refreshFiscalVerdict() async {
+    final current = _state;
+    if (current is! OtaUpdateAvailable) return;
+    final verdict = await _fiscalSafetyGate.evaluateSafety();
+    // Only notify when the verdict actually changed — an unchanged verdict
+    // would otherwise rebuild the card for nothing.
+    if (verdict.runtimeType == current.fiscalVerdict.runtimeType &&
+        (verdict is FiscalGateBlocked) == (current.fiscalVerdict is FiscalGateBlocked)) {
+      return;
+    }
+    _setState(OtaUpdateAvailable(
+      manifest: current.manifest,
+      fiscalVerdict: verdict,
+    ));
+  }
+
   /// The single shared discovery implementation: all I/O, no state mutation.
   Future<OtaDiscoveryOutcome> _discover({required String channel}) async {
     final abi = _resolveAbi();
