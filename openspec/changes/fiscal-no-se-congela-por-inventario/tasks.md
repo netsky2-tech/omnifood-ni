@@ -14,8 +14,8 @@
 | Unit | Goal | Commit |
 |------|------|--------|
 | 1 | La nube: el dibujo parcial, la divergencia y el resultado `APPLIED_WITH_DIVERGENCE` | `16d68396` |
-| 2 | El backoffice: el panel de divergencias y el diagnóstico de paridad | (pendiente) |
-| 3 | La terminal: el resultado nuevo se ve como aviso, no como bloqueo | (pendiente) |
+| 2 | El backoffice: el panel de divergencias y el diagnóstico de paridad | `6325a67b` |
+| 3 | La terminal: el resultado nuevo se ve como aviso, no como bloqueo | (en curso) |
 
 ---
 
@@ -77,16 +77,29 @@
       escrita con su venta, el resultado aceptado, el flujo NO bloqueado tras una
       divergencia, el cierre por regularización, el diagnóstico de paridad.
 
-## Unidad 2 — El backoffice
+## Unidad 2 — El backoffice (HECHA, `6325a67b`)
 
-- [ ] 2.1 El cliente de la API (divergencias + diagnóstico de paridad).
-- [ ] 2.2 `src/features/inventory/divergence-panel.tsx`: el panel con cada divergencia
-      (venta, insumo, unidades, dinero, causa) y su estado.
-- [ ] 2.3 `src/features/inventory/parity-panel.tsx`: los insumos cuyo agregado no cuadra
-      con sus lotes, con la magnitud del desajuste.
-- [ ] 2.4 La ruta en el backoffice + los rótulos (en español, con las palabras del
-      negocio: «diferencia por conciliar», «stock sin lote»).
-- [ ] 2.5 Pruebas del panel.
+- [x] 2.1 `src/features/inventory/divergences-api.ts`: el cliente de la API (divergencias
+      + diagnóstico de paridad), con los tipos de cable honestos.
+- [x] 2.2 `src/features/inventory/divergence-panel.tsx`: el panel con cada divergencia
+      (venta, unidades sin respaldo, dinero, causa) y, debajo, el diagnóstico que
+      NOMBRA el origen (los insumos cuyo agregado no cuadra con sus lotes).
+- [x] 2.3 La pestaña «Conciliación» en Inventario + los rótulos en las palabras del
+      negocio («sin respaldo», «no cuadra con sus lotes»).
+- [x] 2.4 Pruebas del panel (4): vacío, con divergencia, con desajuste, y el fallo de
+      lectura visible (nunca en silencio).
+
+## Unidad 3 — La terminal (en curso)
+
+- [x] 3.1 La terminal NO bloquea: el resultado `APPLIED_WITH_DIVERGENCE` es un resultado
+      ACEPTADO ⇒ la venta se marca sincronizada y sus movimientos quedan
+      `cloudAcknowledged` (prueba en `sales_movement_ownership_and_ack_test.dart`).
+- [x] 3.2 El rastro: la terminal lo deja dicho en el log de sincronización
+      (`SYNC_SALES_DIVERGENCE`), con la venta y el detalle.
+- [ ] 3.3 El aviso en la pantalla del cajero: un banner que diga cuántas ventas se
+      registraron con diferencias por conciliar. La conciliación se hace en el
+      backoffice (Unidad 2), así que esto es visibilidad, no control — pero el
+      operador tiene que poder verlo sin pedirle el informe a nadie.
 
 ## Unidad 3 — La terminal
 

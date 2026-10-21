@@ -1145,6 +1145,17 @@ class SyncService {
 
           final result = resultsByKey[idempotencyKey];
           if (result != null && result.shouldMarkSalesSynced(record)) {
+            // FD-01: the cloud APPLIED the sale and DECLARED the difference
+            // that the inventory could not back. This is NOT a failure and it
+            // does not hold the sale: it is a difference to reconcile in the
+            // backoffice. It is logged so the trail says so out loud.
+            if (result.inventoryOutcome == 'APPLIED_WITH_DIVERGENCE') {
+              developer.log(
+                '[SYNC_SALES_DIVERGENCE] sale $invoiceId was applied with an '
+                'inventory difference to reconcile (${result.message ?? 'sin detalle'})',
+                name: 'SyncService',
+              );
+            }
             if (result.acknowledgedMovementCorrelationIds != null ||
                 result.inventoryOutcome != null) {
               try {

@@ -234,6 +234,63 @@ void main() {
     );
 
     test(
+      'FD-01: acknowledgeSaleSync marks the invoice synced when the cloud applied it WITH a declared inventory difference',
+      () async {
+        // The cloud applied the sale and DECLARED the difference that the
+        // inventory could not back. That is NOT a failure: the sale is
+        // synced (the money and the invoice are in the cloud) and the
+        // difference waits to be reconciled in the backoffice. The terminal
+        // must not hold the sale for it.
+        final invoice = InvoiceEntity(
+          id: 'inv-divergence',
+          number: '001-001-01-00000009',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          type: 'regular',
+          syncStatus: 'pending',
+          inventoryOutcome: 'APPLIED',
+        );
+        await database.invoiceDao.insertInvoice(invoice);
+
+        final movement = MovementEntity(
+          id: 'corr-div',
+          insumoId: 'ins-1',
+          type: 'sale',
+          quantity: -1.0,
+          previousStock: 10.0,
+          newStock: 9.0,
+          timestamp: DateTime.now().toIso8601String(),
+          deliveryOwner: MovementDeliveryOwner.saleSync,
+          deliveryState: MovementDeliveryState.localApplied,
+          saleId: 'inv-divergence',
+          saleCorrelationId: 'corr-div',
+        );
+        await database.salesTransactionDao.insertMovement(movement);
+
+        await repository.acknowledgeSaleSync(
+          invoiceId: 'inv-divergence',
+          outcome: 'APPLIED_WITH_DIVERGENCE',
+          acknowledgedCorrelationIds: ['corr-div'],
+        );
+
+        final updatedInv = await database.invoiceDao.getInvoiceById(
+          'inv-divergence',
+        );
+        expect(updatedInv?.syncStatus, 'synced');
+
+        final movements = await database.salesTransactionDao
+            .getMovementsBySaleId('inv-divergence');
+        expect(
+          movements.first.deliveryState,
+          MovementDeliveryState.cloudAcknowledged,
+        );
+      },
+    );
+
+    test(
       'acknowledgeSaleSync marks invoice synced when outcome is APPLIED_NO_INVENTORY_IMPACT and ACK set is empty',
       () async {
         final invoice = InvoiceEntity(
