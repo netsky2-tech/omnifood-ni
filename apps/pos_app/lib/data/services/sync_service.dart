@@ -2674,6 +2674,13 @@ class SyncService {
   /// store integer timestamps. Accepts epoch-millis numbers and ISO-8601
   /// strings; returns null for anything unparsable (callers fall back to the
   /// local row's value or a safe default).
+  /// Returns [s] unchanged if non-null and non-blank, otherwise returns null.
+  /// Used to coerce accidental blank-string column values (stored by the
+  /// dashboard before the '' → omit fix) to null so the POS promotion engine
+  /// can correctly evaluate `isGlobal = targetProductId == null && …`.
+  String? _nonBlankOrNull(String? s) =>
+      (s != null && s.isNotEmpty) ? s : null;
+
   int? _tryParseEpochMillis(dynamic value) {
     if (value is num) return value.toInt();
     if (value is String && value.trim().isNotEmpty) {
@@ -4574,8 +4581,13 @@ class SyncService {
               id: id,
               name: name,
               type: type,
-              targetProductId: map['targetProductId']?.toString(),
-              targetCategoryId: map['targetCategoryId']?.toString(),
+              // Bug fix: treat blank-string targets as null so the POS
+              // engine's isGlobal check (targetProductId == null &&
+              // targetCategoryId == null) works correctly for promotions
+              // created before the dashboard fix that stored '' instead of
+              // omitting the field entirely.
+              targetProductId: _nonBlankOrNull(map['targetProductId']?.toString()),
+              targetCategoryId: _nonBlankOrNull(map['targetCategoryId']?.toString()),
               buyQuantity: asInt(map['buyQuantity']) ?? 0,
               getQuantity: asInt(map['getQuantity']) ?? 0,
               discountValue: asDouble(map['discountValue']) ?? 0.0,

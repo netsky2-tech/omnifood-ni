@@ -43,8 +43,12 @@ class SalesMapper {
         (e) => e.name == entity.type,
         orElse: () => PromotionType.buyXGetYFree,
       ),
-      targetProductId: entity.targetProductId,
-      targetCategoryId: entity.targetCategoryId,
+      targetProductId: entity.targetProductId?.isEmpty == true
+          ? null
+          : entity.targetProductId,
+      targetCategoryId: entity.targetCategoryId?.isEmpty == true
+          ? null
+          : entity.targetCategoryId,
       buyQuantity: entity.buyQuantity,
       getQuantity: entity.getQuantity,
       discountValue: entity.discountValue,

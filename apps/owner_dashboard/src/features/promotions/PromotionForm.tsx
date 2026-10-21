@@ -142,7 +142,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     // - UPDATE: send an explicit null so Object.assign clears the column
     //   (omitting the key would leave the old target untouched).
     // A selected uuid is always sent unchanged.
-    const { target_category_id, start_date, end_date, ...rest } = data;
+    const { target_category_id, target_product_id, start_date, end_date, ...rest } = data;
     // Promo-fix: date inputs carry 'YYYY-MM-DD'; the backend's DTOs and
     // bigint columns expect epoch-ms numbers.
     // R3-001: a cleared date differs by mode — and S6 makes that difference
@@ -155,6 +155,13 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     // - CREATE: the key is omitted entirely when cleared (absent = no date
     //   bound; CreatePromotionDto stays number-only). Omitting is what
     //   create means, so the create shape keeps its own narrower type.
+    //
+    // Bug fix (discount not applied): target_product_id = '' (no product
+    // selected) must be treated the same as target_category_id = '' (global):
+    // omit on CREATE, send null on UPDATE. If '' is stored in the DB as the
+    // entity's target_product_id, the POS engine evaluates
+    //   isGlobal = targetProductId == null && targetCategoryId == null
+    // as false ('' != null), so the discount never applies to any item.
     try {
       if (isEditing) {
         // T0.5'd: '' -> explicit null (clear to global); a selected uuid is
@@ -165,6 +172,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           start_date: start_date ? dateInputValueToEpochMs(start_date) : null,
           end_date: end_date ? dateInputValueToEpochMs(end_date) : null,
           target_category_id: target_category_id ? target_category_id : null,
+          target_product_id: target_product_id ? target_product_id : undefined,
         };
         await updatePromotion.mutateAsync({ id: initialData!.id, dto });
         toast({ variant: 'success', title: 'Promoción actualizada' });
@@ -183,6 +191,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           ...(start_date ? { start_date: dateInputValueToEpochMs(start_date) } : {}),
           ...(end_date ? { end_date: dateInputValueToEpochMs(end_date) } : {}),
           ...(target_category_id ? { target_category_id } : {}),
+          ...(target_product_id ? { target_product_id } : {}),
         };
         await createPromotion.mutateAsync(payload);
         toast({ variant: 'success', title: 'Promoción creada' });

@@ -125,5 +125,27 @@ void main() {
       final roundtrip = SalesMapper.toPromotionDomain(entity);
       expect(roundtrip, equals(domain));
     });
+
+    // Regression: dashboard stored '' instead of null for unset targets before
+    // the PromotionForm fix. A blank-string targetProductId/targetCategoryId
+    // must map to null so the POS engine's isGlobal check works correctly.
+    test('SalesMapper trata targetProductId y targetCategoryId vacíos como null (regresión)', () {
+      final entityWithBlankTargets = PromotionEntity(
+        id: 'p-blank',
+        name: '10% Global',
+        type: 'percentageDiscount',
+        targetProductId: '',   // blank stored by dashboard before fix
+        targetCategoryId: '',  // blank stored by dashboard before fix
+        discountValue: 10.0,
+        isActive: true,
+      );
+
+      final domain = SalesMapper.toPromotionDomain(entityWithBlankTargets);
+
+      // Both blank strings must become null so isGlobal evaluates to true
+      // in the PromotionsEngine and the discount applies to every cart line.
+      expect(domain.targetProductId, isNull);
+      expect(domain.targetCategoryId, isNull);
+    });
   });
 }
