@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Batch } from '../../inventory/entities/batch.entity';
 import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from '../../inventory/entities/inventory-divergence.entity';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -69,6 +70,8 @@ describe('InvoicesService', () => {
     >;
     findOne: jest.Mock<Promise<unknown>, unknown[]>;
     find: jest.Mock<Promise<unknown[]>, unknown[]>;
+    // FD-01: the sale path amends the invoice with the declared divergence.
+    update: jest.Mock<Promise<unknown>, unknown[]>;
   };
 
   beforeEach(async () => {
@@ -154,7 +157,16 @@ describe('InvoicesService', () => {
         // R3: the sale-cancellation restore reads the outflow trace. Reporting
         // no traces lets the restore return early, exactly like a pre-R3 sale.
         if (target === BatchOutflowTrace) {
-          return { find: jest.fn().mockResolvedValue([]), save: jest.fn() };
+          return {
+            find: jest.fn().mockResolvedValue([]),
+            save: jest.fn(),
+            create: jest.fn((dto: unknown) => dto),
+          };
+        }
+        // FD-01: the divergence ledger. The sale path DECLARES the difference
+        // it could not back, in the same transaction as the invoice.
+        if (target === InventoryDivergence) {
+          return divergenceRepo;
         }
         return undefined;
       }),
@@ -171,6 +183,8 @@ describe('InvoicesService', () => {
         .mockReturnValue(qb),
       findOne: jest.fn<Promise<unknown>, unknown[]>(),
       find: jest.fn<Promise<unknown[]>, unknown[]>().mockResolvedValue([]),
+      // FD-01: the sale path amends the invoice with the declared divergence.
+      update: jest.fn<Promise<unknown>, unknown[]>().mockResolvedValue({}),
     };
     dataSource = {
       transaction: jest
@@ -363,6 +377,12 @@ describe('InvoicesService', () => {
    * A test that needs the batch discipline sets it.
    */
   let batchRows: unknown[] = [];
+  // FD-01: the declared differences (the divergence ledger).
+  let divergenceRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
+  };
 
   describe('syncInvoices', () => {
     const creditNoteInvoice: SyncInvoiceDto = {
@@ -1544,6 +1564,11 @@ describe('InvoicesService', () => {
   describe('syncBatch', () => {
     beforeEach(() => {
       batchRows = [];
+      divergenceRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        save: jest.fn(async (row: unknown) => row),
+        create: jest.fn((dto: unknown) => dto),
+      };
     });
 
     const baseInvoice: SyncInvoiceDto = {
@@ -1622,11 +1647,13 @@ describe('InvoicesService', () => {
       );
     });
 
-    it('reports a batch-balance conflict with ITS OWN code (never a loyalty one)', async () => {
-      // The insumo's batches cannot cover the outflow: the movement is
-      // refused. The code the terminal receives MUST name the inventory
-      // cause — a loyalty code here sent the triage (and the owner) to the
-      // points ledger instead of to the batches.
+    it('DECLARES a batch-balance difference instead of rejecting the sale (FD-01)', async () => {
+      // The insumo's batches cannot cover the outflow. FD-01: that is NOT a
+      // rejection any more — the invoice is applied, the movement is applied,
+      // and the difference is DECLARED as a divergence. The old behaviour
+      // rejected the record, and that rejection blocked the fiscal stream:
+      // every later sale stopped landing in the cloud and the terminal's
+      // fiscal sequence froze.
       batchRows = [
         {
           id: 'batch-1',
@@ -1662,11 +1689,30 @@ describe('InvoicesService', () => {
         },
       ]);
 
-      const rejected = (result.results ?? []).find(
-        (entry) => entry.status !== 'ACCEPTED',
+      // The record is ACCEPTED and says what did not add up.
+      const accepted = (result.results ?? []).find(
+        (entry) => entry.status === 'ACCEPTED',
       );
-      expect(rejected?.code).toBe('INVENTORY_BATCH_BALANCE_INSUFFICIENT');
-      expect(rejected?.code).not.toBe('LOYALTY_IDEMPOTENCY_CONFLICT');
+      expect(accepted).toBeDefined();
+      expect(accepted?.code).toBe('APPLIED_WITH_DIVERGENCE');
+      expect(accepted?.code).not.toBe('LOYALTY_IDEMPOTENCY_CONFLICT');
+      expect(accepted?.inventoryOutcome).toBe('APPLIED_WITH_DIVERGENCE');
+      expect(accepted?.inventoryOutcomeReason).toEqual(
+        expect.objectContaining({
+          code: 'INVENTORY_DIVERGENCE_DECLARED',
+        }),
+      );
+
+      // The difference is RECORDED (the tenant's work list), with the sale
+      // that caused it.
+      expect(divergenceRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          insumo_id: 'prod-1',
+          cause: 'LOT_COVERAGE_INSUFFICIENT',
+          status: 'OPEN',
+        }),
+      );
     });
 
     it('stamps SALE movements with the invoice business timestamp, not ingestion time (AG-02)', async () => {
@@ -2028,15 +2074,17 @@ describe('InvoicesService', () => {
 
       const result = await service.syncBatch('tenant-1', [
         {
+          // The failure is a BUSINESS RULE violation (an inbound delta with
+          // no frozen cost). FD-01: a difference in the INVENTORY (the lots
+          // not covering the outflow, the stock going negative) is no longer
+          // a failure — it is declared — so the blocking behaviour is proven
+          // with a failure that really is a failure.
           idempotencyKey: 'bad-1',
           sourceDeviceId: 'd1',
           sourceSequence: 1,
           flowType: 'inventory',
-          documentType: 'SALE',
-          invoice: {
-            ...baseInvoice,
-            items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
-          },
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 2 }],
         },
         {
           idempotencyKey: 'blocked-2',
@@ -2594,7 +2642,12 @@ describe('InvoicesService', () => {
       );
     });
 
-    it('rejects negative stock when insumo policy is restricted', async () => {
+    it('DECLARES the negative stock of a restricted insumo instead of rejecting the sale (FD-01)', async () => {
+      // FD-01: the sale happened and the goods left, so the movement applies
+      // and the breach of the tenant's own RESTRICT rule is DECLARED. The old
+      // behaviour rejected the record — and that rejection blocked the fiscal
+      // stream, which froze the terminal's sequence and the tenant's
+      // invoicing.
       receiptRepo.findOne.mockResolvedValue(null);
       recipeService.findActiveVersion.mockResolvedValue(null);
       txManager.createQueryBuilder().getOne.mockResolvedValue({
@@ -2605,20 +2658,37 @@ describe('InvoicesService', () => {
         tenant_id: 'tenant-1',
       });
 
-      await expect(
-        service.syncBatch('tenant-1', [
-          {
-            idempotencyKey: 'neg-reject-1',
-            sourceDeviceId: 'd1',
-            sourceSequence: 8,
-            documentType: 'SALE',
-            invoice: {
-              ...baseInvoice,
-              items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
-            },
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'neg-reject-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 8,
+          documentType: 'SALE',
+          invoice: {
+            ...baseInvoice,
+            items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
           },
-        ]),
-      ).rejects.toThrow('Negative stock blocked by policy');
+        },
+      ]);
+
+      // The sale was NOT thrown away: it was applied.
+      expect(result.processed).toBe(1);
+
+      // The movement applies (the goods left) and the shortfall is recorded.
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE,
+          quantity: -1.5,
+          newStock: -1.5,
+        }),
+      );
+      expect(divergenceRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          cause: 'DECLARED_STOCK_INSUFFICIENT',
+          status: 'OPEN',
+        }),
+      );
     });
 
     it('processes Topology A mixed batch with SALE and PURCHASE/SHRINKAGE/PRODUCTION deltas', async () => {
@@ -2758,9 +2828,10 @@ describe('InvoicesService', () => {
         return undefined;
       });
 
-      // The insumo (== product here) has restricted negative-stock policy
-      // and zero stock, so the SALE movement drives the stock negative and
-      // appendInventoryDeltas throws a BadRequestException.
+      // The failure happens AFTER the invoice was synced, while the movements
+      // are applied: the recipe resolution blows up. (FD-01: the negative
+      // stock is no longer a failure — it is declared — so the atomicity is
+      // proven with a failure that really is a failure.)
       txManager.createQueryBuilder().getOne.mockResolvedValue({
         id: 'prod-1',
         stock: 0,
@@ -2768,6 +2839,9 @@ describe('InvoicesService', () => {
         negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
         tenant_id: 'tenant-1',
       });
+      recipeService.findActiveVersion.mockRejectedValue(
+        new Error('recipe service unavailable'),
+      );
 
       await expect(
         service.syncBatch('tenant-1', [
@@ -2782,7 +2856,7 @@ describe('InvoicesService', () => {
             },
           },
         ]),
-      ).rejects.toThrow('Negative stock blocked by policy');
+      ).rejects.toThrow('recipe service unavailable');
 
       // Invoice + items were routed THROUGH the transaction manager (the
       // tx-scoped repos received the upsert), proving they participate in

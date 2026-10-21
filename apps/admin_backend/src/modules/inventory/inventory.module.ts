@@ -10,6 +10,7 @@ import { Warehouse } from './entities/warehouse.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { Batch } from './entities/batch.entity';
 import { BatchOutflowTrace } from './entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from './entities/inventory-divergence.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
@@ -68,6 +69,8 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
 import { UomCatalogController } from './controllers/uom-catalog.controller';
 import { CatalogValue } from '../catalog/entities/catalog-value.entity';
 import { AuditModule } from '../audit/audit.module';
+import { InventoryDivergenceService } from './services/inventory-divergence.service';
+import { InventoryDivergenceController } from './controllers/inventory-divergence.controller';
 
 @Module({
   imports: [
@@ -94,6 +97,8 @@ import { AuditModule } from '../audit/audit.module';
       // R3: the outflow trace a sale records and a cancellation reads back.
       // Without forFeature the draw dies on EntityMetadataNotFoundError.
       BatchOutflowTrace,
+      // FD-01: the divergence ledger (the differences a sale declared).
+      InventoryDivergence,
       PurchaseDocument,
       RecipeVersion,
       RecipeDetail,
@@ -126,6 +131,7 @@ import { AuditModule } from '../audit/audit.module';
     RegularizationController,
     RemediationController,
     InventoryReportsController,
+    InventoryDivergenceController,
     ProductController,
     RecipeController,
     InsumoController,
@@ -133,6 +139,7 @@ import { AuditModule } from '../audit/audit.module';
   ],
   providers: [
     InventoryPurchaseService,
+    InventoryDivergenceService,
     RecipeService,
     BomExplosionService,
     BatchCostingService,

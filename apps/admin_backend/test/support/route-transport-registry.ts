@@ -674,6 +674,9 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   },
   { controller: 'RemediationController', transport: 'human' },
   { controller: 'InventoryReportsController', transport: 'human' },
+  // FD-01: the divergence ledger and the parity diagnostic. Human session
+  // (the owner reads what did not add up); no device transport.
+  { controller: 'InventoryDivergenceController', transport: 'human' },
   { controller: 'ProductController', transport: 'human' },
   { controller: 'RecipeController', transport: 'human' },
   { controller: 'InsumoController', transport: 'human' },

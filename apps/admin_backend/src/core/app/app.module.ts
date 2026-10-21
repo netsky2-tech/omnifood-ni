@@ -55,6 +55,7 @@ import { UomConversion } from '../../modules/inventory/entities/uom-conversion.e
 import { UomCatalogEntry } from '../../modules/inventory/entities/uom-catalog-entry.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
 import { BatchOutflowTrace } from '../../modules/inventory/entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from '../../modules/inventory/entities/inventory-divergence.entity';
 import { BcnFxRate } from '../../modules/inventory/entities/bcn-fx-rate.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
 import { ProductionOrder } from '../../modules/inventory/entities/production-order.entity';
@@ -158,6 +159,9 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     UomCatalogEntry,
     Batch,
     BatchOutflowTrace,
+    // FD-01: the declared differences between a sale and the stock that
+    // backed it (the divergence ledger).
+    InventoryDivergence,
     BcnFxRate,
     PurchaseDocument,
     ProductionOrder,

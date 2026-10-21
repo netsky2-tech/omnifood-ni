@@ -24,10 +24,42 @@ export interface ValidatedBindingToApply {
   explodedQuantity: number;
 }
 
+/**
+ * The outcome vocabulary of a sale's inventory layer.
+ *
+ * `APPLIED_WITH_DIVERGENCE` (FD-01) is the one that says: the invoice IS
+ * applied and the movement IS applied, but part of the stock was not backed by
+ * the lots (or by the stock the tenant declared), and that difference is
+ * recorded as a divergence to reconcile. It is NOT a failure and it does not
+ * block anything — it is the cloud MIRRORING what happened, and saying what
+ * did not add up.
+ */
+export type SaleInventoryOutcome =
+  | 'APPLIED'
+  | 'APPLIED_NO_INVENTORY_IMPACT'
+  | 'APPLIED_INVENTORY_PENDING'
+  | 'APPLIED_WITH_DIVERGENCE';
+
+/**
+ * One declared difference: the insumo, the units nothing backed, and the
+ * money they represent.
+ */
+export interface SaleInventoryDivergenceDetail {
+  insumoId: string;
+  insumoName: string;
+  quantity: number;
+  amountNio: number;
+  cause: 'LOT_COVERAGE_INSUFFICIENT' | 'DECLARED_STOCK_INSUFFICIENT';
+}
+
 export interface SaleTimeSnapshotValidationResult {
   policyVersion: 'SALE_TIME_V1' | 'LEGACY_SYNC_TIME_V1';
-  outcome: 'APPLIED' | 'APPLIED_NO_INVENTORY_IMPACT' | 'APPLIED_INVENTORY_PENDING';
-  reason: { code: string; lines: string[] } | null;
+  outcome: SaleInventoryOutcome;
+  reason: {
+    code: string;
+    lines: string[];
+    divergences?: SaleInventoryDivergenceDetail[];
+  } | null;
   acknowledgedMovementCorrelationIds: string[];
   bindingsToApply: ValidatedBindingToApply[];
 }

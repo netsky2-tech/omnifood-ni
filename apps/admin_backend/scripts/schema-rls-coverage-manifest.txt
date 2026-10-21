@@ -64,7 +64,7 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (70 entries: 52 direct:SIUD + 11 direct:SI + 7 direct:SIU; entry ORDER is
+# (71 entries: 52 direct:SIUD + 11 direct:SI + 8 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest for pre-existing entries)
 # ---------------------------------------------------------------------------
 batch_outflow_traces|direct:SI
@@ -94,6 +94,7 @@ human_auth_tenant_publication_state|direct:SIU
 human_auth_terminal_ack_floor|direct:SIU
 human_auth_terminal_ack_history|direct:SI
 human_auth_verification_events|direct:SI
+inventory_divergences|direct:SIU
 inventory_kardex|direct:SIUD
 inventory_purchase_documents|direct:SIUD
 inventory_remediation_receipts|direct:SI

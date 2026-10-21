@@ -19,6 +19,7 @@ import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { Batch } from '../../inventory/entities/batch.entity';
 import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from '../../inventory/entities/inventory-divergence.entity';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
@@ -31,6 +32,8 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
   let savedInvoices: any[] = [];
   let savedItems: any[] = [];
   let updatedInsumos: any[] = [];
+  // FD-01: the declared differences (the divergence ledger).
+  let savedDivergences: any[] = [];
   let currentMockInsumo: any;
 
   const tenantId = 'tenant-test-v1';
@@ -43,6 +46,7 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     savedInvoices = [];
     savedItems = [];
     updatedInsumos = [];
+    savedDivergences = [];
 
     const mockInsumo: any = {
       id: insumoId,
@@ -112,6 +116,18 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
             find: jest.fn(async () => []),
             save: jest.fn(),
             create: jest.fn((d: any) => d),
+          };
+        }
+        // FD-01: the divergence ledger. The sale path DECLARES the difference
+        // it could not back, in the same transaction as the invoice.
+        if (entity === InventoryDivergence) {
+          return {
+            findOne: jest.fn(async () => null),
+            save: jest.fn(async (row: any) => {
+              savedDivergences.push(row);
+              return row;
+            }),
+            create: jest.fn((dto: any) => dto),
           };
         }
         if (entity === Invoice) {
@@ -189,6 +205,8 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
           }),
         } as any;
       }),
+      // FD-01: the sale path amends the invoice with the declared divergence.
+      update: jest.fn(async () => ({})),
       save: jest.fn(async (entityOrTarget: any, maybeEntity?: any) => {
         const entity = maybeEntity !== undefined ? maybeEntity : entityOrTarget;
         if (entityOrTarget === Insumo || entity.stock !== undefined) {
@@ -498,7 +516,7 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     expect(savedReceipts[0].acknowledgedCorrelationIds).toEqual([]);
   });
 
-  it('R22: degrades to APPLIED_INVENTORY_PENDING when insumo stock violates RESTRICT, persisting invoice and advancing stream sequence', async () => {
+  it('FD-01: DECLARES the RESTRICT breach (instead of degrading), persisting the invoice and advancing the stream sequence', async () => {
     // Modify mock insumo to have 0 stock and RESTRICT policy
     currentMockInsumo.stock = 0;
     currentMockInsumo.negativeStockPolicy = 'RESTRICT';
@@ -602,15 +620,30 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     expect(result.processed).toBe(2);
     expect(result.results).toHaveLength(2);
 
-    // Record 1 was accepted and degraded to APPLIED_INVENTORY_PENDING
+    // Record 1 was accepted and DECLARED what did not add up (FD-01: the
+    // invoice is always applied; the difference is recorded).
     const res1 = result.results[0];
     expect(res1.status).toBe('ACCEPTED');
-    expect(res1.code).toBe('APPLIED_INVENTORY_PENDING');
-    expect(res1.inventoryOutcome).toBe('APPLIED_INVENTORY_PENDING');
-    expect(res1.inventoryOutcomeReason).toEqual({
-      code: 'NEGATIVE_STOCK_BLOCKED_BY_POLICY',
-      lines: [insumoId],
-    });
+    expect(res1.code).toBe('APPLIED_WITH_DIVERGENCE');
+    expect(res1.inventoryOutcome).toBe('APPLIED_WITH_DIVERGENCE');
+    expect(res1.inventoryOutcomeReason).toEqual(
+      expect.objectContaining({
+        code: 'INVENTORY_DIVERGENCE_DECLARED',
+        lines: [insumoId],
+      }),
+    );
+
+    // The difference is RECORDED with the sale that caused it.
+    expect(savedDivergences).toHaveLength(1);
+    expect(savedDivergences[0]).toEqual(
+      expect.objectContaining({
+        tenant_id: tenantId,
+        invoice_id: 'inv-v1-restrict-neg',
+        insumo_id: insumoId,
+        cause: 'DECLARED_STOCK_INSUFFICIENT',
+        status: 'OPEN',
+      }),
+    );
 
     // Record 2 is also accepted, proving sequence 1 did not block sequence 2
     const res2 = result.results[1];
@@ -621,7 +654,9 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
     expect(savedInvoices.map((inv) => inv.id)).toContain('inv-v1-restrict-neg');
     expect(savedInvoices.map((inv) => inv.id)).toContain('inv-v1-subsequent-66');
 
-    // Zero movements created for the restricted insumo
-    expect(savedMovements).toHaveLength(0);
+    // The movement IS created (the goods left the business) and the stock
+    // goes negative: the cloud mirrors the terminal instead of freezing.
+    expect(savedMovements).toHaveLength(1);
+    expect(updatedInsumos).toHaveLength(1);
   });
 });
