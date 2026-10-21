@@ -19,6 +19,9 @@ import { ModifierGroup } from '../entities/modifier-group.entity';
 import { ModifierOption } from '../entities/modifier-option.entity';
 import { CategoryModifierGroup } from '../entities/category-modifier-group.entity';
 import { ProductModifierGroup } from '../entities/product-modifier-group.entity';
+import { Invoice } from '../../sales/entities/invoice.entity';
+import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../../sales/entities/invoice-item-modifier.entity';
 
 /**
  * Why an option's inventory effect cannot be applied for a product.
@@ -55,6 +58,44 @@ export interface PendingModifierConfiguration {
 }
 
 /**
+ * ONE SOLD LINE whose inventory effect never touched the stock.
+ *
+ * ME-04: the configuration list above says what the tenant still OWES;
+ * this one says what already HAPPENED — a sale that went through without
+ * the inventory movement it announced. It is the half of the reconciliation
+ * that only the cloud can answer, because the line is what carries the
+ * truth.
+ */
+export interface PendingModifierEffectLine {
+  invoice_id: string;
+  /** The fiscal number of the sale, when the line has one. */
+  invoice_number: string | null;
+  /** When the sale happened (ISO 8601). */
+  sold_at: string;
+  product_id: string;
+  product_name: string;
+  /** The option the line carries; null for a legacy line. */
+  option_id: string | null;
+  option_name: string;
+  /** Why the effect did not apply (the resolver's own vocabulary). */
+  reason: string;
+  /** The quantity the line sold. */
+  quantity: number;
+}
+
+/**
+ * The sold lines with a pending effect, plus the honest completeness
+ * signal of the page.
+ */
+export interface PendingModifierEffectReport {
+  lines: PendingModifierEffectLine[];
+  /** True when more matching lines exist beyond this page. */
+  truncated: boolean;
+  /** Page size actually applied. */
+  limit: number;
+}
+
+/**
  * The options whose inventory effect CANNOT be applied as they stand.
  *
  * WHY THIS EXISTS (owner's decision, 2026-10-20): the amount an extra takes
@@ -77,6 +118,10 @@ export interface PendingModifierConfiguration {
  */
 @Injectable()
 export class ModifierPendingConfigurationService {
+  /** Page size for the sold pending-effect list. */
+  static readonly DEFAULT_PENDING_EFFECTS_LIMIT = 50;
+  static readonly MAX_PENDING_EFFECTS_LIMIT = 100;
+
   constructor(
     private readonly dataSource: DataSource,
     private readonly bomExplosionService: BomExplosionService,
@@ -88,6 +133,87 @@ export class ModifierPendingConfigurationService {
     return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
       this.findPendingIn(manager, tenantId),
     );
+  }
+
+  /**
+   * The SOLD lines whose inventory effect never touched the stock.
+   *
+   * WHY IT IS A SEPARATE READ: the configuration list says what the tenant
+   * still owes; this says what already happened. A sale whose effect was
+   * pending is a REAL sale with a MISSING inventory movement, and it is the
+   * only thing that can be reconciled against the stock.
+   *
+   * It reads the same append-only line the terminal wrote (the truth of
+   * the effect travels with the line, ME-04) — never a recomputation: the
+   * cloud must not decide today what a sale resolved yesterday.
+   */
+  async findPendingEffects(
+    tenantId: string,
+    limitInput?: number,
+  ): Promise<PendingModifierEffectReport> {
+    const limit =
+      limitInput === undefined || limitInput === null
+        ? ModifierPendingConfigurationService.DEFAULT_PENDING_EFFECTS_LIMIT
+        : Math.min(
+            Math.trunc(limitInput),
+            ModifierPendingConfigurationService.MAX_PENDING_EFFECTS_LIMIT,
+          );
+
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const rows = await manager
+        .getRepository(InvoiceItemModifier)
+        .createQueryBuilder('modifier')
+        .innerJoin(InvoiceItem, 'item', 'item.id = modifier.invoice_item_id')
+        .innerJoin(Invoice, 'invoice', 'invoice.id = item.invoice_id')
+        .where('modifier.tenant_id = :tenantId', { tenantId })
+        .andWhere("modifier.effect_status = 'PENDING'")
+        .orderBy('invoice.created_at', 'DESC')
+        .addOrderBy('modifier.id', 'DESC')
+        // One probe row beyond the cap so `truncated` is provable.
+        .take(limit + 1)
+        .getManyAndCount();
+
+      const modifiers = rows[0];
+      const truncated = modifiers.length > limit;
+      const page = truncated ? modifiers.slice(0, limit) : modifiers;
+
+      // The item and the invoice are read for the page's lines only (the
+      // join above filters, the names are what the owner reads).
+      const itemIds = [...new Set(page.map((m) => m.invoiceItemId))];
+      const items = itemIds.length
+        ? await manager.getRepository(InvoiceItem).find({
+            where: { id: In(itemIds) },
+          })
+        : [];
+      const invoiceIds = [
+        ...new Set(items.map((item) => item.invoiceId)),
+      ];
+      const invoices = invoiceIds.length
+        ? await manager.getRepository(Invoice).find({
+            where: { id: In(invoiceIds) },
+          })
+        : [];
+      const itemById = new Map(items.map((item) => [item.id, item]));
+      const invoiceById = new Map(invoices.map((invoice) => [invoice.id, invoice]));
+
+      const lines: PendingModifierEffectLine[] = page.map((modifier) => {
+        const item = itemById.get(modifier.invoiceItemId);
+        const invoice = item ? invoiceById.get(item.invoiceId) : undefined;
+        return {
+          invoice_id: invoice?.id ?? '',
+          invoice_number: invoice?.number ?? null,
+          sold_at: (invoice?.created_at ?? new Date(0)).toISOString(),
+          product_id: item?.productId ?? '',
+          product_name: item?.productName ?? modifier.name,
+          option_id: modifier.optionId ?? null,
+          option_name: modifier.name,
+          reason: modifier.effectSkipReason ?? 'INCOMPLETE',
+          quantity: modifier.quantity ?? 1,
+        };
+      });
+
+      return { lines, truncated, limit };
+    });
   }
 
   private async findPendingIn(

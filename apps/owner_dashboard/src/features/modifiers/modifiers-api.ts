@@ -155,6 +155,53 @@ export function fetchPendingConfiguration(
   );
 }
 
+/**
+ * ME-04: the SOLD lines whose inventory effect never touched the stock.
+ *
+ * The pending-configuration list says what the tenant still OWES; this one
+ * says what already HAPPENED — a real sale with a missing inventory
+ * movement, which is the only thing that can be reconciled against the
+ * stock.
+ */
+export interface PendingModifierEffectLine {
+  invoice_id: string;
+  invoice_number: string | null;
+  sold_at: string;
+  product_id: string;
+  product_name: string;
+  option_id: string | null;
+  option_name: string;
+  reason: string;
+  quantity: number;
+}
+
+export interface PendingModifierEffectReport {
+  lines: PendingModifierEffectLine[];
+  truncated: boolean;
+  limit: number;
+}
+
+export function fetchPendingEffects(
+  opts?: ApiClientMethodOptions,
+): Promise<PendingModifierEffectReport> {
+  return api
+    .get<unknown>("/modifier-groups/pending-effects", opts)
+    .then((raw) => {
+      const body = (typeof raw === "object" && raw !== null
+        ? raw
+        : {}) as Record<string, unknown>;
+      const rows = Array.isArray(body.lines) ? body.lines : [];
+      return {
+        lines: rows.filter(
+          (line): line is PendingModifierEffectLine =>
+            typeof line === "object" && line !== null,
+        ),
+        truncated: body.truncated === true,
+        limit: typeof body.limit === "number" ? body.limit : 0,
+      };
+    });
+}
+
 export function fetchEffectiveGroups(
   productId: string,
   opts?: ApiClientMethodOptions,

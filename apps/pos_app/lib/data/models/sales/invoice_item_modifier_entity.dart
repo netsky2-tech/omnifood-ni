@@ -54,6 +54,34 @@ class InvoiceItemModifierEntity {
   @ColumnInfo(name: 'effect_factor')
   final double? effectFactor;
 
+  /// ME-04: the TRUTH of the effect at sale time. 'APPLIED' (the stock
+  /// moved) or 'PENDING' (the sale went through, the effect did not touch
+  /// the stock). Null for a price-only line and for every line written by
+  /// a terminal that predates this wire.
+  @ColumnInfo(name: 'effect_status')
+  final String? effectStatus;
+
+  /// ME-04: why the effect did not apply (INCOMPLETE, UNIT_MISMATCH,
+  /// INSUMSO_NOT_IN_CATALOG, COMPONENT_NOT_IN_RECIPE).
+  @ColumnInfo(name: 'effect_skip_reason')
+  final String? effectSkipReason;
+
+  /// ME-04: where the applied quantity came from (DECLARED, INHERITED,
+  /// OVERRIDE).
+  @ColumnInfo(name: 'effect_quantity_source')
+  final String? effectQuantitySource;
+
+  /// ME-04: the supervisor who authorized a quantity override, with the
+  /// credential used and the reason. Null when nobody had to authorize.
+  @ColumnInfo(name: 'effect_authorized_by')
+  final String? effectAuthorizedBy;
+
+  @ColumnInfo(name: 'effect_authorization_method')
+  final String? effectAuthorizationMethod;
+
+  @ColumnInfo(name: 'effect_authorization_reason')
+  final String? effectAuthorizationReason;
+
   InvoiceItemModifierEntity({
     required this.id,
     required this.invoiceItemId,
@@ -67,5 +95,11 @@ class InvoiceItemModifierEntity {
     this.effectTargetInsumoId,
     this.effectQuantity,
     this.effectFactor,
+    this.effectStatus,
+    this.effectSkipReason,
+    this.effectQuantitySource,
+    this.effectAuthorizedBy,
+    this.effectAuthorizationMethod,
+    this.effectAuthorizationReason,
   });
 }

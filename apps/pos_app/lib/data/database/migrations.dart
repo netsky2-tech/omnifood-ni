@@ -3557,6 +3557,37 @@ final migration79_80 = Migration(79, 80, (database) async {
   }
 });
 
+/// ME-04 (Unidad 3): the line's TRUTH about its inventory effect travels
+/// with it, so a sold extra whose effect did not touch the stock is
+/// reconcilable in the cloud and not only visible at the register.
+///
+/// Every column is NULLABLE and additive: a line written before this
+/// migration (and a price-only line) keeps its exact shape, and the cloud
+/// reads the absence as "this terminal says nothing about the effect".
+final migration80_81 = Migration(80, 81, (database) async {
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(invoice_item_modifiers)',
+  );
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  const additions = <String, String>{
+    'effect_status': 'TEXT',
+    'effect_skip_reason': 'TEXT',
+    'effect_quantity_source': 'TEXT',
+    'effect_authorized_by': 'TEXT',
+    'effect_authorization_method': 'TEXT',
+    'effect_authorization_reason': 'TEXT',
+  };
+  for (final entry in additions.entries) {
+    if (existing.contains(entry.key)) continue;
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN ${entry.key} ${entry.value}',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3628,6 +3659,7 @@ final allMigrations = [
   migration77_78,
   migration78_79,
   migration79_80,
+  migration80_81,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

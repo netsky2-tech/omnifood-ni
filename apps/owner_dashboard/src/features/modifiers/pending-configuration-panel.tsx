@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/table";
 import {
   fetchPendingConfiguration,
+  fetchPendingEffects,
   type PendingModifierConfiguration,
+  type PendingModifierEffectLine,
 } from "./modifiers-api";
 import { useModifierGroups } from "./use-modifiers";
 import { ModifierGroupForm } from "./modifier-group-form";
@@ -73,6 +75,12 @@ export function PendingConfigurationPanel() {
     queryKey: ["modifier-groups", "pending-configuration"],
     queryFn: () => fetchPendingConfiguration(),
   });
+  // ME-04: the sold lines whose effect never touched the stock — the half
+  // of the reconciliation that only the cloud can answer.
+  const { data: soldPending } = useQuery({
+    queryKey: ["modifier-groups", "pending-effects"],
+    queryFn: () => fetchPendingEffects(),
+  });
   // The group whose option is being configured: the form edits the WHOLE
   // group, and the option's effect is one row of it.
   const [configuringGroupId, setConfiguringGroupId] = useState<string | null>(
@@ -112,8 +120,9 @@ export function PendingConfigurationPanel() {
   }
 
   const pending: PendingModifierConfiguration[] = data ?? [];
+  const soldLines: PendingModifierEffectLine[] = soldPending?.lines ?? [];
 
-  if (pending.length === 0) {
+  if (pending.length === 0 && soldLines.length === 0) {
     return (
       <div className="rounded-md border p-8 text-center">
         <p className="font-medium">No hay pendientes de configurar</p>
@@ -126,7 +135,72 @@ export function PendingConfigurationPanel() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {soldLines.length > 0 && (
+        <section aria-label="Vendidas sin efecto de inventario" className="space-y-3">
+          <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+            <AlertTriangle className="h-4 w-4 mt-0.5 text-destructive shrink-0" />
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                {soldLines.length === 1
+                  ? "1 venta se cobró sin el efecto de inventario que anunciaba"
+                  : `${soldLines.length} ventas se cobraron sin el efecto de inventario que anunciaban`}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                La venta ocurrió igual (el inventario nunca bloquea una venta),
+                pero el stock no se movió comoSay la línea. Corrijá la
+                configuración del extra y revisá el inventario de esos
+                productos.
+              </p>
+            </div>
+          </div>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Factura</TableHead>
+                  <TableHead>Cuándo</TableHead>
+                  <TableHead>Producto</TableHead>
+                  <TableHead>Extra</TableHead>
+                  <TableHead>Razón</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {soldLines.map((line) => (
+                  <TableRow key={`${line.invoice_id}-${line.option_name}`}>
+                    <TableCell className="font-medium">
+                      {line.invoice_number ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {new Date(line.sold_at).toLocaleString("es-NI", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </TableCell>
+                    <TableCell>{line.product_name}</TableCell>
+                    <TableCell>{line.option_name}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {reasonCopy(line.reason)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {soldPending?.truncated && (
+            <p className="text-xs text-muted-foreground">
+              Se muestran las primeras {soldLines.length} ventas; reduzca el
+              alcance para ver el resto.
+            </p>
+          )}
+        </section>
+      )}
+
+      {pending.length > 0 && (
+      <div className="space-y-4">
       <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/5 p-3">
         <AlertTriangle className="h-4 w-4 mt-0.5 text-warning shrink-0" />
         <p className="text-sm">
@@ -191,6 +265,9 @@ export function PendingConfigurationPanel() {
           </TableBody>
         </Table>
       </div>
+
+      </div>
+      )}
 
       <Dialog
         open={!!configuringGroup}

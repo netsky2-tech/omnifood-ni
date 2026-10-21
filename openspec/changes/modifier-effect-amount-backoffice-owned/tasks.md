@@ -56,6 +56,13 @@ Chain strategy: stacked-to-main
 - [x] 2.6 Actualiza el log ODD con el cierre de PX-003/PX-005 y la credencial del Q80
       (entregado a SOHO: el criterio pasa a ser independiente de la resolución).
 
+## Fase 3 — La verdad a la nube (Unidad 3) — **HECHA**
+
+- [x] 3.1 La línea lleva la verdad del efecto (estado, motivo, origen y autorización),
+      escrita por el resolver en el momento de la venta.
+- [x] 3.2 La nube la guarda (columnas aditivas) y la lista: las ventas cobradas sin
+      efecto de inventario son reconciliables en el backoffice.
+
 ## Fase 3 — La verdad a la nube y el backoffice (Unidad 3) — **PARCIAL**
 
 - [x] 3.7 El diálogo del backoffice explica la cantidad en lenguaje de negocio

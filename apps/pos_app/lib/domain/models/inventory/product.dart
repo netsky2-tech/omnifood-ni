@@ -104,6 +104,31 @@ class Modifier with _$Modifier {
     double? effectQuantity,
     /// The multiplier of a SCALE.
     double? effectFactor,
+    /// ME-04: the TRUTH of the effect, as the sale knew it.
+    ///
+    /// 'APPLIED' — the effect moved the stock. 'PENDING' — the sale went
+    /// through but the effect did NOT touch the stock, and
+    /// [effectSkipReason] says why. Null — the line carries no effect at
+    /// all (a price-only option, or a terminal that predates this wire).
+    ///
+    /// It is written at SALE TIME (the resolver is the only place that
+    /// knows), never guessed in the dialog: a line that says APPLIED when
+    /// the stock did not move would be a lie in the cloud.
+    String? effectStatus,
+    /// ME-04: why the effect did not apply. The same vocabulary the
+    /// resolver and the backoffice use (INCOMPLETE, UNIT_MISMATCH,
+    /// INSUMSO_NOT_IN_CATALOG, COMPONENT_NOT_IN_RECIPE).
+    String? effectSkipReason,
+    /// ME-04: where the applied quantity came from: 'DECLARED' (the
+    /// backoffice configured it), 'INHERITED' (the recipe's component) or
+    /// 'OVERRIDE' (a supervisor marked it).
+    String? effectQuantitySource,
+    /// ME-04: the supervisor who authorized a quantity override, and the
+    /// evidence of that authorization (the credential used and the reason).
+    /// Null when nobody had to authorize anything.
+    String? effectAuthorizedBy,
+    String? effectAuthorizationMethod,
+    String? effectAuthorizationReason,
   }) = _Modifier;
 
   factory Modifier.fromJson(Map<String, dynamic> json) =>

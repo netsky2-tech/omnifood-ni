@@ -16,6 +16,11 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { MODIFIER_INVENTORY_EFFECTS } from '../../modifiers/modifier-inventory-effect';
+import {
+  MODIFIER_EFFECT_QUANTITY_SOURCES,
+  MODIFIER_EFFECT_SKIP_REASONS,
+  MODIFIER_EFFECT_STATUSES,
+} from '../../modifiers/modifier-effect-outcome';
 
 export class InventorySnapshotBindingDto {
   @IsNumber()
@@ -268,6 +273,45 @@ export class CreateModifierDto {
   @IsOptional()
   @IsNumber()
   effectFactor?: number;
+
+  // --- ME-04: the TRUTH of the effect, as the sale resolved it ----------
+  // A line whose effect did not touch the stock is a SALE THAT HAPPENED
+  // WITH A MISSING INVENTORY MOVEMENT. Without these fields the cloud
+  // cannot tell that case from a line that never declared an effect, so
+  // the pending sale is invisible until somebody reconciles it by hand.
+  //
+  // Every field is OPTIONAL: a terminal that predates ME-04 sends nothing,
+  // and its lines keep the exact shape they had.
+
+  /** APPLIED (the stock moved) or PENDING (the sale went through, the effect did not). */
+  @IsOptional()
+  @IsIn(MODIFIER_EFFECT_STATUSES)
+  effectStatus?: string;
+
+  /** Why the effect did not apply (INCOMPLETE, UNIT_MISMATCH, …). */
+  @IsOptional()
+  @IsIn(MODIFIER_EFFECT_SKIP_REASONS)
+  effectSkipReason?: string;
+
+  /** Where the applied quantity came from: DECLARED, INHERITED or OVERRIDE. */
+  @IsOptional()
+  @IsIn(MODIFIER_EFFECT_QUANTITY_SOURCES)
+  effectQuantitySource?: string;
+
+  /** The supervisor who authorized a quantity override, when one did. */
+  @IsOptional()
+  @IsString()
+  effectAuthorizedBy?: string;
+
+  /** The credential used for that authorization: PIN or TOTP. */
+  @IsOptional()
+  @IsString()
+  effectAuthorizationMethod?: string;
+
+  /** The reason given for that override. */
+  @IsOptional()
+  @IsString()
+  effectAuthorizationReason?: string;
 }
 
 export class CreatePaymentDto {

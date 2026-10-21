@@ -1700,6 +1700,27 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
           ? null
           : _insumoFacts[option.effectInsumoId]?.unit;
 
+  /// ME-04: the wire name of where the effective quantity comes from:
+  /// DECLARED (the backoffice configured it), INHERITED (the recipe's
+  /// component) or OVERRIDE (a supervisor marked it).
+  ///
+  /// It is read from the SAME preview the screen announces, so the line and
+  /// the screen can never tell different stories about the number.
+  String? _effectQuantitySourceOf(EffectiveModifierOption option) {
+    if (option.inventoryEffect == 'NONE') return null;
+    final preview = _previewOf(option);
+    if (preview == null) return null;
+    return switch (preview.quantitySource) {
+      ModifierEffectQuantitySource.override => 'OVERRIDE',
+      ModifierEffectQuantitySource.declared => 'DECLARED',
+      ModifierEffectQuantitySource.inherited => 'INHERITED',
+      // NONE: no quantity could be resolved. The line says nothing about a
+      // source it does not have; the status (PENDING) is the resolver's
+      // verdict, not this one's.
+      ModifierEffectQuantitySource.none => null,
+    };
+  }
+
   ModifierEffectPreview? _previewOf(EffectiveModifierOption option) {
     if (option.inventoryEffect == 'NONE') return null;
     final target = option.effectTargetInsumoId == null
@@ -2069,6 +2090,18 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                           _effectOverrides[option.id]?.quantity ??
                               option.effectQuantity,
                       effectFactor: option.effectFactor,
+                      // ME-04: WHERE the quantity came from, and WHO
+                      // authorized it when a supervisor had to. The
+                      // STATUS (applied / pending) is NOT written here:
+                      // only the resolver knows it, so it is stamped at
+                      // sale time — a line must never claim an effect
+                      // that the stock did not carry.
+                      effectQuantitySource: _effectQuantitySourceOf(option),
+                      effectAuthorizedBy: _effectOverrides[option.id]?.supervisorId,
+                      effectAuthorizationMethod:
+                          _effectOverrides[option.id]?.method,
+                      effectAuthorizationReason:
+                          _effectOverrides[option.id]?.reason,
                     );
 
                 if (group.maxSelected == 1) {

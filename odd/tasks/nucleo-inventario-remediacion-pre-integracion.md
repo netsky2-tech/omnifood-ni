@@ -605,6 +605,14 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
     - El enlace de contexto: la tarjeta de Configuración → Supervisión dice «Ver qué se firmó en sus cajas» y lleva a la cola con el período.
   - Change de SDD: `openspec/changes/supervision-policy-tenant-owned/` (propuesta, contrato, diseño, tareas). Unidades: `ace7e0d1` (nube) · `4f5821a0` (backoffice) · esta (terminal).
 
+- **L65** 2026-10-21 — **LA VERDAD DEL EFECTO VIAJA A LA NUBE (Unidad 3 del change `modifier-effect-amount-backoffice-owned`): un extra vendido sin efecto de inventario ya es reconciliable, no sólo visible en el mostrador.**
+  - **La línea lleva la verdad del efecto** (`effect_status`, `effect_skip_reason`, `effect_quantity_source` + la autorización del override). Lo que se guarda es lo que la venta **resolvió**, no lo que la pantallaDibujó.
+  - **La regla que evita la mentira**: el estado (aplicado / pendiente) lo escribe **el resolver, en el momento de la venta** — es el único que sabe (necesita la autoridad: el catálogo y la receta). El mostrador sólo pone el **origen** de la cantidad (declarada / heredada / marcada) y la **autorización** del supervisor, que son hechos del mostrador. **Una línea nunca dice «aplicado» si el stock no se movió.**
+  - **La resolución se calcula UNA vez por línea**: los bindings del snapshot y la verdad de la línea salen del **mismo veredicto** (no pueden discrepar).
+  - **Cero impacto en lo fiscal**: el precio, la identidad de la opción y el importe de la línea no cambian; las columnas nuevas son aditivas y nullable (local: esquema 77 → 78; nube: migración `1810070000000`). El cable sólo emite los campos **cuando existen**, así que una línea vieja conserva sus bytes exactos (el hash de conflicto de la nota de crédito los cubre).
+  - **El backoffice reconcilia**: la pestaña «Pendientes de configurar» ahora tiene DOS mitades — lo que el tenant **debe** (configuración) y lo que **ya pasó** (las ventas cobradas sin el efecto que anunciaban, con su factura, su motivo y su producto). La nube **no recalcula** lo que una venta resolvió ayer: lee la línea que escribió el terminal.
+  - Suites: **3831 POS** (1 flake de herramienta que pasa aislado + 2 preexistentes), **4393 backend**, **1838 dashboard**.
+
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)
 
 La matriz de L47 medía el comportamiento **pre-R28** (los extras NO consumían inventario). Con R28 los extras **sí** mueven stock, así que la matriz vigente separa explícitamente lo que **no cambia** (la estructura de la venta, las secuencias, la factura) de lo que **cambia** (el consumo del extra). Medir la nueva conducta contra el contrato viejo sería un falso negativo.

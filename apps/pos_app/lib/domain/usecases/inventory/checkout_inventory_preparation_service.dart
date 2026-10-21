@@ -1,7 +1,9 @@
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/usecases/inventory/modifier_deviation_resolver.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_inventory_outcome_planner.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_time_inventory_snapshot_builder.dart';
 import 'package:pos_app/domain/usecases/inventory/sub_recipe_bom_explosion.dart';
@@ -339,11 +341,24 @@ class CheckoutInventoryPreparationService {
       for (final l in buildResult.lines) l.lineId: l.snapshot,
     };
 
+    // ME-04: the TRUTH of each modifier's effect, as this sale resolved it.
+    // The resolver is the only place that knows (it needs the authority
+    // facts: the catalog and the recipe), so the line is stamped HERE, at
+    // sale time — never guessed in the dialog. A line that said APPLIED
+    // when the stock did not move would be a lie in the cloud.
+    final effectsByLineId = {
+      for (final l in buildResult.lines) l.lineId: l.effects,
+    };
+
     final frozenItems = items.map((item) {
       final snapshot = snapshotsByLineId[item.id];
+      final effects = effectsByLineId[item.id] ?? const <AppliedModifierEffect>[];
       return item.copyWith(
         inventorySnapshotVersion: 'SALE_TIME_V1',
         inventorySnapshot: snapshot,
+        selectedModifiers: item.selectedModifiers
+            .map((modifier) => _stampEffectTruth(modifier, effects))
+            .toList(growable: false),
       );
     }).toList();
 
@@ -373,6 +388,32 @@ class CheckoutInventoryPreparationService {
     return PreparedSaleInventoryResult(
       invoice: updatedInvoice,
       items: frozenItems,
+    );
+  }
+
+  /// Stamps the resolved truth of ONE modifier's effect onto it.
+  ///
+  /// A modifier with no inventory effect (a price-only option) keeps its
+  /// absence: there is nothing to say about it. A modifier whose effect the
+  /// resolver never saw (a line with no recipe to correct) also keeps its
+  /// absence — the terminal says nothing it cannot prove.
+  static Modifier _stampEffectTruth(
+    Modifier modifier,
+    List<AppliedModifierEffect> effects,
+  ) {
+    if (!modifier.hasInventoryEffect) return modifier;
+    final optionId = modifier.optionId ?? modifier.id;
+    AppliedModifierEffect? match;
+    for (final effect in effects) {
+      if (effect.optionId == optionId) {
+        match = effect;
+        break;
+      }
+    }
+    if (match == null) return modifier;
+    return modifier.copyWith(
+      effectStatus: match.applied ? 'APPLIED' : 'PENDING',
+      effectSkipReason: match.skipReason?.wireName,
     );
   }
 

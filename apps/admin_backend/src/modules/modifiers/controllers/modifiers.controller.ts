@@ -110,6 +110,25 @@ export class ModifiersController {
     );
   }
 
+  // ME-04: the sold lines whose inventory effect never touched the stock.
+  //
+  // The list above says what the tenant still OWES (the configuration);
+  // this one says what already HAPPENED — a real sale with a missing
+  // inventory movement, which is the only thing that can be reconciled
+  // against the stock. It is read from the line the terminal wrote, never
+  // recomputed.
+  @Get('pending-effects')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getPendingEffects(
+    @GetTenantId() tenantId?: string,
+    @Query('limit') limit?: number,
+  ) {
+    return this.pendingConfigurationService.findPendingEffects(
+      this.requireTenant(tenantId),
+      limit,
+    );
+  }
+
   @Get(':id')
   @Roles(UserRole.OWNER, UserRole.MANAGER, UserRole.CASHIER, UserRole.WAITER)
   async findOne(@Param('id') id: string, @GetTenantId() tenantId?: string) {

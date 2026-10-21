@@ -80,4 +80,58 @@ export class InvoiceItemModifier {
     nullable: true,
   })
   effectFactor: number | null;
+
+  // --- ME-04: the TRUTH of the effect, as the sale resolved it ----------
+  // A line whose effect did not touch the stock is a SALE THAT HAPPENED
+  // WITH A MISSING INVENTORY MOVEMENT. These columns are what makes that
+  // case visible and reconcilable in the cloud (and in the backoffice's
+  // pending list) instead of invisible until somebody reads the stock by
+  // hand.
+  //
+  // All NULLABLE and additive: a line written by a terminal that predates
+  // ME-04 (and a price-only line) keeps its exact shape.
+
+  /** APPLIED (the stock moved) or PENDING (the sale went through, the effect did not). */
+  @Column({ name: 'effect_status', type: 'varchar', length: 16, nullable: true })
+  effectStatus: string | null;
+
+  /** Why the effect did not apply (INCOMPLETE, UNIT_MISMATCH, …). */
+  @Column({
+    name: 'effect_skip_reason',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  effectSkipReason: string | null;
+
+  /** Where the applied quantity came from: DECLARED, INHERITED or OVERRIDE. */
+  @Column({
+    name: 'effect_quantity_source',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
+  effectQuantitySource: string | null;
+
+  /** The supervisor who authorized a quantity override, when one did. */
+  @Column({ name: 'effect_authorized_by', type: 'uuid', nullable: true })
+  effectAuthorizedBy: string | null;
+
+  /** The credential used for that authorization: PIN or TOTP. */
+  @Column({
+    name: 'effect_authorization_method',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
+  effectAuthorizationMethod: string | null;
+
+  /** The reason given for that override. */
+  @Column({
+    name: 'effect_authorization_reason',
+    type: 'varchar',
+    length: 240,
+    nullable: true,
+  })
+  effectAuthorizationReason: string | null;
 }

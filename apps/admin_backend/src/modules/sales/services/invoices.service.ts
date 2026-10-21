@@ -353,6 +353,20 @@ export class InvoicesService {
                 : modifier.effectQuantity,
             effectFactor:
               modifier.effectFactor === undefined ? null : modifier.effectFactor,
+            // ME-04: the TRUTH of the effect, as the sale resolved it. A
+            // pending effect is a sale that happened WITHOUT the inventory
+            // movement it announced: the cloud has to be able to see it to
+            // reconcile it. Absent for every line whose terminal says
+            // nothing (a terminal that predates ME-04), so the historical
+            // records stay exactly as they are.
+            effectStatus: modifier.effectStatus ?? null,
+            effectSkipReason: modifier.effectSkipReason ?? null,
+            effectQuantitySource: modifier.effectQuantitySource ?? null,
+            effectAuthorizedBy: modifier.effectAuthorizedBy ?? null,
+            effectAuthorizationMethod:
+              modifier.effectAuthorizationMethod ?? null,
+            effectAuthorizationReason:
+              modifier.effectAuthorizationReason ?? null,
           })),
         );
         if (modifierRows.length) {

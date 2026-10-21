@@ -762,6 +762,14 @@ describe('InvoicesService', () => {
           effectTargetInsumoId: null,
           effectQuantity: null,
           effectFactor: null,
+          // ME-04: the truth of the effect, as absence. A line whose
+          // terminal says nothing about it keeps the absence.
+          effectStatus: null,
+          effectSkipReason: null,
+          effectQuantitySource: null,
+          effectAuthorizedBy: null,
+          effectAuthorizationMethod: null,
+          effectAuthorizationReason: null,
         },
         {
           invoiceItemId: 'item-mod-1',
@@ -775,6 +783,12 @@ describe('InvoicesService', () => {
           effectTargetInsumoId: null,
           effectQuantity: null,
           effectFactor: null,
+          effectStatus: null,
+          effectSkipReason: null,
+          effectQuantitySource: null,
+          effectAuthorizedBy: null,
+          effectAuthorizationMethod: null,
+          effectAuthorizationReason: null,
         },
       ]);
       // Deterministic mirror: the item's previous modifier lines are

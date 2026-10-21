@@ -166,5 +166,119 @@ void main() {
       expect(domain.inventoryEffect, 'SWAP');
       expect(domain.hasInventoryEffect, isTrue);
     });
+  
+  // ME-04: the TRUTH of the effect travels with the line, so a sold extra
+  // whose effect never touched the stock is reconcilable in the cloud.
+  });
+
+  group('ME-04: la verdad del efecto viaja con la línea', () {
+    Modifier modifierWithTruth({
+      String? status,
+      String? reason,
+      String? source,
+      String? authorizedBy,
+      String? method,
+      String? why,
+    }) {
+      return Modifier(
+        id: 'opt-almendras',
+        name: 'Leche: Almendras',
+        extraPrice: 10,
+        optionId: 'opt-almendras',
+        groupId: 'grp-leche',
+        inventoryEffect: 'SWAP',
+        effectTargetInsumoId: 'ins-leche-entera',
+        effectInsumoId: 'ins-leche-almendras',
+        effectStatus: status,
+        effectSkipReason: reason,
+        effectQuantitySource: source,
+        effectAuthorizedBy: authorizedBy,
+        effectAuthorizationMethod: method,
+        effectAuthorizationReason: why,
+      );
+    }
+
+    InvoiceItem itemWith(Modifier modifier) => InvoiceItem(
+          id: 'line-1',
+          invoiceId: 'inv-1',
+          productId: 'prod-1',
+          productName: 'Capuccino',
+          quantity: 1,
+          unitPrice: 70,
+          taxAmount: 10.5,
+          total: 80.5,
+          originalTaxRate: 15,
+          appliedTaxRate: 15,
+          selectedModifiers: [modifier],
+        );
+
+    test('lleva el estado, el motivo, el origen y la autorización', () {
+      final payload = SalesMapper.toSyncJson(
+        invoice,
+        [
+          itemWith(
+            modifierWithTruth(
+              status: 'PENDING',
+              reason: 'INSUMSO_NOT_IN_CATALOG',
+              source: 'DECLARED',
+              authorizedBy: 'sup-1',
+              method: 'PIN',
+              why: 'el insumo no está registrado',
+            ),
+          ),
+        ],
+        const [],
+      );
+      final modifier =
+          ((payload['items'] as List).first['modifiers'] as List).first
+              as Map<String, dynamic>;
+
+      expect(modifier['effectStatus'], 'PENDING');
+      expect(modifier['effectSkipReason'], 'INSUMSO_NOT_IN_CATALOG');
+      expect(modifier['effectQuantitySource'], 'DECLARED');
+      expect(modifier['effectAuthorizedBy'], 'sup-1');
+      expect(modifier['effectAuthorizationMethod'], 'PIN');
+      expect(modifier['effectAuthorizationReason'], 'el insumo no está registrado');
+    });
+
+    test('una línea sin efecto conserva EXACTAMENTE la forma del cable de antes', () {
+      final payload = SalesMapper.toSyncJson(
+        invoice,
+        [itemWith(modifierWithTruth())],
+        const [],
+      );
+      final modifier =
+          ((payload['items'] as List).first['modifiers'] as List).first
+              as Map<String, dynamic>;
+
+      // Los campos nuevos sólo viajan cuando existen: una línea vieja (o de
+      // precio sin efecto) no puede cambiar de bytes, porque el hash de
+      //冲突 del backoffice los cubre.
+      expect(modifier.containsKey('effectStatus'), isFalse);
+      expect(modifier.containsKey('effectSkipReason'), isFalse);
+      expect(modifier.containsKey('effectQuantitySource'), isFalse);
+      expect(modifier.containsKey('effectAuthorizedBy'), isFalse);
+    });
+
+    test('la fila local guarda y devuelve la verdad (ida y vuelta)', () {
+      final rows = SalesMapper.toItemModifierEntities(
+        itemWith(
+          modifierWithTruth(
+            status: 'PENDING',
+            reason: 'UNIT_MISMATCH',
+            source: 'OVERRIDE',
+          ),
+        ),
+      );
+
+      expect(rows.single.effectStatus, 'PENDING');
+      expect(rows.single.effectSkipReason, 'UNIT_MISMATCH');
+      expect(rows.single.effectQuantitySource, 'OVERRIDE');
+
+      final back = SalesMapper.toModifierDomain(rows.single);
+      expect(back.effectStatus, 'PENDING');
+      expect(back.effectSkipReason, 'UNIT_MISMATCH');
+      expect(back.effectQuantitySource, 'OVERRIDE');
+    });
   });
 }

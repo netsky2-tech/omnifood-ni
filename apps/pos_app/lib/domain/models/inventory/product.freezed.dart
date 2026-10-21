@@ -948,6 +948,35 @@ mixin _$Modifier {
   /// The multiplier of a SCALE.
   double? get effectFactor => throw _privateConstructorUsedError;
 
+  /// ME-04: the TRUTH of the effect, as the sale knew it.
+  ///
+  /// 'APPLIED' — the effect moved the stock. 'PENDING' — the sale went
+  /// through but the effect did NOT touch the stock, and
+  /// [effectSkipReason] says why. Null — the line carries no effect at
+  /// all (a price-only option, or a terminal that predates this wire).
+  ///
+  /// It is written at SALE TIME (the resolver is the only place that
+  /// knows), never guessed in the dialog: a line that says APPLIED when
+  /// the stock did not move would be a lie in the cloud.
+  String? get effectStatus => throw _privateConstructorUsedError;
+
+  /// ME-04: why the effect did not apply. The same vocabulary the
+  /// resolver and the backoffice use (INCOMPLETE, UNIT_MISMATCH,
+  /// INSUMSO_NOT_IN_CATALOG, COMPONENT_NOT_IN_RECIPE).
+  String? get effectSkipReason => throw _privateConstructorUsedError;
+
+  /// ME-04: where the applied quantity came from: 'DECLARED' (the
+  /// backoffice configured it), 'INHERITED' (the recipe's component) or
+  /// 'OVERRIDE' (a supervisor marked it).
+  String? get effectQuantitySource => throw _privateConstructorUsedError;
+
+  /// ME-04: the supervisor who authorized a quantity override, and the
+  /// evidence of that authorization (the credential used and the reason).
+  /// Null when nobody had to authorize anything.
+  String? get effectAuthorizedBy => throw _privateConstructorUsedError;
+  String? get effectAuthorizationMethod => throw _privateConstructorUsedError;
+  String? get effectAuthorizationReason => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $ModifierCopyWith<Modifier> get copyWith =>
@@ -970,7 +999,13 @@ abstract class $ModifierCopyWith<$Res> {
       String? effectInsumoId,
       String? effectTargetInsumoId,
       double? effectQuantity,
-      double? effectFactor});
+      double? effectFactor,
+      String? effectStatus,
+      String? effectSkipReason,
+      String? effectQuantitySource,
+      String? effectAuthorizedBy,
+      String? effectAuthorizationMethod,
+      String? effectAuthorizationReason});
 }
 
 /// @nodoc
@@ -997,6 +1032,12 @@ class _$ModifierCopyWithImpl<$Res, $Val extends Modifier>
     Object? effectTargetInsumoId = freezed,
     Object? effectQuantity = freezed,
     Object? effectFactor = freezed,
+    Object? effectStatus = freezed,
+    Object? effectSkipReason = freezed,
+    Object? effectQuantitySource = freezed,
+    Object? effectAuthorizedBy = freezed,
+    Object? effectAuthorizationMethod = freezed,
+    Object? effectAuthorizationReason = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -1043,6 +1084,30 @@ class _$ModifierCopyWithImpl<$Res, $Val extends Modifier>
           ? _value.effectFactor
           : effectFactor // ignore: cast_nullable_to_non_nullable
               as double?,
+      effectStatus: freezed == effectStatus
+          ? _value.effectStatus
+          : effectStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectSkipReason: freezed == effectSkipReason
+          ? _value.effectSkipReason
+          : effectSkipReason // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectQuantitySource: freezed == effectQuantitySource
+          ? _value.effectQuantitySource
+          : effectQuantitySource // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectAuthorizedBy: freezed == effectAuthorizedBy
+          ? _value.effectAuthorizedBy
+          : effectAuthorizedBy // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectAuthorizationMethod: freezed == effectAuthorizationMethod
+          ? _value.effectAuthorizationMethod
+          : effectAuthorizationMethod // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectAuthorizationReason: freezed == effectAuthorizationReason
+          ? _value.effectAuthorizationReason
+          : effectAuthorizationReason // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -1066,7 +1131,13 @@ abstract class _$$ModifierImplCopyWith<$Res>
       String? effectInsumoId,
       String? effectTargetInsumoId,
       double? effectQuantity,
-      double? effectFactor});
+      double? effectFactor,
+      String? effectStatus,
+      String? effectSkipReason,
+      String? effectQuantitySource,
+      String? effectAuthorizedBy,
+      String? effectAuthorizationMethod,
+      String? effectAuthorizationReason});
 }
 
 /// @nodoc
@@ -1091,6 +1162,12 @@ class __$$ModifierImplCopyWithImpl<$Res>
     Object? effectTargetInsumoId = freezed,
     Object? effectQuantity = freezed,
     Object? effectFactor = freezed,
+    Object? effectStatus = freezed,
+    Object? effectSkipReason = freezed,
+    Object? effectQuantitySource = freezed,
+    Object? effectAuthorizedBy = freezed,
+    Object? effectAuthorizationMethod = freezed,
+    Object? effectAuthorizationReason = freezed,
   }) {
     return _then(_$ModifierImpl(
       id: null == id
@@ -1137,6 +1214,30 @@ class __$$ModifierImplCopyWithImpl<$Res>
           ? _value.effectFactor
           : effectFactor // ignore: cast_nullable_to_non_nullable
               as double?,
+      effectStatus: freezed == effectStatus
+          ? _value.effectStatus
+          : effectStatus // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectSkipReason: freezed == effectSkipReason
+          ? _value.effectSkipReason
+          : effectSkipReason // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectQuantitySource: freezed == effectQuantitySource
+          ? _value.effectQuantitySource
+          : effectQuantitySource // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectAuthorizedBy: freezed == effectAuthorizedBy
+          ? _value.effectAuthorizedBy
+          : effectAuthorizedBy // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectAuthorizationMethod: freezed == effectAuthorizationMethod
+          ? _value.effectAuthorizationMethod
+          : effectAuthorizationMethod // ignore: cast_nullable_to_non_nullable
+              as String?,
+      effectAuthorizationReason: freezed == effectAuthorizationReason
+          ? _value.effectAuthorizationReason
+          : effectAuthorizationReason // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -1155,7 +1256,13 @@ class _$ModifierImpl implements _Modifier {
       this.effectInsumoId,
       this.effectTargetInsumoId,
       this.effectQuantity,
-      this.effectFactor});
+      this.effectFactor,
+      this.effectStatus,
+      this.effectSkipReason,
+      this.effectQuantitySource,
+      this.effectAuthorizedBy,
+      this.effectAuthorizationMethod,
+      this.effectAuthorizationReason});
 
   factory _$ModifierImpl.fromJson(Map<String, dynamic> json) =>
       _$$ModifierImplFromJson(json);
@@ -1213,9 +1320,44 @@ class _$ModifierImpl implements _Modifier {
   @override
   final double? effectFactor;
 
+  /// ME-04: the TRUTH of the effect, as the sale knew it.
+  ///
+  /// 'APPLIED' — the effect moved the stock. 'PENDING' — the sale went
+  /// through but the effect did NOT touch the stock, and
+  /// [effectSkipReason] says why. Null — the line carries no effect at
+  /// all (a price-only option, or a terminal that predates this wire).
+  ///
+  /// It is written at SALE TIME (the resolver is the only place that
+  /// knows), never guessed in the dialog: a line that says APPLIED when
+  /// the stock did not move would be a lie in the cloud.
+  @override
+  final String? effectStatus;
+
+  /// ME-04: why the effect did not apply. The same vocabulary the
+  /// resolver and the backoffice use (INCOMPLETE, UNIT_MISMATCH,
+  /// INSUMSO_NOT_IN_CATALOG, COMPONENT_NOT_IN_RECIPE).
+  @override
+  final String? effectSkipReason;
+
+  /// ME-04: where the applied quantity came from: 'DECLARED' (the
+  /// backoffice configured it), 'INHERITED' (the recipe's component) or
+  /// 'OVERRIDE' (a supervisor marked it).
+  @override
+  final String? effectQuantitySource;
+
+  /// ME-04: the supervisor who authorized a quantity override, and the
+  /// evidence of that authorization (the credential used and the reason).
+  /// Null when nobody had to authorize anything.
+  @override
+  final String? effectAuthorizedBy;
+  @override
+  final String? effectAuthorizationMethod;
+  @override
+  final String? effectAuthorizationReason;
+
   @override
   String toString() {
-    return 'Modifier(id: $id, name: $name, extraPrice: $extraPrice, quantity: $quantity, optionId: $optionId, groupId: $groupId, inventoryEffect: $inventoryEffect, effectInsumoId: $effectInsumoId, effectTargetInsumoId: $effectTargetInsumoId, effectQuantity: $effectQuantity, effectFactor: $effectFactor)';
+    return 'Modifier(id: $id, name: $name, extraPrice: $extraPrice, quantity: $quantity, optionId: $optionId, groupId: $groupId, inventoryEffect: $inventoryEffect, effectInsumoId: $effectInsumoId, effectTargetInsumoId: $effectTargetInsumoId, effectQuantity: $effectQuantity, effectFactor: $effectFactor, effectStatus: $effectStatus, effectSkipReason: $effectSkipReason, effectQuantitySource: $effectQuantitySource, effectAuthorizedBy: $effectAuthorizedBy, effectAuthorizationMethod: $effectAuthorizationMethod, effectAuthorizationReason: $effectAuthorizationReason)';
   }
 
   @override
@@ -1241,7 +1383,21 @@ class _$ModifierImpl implements _Modifier {
             (identical(other.effectQuantity, effectQuantity) ||
                 other.effectQuantity == effectQuantity) &&
             (identical(other.effectFactor, effectFactor) ||
-                other.effectFactor == effectFactor));
+                other.effectFactor == effectFactor) &&
+            (identical(other.effectStatus, effectStatus) ||
+                other.effectStatus == effectStatus) &&
+            (identical(other.effectSkipReason, effectSkipReason) ||
+                other.effectSkipReason == effectSkipReason) &&
+            (identical(other.effectQuantitySource, effectQuantitySource) ||
+                other.effectQuantitySource == effectQuantitySource) &&
+            (identical(other.effectAuthorizedBy, effectAuthorizedBy) ||
+                other.effectAuthorizedBy == effectAuthorizedBy) &&
+            (identical(other.effectAuthorizationMethod,
+                    effectAuthorizationMethod) ||
+                other.effectAuthorizationMethod == effectAuthorizationMethod) &&
+            (identical(other.effectAuthorizationReason,
+                    effectAuthorizationReason) ||
+                other.effectAuthorizationReason == effectAuthorizationReason));
   }
 
   @JsonKey(ignore: true)
@@ -1258,7 +1414,13 @@ class _$ModifierImpl implements _Modifier {
       effectInsumoId,
       effectTargetInsumoId,
       effectQuantity,
-      effectFactor);
+      effectFactor,
+      effectStatus,
+      effectSkipReason,
+      effectQuantitySource,
+      effectAuthorizedBy,
+      effectAuthorizationMethod,
+      effectAuthorizationReason);
 
   @JsonKey(ignore: true)
   @override
@@ -1286,7 +1448,13 @@ abstract class _Modifier implements Modifier {
       final String? effectInsumoId,
       final String? effectTargetInsumoId,
       final double? effectQuantity,
-      final double? effectFactor}) = _$ModifierImpl;
+      final double? effectFactor,
+      final String? effectStatus,
+      final String? effectSkipReason,
+      final String? effectQuantitySource,
+      final String? effectAuthorizedBy,
+      final String? effectAuthorizationMethod,
+      final String? effectAuthorizationReason}) = _$ModifierImpl;
 
   factory _Modifier.fromJson(Map<String, dynamic> json) =
       _$ModifierImpl.fromJson;
@@ -1341,6 +1509,41 @@ abstract class _Modifier implements Modifier {
 
   /// The multiplier of a SCALE.
   double? get effectFactor;
+  @override
+
+  /// ME-04: the TRUTH of the effect, as the sale knew it.
+  ///
+  /// 'APPLIED' — the effect moved the stock. 'PENDING' — the sale went
+  /// through but the effect did NOT touch the stock, and
+  /// [effectSkipReason] says why. Null — the line carries no effect at
+  /// all (a price-only option, or a terminal that predates this wire).
+  ///
+  /// It is written at SALE TIME (the resolver is the only place that
+  /// knows), never guessed in the dialog: a line that says APPLIED when
+  /// the stock did not move would be a lie in the cloud.
+  String? get effectStatus;
+  @override
+
+  /// ME-04: why the effect did not apply. The same vocabulary the
+  /// resolver and the backoffice use (INCOMPLETE, UNIT_MISMATCH,
+  /// INSUMSO_NOT_IN_CATALOG, COMPONENT_NOT_IN_RECIPE).
+  String? get effectSkipReason;
+  @override
+
+  /// ME-04: where the applied quantity came from: 'DECLARED' (the
+  /// backoffice configured it), 'INHERITED' (the recipe's component) or
+  /// 'OVERRIDE' (a supervisor marked it).
+  String? get effectQuantitySource;
+  @override
+
+  /// ME-04: the supervisor who authorized a quantity override, and the
+  /// evidence of that authorization (the credential used and the reason).
+  /// Null when nobody had to authorize anything.
+  String? get effectAuthorizedBy;
+  @override
+  String? get effectAuthorizationMethod;
+  @override
+  String? get effectAuthorizationReason;
   @override
   @JsonKey(ignore: true)
   _$$ModifierImplCopyWith<_$ModifierImpl> get copyWith =>

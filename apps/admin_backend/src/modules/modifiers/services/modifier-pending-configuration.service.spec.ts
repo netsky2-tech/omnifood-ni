@@ -9,6 +9,9 @@ import { Product } from '../../inventory/entities/product.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
+import { Invoice } from '../../sales/entities/invoice.entity';
+import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
+import { InvoiceItemModifier } from '../../sales/entities/invoice-item-modifier.entity';
 
 /**
  * The owner's decision (2026-10-20): the backoffice owns the quantity of an
@@ -228,5 +231,139 @@ describe('ModifierPendingConfigurationService', () => {
 
     expect(pending).toHaveLength(1);
     expect(pending[0].products[0].reason).toBe('INSUMSO_NOT_IN_CATALOG');
+  });
+});
+
+/**
+ * ME-04: the SOLD lines whose inventory effect never touched the stock.
+ *
+ * The configuration list says what the tenant still OWES; this one says
+ * what already HAPPENED — a real sale with a missing inventory movement.
+ * It is read from the line the terminal wrote, never recomputed: the cloud
+ * must not decide today what a sale resolved yesterday.
+ */
+describe('ModifierPendingConfigurationService · efectos pendientes vendidos', () => {
+  const TENANT_ID = 'tenant-1';
+
+  const manager: { getRepository: jest.Mock; query: jest.Mock } = {
+    getRepository: jest.fn(),
+    query: jest.fn(),
+  };
+
+  const dataSource = {
+    transaction: jest.fn(async (cb: (m: unknown) => unknown) => cb(manager)),
+  } as unknown as DataSource;
+
+  const makeService = () =>
+    new ModifierPendingConfigurationService(
+      dataSource,
+      {} as never,
+    );
+
+  const pendingModifier = {
+    id: 'mod-1',
+    invoiceItemId: 'item-1',
+    name: 'Leche: Almendras',
+    extraPrice: 10,
+    quantity: 1,
+    optionId: 'opt-almendras',
+    groupId: 'grp-leche',
+    inventoryEffect: 'SWAP',
+    effectInsumoId: 'ins-almendras',
+    effectTargetInsumoId: 'ins-leche',
+    effectQuantity: null,
+    effectFactor: null,
+    effectStatus: 'PENDING',
+    effectSkipReason: 'INSUMSO_NOT_IN_CATALOG',
+    effectQuantitySource: 'DECLARED',
+    effectAuthorizedBy: null,
+    effectAuthorizationMethod: null,
+    effectAuthorizationReason: null,
+  };
+
+  it('devuelve la línea vendida con su motivo, y pagina con honestidad', async () => {
+    const qb: Record<string, jest.Mock> = {};
+    for (const method of [
+      'innerJoin',
+      'where',
+      'andWhere',
+      'orderBy',
+      'addOrderBy',
+      'take',
+    ]) {
+      qb[method] = jest.fn(() => qb);
+    }
+    qb.getManyAndCount = jest
+      .fn()
+      .mockResolvedValue([[pendingModifier], 1]);
+
+    const modifierRepo = { createQueryBuilder: jest.fn(() => qb) };
+    const itemRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 'item-1',
+          invoiceId: 'inv-1',
+          productId: 'prod-1',
+          productName: 'Capuccino',
+        },
+      ]),
+    };
+    const invoiceRepo = {
+      find: jest.fn().mockResolvedValue([
+        {
+          id: 'inv-1',
+          number: '001-001-01-00000042',
+          created_at: new Date('2026-10-20T15:00:00.000Z'),
+        },
+      ]),
+    };
+
+    manager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === InvoiceItemModifier) return modifierRepo;
+      if (entity === InvoiceItem) return itemRepo;
+      if (entity === Invoice) return invoiceRepo;
+      throw new Error('unexpected repository');
+    });
+
+    const report = await makeService().findPendingEffects(TENANT_ID);
+
+    expect(report.lines).toHaveLength(1);
+    expect(report.lines[0].invoice_number).toBe('001-001-01-00000042');
+    expect(report.lines[0].product_name).toBe('Capuccino');
+    expect(report.lines[0].option_name).toBe('Leche: Almendras');
+    expect(report.lines[0].reason).toBe('INSUMSO_NOT_IN_CATALOG');
+    expect(report.truncated).toBe(false);
+  });
+
+  it('declara el recorte cuando hay más líneas que la página', async () => {
+    const qb: Record<string, jest.Mock> = {};
+    for (const method of [
+      'innerJoin',
+      'where',
+      'andWhere',
+      'orderBy',
+      'addOrderBy',
+      'take',
+    ]) {
+      qb[method] = jest.fn(() => qb);
+    }
+    qb.getManyAndCount = jest
+      .fn()
+      .mockResolvedValue([[pendingModifier, pendingModifier], 2]);
+
+    manager.getRepository.mockImplementation((entity: unknown) => {
+      if (entity === InvoiceItemModifier) {
+        return { createQueryBuilder: jest.fn(() => qb) };
+      }
+      if (entity === InvoiceItem) return { find: jest.fn().mockResolvedValue([]) };
+      if (entity === Invoice) return { find: jest.fn().mockResolvedValue([]) };
+      throw new Error('unexpected repository');
+    });
+
+    const report = await makeService().findPendingEffects(TENANT_ID, 1);
+
+    expect(report.limit).toBe(1);
+    expect(report.lines).toHaveLength(1);
+    expect(report.truncated).toBe(true);
   });
 });

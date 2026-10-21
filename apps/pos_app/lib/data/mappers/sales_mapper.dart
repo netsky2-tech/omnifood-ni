@@ -551,6 +551,18 @@ class SalesMapper {
             effectTargetInsumoId: m.effectTargetInsumoId,
             effectQuantity: m.effectQuantity,
             effectFactor: m.effectFactor,
+            // ME-04: the truth of the effect, as the sale knew it. The
+            // status and the reason are written at SALE TIME (the resolver
+            // is the only place that knows); the source and the
+            // authorization come from the register. A line that says
+            // APPLIED when the stock did not move would be a lie in the
+            // cloud, so nothing here is ever inferred.
+            effectStatus: m.effectStatus,
+            effectSkipReason: m.effectSkipReason,
+            effectQuantitySource: m.effectQuantitySource,
+            effectAuthorizedBy: m.effectAuthorizedBy,
+            effectAuthorizationMethod: m.effectAuthorizationMethod,
+            effectAuthorizationReason: m.effectAuthorizationReason,
           ),
         )
         .toList();
@@ -573,6 +585,15 @@ class SalesMapper {
         effectTargetInsumoId: row.effectTargetInsumoId,
         effectQuantity: row.effectQuantity,
         effectFactor: row.effectFactor,
+        // ME-04: the inverse carries the truth back, so a rebuilt line
+        // (the activation-controlled rebuild) is byte-identical to the one
+        // that was sold.
+        effectStatus: row.effectStatus,
+        effectSkipReason: row.effectSkipReason,
+        effectQuantitySource: row.effectQuantitySource,
+        effectAuthorizedBy: row.effectAuthorizedBy,
+        effectAuthorizationMethod: row.effectAuthorizationMethod,
+        effectAuthorizationReason: row.effectAuthorizationReason,
       );
 
   // --- Payment ---
@@ -782,6 +803,30 @@ class SalesMapper {
                           'effectQuantity': m.effectQuantity,
                         if (m.effectFactor != null)
                           'effectFactor': m.effectFactor,
+                        // ME-04: the TRUTH of the effect travels with the
+                        // line, so a sold extra whose effect did not touch
+                        // the stock is reconcilable in the cloud and not
+                        // only visible at the register.
+                        //
+                        // The fields are sent ONLY when they exist, so a
+                        // line whose terminal says nothing about the effect
+                        // (a legacy line, a price-only option) keeps the
+                        // exact wire shape it had before — the credit-note
+                        // conflict hash covers these bytes.
+                        if (m.effectStatus != null)
+                          'effectStatus': m.effectStatus,
+                        if (m.effectSkipReason != null)
+                          'effectSkipReason': m.effectSkipReason,
+                        if (m.effectQuantitySource != null)
+                          'effectQuantitySource': m.effectQuantitySource,
+                        if (m.effectAuthorizedBy != null)
+                          'effectAuthorizedBy': m.effectAuthorizedBy,
+                        if (m.effectAuthorizationMethod != null)
+                          'effectAuthorizationMethod':
+                              m.effectAuthorizationMethod,
+                        if (m.effectAuthorizationReason != null)
+                          'effectAuthorizationReason':
+                              m.effectAuthorizationReason,
                       },
                     },
                   )

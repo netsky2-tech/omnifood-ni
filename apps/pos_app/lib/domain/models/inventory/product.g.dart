@@ -108,6 +108,12 @@ _$ModifierImpl _$$ModifierImplFromJson(Map<String, dynamic> json) =>
       effectTargetInsumoId: json['effectTargetInsumoId'] as String?,
       effectQuantity: (json['effectQuantity'] as num?)?.toDouble(),
       effectFactor: (json['effectFactor'] as num?)?.toDouble(),
+      effectStatus: json['effectStatus'] as String?,
+      effectSkipReason: json['effectSkipReason'] as String?,
+      effectQuantitySource: json['effectQuantitySource'] as String?,
+      effectAuthorizedBy: json['effectAuthorizedBy'] as String?,
+      effectAuthorizationMethod: json['effectAuthorizationMethod'] as String?,
+      effectAuthorizationReason: json['effectAuthorizationReason'] as String?,
     );
 
 Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
@@ -123,6 +129,12 @@ Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
       'effectTargetInsumoId': instance.effectTargetInsumoId,
       'effectQuantity': instance.effectQuantity,
       'effectFactor': instance.effectFactor,
+      'effectStatus': instance.effectStatus,
+      'effectSkipReason': instance.effectSkipReason,
+      'effectQuantitySource': instance.effectQuantitySource,
+      'effectAuthorizedBy': instance.effectAuthorizedBy,
+      'effectAuthorizationMethod': instance.effectAuthorizationMethod,
+      'effectAuthorizationReason': instance.effectAuthorizationReason,
     };
 
 _$EffectiveModifierOptionImpl _$$EffectiveModifierOptionImplFromJson(
