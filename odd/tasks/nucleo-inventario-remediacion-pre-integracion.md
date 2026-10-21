@@ -594,6 +594,10 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
     3. La terminal (APK de esta rama, instalado con `adb install -r -d`) la **proyecta**: `local_configs['supervision_policy']` = la política escrita, `last_applied_fiscal_revision` = 2 y `fiscal_projection_version` = 2 (la reparación de las instalaciones v1 corrió sola).
     4. **La retracción también, de punta a punta**: al restablecer en el backoffice (revision 3), la terminal aplicó la 3 y **borró** la clave local → vuelve al valor por defecto de su modo. Sin dejarresiduo.
     5. El invariante, en vivo: la política que dejaría el corte de caja imposible la **rechaza el servidor** (400) con el mensaje en palabras, y la terminal **nunca** aplica una así (prueba del dominio).
+  - **EL HUECO QUE ENCONTRÉ AL MAPEAR LA CONFIGURACIÓN (y que estaba en contra de la promesa)**: la evidencia de la auto-autorización llegaba a la nube, pero **la nube no la clasificaba** (cayendo al `INFO` de «código desconocido») y **el backoffice no le ponía nombre** (la bitácora mostraba `SELF_AUTHORIZED_CLOSE_SESSION` en crudo). O sea: el registro existían pero **no era revisable** — justo lo contrario de lo prometido («el control es el registro»).
+    - **La severidad sigue al EVENTO, no al firmante**: la misma clase conserva la misma severidad con o sin supervisor, y una auto-autorización (el control MÁS débil) nunca puede ser más suave que su gemelo supervisado. Cierre de turno y descuento manual = `CRITICAL`; gaveta fuera de venta y cantidad de un extra = `WARNING`.
+    - Los seis códigos nuevos (`SELF_AUTHORIZED_*`, `MODIFIER_EFFECT_QUANTITY_*`) entran también en la **guarda S4a** (dinero/privilegio/permiso nunca degradan a `INFO`).
+    - Y el backoffice les pone palabras: «Cierre de turno firmado por el operador», «Cantidad de un extra ajustada con supervisor», etc.
   - Change de SDD: `openspec/changes/supervision-policy-tenant-owned/` (propuesta, contrato, diseño, tareas). Unidades: `ace7e0d1` (nube) · `4f5821a0` (backoffice) · esta (terminal).
 
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)

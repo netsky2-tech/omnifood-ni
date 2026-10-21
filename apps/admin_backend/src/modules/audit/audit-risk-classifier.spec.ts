@@ -113,6 +113,47 @@ describe('audit-risk-classifier', () => {
         evidence:
           'sale_view.dart:744 (logForensic) and backend audit-trail.service.ts recordManualDrawerOpen — supervised cash drawer open outside a sale: cash exposure follow-up (PRD §19.1 Warning)',
       },
+      // The tenant's supervision policy made the supervisor optional, so the
+      // terminal records the self-authorization instead of the override. The
+      // severity follows the EVENT, not the signer: the same class keeps the
+      // same severity, and a self-authorization (the weaker control) can
+      // never be softer than its supervised twin.
+      {
+        action: 'SELF_AUTHORIZED_CLOSE_SESSION',
+        expected: 'CRITICAL',
+        evidence:
+          'sale_view.dart:861 (logForensic) — the shift close (Corte Z) signed by the operator alone: a numbered fiscal act, same class as SUPERVISOR_OVERRIDE_CLOSE_SESSION (PRD §19.1 Critical)',
+      },
+      {
+        action: 'SELF_AUTHORIZED_MANUAL_DISCOUNT',
+        expected: 'CRITICAL',
+        evidence:
+          'sale_view.dart:2849 (logForensic) — a manual discount signed by the operator alone: money out of the price, same class as SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT (PRD §19.1 Critical)',
+      },
+      {
+        action: 'SELF_AUTHORIZED_DRAWER_OPENED',
+        expected: 'WARNING',
+        evidence:
+          'sale_view.dart:908 (logForensic) — the drawer opened outside a sale by the operator alone: an irregular cash movement by nature, same class as DRAWER_OPENED_MANUALLY (PRD §19.1 Warning)',
+      },
+      {
+        action: 'MODIFIER_EFFECT_QUANTITY_ADJUSTED',
+        expected: 'WARNING',
+        evidence:
+          'sale_view.dart:1601 (logForensic) — the quantity of an extra was adjusted away from its configured value: the inventory effect no longer matches the backoffice, an operational follow-up (PRD §19.1 Warning)',
+      },
+      {
+        action: 'MODIFIER_EFFECT_QUANTITY_OVERRIDE',
+        expected: 'WARNING',
+        evidence:
+          'sale_view.dart:1663 (logForensic) — a supervisor signed the quantity adjustment of an extra: same inventory-effect follow-up class (PRD §19.1 Warning)',
+      },
+      {
+        action: 'SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY',
+        expected: 'WARNING',
+        evidence:
+          'sale_view.dart:1664 (logForensic) — the operator adjusted the quantity of an extra alone: same inventory-effect follow-up class (PRD §19.1 Warning)',
+      },
       {
         action: 'REPRINT_REQUESTED',
         expected: 'WARNING',
@@ -203,6 +244,15 @@ describe('audit-risk-classifier', () => {
       'PRINT_PAYLOAD_CORRUPT',
       'USER_DEACTIVATED',
       'SUPERVISOR_OVERRIDE_REJECTED',
+      // The self-authorization family: the tenant's policy made the
+      // supervisor optional, but the EVENT is the same class as its
+      // supervised twin, so it must never degrade to awareness noise.
+      'SELF_AUTHORIZED_CLOSE_SESSION',
+      'SELF_AUTHORIZED_MANUAL_DISCOUNT',
+      'SELF_AUTHORIZED_DRAWER_OPENED',
+      'MODIFIER_EFFECT_QUANTITY_ADJUSTED',
+      'MODIFIER_EFFECT_QUANTITY_OVERRIDE',
+      'SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY',
     ];
 
     it('never classifies money, privilege or permission codes as INFO (S4a guard)', () => {

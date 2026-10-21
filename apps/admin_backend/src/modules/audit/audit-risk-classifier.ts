@@ -78,6 +78,35 @@ const ACTION_SEVERITY_TABLE: Readonly<Record<string, AuditSeverity>> = {
   SUPERVISOR_OVERRIDE_CLOSE_SESSION: 'CRITICAL',
   // Supervised cash drawer open outside a sale: cash exposure follow-up.
   DRAWER_OPENED_MANUALLY: 'WARNING',
+  // ------------------------------------------------------------------
+  // The tenant's SUPERVISION POLICY made the supervisor optional (the
+  // owner's decision, 2026-10-20: in a food park there is often nobody
+  // else on the floor, and a rule that demands one does not create a
+  // control, it creates a dead end). The terminal then records the
+  // self-authorization instead of the override.
+  //
+  // THE SEVERITY FOLLOWS THE EVENT, NOT THE SIGNER: the same event class
+  // keeps the same severity whether a supervisor signed it or the
+  // operator signed their own operation. A self-authorization is the
+  // WEAKER control, so it can never be softer than its supervised twin.
+  // (The tenant's policy is what makes it legitimate; the record is what
+  // makes it reviewable.)
+  // ------------------------------------------------------------------
+  // The shift close (Corte Z) is a NUMBERED FISCAL ACT: same class as
+  // SUPERVISOR_OVERRIDE_CLOSE_SESSION.
+  SELF_AUTHORIZED_CLOSE_SESSION: 'CRITICAL',
+  // A manual discount is MONEY out of the price: same class as
+  // SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT.
+  SELF_AUTHORIZED_MANUAL_DISCOUNT: 'CRITICAL',
+  // The drawer opened outside a sale is an IRREGULAR cash movement by
+  // nature: same class as DRAWER_OPENED_MANUALLY.
+  SELF_AUTHORIZED_DRAWER_OPENED: 'WARNING',
+  // The quantity of an extra was adjusted away from its configured value:
+  // the inventory effect no longer matches the backoffice. An operational
+  // follow-up, whoever signed it.
+  MODIFIER_EFFECT_QUANTITY_ADJUSTED: 'WARNING',
+  MODIFIER_EFFECT_QUANTITY_OVERRIDE: 'WARNING',
+  SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY: 'WARNING',
   // Fiscal receipt reissue: receipt-fraud follow-up, no money movement.
   REPRINT_REQUESTED: 'WARNING',
   // Emitted when the fail-safe control REFUSES to print a corrupt fiscal
