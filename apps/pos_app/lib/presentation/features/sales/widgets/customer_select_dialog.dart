@@ -366,13 +366,23 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => setState(() => _isCreatingNew = true),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Nuevo'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  // The app-wide `elevatedButtonTheme` sets
+                  // `minimumSize: Size.fromHeight(48)`, which means an INFINITE
+                  // minimum width. In this unbounded Row that throws
+                  // "BoxConstraints forces an infinite width" inside the
+                  // button's padding and aborts the whole body layout: on
+                  // device only the dim barrier rendered and the dialog looked
+                  // empty. Clamping the button gives it a finite width.
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 132),
+                    child: ElevatedButton.icon(
+                      onPressed: () => setState(() => _isCreatingNew = true),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Nuevo'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
                     ),
                   ),
                 ],
