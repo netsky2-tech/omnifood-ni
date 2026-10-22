@@ -123,8 +123,14 @@
       es NOT NULL ⇒ no se inventa un lote sin vencimiento real): es una fábrica de
       divergencias. Documentada en `docs/inventario_marco_normativo.md`; este change
       garantiza que **no** bloquee la facturación, pero su causa raíz queda abierta.
-- [ ] **A-2** El ledger de lealtad: un fallo de lealtad también mete el flujo en
-      `blockedStreams` (el mismo defecto, hermano). Otro ledger, otro análisis.
+- [ ] **A-2** El ledger de lealtad: **corregido el diagnóstico** (no hace falta arreglar
+      la facturación aquí). El fallo de lealtad sí mete el flujo en `blockedStreams`,
+      pero el flujo de lealtad es el suyo (`flowType` propio) ⇒ **NO bloquea el flujo
+      fiscal**: la venta sigue entrando. Lo que sí queda es que el registro de lealtad
+      conflictivo queda bloqueado para ese dispositivo hasta que un humano lo resuelva
+      (que es lo correcto: un conflicto de idempotencia de puntos es una inconsistencia
+      real, no un reintento). Queda como tarea propia del módulo de lealtad, con su
+      análisis: qué superficie le da al dueño para resolverlo.
 - [ ] **A-3** El change hermano `lo-vendible-es-lo-registrable`: alinear la regla de
       disponibilidad (el lote manda) y **publicar** el disponible por lote al terminal
       (que hoy no conoce el saldo de lotes de la nube).

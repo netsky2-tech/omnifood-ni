@@ -72,9 +72,11 @@ la supervisión:
   crear un lote (`batches.expiration_date` es NOT NULL ⇒ no se inventa un lote sin
   vencimiento real; el propio código lo declara como caso abierto). Ese hueco está
   documentado en el marco normativo y se **abre como tarea**, no se tapa en este change.
-- **La nota de crédito y el ledger de lealtad**: hoy un fallo de lealtad también mete el
-  flujo en `blockedStreams` (el mismo defecto, hermano). Se **abre como tarea**: son
-  ledgers distintos y merecen su propio análisis.
+- **La nota de crédito y el ledger de lealtad**: un fallo de lealtad también mete el
+  flujo en `blockedStreams`, pero el flujo de lealtad es el suyo (`flowType` propio) ⇒
+  **no bloquea la facturación**. Se **abre como tarea** para el módulo de lealtad (qué
+  superficie le da al dueño para resolver un conflicto de puntos), no como un riesgo
+  para la venta.
 - **El panel de la cola de revisión de supervisiones** y lo demás ya entregado.
 
 ## Capabilities
