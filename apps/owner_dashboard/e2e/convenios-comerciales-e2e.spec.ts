@@ -4,12 +4,12 @@ const BACKEND_URL = "http://localhost:3000";
 const DASHBOARD_URL = "http://localhost:5173";
 
 const ADMIN_CREDENTIALS = {
-  email: "sofia@omnifood.ni",
+  email: "owner.b.a6b4d092-b1c5-4071-b754-f7cb573236c9@test.com",
   pass: "password123",
-  tenantSlug: "soho-test-fixture",
+  tenantSlug: "tenant-b-pilot-5d9c95ee",
 };
 
-const TENANT_ID = "e05bf002-b1d3-45f2-a46a-3592e1cc1431";
+const TENANT_ID = "381c9887-9ba7-4756-9bdf-588344d035dd";
 
 /* ═════════════════════════════════════════════════════════════════════
    HELPERS — API REAL (sin mocks)
