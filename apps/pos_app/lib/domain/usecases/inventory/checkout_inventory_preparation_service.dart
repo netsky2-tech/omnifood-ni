@@ -10,13 +10,40 @@ import 'package:pos_app/domain/usecases/inventory/sale_time_inventory_snapshot_b
 import 'package:pos_app/domain/usecases/inventory/sub_recipe_bom_explosion.dart';
 import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
 
+/// An insumo whose LOTS did not cover what the sale consumed.
+///
+/// FD-03: ADVISORY. It never refuses the sale — the declared aggregate (and
+/// the tenant's own `negative_stock_policy`) decide that. It travels with the
+/// sale so the cloud can DECLARE the difference (FD-01) and the owner can
+/// reconcile it with a count that says in which lot the stock is (A-1).
+class InsumoLotShortage {
+  final String insumoId;
+  final String insumoName;
+  final double requiredQuantity;
+  final double lotAvailableQuantity;
+
+  const InsumoLotShortage({
+    required this.insumoId,
+    required this.insumoName,
+    required this.requiredQuantity,
+    required this.lotAvailableQuantity,
+  });
+
+  /// The units the lots did not back.
+  double get uncoveredQuantity => requiredQuantity - lotAvailableQuantity;
+}
+
 class PreparedSaleInventoryResult {
   final Invoice invoice;
   final List<InvoiceItem> items;
 
+  /// FD-03: the lot shortages of this sale (empty when the lots covered it).
+  final List<InsumoLotShortage> lotShortages;
+
   const PreparedSaleInventoryResult({
     required this.invoice,
     required this.items,
+    this.lotShortages = const <InsumoLotShortage>[],
   });
 }
 
@@ -292,6 +319,9 @@ class CheckoutInventoryPreparationService {
     // (default RESTRICT), the checkout must abort with a typed exception naming the failing
     // product, insumo and quantities, rather than selling offline and wedging cloud sync.
     final totalRequiredByInsumo = <String, double>{};
+    // FD-03: the lot shortages of this sale (advisory: they do NOT refuse the
+    // sale, they travel with it so the cloud can declare the difference).
+    final lotShortages = <InsumoLotShortage>[];
     final insumoContributingProducts = <String, String>{};
     for (final line in buildResult.lines) {
       final item = items.firstWhere(
@@ -321,22 +351,34 @@ class CheckoutInventoryPreparationService {
       final policy = authInsumo?.negativeStockPolicy ??
           insumoRow.negativeStockPolicy;
 
-      // FD-02: ONE availability rule, and it is the cloud's rule.
+      // The availability that DECIDES is the declared aggregate, with the
+      // tenant's own policy on top of it (`RESTRICT` refuses, `ALLOW_TEMPORARY`
+      // lets the stock go negative and the difference is reconciled later).
       //
-      // An insumo managed by LOTS is available by its lots — the number the
-      // cloud published (`lotAvailableStock`), because that is the number the
-      // cloud will actually draw from (FEFO over the identified lots). An
-      // insumo without lots is available by its aggregate, because there the
-      // aggregate IS the only truth.
-      //
-      // Before this, the terminal decided with the aggregate and the cloud
-      // decided with the lots: the terminal sold what the cloud could not
-      // record, and the cloud rejected it, which froze the fiscal sequence.
-      final availableStock = insumoRow.isBatchManaged &&
-              insumoRow.lotAvailableStock != null
-          ? insumoRow.lotAvailableStock!
-          : insumoRow.stock;
+      // The LOTS do NOT decide (FD-03): they are the traceability truth, and
+      // a derived number must never refuse a sale — "a POS that refuses a
+      // dish the kitchen can actually cook is worse than one showing a stale
+      // count" (and a lot record can simply be missing: the milk IS in the
+      // fridge, the bookkeeping is behind). So the lot coverage is ADVISORY:
+      // it is measured, it is reported to the operator, and the difference
+      // travels to the cloud, which DECLARES it (FD-01) for the
+      // reconciliation to close.
+      final availableStock = insumoRow.stock;
       final resultingStock = availableStock - requiredQty;
+      if (
+        insumoRow.isBatchManaged &&
+        insumoRow.lotAvailableStock != null &&
+        insumoRow.lotAvailableStock! < requiredQty
+      ) {
+        lotShortages.add(
+          InsumoLotShortage(
+            insumoId: insumoId,
+            insumoName: insumoRow.name,
+            requiredQuantity: requiredQty,
+            lotAvailableQuantity: insumoRow.lotAvailableStock!,
+          ),
+        );
+      }
 
       if (policy != 'ALLOW_TEMPORARY' && resultingStock < 0) {
         final insumoName = authInsumo?.name ?? insumoRow.name;
@@ -410,6 +452,7 @@ class CheckoutInventoryPreparationService {
     return PreparedSaleInventoryResult(
       invoice: updatedInvoice,
       items: frozenItems,
+      lotShortages: lotShortages,
     );
   }
 

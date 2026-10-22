@@ -1,5 +1,11 @@
 # Tasks: Lo que el terminal puede vender es lo que la nube puede registrar
 
+> ⚠️ **La Unidad 2.3 (el terminal decide por los lotes) se REVIERTE** por
+> `disponibilidad-derivada-no-bloquea` (FD-03): la disponibilidad derivada nunca
+> bloquea. El faltante por lotes se **mide y se reporta** (`lotShortages`), no se
+> rechaza la venta. La Unidad 1.3 (el servidor rechaza `ALLOW_TEMPORARY` en un
+> perecedero) también se revierte: su razón se evaporó con FD-01.
+
 ## Review Workload Forecast
 
 | Field | Value |

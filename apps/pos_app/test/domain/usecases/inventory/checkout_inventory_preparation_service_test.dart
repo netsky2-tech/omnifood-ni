@@ -1010,7 +1010,7 @@ void main() {
   );
 
   test(
-    'FD-02: a lot-managed insumo is available by its LOTS, not by the aggregate',
+    'FD-03: the lot coverage does NOT refuse the sale; it is reported as a shortage',
     () async {
       // The rig's case: 150 ml in the aggregate, 50 ml in the lots. The
       // cloud draws the outflow from the LOTS, so the terminal must decide
@@ -1043,8 +1043,59 @@ void main() {
         insumoId: 'insumo-leche',
       );
 
-      // 100 ml: the lots (50) do not cover it ⇒ the sale is refused, exactly
-      // as the cloud would refuse it.
+      // 100 ml: the lots (50) do not cover it. The sale STILL GOES (the
+      // declared aggregate does, and a lot record can simply be missing: the
+      // milk is in the fridge and the bookkeeping is behind). The shortage
+      // travels with the sale so the cloud can declare the difference.
+      final result = await service.prepare(
+        invoice: buildInvoice(),
+        items: [buildDirectItem(productId: 'prod-leche', quantity: 100.0)],
+        offlineUserId: 'user-1',
+        tenantId: 'tenant-1',
+        terminalId: 'term-1',
+      );
+
+      expect(result.invoice.inventoryOutcome, 'APPLIED');
+      expect(result.lotShortages, hasLength(1));
+      expect(result.lotShortages.first.insumoId, 'insumo-leche');
+      expect(result.lotShortages.first.requiredQuantity, 100.0);
+      expect(result.lotShortages.first.lotAvailableQuantity, 50.0);
+      expect(result.lotShortages.first.uncoveredQuantity, 50.0);
+    },
+  );
+
+  test(
+    'FD-03: RESTRICT still refuses when the DECLARED aggregate is not enough',
+    () async {
+      // The gate is the tenant's own rule on the declared stock — not the
+      // lots. This is the difference that matters: the business stops only
+      // when the tenant's own numbers say it should.
+      await database.authorityProjectionDao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-leche',
+          name: 'Leche',
+          uom: 'ML',
+        ),
+      );
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-leche',
+          name: 'Leche',
+          consumptionUom: 'ML',
+          stock: 40.0,
+          averageCost: 12.0,
+          isBatchManaged: true,
+          lotAvailableStock: 50.0,
+        ),
+      ]);
+      await insertDirectMappedProduct(
+        id: 'prod-leche',
+        productType: 'SIMPLE',
+        mappingVersionId: 'mv-leche-1',
+        insumoId: 'insumo-leche',
+      );
+
       await expectLater(
         service.prepare(
           invoice: buildInvoice(),

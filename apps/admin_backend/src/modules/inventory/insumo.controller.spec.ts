@@ -147,26 +147,29 @@ describe('InsumoController', () => {
       expect(insumoRepo.save).toHaveBeenCalled();
     });
 
-    // FD-02: `ALLOW_TEMPORARY` and the lot management cannot live together.
-    // The policy means "sell even with no stock"; a lot means the outflow has
-    // to come from an identified lot, and a lot without a real expiration
-    // date cannot be invented. So the cloud could not record that sale — and
-    // the terminal would sell what the cloud rejects.
-    it('rejects ALLOW_TEMPORARY on a perishable (lot-managed) insumo', async () => {
+    // FD-03: the derived availability NEVER refuses a sale. The tenant's own
+    // policy on the DECLARED aggregate decides (`RESTRICT` refuses,
+    // `ALLOW_TEMPORARY` lets the stock go negative and the difference is
+    // declared for the reconciliation). The lots do not decide — a lot
+    // record can simply be missing, and a POS that refuses a dish the kitchen
+    // can actually cook is worse than one showing a stale count.
+    it('accepts ALLOW_TEMPORARY on a perishable (lot-managed) insumo', async () => {
       insumoRepo.findOne.mockResolvedValue(null);
 
-      await expect(
-        buildController().create(
-          {
-            ...validDto,
-            is_perishable: true,
-            negativeStockPolicy: 'ALLOW_TEMPORARY',
-          },
-          'tenant-A',
-        ),
-      ).rejects.toThrow(/no puede usar la política ALLOW_TEMPORARY/);
+      const result = await buildController().create(
+        {
+          ...validDto,
+          is_perishable: true,
+          negativeStockPolicy: 'ALLOW_TEMPORARY',
+        },
+        'tenant-A',
+      );
 
-      expect(insumoRepo.save).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        is_perishable: true,
+        negativeStockPolicy: 'ALLOW_TEMPORARY',
+      });
+      expect(insumoRepo.save).toHaveBeenCalled();
     });
 
     it('throws ConflictException when insumo name already exists for tenant', async () => {

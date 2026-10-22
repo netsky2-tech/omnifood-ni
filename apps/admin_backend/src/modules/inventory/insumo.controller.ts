@@ -12,7 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Insumo, NEGATIVE_STOCK_POLICY } from './entities/insumo.entity';
+import { Insumo } from './entities/insumo.entity';
 import {
   serializeInsumo,
   serializeInsumos,
@@ -199,29 +199,6 @@ export class InsumoController {
           );
         }
 
-        // FD-02: `ALLOW_TEMPORARY` and the lot management CANNOT live
-        // together. The policy means "sell even if there is no stock"; a lot
-        // means the outflow has to be drawn from an identified lot, and a lot
-        // without a real expiration date cannot be invented (NIC 2's specific
-        // identification). So for a lot-managed insumo the two rules would
-        // contradict each other — and the terminal would sell what the cloud
-        // cannot record. Rejected here, with the reason.
-        const effectivePerishable =
-          dto.is_perishable ?? false;
-        const effectivePolicy =
-          dto.negativeStockPolicy ?? 'RESTRICT';
-        if (
-          effectivePerishable &&
-          effectivePolicy === NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY
-        ) {
-          throw new BadRequestException(
-            'Un insumo perecedero se gestiona por lotes: no puede ' +
-              'usar la política ALLOW_TEMPORARY (vender sin existencias). ' +
-              'Un lote sin fecha de vencimiento real no se puede crear, así ' +
-              'que la nube no podría registrar esa venta.',
-          );
-        }
-
         const insumo = repo.create({
           tenant_id: normalizedTenantId,
           name: dto.name,
@@ -305,19 +282,7 @@ export class InsumoController {
           insumo.warehouse_id = dto.warehouse_id;
         if (dto.is_active !== undefined) insumo.is_active = dto.is_active;
 
-        // FD-02: the same incompatibility, checked with the values that
-        // RESULT from this update (the change may be in either field).
-        if (
-          insumo.is_perishable &&
-          insumo.negativeStockPolicy === NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY
-        ) {
-          throw new BadRequestException(
-            'Un insumo perecedero se gestiona por lotes: no puede ' +
-              'usar la política ALLOW_TEMPORARY (vender sin existencias). ' +
-              'Un lote sin fecha de vencimiento real no se puede crear, así ' +
-              'que la nube no podría registrar esa venta.',
-          );
-        }
+
 
         return repo.save(insumo);
       },

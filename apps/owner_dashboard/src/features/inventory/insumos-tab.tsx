@@ -978,22 +978,10 @@ export function InsumosTab() {
                   data-testid="insumo-form-perishable"
                   checked={form.is_perishable}
                   onChange={(e) => {
-                    const isPerishable = e.target.checked;
-                    // FD-02: a perishable insumo is managed by LOTS, and the
-                    // cloud cannot record a sale with no lot behind it (a lot
-                    // without a real expiration date cannot be invented). So
-                    // the "sell without stock" policy is not available for
-                    // it, and checking the box turns the policy off instead
-                    // of leaving the owner with a combination the server
-                    // will refuse.
-                    setForm({
-                      ...form,
-                      is_perishable: isPerishable,
-                      negativeStockPolicy:
-                        isPerishable && form.negativeStockPolicy === "ALLOW_TEMPORARY"
-                          ? "RESTRICT"
-                          : form.negativeStockPolicy,
-                    });
+                    // FD-03: marking the insumo as perishable does NOT change
+                    // its stock policy. The tenant decides whether it sells
+                    // without stock; the lots never refuse a sale.
+                    setForm({ ...form, is_perishable: e.target.checked });
                   }}
                   className="rounded border-border text-primary focus:ring-primary h-4 w-4"
                 />
@@ -1005,11 +993,12 @@ export function InsumosTab() {
               <div className="space-y-1 pt-1">
                 <Label className="text-xs font-medium">Venta sin existencias</Label>
                 <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  {form.negativeStockPolicy === "ALLOW_TEMPORARY"
+                    ? "Permitida: el stock puede quedar negativo. Cada venta que lo haga genera una diferencia de inventario para conciliar en el backoffice."
+                    : "No permitida: si no hay existencias, la venta se rechaza antes de cobrar."}
                   {form.is_perishable
-                    ? "No disponible en un insumo perecedero: se maneja por lotes y la nube no puede registrar una venta sin lote detrás. La venta se rechaza antes de cobrar."
-                    : form.negativeStockPolicy === "ALLOW_TEMPORARY"
-                      ? "Permitida: el stock puede quedar negativo y la diferencia se declara para conciliar en el backoffice."
-                      : "No permitida: si no hay existencias, la venta se rechaza antes de cobrar."}
+                    ? " Este insumo se maneja por lotes: las ventas se controlan por el stock declarado y el sobrante sin lote se concilia con un conteo."
+                    : ""}
                 </p>
               </div>
 

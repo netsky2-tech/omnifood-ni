@@ -1,5 +1,12 @@
 # Proposal: Lo que el terminal puede vender es lo que la nube puede registrar
 
+> ⚠️ **CORREGIDO por `disponibilidad-derivada-no-bloquea` (FD-03, 2026-10-21).**
+> La regla que este change implementó —**el terminal se niega a vender si los lotes no
+> cubren**— **se revierte**: la disponibilidad derivada nunca bloquea (la evidencia de
+> la industria y el principio del dueño: «nunca bloquear»). Lo que se conserva de aquí
+> es la **publicación** del disponible por lote, que ahora sirve para el aviso y para
+> que la nube declare la diferencia con la magnitud exacta.
+
 ## Intent
 
 El terminal y la nube aplican **dos reglas de disponibilidad distintas** sobre el mismo
