@@ -253,6 +253,13 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       ) as double);
 
   @override
+  bool get pricesIncludeTax => (super.noSuchMethod(
+        Invocation.getter(#pricesIncludeTax),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   double get commercialRate => (super.noSuchMethod(
         Invocation.getter(#commercialRate),
         returnValue: 0.0,
@@ -570,6 +577,15 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       ) as bool);
 
   @override
+  void clearFiscalConfigWarning() => super.noSuchMethod(
+        Invocation.method(
+          #clearFiscalConfigWarning,
+          [],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
   void consumePendingLoyaltyWarning() => super.noSuchMethod(
         Invocation.method(
           #consumePendingLoyaltyWarning,
@@ -821,6 +837,15 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
         Invocation.method(
           #applyManualDiscount,
           [discountAmount],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void removeManualDiscount() => super.noSuchMethod(
+        Invocation.method(
+          #removeManualDiscount,
+          [],
         ),
         returnValueForMissingStub: null,
       );
