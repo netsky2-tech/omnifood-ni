@@ -1010,6 +1010,100 @@ void main() {
   );
 
   test(
+    'FD-02: a lot-managed insumo is available by its LOTS, not by the aggregate',
+    () async {
+      // The rig's case: 150 ml in the aggregate, 50 ml in the lots. The
+      // cloud draws the outflow from the LOTS, so the terminal must decide
+      // with the same number — otherwise it sells what the cloud cannot
+      // record (and the cloud used to reject it, freezing the fiscal
+      // sequence).
+      await database.authorityProjectionDao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-leche',
+          name: 'Leche',
+          uom: 'ML',
+        ),
+      );
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-leche',
+          name: 'Leche',
+          consumptionUom: 'ML',
+          stock: 150.0,
+          averageCost: 12.0,
+          isBatchManaged: true,
+          lotAvailableStock: 50.0,
+        ),
+      ]);
+      await insertDirectMappedProduct(
+        id: 'prod-leche',
+        productType: 'SIMPLE',
+        mappingVersionId: 'mv-leche-1',
+        insumoId: 'insumo-leche',
+      );
+
+      // 100 ml: the lots (50) do not cover it ⇒ the sale is refused, exactly
+      // as the cloud would refuse it.
+      await expectLater(
+        service.prepare(
+          invoice: buildInvoice(),
+          items: [buildDirectItem(productId: 'prod-leche', quantity: 100.0)],
+          offlineUserId: 'user-1',
+          tenantId: 'tenant-1',
+          terminalId: 'term-1',
+        ),
+        throwsA(
+          isA<CheckoutAuthorityException>().having(
+            (e) => e.reason,
+            'reason',
+            CheckoutAuthorityFailureReason.negativeStockBlocked,
+          ),
+        ),
+      );
+    },
+  );
+
+  test(
+    'FD-02: an insumo WITHOUT lots keeps the aggregate as its only truth',
+    () async {
+      await database.authorityProjectionDao.insertInsumo(
+        const AuthorityInsumoEntity(
+          tenantId: 'tenant-1',
+          id: 'insumo-azucar',
+          name: 'Azúcar',
+          uom: 'KG',
+        ),
+      );
+      await database.insumoDao.insertInsumos([
+        InsumoEntity(
+          id: 'insumo-azucar',
+          name: 'Azúcar',
+          consumptionUom: 'KG',
+          stock: 150.0,
+          averageCost: 12.0,
+          // No lots: the aggregate decides, exactly as before.
+        ),
+      ]);
+      await insertDirectMappedProduct(
+        id: 'prod-azucar',
+        productType: 'SIMPLE',
+        mappingVersionId: 'mv-azucar-1',
+        insumoId: 'insumo-azucar',
+      );
+
+      final result = await service.prepare(
+        invoice: buildInvoice(),
+        items: [buildDirectItem(productId: 'prod-azucar', quantity: 100.0)],
+        offlineUserId: 'user-1',
+        tenantId: 'tenant-1',
+        terminalId: 'term-1',
+      );
+      expect(result.invoice.inventoryOutcome, 'APPLIED');
+    },
+  );
+
+  test(
     'R23: checkout succeeds when negative_stock_policy is ALLOW_TEMPORARY even with zero stock',
     () async {
       final dao = database.authorityProjectionDao;

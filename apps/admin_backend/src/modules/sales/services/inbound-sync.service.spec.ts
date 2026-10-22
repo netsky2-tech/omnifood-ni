@@ -253,6 +253,8 @@ describe('InboundSyncService', () => {
     overrides: Map<unknown, unknown> = new Map(),
   ) {
     return {
+      // FD-02: the lot availability read (a grouped sum over the batches).
+      query: jest.fn(async () => [] as unknown[]),
       getRepository: jest.fn((entity: unknown) => {
         if (overrides.has(entity)) return overrides.get(entity);
         if (entity === Product) return mockProductRepo;
@@ -649,6 +651,75 @@ describe('InboundSyncService', () => {
       parLevel: null,
       minStock: null,
       maxStock: null,
+    });
+  });
+
+  it('FD-02: publishes the LOT availability and whether the insumo is batch-managed', async () => {
+    // The terminal decides what it can sell and the cloud decides what it can
+    // record; they were reading different numbers. The cloud now publishes
+    // the number it will actually draw from.
+    insumoQb.getMany.mockResolvedValue([
+      {
+        id: 'ins-521a',
+        tenant_id: 'tenant-abc',
+        name: 'Leche',
+        purchaseUom: 'ML',
+        consumptionUom: 'ml',
+        conversionFactor: 1000,
+        stock: 150,
+        averageCost: 3.25,
+        is_active: true,
+        is_perishable: true,
+        negativeStockPolicy: 'RESTRICT',
+        parLevel: null,
+        minStock: null,
+        maxStock: null,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Insumo,
+      {
+        id: 'ins-521b',
+        tenant_id: 'tenant-abc',
+        name: 'Café',
+        purchaseUom: 'KG',
+        consumptionUom: 'G',
+        conversionFactor: 1000,
+        stock: 1.5,
+        averageCost: 12.0,
+        is_active: true,
+        is_perishable: false,
+        negativeStockPolicy: 'RESTRICT',
+        parLevel: null,
+        minStock: null,
+        maxStock: null,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Insumo,
+    ]);
+
+    const manager = buildDefaultBoundManager();
+    const managerWithQuery = manager as unknown as { query: jest.Mock };
+    managerWithQuery.query.mockResolvedValue([
+      { insumo_id: 'ins-521a', lot_stock: '50.0000' },
+    ]);
+
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      { types: 'insumos' },
+      undefined,
+      manager,
+    );
+
+    expect(response.deltas.insumos[0]).toMatchObject({
+      id: 'ins-521a',
+      lotAvailableStock: 50,
+      isBatchManaged: true,
+    });
+    // An insumo without lots: the aggregate is the only truth.
+    expect(response.deltas.insumos[1]).toMatchObject({
+      id: 'ins-521b',
+      lotAvailableStock: null,
+      isBatchManaged: false,
     });
   });
 

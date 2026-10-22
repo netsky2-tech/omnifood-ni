@@ -15,7 +15,7 @@
 |------|------|--------|
 | 1 | La nube: el dibujo parcial, la divergencia y el resultado `APPLIED_WITH_DIVERGENCE` | `16d68396` |
 | 2 | El backoffice: el panel de divergencias y el diagnóstico de paridad | `6325a67b` |
-| 3 | La terminal: el resultado nuevo se ve como aviso, no como bloqueo | (en curso) |
+| 3 | La terminal: el resultado nuevo se ve como aviso, no como bloqueo | `a49d9db9` |
 
 ---
 
@@ -96,10 +96,15 @@
       `cloudAcknowledged` (prueba en `sales_movement_ownership_and_ack_test.dart`).
 - [x] 3.2 El rastro: la terminal lo deja dicho en el log de sincronización
       (`SYNC_SALES_DIVERGENCE`), con la venta y el detalle.
-- [ ] 3.3 El aviso en la pantalla del cajero: un banner que diga cuántas ventas se
-      registraron con diferencias por conciliar. La conciliación se hace en el
-      backoffice (Unidad 2), así que esto es visibilidad, no control — pero el
-      operador tiene que poder verlo sin pedirle el informe a nadie.
+- [x] 3.3 El aviso en la pantalla del cajero: un banner que dice cuántas ventas se
+      registraron con diferencias por conciliar, con la columna local propia
+      (`cloud_inventory_outcome`, migración 78→79) para lo que dijo la nube. La
+      conciliación se hace en el backoffice (Unidad 2), así que esto es
+      visibilidad, no control — el aviso nunca bloquea una venta, un cierre de
+      turno ni la numeración.
+- [x] 3.4 El tripwire de preservación de columnas (#548) encontró que las reescrituras
+      de factura (anulación, `markAsFailed`) perdían la columna nueva ⇒ corregido
+      (la reescritura no puede borrar lo que la nube declaró).
 
 ## Unidad 3 — La terminal
 

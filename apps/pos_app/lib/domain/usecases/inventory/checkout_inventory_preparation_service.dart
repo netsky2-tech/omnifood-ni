@@ -321,7 +321,21 @@ class CheckoutInventoryPreparationService {
       final policy = authInsumo?.negativeStockPolicy ??
           insumoRow.negativeStockPolicy;
 
-      final availableStock = insumoRow.stock;
+      // FD-02: ONE availability rule, and it is the cloud's rule.
+      //
+      // An insumo managed by LOTS is available by its lots — the number the
+      // cloud published (`lotAvailableStock`), because that is the number the
+      // cloud will actually draw from (FEFO over the identified lots). An
+      // insumo without lots is available by its aggregate, because there the
+      // aggregate IS the only truth.
+      //
+      // Before this, the terminal decided with the aggregate and the cloud
+      // decided with the lots: the terminal sold what the cloud could not
+      // record, and the cloud rejected it, which froze the fiscal sequence.
+      final availableStock = insumoRow.isBatchManaged &&
+              insumoRow.lotAvailableStock != null
+          ? insumoRow.lotAvailableStock!
+          : insumoRow.stock;
       final resultingStock = availableStock - requiredQty;
 
       if (policy != 'ALLOW_TEMPORARY' && resultingStock < 0) {

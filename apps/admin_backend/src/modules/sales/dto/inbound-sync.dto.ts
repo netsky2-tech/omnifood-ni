@@ -141,6 +141,14 @@ export interface InboundSyncInsumoDto {
   isActive: boolean;
   isPerishable: boolean;
   negativeStockPolicy: string;
+  /**
+   * FD-02: the sum of the remaining stock of this insumo's LOTS — the number
+   * the cloud will actually draw from. Null when the insumo has no lots, and
+   * then the aggregate `stock` is the only truth.
+   */
+  lotAvailableStock: number | null;
+  /** FD-02: whether this insumo is managed by lots. */
+  isBatchManaged: boolean;
   /** Stock alert thresholds (issue #521 S1); null when not configured. */
   parLevel: number | null;
   minStock: number | null;

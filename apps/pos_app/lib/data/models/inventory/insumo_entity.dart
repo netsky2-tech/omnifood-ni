@@ -25,6 +25,21 @@ class InsumoEntity {
   @ColumnInfo(name: 'negative_stock_policy')
   final String negativeStockPolicy;
 
+  /// FD-02: the sum of the remaining stock of this insumo's LOTS — the
+  /// number the cloud will actually draw from. Null when the insumo has no
+  /// lots, and then the aggregate [stock] is the only truth.
+  ///
+  /// WHY two numbers: the terminal decides what it can sell and the cloud
+  /// decides what it can record. They were reading different numbers (the
+  /// aggregate here, the lots there), so the terminal sold what the cloud
+  /// could not record. Now both read the SAME one.
+  @ColumnInfo(name: 'lot_available_stock')
+  final double? lotAvailableStock;
+
+  /// FD-02: whether this insumo is managed by lots.
+  @ColumnInfo(name: 'is_batch_managed')
+  final bool isBatchManaged;
+
   InsumoEntity({
     required this.id,
     required this.name,
@@ -38,5 +53,7 @@ class InsumoEntity {
     this.stockMax,
     this.isActive = true,
     this.negativeStockPolicy = 'RESTRICT',
+    this.lotAvailableStock,
+    this.isBatchManaged = false,
   });
 }

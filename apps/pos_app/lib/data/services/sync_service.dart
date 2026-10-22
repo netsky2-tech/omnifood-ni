@@ -3996,6 +3996,12 @@ class SyncService {
                 averageCost: asDouble(map['averageCost']) ?? 0.0,
                 isActive: map['isActive'] as bool? ?? true,
                 isPerishable: map['isPerishable'] as bool? ?? false,
+                // FD-02: the LOT availability the cloud published. It is the
+                // number the cloud will actually draw from, so the terminal
+                // can apply the SAME availability rule (see
+                // `availableQuantityFor`).
+                lotAvailableStock: asDouble(map['lotAvailableStock']),
+                isBatchManaged: map['isBatchManaged'] as bool? ?? false,
                 // Issue #521 S1: stock alert thresholds from the backend
                 // delta; coerced safely via asDouble (numeric/decimal columns
                 // are serialized as strings by TypeORM/pg driver).

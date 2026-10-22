@@ -3613,6 +3613,35 @@ final migration81_82 = Migration(81, 82, (database) async {
   }
 });
 
+/// FD-02: the LOT availability of each insumo (the sum of the remaining
+/// stock of its lots) and whether it is managed by lots at all.
+///
+/// The terminal decides what it can sell and the cloud decides what it can
+/// record; they were reading different numbers (the aggregate here, the
+/// lots there). These two columns are what makes them read the SAME one.
+///
+/// NULLABLE and additive: an insumo written before this migration (and one
+/// the cloud has not published yet) keeps its exact shape, and the absence
+/// reads as "no lot information" — the terminal then keeps using the
+/// aggregate, exactly as before.
+final migration82_83 = Migration(82, 83, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(insumos)');
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('lot_available_stock')) {
+    await database.execute(
+      'ALTER TABLE insumos ADD COLUMN lot_available_stock REAL',
+    );
+  }
+  if (!existing.contains('is_batch_managed')) {
+    await database.execute(
+      'ALTER TABLE insumos ADD COLUMN is_batch_managed INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3686,6 +3715,7 @@ final allMigrations = [
   migration79_80,
   migration80_81,
   migration81_82,
+  migration82_83,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

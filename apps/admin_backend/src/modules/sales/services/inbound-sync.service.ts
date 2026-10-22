@@ -20,6 +20,7 @@ import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Batch } from '../../inventory/entities/batch.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import {
   RecipeOrigin,
@@ -760,6 +761,26 @@ export class InboundSyncService {
     }
 
     const items = await qb.getMany();
+
+    // FD-02 (openspec/changes/lo-vendible-es-lo-registrable): the LOT
+    // availability travels with the insumo delta.
+    //
+    // WHY: the terminal decides what it can sell, and the cloud decides what
+    // it can record — and they were reading two different numbers (the
+    // aggregate here, the lots there). The terminal sold what the aggregate
+    // promised and the cloud rejected what the lots could not back, which
+    // froze the fiscal stream (FD-01). So the cloud publishes the number it
+    // will actually draw from, and the terminal applies the SAME rule.
+    //
+    // An insumo WITHOUT lots keeps the aggregate as its only truth (that is
+    // the rule `drawBatchOutflow` already follows), so its lot availability
+    // is null and the terminal keeps using the aggregate.
+    const lotAvailability = await this.fetchLotAvailability(
+      tenantId,
+      items.map((i) => i.id),
+      entityManager,
+    );
+
     return items.map((i) => ({
       id: i.id,
       name: i.name,
@@ -771,6 +792,9 @@ export class InboundSyncService {
       isActive: i.is_active,
       isPerishable: i.is_perishable,
       negativeStockPolicy: i.negativeStockPolicy,
+      // The lot availability (null when the insumo has no lots).
+      lotAvailableStock: lotAvailability.get(i.id) ?? null,
+      isBatchManaged: lotAvailability.has(i.id),
       // Issue #521 S1: stock alert thresholds ride the incremental insumos
       // delta so the POS can fire low/high stock alerts.
       parLevel: i.parLevel ?? null,
@@ -780,6 +804,37 @@ export class InboundSyncService {
       createdAt: i.created_at,
       updatedAt: i.updated_at,
     }));
+  }
+
+  /**
+   * The lot availability per insumo: the sum of the remaining stock of its
+   * lots. An insumo that HAS no lot is not in the map — its aggregate is the
+   * only truth.
+   */
+  private async fetchLotAvailability(
+    tenantId: string,
+    insumoIds: string[],
+    entityManager: EntityManager,
+  ): Promise<Map<string, number>> {
+    if (insumoIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await entityManager.query(
+      `
+      SELECT insumo_id, SUM(remaining_stock) AS lot_stock
+      FROM batches
+      WHERE tenant_id = $1 AND insumo_id = ANY($2::uuid[])
+      GROUP BY insumo_id
+      `,
+      [tenantId, insumoIds],
+    );
+
+    const availability = new Map<string, number>();
+    for (const row of rows as Array<{ insumo_id: string; lot_stock: string }>) {
+      availability.set(row.insumo_id, Number(row.lot_stock));
+    }
+    return availability;
   }
 
   private async fetchRecipeDeltas(

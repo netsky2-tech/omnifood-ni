@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 82,
+      version: 83,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -206,7 +206,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, `negative_stock_policy` TEXT NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, `negative_stock_policy` TEXT NOT NULL, `lot_available_stock` REAL, `is_batch_managed` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `negative_stock_policy` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
@@ -1152,7 +1152,9 @@ class _$InsumoDao extends InsumoDao {
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
                   'is_active': item.isActive ? 1 : 0,
-                  'negative_stock_policy': item.negativeStockPolicy
+                  'negative_stock_policy': item.negativeStockPolicy,
+                  'lot_available_stock': item.lotAvailableStock,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -1170,7 +1172,9 @@ class _$InsumoDao extends InsumoDao {
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
                   'is_active': item.isActive ? 1 : 0,
-                  'negative_stock_policy': item.negativeStockPolicy
+                  'negative_stock_policy': item.negativeStockPolicy,
+                  'lot_available_stock': item.lotAvailableStock,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1198,7 +1202,9 @@ class _$InsumoDao extends InsumoDao {
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0,
-            negativeStockPolicy: row['negative_stock_policy'] as String));
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0));
   }
 
   @override
@@ -1216,7 +1222,9 @@ class _$InsumoDao extends InsumoDao {
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0,
-            negativeStockPolicy: row['negative_stock_policy'] as String),
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [id]);
   }
 
@@ -1240,7 +1248,9 @@ class _$InsumoDao extends InsumoDao {
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0,
-            negativeStockPolicy: row['negative_stock_policy'] as String),
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [...ids]);
   }
 
@@ -4463,7 +4473,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
                   'is_active': item.isActive ? 1 : 0,
-                  'negative_stock_policy': item.negativeStockPolicy
+                  'negative_stock_policy': item.negativeStockPolicy,
+                  'lot_available_stock': item.lotAvailableStock,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -4517,7 +4529,9 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
             isActive: (row['is_active'] as int) != 0,
-            negativeStockPolicy: row['negative_stock_policy'] as String),
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [id]);
   }
 
