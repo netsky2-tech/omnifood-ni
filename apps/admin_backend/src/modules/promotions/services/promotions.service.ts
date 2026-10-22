@@ -51,7 +51,7 @@ export class PromotionsService {
         await this.assertValidTargetCategory(manager, tenantId, dto);
         await this.assertValidTargetCustomer(manager, tenantId, dto);
         await this.assertUniqueCode(manager, tenantId, dto);
-        this.assertConvenioRequiresCustomer(dto);
+        this.assertConvenioIsCoherent(dto);
         const promotion = manager.getRepository(Promotion).create({
           ...dto,
           tenant_id: tenantId,
@@ -81,7 +81,7 @@ export class PromotionsService {
         await this.assertValidTargetCategory(manager, tenantId, dto);
         await this.assertValidTargetCustomer(manager, tenantId, dto);
         await this.assertUniqueCode(manager, tenantId, dto, id);
-        this.assertConvenioRequiresCustomer(dto);
+        this.assertConvenioIsCoherent(dto);
         Object.assign(promotion, dto);
         return manager.getRepository(Promotion).save(promotion);
       },
@@ -240,21 +240,34 @@ export class PromotionsService {
   }
 
   /**
-   * Cuando el tipo es CONVENIO o restriction_type es 'customer', se requiere
-   * un target_customer_id. Sin él la promoción no sabe a quién aplicar el
-   * descuento del convenio.
+   * A convenio must be coherent or it is a silent no-op.
+   *
+   * Two rules, both enforced here because the POS engine is the only consumer
+   * and it cannot ask:
+   * - it needs a target_customer_id, otherwise the agreement has no owner and
+   *   no line can ever match it;
+   * - it needs a discount_value > 0, because the engine applies a convenio as
+   *   a percentage and SKIPS it when the value is 0. Creating an active
+   *   convenio with a zero value would promise a discount that never
+   *   materialises — false certainty about money.
    */
-  private assertConvenioRequiresCustomer(
+  private assertConvenioIsCoherent(
     dto: CreatePromotionDto | UpdatePromotionDto,
   ): void {
     const isConvenio = dto.type === PromotionType.CONVENIO;
     const isCustomerRestricted = dto.restriction_type === 'customer';
-    if (isConvenio || isCustomerRestricted) {
-      if (!dto.target_customer_id) {
-        throw new BadRequestException(
-          'A convenio/customer-restricted promotion requires a target_customer_id',
-        );
-      }
+    if (!isConvenio && !isCustomerRestricted) {
+      return;
+    }
+    if (!dto.target_customer_id) {
+      throw new BadRequestException(
+        'A convenio/customer-restricted promotion requires a target_customer_id',
+      );
+    }
+    if (dto.discount_value !== undefined && dto.discount_value <= 0) {
+      throw new BadRequestException(
+        'A convenio/customer-restricted promotion requires a discount_value greater than 0',
+      );
     }
   }
 }

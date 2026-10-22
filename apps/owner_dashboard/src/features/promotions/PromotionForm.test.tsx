@@ -10,12 +10,21 @@ import {
   useProductSearch,
   useProductById,
 } from '@/features/catalog/use-product-search';
+import {
+  useCustomerSearch,
+  useCustomerById,
+} from '@/features/customers/use-customer-search';
 import { toast } from '@/hooks/use-toast';
 
 vi.mock('@/hooks/use-promotions');
 vi.mock('@/hooks/use-toast');
 vi.mock('@/features/catalog/use-catalog');
 vi.mock('@/features/catalog/use-product-search');
+// The convenio customer target is a governed selector backed by this hook.
+// It must be mocked like the product one: the suite stubs @tanstack/react-query
+// with `useQuery: vi.fn()` (returns undefined), so an unmocked hook that
+// destructures the query result crashes the render.
+vi.mock('@/features/customers/use-customer-search');
 vi.mock('@tanstack/react-query', () => ({
   useQuery: vi.fn(),
   useMutation: vi.fn(),
@@ -142,6 +151,65 @@ describe('promotionFormSchema target_category_id (T0.5\'d)', () => {
   });
 });
 
+describe('promotionFormSchema CONVENIO scope', () => {
+  const customerUuid = '88888888-8888-4888-8888-888888888888';
+
+  it('accepts a convenio with a customer and a discount value', () => {
+    const result = promotionFormSchema.safeParse({
+      name: 'Convenio ACME',
+      type: 'convenio',
+      target_customer_id: customerUuid,
+      restriction_type: 'customer',
+      discount_value: 15,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a convenio without a customer (it would never match a sale)', () => {
+    const result = promotionFormSchema.safeParse({
+      name: 'Convenio ACME',
+      type: 'convenio',
+      target_customer_id: '',
+      restriction_type: 'customer',
+      discount_value: 15,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a convenio with a zero discount (the POS engine skips those)', () => {
+    const result = promotionFormSchema.safeParse({
+      name: 'Convenio ACME',
+      type: 'convenio',
+      target_customer_id: customerUuid,
+      restriction_type: 'customer',
+      discount_value: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a customer-restricted promotion without a customer', () => {
+    const result = promotionFormSchema.safeParse({
+      name: 'Promo',
+      type: 'percentageDiscount',
+      target_customer_id: '',
+      restriction_type: 'customer',
+      discount_value: 15,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a free-text customer target (only a uuid or nothing)', () => {
+    const result = promotionFormSchema.safeParse({
+      name: 'Convenio ACME',
+      type: 'convenio',
+      target_customer_id: 'Distribuidora Las Mercedes',
+      restriction_type: 'customer',
+      discount_value: 15,
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
 describe('PromotionForm', () => {
   const mockCreatePromotion = { mutateAsync: vi.fn() };
   const mockUpdatePromotion = { mutateAsync: vi.fn() };
@@ -156,6 +224,19 @@ describe('PromotionForm', () => {
     {
       id: '55555555-5555-4555-8555-555555555555',
       name: 'CAPUCHINO',
+    },
+  ];
+
+  // §17.6 selector fixtures for the CONVENIO customer target: a flexible
+  // hit that is neither the exact id nor the exact name of anything.
+  const searchResultCustomers = [
+    {
+      id: '66666666-6666-4666-8666-666666666666',
+      name: 'Distribuidora Las Mercedes',
+    },
+    {
+      id: '77777777-7777-4777-8777-777777777777',
+      name: 'EMPRESA DEL NORTE',
     },
   ];
 
@@ -177,6 +258,18 @@ describe('PromotionForm', () => {
       refetch: vi.fn(),
     });
     (useProductById as any).mockReturnValue({ data: undefined });
+    // The convenio customer selector: same governed-selector contract as the
+    // product one (flexible hit, never an exact id or an exact name).
+    (useCustomerSearch as any).mockReturnValue({
+      data: {
+        data: searchResultCustomers,
+        total: searchResultCustomers.length,
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    (useCustomerById as any).mockReturnValue({ data: undefined });
     (toast as any).mockImplementation(vi.fn());
   });
 
@@ -199,6 +292,7 @@ describe('PromotionForm', () => {
 
   it('shows discount fields for PERCENTAGE_DISCOUNT type', async () => {
     renderForm(null);
+
     
     const selectTrigger = screen.getByRole('combobox', { name: /tipo de promoci/i });
     fireEvent.click(selectTrigger);
@@ -215,8 +309,31 @@ describe('PromotionForm', () => {
     expect(screen.queryByLabelText('Cantidad a Comprar *')).not.toBeInTheDocument();
   });
 
-  it('shows discount fields for FIXED_DISCOUNT type', async () => {
+  it('shows the PERCENTAGE discount and the scope picker for CONVENIO type', async () => {
     renderForm(null);
+
+    const selectTrigger = screen.getByRole('combobox', { name: /tipo de promoci/i });
+    fireEvent.click(selectTrigger);
+
+    const convenioOptions = screen.getAllByText('Convenio con Cliente');
+    // The second one is in the dropdown (first is in the table badge)
+    expect(convenioOptions.length).toBeGreaterThan(1);
+    fireEvent.click(convenioOptions[1]!);
+
+    // A convenio is applied by the POS engine as a PERCENT, so the value must
+    // be editable — a convenio created without it would never discount.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Porcentaje de Descuento *')).toBeInTheDocument();
+    });
+
+    // The scope picker and the agreement code are part of the convenio scope.
+    expect(screen.getByLabelText('Código del Convenio (opcional)')).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Alcance del Descuento' }),
+    ).toBeInTheDocument();
+  });
+
+  it('shows discount fields for FIXED_DISCOUNT type', async () => {    renderForm(null);
     
     const selectTrigger = screen.getByRole('combobox', { name: /tipo de promoci/i });
     fireEvent.click(selectTrigger);
@@ -444,6 +561,10 @@ describe('PromotionForm', () => {
       'end_date',
       'priority',
       'is_stackable',
+      // The convenio scope. 'restriction_type' is always sent (the form's
+      // default is 'global'); 'code' and 'target_customer_id' are omitted
+      // when empty, exactly like target_product_id / target_category_id.
+      'restriction_type',
     ].sort();
     expect(Object.keys(payload).sort()).toEqual(whitelist);
   });

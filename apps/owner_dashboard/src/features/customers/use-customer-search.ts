@@ -37,8 +37,8 @@ export function useCustomerSearch(
     queryFn: ({ signal }) =>
       fetchPaginatedCustomers(
         {
-          page: 1,
-          pageSize: limit,
+          limit,
+          offset: 0,
           search: term || undefined,
         },
         { signal },

@@ -3,8 +3,6 @@ import { apiFetch } from '@/lib/api';
 export interface PaginatedCustomersResponse {
   data: CustomerItem[];
   total: number;
-  page: number;
-  pageSize: number;
 }
 
 export interface CustomerItem {
@@ -16,20 +14,27 @@ export interface CustomerItem {
   is_active: boolean;
 }
 
+/**
+ * `GET /customers` query contract (CustomerQueryDto).
+ *
+ * ONLY `search`, `limit` and `offset` are accepted: the backend's global
+ * ValidationPipe runs with `forbidNonWhitelisted: true`, so an extra query
+ * parameter (a `page`/`pageSize` pair, the shape the products endpoint uses)
+ * is rejected with a 400 and the whole search fails. The customer selector
+ * then renders its error state instead of its results.
+ */
 export async function fetchPaginatedCustomers({
-  page,
-  pageSize,
+  limit,
+  offset,
   search,
 }: {
-  page: number;
-  pageSize: number;
+  limit: number;
+  offset: number;
   search?: string;
 }, { signal }: { signal: AbortSignal }): Promise<PaginatedCustomersResponse> {
   const params = new URLSearchParams({
-    page: String(page),
-    pageSize: String(pageSize),
-    limit: String(pageSize),
-    offset: String((page - 1) * pageSize),
+    limit: String(limit),
+    offset: String(offset),
   });
   if (search) params.set('search', search);
 

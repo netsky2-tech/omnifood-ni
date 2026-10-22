@@ -431,13 +431,14 @@ async function seed() {
         const existing = await manager.findOne(User, {
           where: { email: u.email },
         });
+        const passwordHash = await bcrypt.hash('password123', 10);
         if (!existing) {
           const user = manager.create(User, {
             name: u.name,
             email: u.email,
             role: u.role,
             tenant_id: TENANT_ID,
-            password_hash: await bcrypt.hash('password123', 10),
+            password_hash: passwordHash,
             is_active: true,
           });
           const savedUser = await manager.save(user);
@@ -453,7 +454,39 @@ async function seed() {
             `✅ User created: ${u.name} (${u.role}) id=${savedUser.id}`,
           );
         } else {
-          console.log(`ℹ️  User already exists: ${u.name} id=${existing.id}`);
+          // Idempotent credential repair: an EXISTING row may carry a stale
+          // password hash, an inactive flag, or no password hash at all (a
+          // tenant-RLS fixture row). Without this, `npm run seed:test` leaves
+          // the tenant unloginable and every E2E that authenticates against
+          // it fails with a generic 401/500 instead of a real assertion.
+          // The seed owns the fixture credentials, so it must own them on
+          // every run.
+          existing.name = u.name;
+          existing.role = u.role;
+          existing.tenant_id = TENANT_ID;
+          existing.password_hash = passwordHash;
+          existing.is_active = true;
+          await manager.save(existing);
+
+          const existingProfile = await manager.findOne(SecurityProfile, {
+            where: { user_id: existing.id },
+          });
+          if (!existingProfile) {
+            const profile = manager.create(SecurityProfile, {
+              user_id: existing.id,
+              pin_hash: await bcrypt.hash(u.pin, 10),
+              is_pin_enabled: true,
+              is_totp_enabled: false,
+            });
+            await manager.save(profile);
+          } else {
+            existingProfile.pin_hash = await bcrypt.hash(u.pin, 10);
+            existingProfile.is_pin_enabled = true;
+            await manager.save(existingProfile);
+          }
+          console.log(
+            `♻️  User credentials repaired: ${u.name} (${u.role}) id=${existing.id}`,
+          );
         }
       }
 

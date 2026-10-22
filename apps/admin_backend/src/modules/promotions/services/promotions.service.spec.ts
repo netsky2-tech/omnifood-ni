@@ -6,6 +6,7 @@ import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-tra
 import { PromotionsService } from './promotions.service';
 import { Promotion, PromotionType } from '../entities/promotion.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
 
 describe('PromotionsService', () => {
@@ -21,6 +22,11 @@ describe('PromotionsService', () => {
   // tenant-bound transaction, so the manager must hand out a distinct
   // catalog repository the tests can observe.
   let catalogRepo: { findOne: jest.Mock };
+  // The CONVENIO customer target is a FK to customers(tenant_id, id); the
+  // service validates it inside the same tenant-bound transaction, so the
+  // manager must hand out a distinct customer repository the tests can
+  // observe.
+  let customerRepo: { findOne: jest.Mock };
   // The tenant-bound transaction fake: the manager hands back the same
   // repository mock the pooled token provides, so the existing behavior
   // assertions keep working unchanged while the guard test below proves the
@@ -62,10 +68,18 @@ describe('PromotionsService', () => {
       findOne: jest.fn().mockResolvedValue(null),
     };
 
+    customerRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+
     transactionalManager = {
       query: jest.fn(async () => []),
       getRepository: jest.fn((entity: unknown) =>
-        entity === CatalogValue ? catalogRepo : repo,
+        entity === CatalogValue
+          ? catalogRepo
+          : entity === Customer
+            ? customerRepo
+            : repo,
       ),
     };
     transactionalDataSource = {
@@ -389,6 +403,116 @@ describe('PromotionsService', () => {
       expect(pooledPromotion.findOne).not.toHaveBeenCalled();
       expect(pooledPromotion.create).not.toHaveBeenCalled();
       expect(pooledPromotion.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('CONVENIO scope (commercial agreement bound to one customer)', () => {
+    const CUSTOMER_ID = '88888888-8888-4888-8888-888888888888';
+
+    it('creates a convenio for an active customer of the tenant', async () => {
+      customerRepo.findOne.mockResolvedValueOnce({
+        id: CUSTOMER_ID,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+
+      await service.create('tenant-1', {
+        name: 'Convenio ACME',
+        type: PromotionType.CONVENIO,
+        target_customer_id: CUSTOMER_ID,
+        code: 'CONV-A',
+        restriction_type: 'customer',
+        discount_value: 15,
+      });
+
+      expect(customerRepo.findOne).toHaveBeenCalledWith({
+        where: { id: CUSTOMER_ID, tenant_id: 'tenant-1', is_active: true },
+      });
+      expect(repo.save).toHaveBeenCalled();
+    });
+
+    it('rejects a convenio whose customer does not exist in this tenant', async () => {
+      customerRepo.findOne.mockResolvedValueOnce(null);
+
+      await expect(
+        service.create('tenant-1', {
+          name: 'Convenio ACME',
+          type: PromotionType.CONVENIO,
+          target_customer_id: CUSTOMER_ID,
+          restriction_type: 'customer',
+          discount_value: 15,
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a convenio without a customer (it could never match a sale)', async () => {
+      await expect(
+        service.create('tenant-1', {
+          name: 'Convenio ACME',
+          type: PromotionType.CONVENIO,
+          restriction_type: 'customer',
+          discount_value: 15,
+        }),
+      ).rejects.toThrow(/requires a target_customer_id/);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a convenio with a zero discount (the POS engine skips those)', async () => {
+      customerRepo.findOne.mockResolvedValueOnce({
+        id: CUSTOMER_ID,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+
+      await expect(
+        service.create('tenant-1', {
+          name: 'Convenio ACME',
+          type: PromotionType.CONVENIO,
+          target_customer_id: CUSTOMER_ID,
+          restriction_type: 'customer',
+          discount_value: 0,
+        }),
+      ).rejects.toThrow(/discount_value greater than 0/);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects a duplicate code inside the same tenant', async () => {
+      customerRepo.findOne.mockResolvedValueOnce({
+        id: CUSTOMER_ID,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+      // The code lookup finds an existing promotion with another id.
+      repo.findOne.mockResolvedValueOnce(mockPromotion({ id: 'promo-other' }));
+
+      await expect(
+        service.create('tenant-1', {
+          name: 'Convenio ACME',
+          type: PromotionType.CONVENIO,
+          target_customer_id: CUSTOMER_ID,
+          code: 'CONV-A',
+          restriction_type: 'customer',
+          discount_value: 15,
+        }),
+      ).rejects.toThrow(/already used/);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('lets a promotion keep its own code when it is re-saved', async () => {
+      customerRepo.findOne.mockResolvedValueOnce({
+        id: CUSTOMER_ID,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+      // The code lookup finds the SAME promotion being updated.
+      repo.findOne.mockResolvedValueOnce(mockPromotion({ id: 'promo-uuid-1' }));
+
+      await service.update('tenant-1', 'promo-uuid-1', {
+        code: 'CONV-A',
+      });
+
+      expect(repo.save).toHaveBeenCalled();
     });
   });
 });

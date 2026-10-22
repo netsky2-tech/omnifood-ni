@@ -245,7 +245,18 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   };
 
   const showBuyGetFields = watchedType === PromotionType.BUY_X_GET_Y_FREE;
-  const showDiscountFields = watchedType === PromotionType.PERCENTAGE_DISCOUNT || watchedType === PromotionType.FIXED_DISCOUNT;
+  // CONVENIO carries a percentage discount too: the POS engine applies a
+  // convenio as `discountValue` percent over the cart lines, so the form MUST
+  // expose the value — a convenio created without it would be 0 and the
+  // engine would skip the agreement entirely.
+  const showDiscountFields =
+    watchedType === PromotionType.PERCENTAGE_DISCOUNT ||
+    watchedType === PromotionType.FIXED_DISCOUNT ||
+    watchedType === PromotionType.CONVENIO;
+  // A convenio is always a percentage (the engine's only convenio rule).
+  const discountIsPercentage =
+    watchedType === PromotionType.PERCENTAGE_DISCOUNT ||
+    watchedType === PromotionType.CONVENIO;
 
   return (
     // noValidate: the application's own zod validation (via the RHF
@@ -473,16 +484,22 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="discount_value">
-                {watchedType === PromotionType.PERCENTAGE_DISCOUNT ? 'Porcentaje de Descuento *' : 'Descuento Fijo *'}
+                {discountIsPercentage ? 'Porcentaje de Descuento *' : 'Descuento Fijo *'}
               </Label>
               <Input
                 id="discount_value"
                 type="number"
-                step={watchedType === PromotionType.PERCENTAGE_DISCOUNT ? '0.01' : '0.01'}
+                step="0.01"
                 min="0.01"
-                placeholder={watchedType === PromotionType.PERCENTAGE_DISCOUNT ? 'Ej: 15' : 'Ej: 50.00'}
+                placeholder={discountIsPercentage ? 'Ej: 15' : 'Ej: 50.00'}
                 {...form.register('discount_value', { valueAsNumber: true })}
               />
+              {watchedType === PromotionType.CONVENIO && (
+                <p className="text-xs text-muted-foreground">
+                  El descuento del convenio se aplica como porcentaje sobre el
+                  total de la venta.
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="min_order_amount">Monto Mínimo de Orden (opcional)</Label>

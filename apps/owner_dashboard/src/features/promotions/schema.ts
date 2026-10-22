@@ -68,15 +68,34 @@ export const promotionFormSchema = z.object({
   is_stackable: z.boolean().optional(),
   is_active: z.boolean().optional(),
   }).refine(
+  // The customer scope is checked FIRST and INDEPENDENTLY of the type
+  // branches below: a customer-restricted promotion of ANY type needs its
+  // customer. Folding this into the type branches would let a
+  // percentageDiscount with restriction_type='customer' and no customer pass
+  // the form and be rejected later by the backend.
+  (data) => {
+    const needsCustomer =
+      data.type === PromotionType.CONVENIO || data.restriction_type === 'customer';
+    if (!needsCustomer) return true;
+    return Boolean(data.target_customer_id && data.target_customer_id !== '');
+  },
+  {
+    message: 'Seleccione el cliente o empresa del convenio',
+    path: ['target_customer_id'],
+  }
+).refine(
   (data) => {
     if (data.type === PromotionType.BUY_X_GET_Y_FREE) {
-      return data.buy_quantity && data.buy_quantity > 0 && data.get_quantity && data.get_quantity > 0;
+      return Boolean(data.buy_quantity && data.buy_quantity > 0 && data.get_quantity && data.get_quantity > 0);
     }
     if (data.type === PromotionType.PERCENTAGE_DISCOUNT || data.type === PromotionType.FIXED_DISCOUNT) {
-      return data.discount_value && data.discount_value > 0;
+      return Boolean(data.discount_value && data.discount_value > 0);
     }
-    if (data.type === PromotionType.CONVENIO || data.restriction_type === 'customer') {
-      return Boolean(data.target_customer_id && data.target_customer_id !== '');
+    if (data.type === PromotionType.CONVENIO) {
+      // A convenio needs a discount value: the POS engine applies a convenio
+      // as a percentage and SKIPS it when the value is 0, so a convenio
+      // without a value would be created active and silently never discount.
+      return Boolean(data.discount_value && data.discount_value > 0);
     }
     return true;
   },
