@@ -535,19 +535,53 @@ class AuthRepositoryImpl implements AuthRepository {
           })
           .toList();
       final entities = users.map((u) => u.toEntity()).toList();
+
+      // Issue #944: the staff endpoint runs on the USER channel, where the
+      // backend masks `pin_hash`/`totp_secret_seed` for every user the
+      // requester may not read (a cashier may not read another cashier's
+      // hash — see `getStaffForSync` in the backend auth service). The DEVICE
+      // channel is the authoritative source for those secrets: it ships the
+      // real hashes for the whole tenant staff. So a masked value here is a
+      // fact about the REQUESTER, not about the user — writing it over the
+      // local row destroyed the hash the device channel had delivered and the
+      // cashier could not log in offline anymore. The local value is kept
+      // instead, and a null is only written when the payload states the
+      // secret is not enabled (or the user has no profile row at all).
+      final existingProfiles = await _securityProfileDao.findAll();
+      final existingByUserId = <String, SecurityProfileEntity>{
+        for (final profile in existingProfiles) profile.userId: profile,
+      };
+
       final profiles = staffJson
           .map((raw) => Map<String, dynamic>.from(raw as Map))
           .map((json) {
             final profile = json['security_profile'] as Map<String, dynamic>?;
             final rawSeed = profile?['totp_secret_seed'] as String?;
+            final userId = (profile?['user_id'] ?? json['id']) as String;
+            final isPinEnabled =
+                (profile?['is_pin_enabled'] as bool?) ?? true;
+            final isTotpEnabled =
+                (profile?['is_totp_enabled'] as bool?) ?? false;
+            final existing = existingByUserId[userId];
+
             return SecurityProfileEntity(
-              userId: (profile?['user_id'] ?? json['id']) as String,
-              pinHash: profile?['pin_hash'] as String?,
-              totpSecretSeed: totpSeedCipher != null
-                  ? totpSeedCipher.encryptNullable(rawSeed)
-                  : rawSeed,
-              isTotpEnabled: (profile?['is_totp_enabled'] as bool?) ?? false,
-              isPinEnabled: (profile?['is_pin_enabled'] as bool?) ?? true,
+              userId: userId,
+              pinHash: _resolveSyncedSecret(
+                incoming: profile?['pin_hash'] as String?,
+                existing: existing?.pinHash,
+                enabled: isPinEnabled,
+                hasProfile: profile != null,
+              ),
+              totpSecretSeed: _resolveSyncedSecret(
+                incoming: totpSeedCipher != null
+                    ? totpSeedCipher.encryptNullable(rawSeed)
+                    : rawSeed,
+                existing: existing?.totpSecretSeed,
+                enabled: isTotpEnabled,
+                hasProfile: profile != null,
+              ),
+              isTotpEnabled: isTotpEnabled,
+              isPinEnabled: isPinEnabled,
             );
           })
           .toList();
@@ -564,6 +598,30 @@ class AuthRepositoryImpl implements AuthRepository {
     } catch (e) {
       debugPrint('[AuthRepository] Failed to sync staff: $e');
     }
+  }
+
+  /// Resolves one secret field (`pin_hash`, `totp_secret_seed`) when a staff
+  /// payload is merged over the locally stored profile.
+  ///
+  /// The staff endpoint runs on the USER channel, where the backend masks
+  /// those secrets for every user the requester may not read. A masked value
+  /// is a fact about the REQUESTER, not about the user, so it must never
+  /// overwrite the value the DEVICE channel delivered — that channel is the
+  /// authoritative source for the tenant's staff secrets.
+  ///
+  /// A null is written only when the payload states the secret is not
+  /// enabled, or when the user has no profile row on the server at all: in
+  /// both cases the absence IS the authoritative fact.
+  static String? _resolveSyncedSecret({
+    required String? incoming,
+    required String? existing,
+    required bool enabled,
+    required bool hasProfile,
+  }) {
+    if (incoming != null && incoming.isNotEmpty) return incoming;
+    if (!hasProfile) return null;
+    if (enabled) return existing;
+    return null;
   }
 
   @override

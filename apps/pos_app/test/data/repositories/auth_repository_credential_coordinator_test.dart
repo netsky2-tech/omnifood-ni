@@ -75,6 +75,9 @@ void main() {
     when(() => userDao.insertUsers(any())).thenAnswer((_) async {});
     when(() => securityProfileDao.deleteAll()).thenAnswer((_) async {});
     when(
+      () => securityProfileDao.findAll(),
+    ).thenAnswer((_) async => []);
+    when(
       () => securityProfileDao.insertProfiles(any()),
     ).thenAnswer((_) async {});
     when(

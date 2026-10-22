@@ -44,6 +44,9 @@ void main() {
     when(() => userDao.findAllUsers()).thenAnswer((_) async => <UserEntity>[]);
     when(() => securityProfileDao.deleteAll()).thenAnswer((_) async {});
     when(
+      () => securityProfileDao.findAll(),
+    ).thenAnswer((_) async => <SecurityProfileEntity>[]);
+    when(
       () => securityProfileDao.insertProfiles(any()),
     ).thenAnswer((_) async {});
     when(
@@ -713,6 +716,227 @@ void main() {
       expect(insertedProfiles.first.isTotpEnabled, isFalse);
     },
   );
+
+  // Issue #944: the staff endpoint runs on the USER channel, where the
+  // backend masks `pin_hash`/`totp_secret_seed` for every user the requester
+  // may not read (a cashier may not read another cashier's hash). The DEVICE
+  // channel is the authoritative source for those secrets and it ships the
+  // real hashes. Writing the masked null over the local row destroyed the
+  // hash the device channel had delivered, and the cashier could not log in
+  // offline anymore.
+  group('syncStaff secret preservation across channels (issue #944)', () {
+    Map<String, dynamic> cashierEntry({
+      required String id,
+      required String name,
+      required String email,
+      String? pinHash,
+      String? totpSeed,
+      bool isPinEnabled = true,
+      bool isTotpEnabled = false,
+    }) {
+      return {
+        'id': id,
+        'name': name,
+        'role': 'CASHIER',
+        'is_active': true,
+        'email': email,
+        'tenant_id': 't-1',
+        'security_profile': {
+          'user_id': id,
+          'pin_hash': pinHash,
+          'totp_secret_seed': totpSeed,
+          'is_totp_enabled': isTotpEnabled,
+          'is_pin_enabled': isPinEnabled,
+        },
+      };
+    }
+
+    void stubStaff(List<Map<String, dynamic>> staff) {
+      when(
+        () => dio.get('/identity/staff', options: any(named: 'options')),
+      ).thenAnswer(
+        (_) async => Response(
+          requestOptions: RequestOptions(path: '/identity/staff'),
+          data: staff,
+        ),
+      );
+    }
+
+    Future<Map<String, SecurityProfileEntity>> insertedProfilesByUser() async {
+      await repository.syncStaff();
+      final inserted =
+          verify(
+                () => securityProfileDao.insertProfiles(captureAny()),
+              ).captured.last
+              as List<SecurityProfileEntity>;
+      return {for (final profile in inserted) profile.userId: profile};
+    }
+
+    test(
+      'keeps the local PIN of a cashier whose hash the staff payload masks',
+      () async {
+        // The DEVICE channel already delivered the real hash of the second
+        // cashier to this terminal.
+        when(() => securityProfileDao.findAll()).thenAnswer(
+          (_) async => [
+            SecurityProfileEntity(
+              userId: 'u-cashier-2',
+              pinHash: 'device-channel-hash',
+              totpSecretSeed: null,
+              isTotpEnabled: false,
+              isPinEnabled: true,
+            ),
+          ],
+        );
+
+        stubStaff([
+          cashierEntry(
+            id: 'u-cashier-1',
+            name: 'Mateo',
+            email: 'mateo@soho.com',
+            pinHash: r'$2a$12$selfhash',
+          ),
+          cashierEntry(
+            id: 'u-cashier-2',
+            name: 'Cajero Temporal',
+            email: 'cajero2@soho.com',
+            pinHash: null,
+          ),
+        ]);
+
+        final byUser = await insertedProfilesByUser();
+
+        expect(byUser['u-cashier-1']!.pinHash, r'$2a$12$selfhash');
+        expect(
+          byUser['u-cashier-2']!.pinHash,
+          'device-channel-hash',
+          reason: 'a masked hash is a fact about the requester, not about the '
+              'user: it must not overwrite the hash the device channel '
+              'delivered',
+        );
+      },
+    );
+
+    test(
+      'keeps the local TOTP seed of an authorizer the staff payload masks',
+      () async {
+        when(() => securityProfileDao.findAll()).thenAnswer(
+          (_) async => [
+            SecurityProfileEntity(
+              userId: 'u-supervisor',
+              pinHash: 'device-pin',
+              totpSecretSeed: 'enc:v2:device-seed',
+              isTotpEnabled: true,
+              isPinEnabled: true,
+            ),
+          ],
+        );
+
+        stubStaff([
+          cashierEntry(
+            id: 'u-supervisor',
+            name: 'Supervisor',
+            email: 'sup@soho.com',
+            pinHash: null,
+            totpSeed: null,
+            isTotpEnabled: true,
+          ),
+        ]);
+
+        final byUser = await insertedProfilesByUser();
+
+        expect(byUser['u-supervisor']!.totpSecretSeed, 'enc:v2:device-seed');
+      },
+    );
+
+    test('clears the local PIN when the payload states the user has none', () async {
+      when(() => securityProfileDao.findAll()).thenAnswer(
+        (_) async => [
+          SecurityProfileEntity(
+            userId: 'u-cashier-2',
+            pinHash: 'stale-hash',
+            totpSecretSeed: null,
+            isTotpEnabled: false,
+            isPinEnabled: true,
+          ),
+        ],
+      );
+
+      stubStaff([
+        cashierEntry(
+          id: 'u-cashier-2',
+          name: 'Cajero Temporal',
+          email: 'cajero2@soho.com',
+          pinHash: null,
+          isPinEnabled: false,
+        ),
+      ]);
+
+      final byUser = await insertedProfilesByUser();
+
+      expect(byUser['u-cashier-2']!.pinHash, isNull);
+      expect(byUser['u-cashier-2']!.isPinEnabled, isFalse);
+    });
+
+    test(
+      'clears the local PIN when the payload carries no security profile at all',
+      () async {
+        when(() => securityProfileDao.findAll()).thenAnswer(
+          (_) async => [
+            SecurityProfileEntity(
+              userId: 'u-cashier-2',
+              pinHash: 'stale-hash',
+              totpSecretSeed: null,
+              isTotpEnabled: false,
+              isPinEnabled: true,
+            ),
+          ],
+        );
+
+        stubStaff([
+          {
+            'id': 'u-cashier-2',
+            'name': 'Cajero Temporal',
+            'role': 'CASHIER',
+            'is_active': true,
+            'email': 'cajero2@soho.com',
+            'tenant_id': 't-1',
+          },
+        ]);
+
+        final byUser = await insertedProfilesByUser();
+
+        expect(byUser['u-cashier-2']!.pinHash, isNull);
+      },
+    );
+
+    test('applies the hash the staff payload does carry', () async {
+      when(() => securityProfileDao.findAll()).thenAnswer(
+        (_) async => [
+          SecurityProfileEntity(
+            userId: 'u-cashier-1',
+            pinHash: 'previous-hash',
+            totpSecretSeed: null,
+            isTotpEnabled: false,
+            isPinEnabled: true,
+          ),
+        ],
+      );
+
+      stubStaff([
+        cashierEntry(
+          id: 'u-cashier-1',
+          name: 'Mateo',
+          email: 'mateo@soho.com',
+          pinHash: r'$2a$12$rotatedhash',
+        ),
+      ]);
+
+      final byUser = await insertedProfilesByUser();
+
+      expect(byUser['u-cashier-1']!.pinHash, r'$2a$12$rotatedhash');
+    });
+  });
 
   test(
     'authorizeOverride requires encrypted seed at runtime and rejects plaintext row',

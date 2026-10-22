@@ -6,6 +6,15 @@ abstract class SecurityProfileDao {
   @Query('SELECT * FROM security_profiles WHERE user_id = :userId LIMIT 1')
   Future<SecurityProfileEntity?> findByUserId(String userId);
 
+  /// Reads every stored profile so a sync can merge instead of overwrite.
+  ///
+  /// Issue #944: the staff sync runs on the USER channel, where the backend
+  /// masks `pin_hash`/`totp_secret_seed` for every user the requester may not
+  /// read. A masked value is not a fact about the user — it is a fact about
+  /// the requester — so the merge needs the local value to fall back to.
+  @Query('SELECT * FROM security_profiles')
+  Future<List<SecurityProfileEntity>> findAll();
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertProfiles(List<SecurityProfileEntity> profiles);
 

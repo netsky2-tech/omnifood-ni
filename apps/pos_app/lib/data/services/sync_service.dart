@@ -4278,6 +4278,14 @@ class SyncService {
             .getConfigByKey('tenant_id');
         final localTenantId = localTenantConfig?.value;
 
+        // Issue #944: the stored profiles are read BEFORE the replace-upsert
+        // so a delta that arrives without a PIN hash can fall back to the
+        // hash this terminal already holds instead of erasing it.
+        final existingProfiles = {
+          for (final profile in await _database!.securityProfileDao.findAll())
+            profile.userId: profile,
+        };
+
         for (final u in rawUsers) {
           final map = Map<String, dynamic>.from(u as Map);
           final userId = map['id'] as String;
@@ -4306,11 +4314,20 @@ class SyncService {
           );
 
           if (secProfile != null) {
+            final isPinEnabled = secProfile['isPinEnabled'] as bool? ?? true;
             profileEntities.add(
               SecurityProfileEntity(
                 userId: userId,
-                pinHash: pinHash.isNotEmpty ? pinHash : null,
-                isPinEnabled: secProfile['isPinEnabled'] as bool? ?? true,
+                // Issue #944: `is_pin_enabled` is the authoritative switch for
+                // a PIN. A payload that states the PIN is enabled but carries
+                // no hash is a PARTIAL payload — the RLS join can mask the
+                // joined `security_profiles` side and drop `pin_hash` (see
+                // issue #581) — so it must not delete the hash this terminal
+                // already holds. Only an explicit "PIN disabled" clears it.
+                pinHash: pinHash.isNotEmpty
+                    ? pinHash
+                    : (isPinEnabled ? existingProfiles[userId]?.pinHash : null),
+                isPinEnabled: isPinEnabled,
                 isTotpEnabled: secProfile['isTotpEnabled'] as bool? ?? false,
               ),
             );

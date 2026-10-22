@@ -845,6 +845,17 @@ class _$SecurityProfileDao extends SecurityProfileDao {
   }
 
   @override
+  Future<List<SecurityProfileEntity>> findAll() async {
+    return _queryAdapter.queryList('SELECT * FROM security_profiles',
+        mapper: (Map<String, Object?> row) => SecurityProfileEntity(
+            userId: row['user_id'] as String,
+            pinHash: row['pin_hash'] as String?,
+            totpSecretSeed: row['totp_secret_seed'] as String?,
+            isTotpEnabled: (row['is_totp_enabled'] as int) != 0,
+            isPinEnabled: (row['is_pin_enabled'] as int) != 0));
+  }
+
+  @override
   Future<void> deleteAll() async {
     await _queryAdapter.queryNoReturn('DELETE FROM security_profiles');
   }

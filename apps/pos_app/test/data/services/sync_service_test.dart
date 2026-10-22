@@ -17,6 +17,7 @@ import 'package:pos_app/data/models/inventory/authority_projection_entities.dart
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/data/models/inventory/recipe_entity.dart';
 import 'package:pos_app/data/models/catalog/catalog_value_entity.dart';
+import 'package:pos_app/data/models/security_profile_entity.dart';
 import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.dart';
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
@@ -2880,6 +2881,147 @@ void main() {
         }
       },
     );
+
+    // Issue #944: `is_pin_enabled` is the authoritative switch for a PIN.
+    // A payload that states the PIN is enabled but carries no hash is not a
+    // fact about the user — it is a partial payload (the RLS join can mask
+    // the joined `security_profiles` side, see issue #581) — so it must not
+    // delete the hash the terminal already holds.
+    group('inbound user delta never deletes a valid local PIN (#944)', () {
+      Future<AppDatabase> seedLocalPin(
+        String userId,
+        String pinHash,
+        bool isPinEnabled,
+      ) async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+        await database.securityProfileDao.insertProfiles([
+          SecurityProfileEntity(
+            userId: userId,
+            pinHash: pinHash,
+            totpSecretSeed: null,
+            isTotpEnabled: false,
+            isPinEnabled: isPinEnabled,
+          ),
+        ]);
+        return database;
+      }
+
+      Map<String, dynamic> userDelta({
+        required bool isPinEnabled,
+        String? pinHash,
+      }) {
+        return {
+          'status': 'success',
+          'serverTime': '2026-08-26T18:00:00.000Z',
+          'currentVersion': 1787745600000,
+          'deltas': {
+            'products': [],
+            'catalogValues': [],
+            'insumos': [],
+            'recipes': [],
+            'users': [
+              {
+                'id': 'user-201',
+                'name': 'Barista Principal',
+                'email': 'barista@omnifood.ni',
+                'role': 'CASHIER',
+                'isActive': true,
+                'securityProfile': {
+                  'isPinEnabled': isPinEnabled,
+                  'isTotpEnabled': false,
+                  'pinHash': pinHash,
+                },
+              },
+            ],
+          },
+        };
+      }
+
+      test('keeps the local PIN when the delta carries no hash', () async {
+        final database = await seedLocalPin('user-201', 'local-pin-hash', true);
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          capturedGets['/v1/sync/inbound/deltas'] = userDelta(
+            isPinEnabled: true,
+          );
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          final saved = await database.securityProfileDao.findByUserId(
+            'user-201',
+          );
+          expect(saved, isNotNull);
+          expect(
+            saved!.pinHash,
+            'local-pin-hash',
+            reason: 'a partial payload must not delete a valid local PIN',
+          );
+        } finally {
+          await database.close();
+        }
+      });
+
+      test('applies the hash the delta carries', () async {
+        final database = await seedLocalPin('user-201', 'old-pin-hash', true);
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          capturedGets['/v1/sync/inbound/deltas'] = userDelta(
+            isPinEnabled: true,
+            pinHash: r'$2b$10$rotatedpin',
+          );
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          final saved = await database.securityProfileDao.findByUserId(
+            'user-201',
+          );
+          expect(saved!.pinHash, r'$2b$10$rotatedpin');
+        } finally {
+          await database.close();
+        }
+      });
+
+      test('clears the local PIN when the delta states it is disabled', () async {
+        final database = await seedLocalPin('user-201', 'local-pin-hash', true);
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+          capturedGets['/v1/sync/inbound/deltas'] = userDelta(
+            isPinEnabled: false,
+          );
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          final saved = await database.securityProfileDao.findByUserId(
+            'user-201',
+          );
+          expect(saved, isNotNull);
+          expect(saved!.pinHash, isNull);
+          expect(saved.isPinEnabled, isFalse);
+        } finally {
+          await database.close();
+        }
+      });
+    });
 
     test(
       'pullInboundDeltas applies received credit notes as synced read-model '
