@@ -67,7 +67,9 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
         toast({
           variant: "success",
           title: "Usuario actualizado",
-          description: `Los datos de "${name}" fueron actualizados exitosamente.`,
+          description: payload.pin
+            ? `Los datos de "${name}" fueron actualizados. El nuevo PIN llega a los terminales en su próxima sincronización (automática, hasta 5 minutos).`
+            : `Los datos de "${name}" fueron actualizados exitosamente.`,
         });
       } else {
         const payload = {
@@ -86,7 +88,9 @@ function UserForm({ userToEdit, onClose }: UserFormProps) {
         toast({
           variant: "success",
           title: "Usuario creado",
-          description: `"${name}" fue registrado exitosamente.`,
+          description: payload.pin
+            ? `"${name}" fue registrado exitosamente. El PIN llega a los terminales en su próxima sincronización (automática, hasta 5 minutos).`
+            : `"${name}" fue registrado exitosamente.`,
         });
       }
       onClose();
