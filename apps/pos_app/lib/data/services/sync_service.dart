@@ -4605,6 +4605,17 @@ class SyncService {
               // omitting the field entirely.
               targetProductId: _nonBlankOrNull(map['targetProductId']?.toString()),
               targetCategoryId: _nonBlankOrNull(map['targetCategoryId']?.toString()),
+              // Convenio: sin el cliente destino el engine no puede aplicar
+              // el acuerdo a la venta, y el POS guardaría una promoción que
+              // nunca descuenta.
+              targetCustomerId: _nonBlankOrNull(
+                map['targetCustomerId']?.toString(),
+              ),
+              code: _nonBlankOrNull(map['code']?.toString()),
+              restrictionType: _nonBlankOrNull(
+                map['restrictionType']?.toString(),
+              ),
+              usedCount: asInt(map['usedCount']) ?? 0,
               buyQuantity: asInt(map['buyQuantity']) ?? 0,
               getQuantity: asInt(map['getQuantity']) ?? 0,
               discountValue: asDouble(map['discountValue']) ?? 0.0,

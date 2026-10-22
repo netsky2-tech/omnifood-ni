@@ -5,11 +5,21 @@ class PromotionEntity {
   @primaryKey
   final String id;
   final String name;
-  final String type; // 'buyXGetYFree', 'percentageDiscount', 'fixedDiscount', 'comboPackage'
+  final String type; // 'buyXGetYFree', 'percentageDiscount', 'fixedDiscount', 'comboPackage', 'convenio'
   @ColumnInfo(name: 'target_product_id')
   final String? targetProductId;
   @ColumnInfo(name: 'target_category_id')
   final String? targetCategoryId;
+  @ColumnInfo(name: 'target_customer_id')
+  final String? targetCustomerId;
+  /// Código corto de referencia interna del convenio (ej. "CONV-A").
+  final String? code;
+  /// 'global' | 'customer'. El backend lo exige para el convenio; se
+  /// persiste para poder auditar con qué alcance se aplicó el descuento.
+  @ColumnInfo(name: 'restriction_type')
+  final String? restrictionType;
+  @ColumnInfo(name: 'used_count')
+  final int usedCount;
   @ColumnInfo(name: 'buy_quantity')
   final int buyQuantity;
   @ColumnInfo(name: 'get_quantity')
@@ -41,6 +51,10 @@ class PromotionEntity {
     required this.type,
     this.targetProductId,
     this.targetCategoryId,
+    this.targetCustomerId,
+    this.code,
+    this.restrictionType,
+    this.usedCount = 0,
     this.buyQuantity = 0,
     this.getQuantity = 0,
     this.discountValue = 0.0,

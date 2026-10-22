@@ -1263,6 +1263,12 @@ export class InboundSyncService {
       type: p.type,
       targetProductId: p.target_product_id ?? null,
       targetCategoryId: p.target_category_id ?? null,
+      // Convenio: without this the device cannot bind the discount to the
+      // selected customer and the engine silently skips the promotion.
+      targetCustomerId: p.target_customer_id ?? null,
+      code: p.code ?? null,
+      restrictionType: p.restriction_type ?? null,
+      usedCount: p.used_count ?? 0,
       buyQuantity: p.buy_quantity,
       getQuantity: p.get_quantity,
       discountValue: Number(p.discount_value),

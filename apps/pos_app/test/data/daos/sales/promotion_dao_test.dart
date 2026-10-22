@@ -147,5 +147,71 @@ void main() {
       expect(domain.targetProductId, isNull);
       expect(domain.targetCategoryId, isNull);
     });
+
+    // Convenio comercial: el vínculo con el cliente, el código y el alcance
+    // deben sobrevivir el round-trip entity -> dominio, o el engine recibe
+    // una promoción sin target y nunca la aplica.
+    test('SalesMapper preserva los campos del convenio en ambas direcciones', () {
+      const domain = Promotion(
+        id: 'promo-conv-1',
+        name: 'Convenio ACME',
+        type: PromotionType.convenio,
+        targetCustomerId: 'cust-acme',
+        code: 'CONV-ACME',
+        restrictionType: 'customer',
+        usedCount: 7,
+        discountValue: 15.0,
+        isActive: true,
+      );
+
+      final entity = SalesMapper.toPromotionEntity(domain);
+      expect(entity.type, 'convenio');
+      expect(entity.targetCustomerId, 'cust-acme');
+      expect(entity.code, 'CONV-ACME');
+      expect(entity.restrictionType, 'customer');
+      expect(entity.usedCount, 7);
+
+      final roundtrip = SalesMapper.toPromotionDomain(entity);
+      expect(roundtrip, equals(domain));
+    });
+
+    test('SalesMapper trata targetCustomerId vacío como null (no convenio)', () {
+      final entity = PromotionEntity(
+        id: 'promo-conv-blank',
+        name: 'Convenio sin cliente',
+        type: 'convenio',
+        targetCustomerId: '',
+        discountValue: 15.0,
+        isActive: true,
+      );
+
+      final domain = SalesMapper.toPromotionDomain(entity);
+
+      expect(domain.targetCustomerId, isNull);
+    });
+
+    test('persiste y recupera un convenio desde SQLite', () async {
+      final convenio = PromotionEntity(
+        id: 'promo-conv-db',
+        name: 'Convenio ACME',
+        type: 'convenio',
+        targetCustomerId: 'cust-acme',
+        code: 'CONV-ACME',
+        restrictionType: 'customer',
+        usedCount: 2,
+        discountValue: 15.0,
+        priority: 10,
+        isActive: true,
+      );
+
+      await database.promotionDao.savePromotion(convenio);
+      final saved = await database.promotionDao.getAllPromotions();
+
+      expect(saved, hasLength(1));
+      expect(saved.first.targetCustomerId, 'cust-acme');
+      expect(saved.first.code, 'CONV-ACME');
+      expect(saved.first.restrictionType, 'customer');
+      expect(saved.first.usedCount, 2);
+    });
   });
 }

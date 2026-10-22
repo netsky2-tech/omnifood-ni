@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 73,
+      version: 74,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -284,7 +284,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `hold_ticket_items` (`id` TEXT NOT NULL, `hold_ticket_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `tax_rate` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`hold_ticket_id`) REFERENCES `hold_tickets` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT, `target_category_id` TEXT, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `min_order_amount` REAL NOT NULL, `days_of_week` TEXT, `start_time` TEXT, `end_time` TEXT, `start_date` INTEGER, `end_date` INTEGER, `priority` INTEGER NOT NULL, `is_stackable` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `promotions` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `target_product_id` TEXT, `target_category_id` TEXT, `target_customer_id` TEXT, `code` TEXT, `restriction_type` TEXT, `used_count` INTEGER NOT NULL, `buy_quantity` INTEGER NOT NULL, `get_quantity` INTEGER NOT NULL, `discount_value` REAL NOT NULL, `min_order_amount` REAL NOT NULL, `days_of_week` TEXT, `start_time` TEXT, `end_time` TEXT, `start_date` INTEGER, `end_date` INTEGER, `priority` INTEGER NOT NULL, `is_stackable` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `modifier_groups` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `min_selected` INTEGER NOT NULL, `max_selected` INTEGER NOT NULL, `allow_quantities` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -5391,6 +5391,10 @@ class _$PromotionDao extends PromotionDao {
                   'type': item.type,
                   'target_product_id': item.targetProductId,
                   'target_category_id': item.targetCategoryId,
+                  'target_customer_id': item.targetCustomerId,
+                  'code': item.code,
+                  'restriction_type': item.restrictionType,
+                  'used_count': item.usedCount,
                   'buy_quantity': item.buyQuantity,
                   'get_quantity': item.getQuantity,
                   'discount_value': item.discountValue,
@@ -5414,6 +5418,10 @@ class _$PromotionDao extends PromotionDao {
                   'type': item.type,
                   'target_product_id': item.targetProductId,
                   'target_category_id': item.targetCategoryId,
+                  'target_customer_id': item.targetCustomerId,
+                  'code': item.code,
+                  'restriction_type': item.restrictionType,
+                  'used_count': item.usedCount,
                   'buy_quantity': item.buyQuantity,
                   'get_quantity': item.getQuantity,
                   'discount_value': item.discountValue,
@@ -5448,6 +5456,10 @@ class _$PromotionDao extends PromotionDao {
             type: row['type'] as String,
             targetProductId: row['target_product_id'] as String?,
             targetCategoryId: row['target_category_id'] as String?,
+            targetCustomerId: row['target_customer_id'] as String?,
+            code: row['code'] as String?,
+            restrictionType: row['restriction_type'] as String?,
+            usedCount: row['used_count'] as int,
             buyQuantity: row['buy_quantity'] as int,
             getQuantity: row['get_quantity'] as int,
             discountValue: row['discount_value'] as double,
@@ -5472,6 +5484,10 @@ class _$PromotionDao extends PromotionDao {
             type: row['type'] as String,
             targetProductId: row['target_product_id'] as String?,
             targetCategoryId: row['target_category_id'] as String?,
+            targetCustomerId: row['target_customer_id'] as String?,
+            code: row['code'] as String?,
+            restrictionType: row['restriction_type'] as String?,
+            usedCount: row['used_count'] as int,
             buyQuantity: row['buy_quantity'] as int,
             getQuantity: row['get_quantity'] as int,
             discountValue: row['discount_value'] as double,
@@ -5500,7 +5516,7 @@ class _$PromotionDao extends PromotionDao {
   Future<List<PromotionEntity>> getPromotionsByProduct(String productId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM promotions WHERE target_product_id = ?1 AND is_active = 1',
-        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String?, targetCategoryId: row['target_category_id'] as String?, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, minOrderAmount: row['min_order_amount'] as double, daysOfWeek: row['days_of_week'] as String?, startTime: row['start_time'] as String?, endTime: row['end_time'] as String?, startDate: row['start_date'] as int?, endDate: row['end_date'] as int?, priority: row['priority'] as int, isStackable: (row['is_stackable'] as int) != 0, isActive: (row['is_active'] as int) != 0),
+        mapper: (Map<String, Object?> row) => PromotionEntity(id: row['id'] as String, name: row['name'] as String, type: row['type'] as String, targetProductId: row['target_product_id'] as String?, targetCategoryId: row['target_category_id'] as String?, targetCustomerId: row['target_customer_id'] as String?, code: row['code'] as String?, restrictionType: row['restriction_type'] as String?, usedCount: row['used_count'] as int, buyQuantity: row['buy_quantity'] as int, getQuantity: row['get_quantity'] as int, discountValue: row['discount_value'] as double, minOrderAmount: row['min_order_amount'] as double, daysOfWeek: row['days_of_week'] as String?, startTime: row['start_time'] as String?, endTime: row['end_time'] as String?, startDate: row['start_date'] as int?, endDate: row['end_date'] as int?, priority: row['priority'] as int, isStackable: (row['is_stackable'] as int) != 0, isActive: (row['is_active'] as int) != 0),
         arguments: [productId]);
   }
 

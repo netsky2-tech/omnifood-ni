@@ -3295,6 +3295,39 @@ final migration72_73 = Migration(72, 73, (database) async {
   }
 });
 
+/// Convenio comercial: la promoción puede estar atada a un cliente/empresa.
+/// Sin `target_customer_id` el engine del POS no puede aplicar el descuento a
+/// la venta correcta, y sin `code`/`restriction_type`/`used_count` se pierde
+/// la trazabilidad del acuerdo en el dispositivo offline.
+final migration73_74 = Migration(73, 74, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(promotions)');
+  // Legacy fixtures can predate the table entirely (the `promotions` mirror
+  // arrived later); onCreate creates it with every column, so there is
+  // nothing to alter. PRAGMA returns no rows for a missing table.
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns.map((column) => column['name']).toSet();
+  if (!existing.contains('target_customer_id')) {
+    await database.execute(
+      'ALTER TABLE promotions ADD COLUMN target_customer_id TEXT',
+    );
+  }
+  if (!existing.contains('code')) {
+    await database.execute('ALTER TABLE promotions ADD COLUMN code TEXT');
+  }
+  if (!existing.contains('restriction_type')) {
+    await database.execute(
+      'ALTER TABLE promotions ADD COLUMN restriction_type TEXT',
+    );
+  }
+  if (!existing.contains('used_count')) {
+    await database.execute(
+      'ALTER TABLE promotions ADD COLUMN used_count INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3359,6 +3392,7 @@ final allMigrations = [
   migration70_71,
   migration71_72,
   migration72_73,
+  migration73_74,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

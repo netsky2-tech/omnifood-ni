@@ -49,6 +49,12 @@ class SalesMapper {
       targetCategoryId: entity.targetCategoryId?.isEmpty == true
           ? null
           : entity.targetCategoryId,
+      targetCustomerId: entity.targetCustomerId?.isEmpty == true
+          ? null
+          : entity.targetCustomerId,
+      code: entity.code,
+      restrictionType: entity.restrictionType,
+      usedCount: entity.usedCount,
       buyQuantity: entity.buyQuantity,
       getQuantity: entity.getQuantity,
       discountValue: entity.discountValue,
@@ -71,6 +77,10 @@ class SalesMapper {
       type: domain.type.name,
       targetProductId: domain.targetProductId,
       targetCategoryId: domain.targetCategoryId,
+      targetCustomerId: domain.targetCustomerId,
+      code: domain.code,
+      restrictionType: domain.restrictionType,
+      usedCount: domain.usedCount,
       buyQuantity: domain.buyQuantity,
       getQuantity: domain.getQuantity,
       discountValue: domain.discountValue,

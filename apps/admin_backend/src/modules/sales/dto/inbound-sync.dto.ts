@@ -300,6 +300,13 @@ export interface InboundSyncPromotionDto {
   type: string;
   targetProductId: string | null;
   targetCategoryId: string | null;
+  // Convenio comercial: the customer the agreement is bound to. The POS
+  // cannot evaluate a convenio without it, so it must travel with the delta
+  // (otherwise the device stores a promotion that never matches a sale).
+  targetCustomerId: string | null;
+  code: string | null;
+  restrictionType: string | null;
+  usedCount: number;
   buyQuantity: number;
   getQuantity: number;
   discountValue: number;

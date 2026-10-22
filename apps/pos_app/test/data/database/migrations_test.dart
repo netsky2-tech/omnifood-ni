@@ -578,4 +578,108 @@ void main() {
 
     await db.close();
   });
+
+  // Convenio comercial: la promoción atada a un cliente necesita cuatro
+  // columnas nuevas. Sin ellas el delta del cloud no tiene dónde guardar
+  // `target_customer_id` y el descuento nunca se aplica en el POS.
+  Future<dynamic> openLegacyPromotionsDatabase() async {
+    final path = '${dbPath}_promotions';
+    final db = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 73,
+        onCreate: (database, version) async {
+          await database.execute('''
+            CREATE TABLE promotions (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              type TEXT NOT NULL,
+              target_product_id TEXT,
+              target_category_id TEXT,
+              buy_quantity INTEGER NOT NULL,
+              get_quantity INTEGER NOT NULL,
+              discount_value REAL NOT NULL,
+              min_order_amount REAL NOT NULL,
+              days_of_week TEXT,
+              start_time TEXT,
+              end_time TEXT,
+              start_date INTEGER,
+              end_date INTEGER,
+              priority INTEGER NOT NULL,
+              is_stackable INTEGER NOT NULL,
+              is_active INTEGER NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    return db;
+  }
+
+  test('migration73_74 adds the convenio columns to promotions', () async {
+    final db = await openLegacyPromotionsDatabase();
+
+    await migration73_74.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(promotions)');
+    final byName = {for (final c in columns) c['name']: c};
+
+    // El vínculo con el cliente es nullable (una promoción normal no lo usa)
+    // y sin default: null significa "no es un convenio".
+    expect(byName['target_customer_id'], isNotNull);
+    expect(byName['target_customer_id']['notnull'], 0);
+    expect(byName['target_customer_id']['dflt_value'], isNull);
+
+    expect(byName['code'], isNotNull);
+    expect(byName['code']['notnull'], 0);
+
+    expect(byName['restriction_type'], isNotNull);
+    expect(byName['restriction_type']['notnull'], 0);
+
+    // used_count NO puede ser null: es un contador que el engine y los
+    // reportes leen como entero.
+    expect(byName['used_count'], isNotNull);
+    expect(byName['used_count']['notnull'], 1);
+    expect(byName['used_count']['dflt_value'], '0');
+
+    await db.close();
+    await databaseFactory.deleteDatabase('${dbPath}_promotions');
+  });
+
+  test('migration73_74 is safe to re-run (idempotent)', () async {
+    final db = await openLegacyPromotionsDatabase();
+
+    await migration73_74.migrate(db);
+    await migration73_74.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(promotions)');
+    for (final name in [
+      'target_customer_id',
+      'code',
+      'restriction_type',
+      'used_count',
+    ]) {
+      final matches = columns.where((c) => c['name'] == name).toList();
+      expect(matches, hasLength(1), reason: '$name duplicada');
+    }
+
+    await db.close();
+    await databaseFactory.deleteDatabase('${dbPath}_promotions');
+  });
+
+  // Regresión: un fixture legacy puede no tener la tabla `promotions` (el
+  // mirror llegó después). La migración debe salir en silencio: onCreate la
+  // crea ya completa, así que no hay nada que alterar ni motivo para romper
+  // la apertura de la base.
+  test('migration73_74 completes without throwing when promotions does not exist',
+      () async {
+    final db = await openV60Database();
+
+    await expectLater(
+      migration73_74.migrate(db),
+      completes,
+    );
+
+    await db.close();
+  });
 }

@@ -1799,6 +1799,57 @@ describe('InboundSyncService', () => {
       );
     });
 
+    it('projects a convenio promotion with its customer binding', async () => {
+      promotionQb.getMany.mockResolvedValue([
+        {
+          id: 'promo-conv-1',
+          tenant_id: 'tenant-abc',
+          name: 'Convenio ACME',
+          type: 'convenio',
+          target_product_id: null,
+          target_category_id: null,
+          target_customer_id: 'cust-acme',
+          code: 'CONV-ACME',
+          restriction_type: 'customer',
+          used_count: 4,
+          buy_quantity: 0,
+          get_quantity: 0,
+          discount_value: '15.00',
+          min_order_amount: '0.00',
+          days_of_week: null,
+          start_time: null,
+          end_time: null,
+          start_date: null,
+          end_date: null,
+          priority: 10,
+          is_stackable: false,
+          is_active: true,
+          created_at: new Date('2026-08-01T00:00:00Z'),
+          updated_at: new Date('2026-08-02T00:00:00Z'),
+        } as unknown as Promotion,
+      ]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'promotions' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      // Sin estos cuatro campos el POS guardaría una promoción sin cliente y
+      // el engine nunca aplicaría el descuento a la venta correcta.
+      expect(response.deltas.promotions).toHaveLength(1);
+      expect(response.deltas.promotions[0]).toMatchObject({
+        id: 'promo-conv-1',
+        type: 'convenio',
+        targetCustomerId: 'cust-acme',
+        code: 'CONV-ACME',
+        restrictionType: 'customer',
+        usedCount: 4,
+        discountValue: 15,
+      });
+    });
+
     it('projects loyalty programs with their embedded reward closure', async () => {
       loyaltyProgramQb.getMany.mockResolvedValue([
         {

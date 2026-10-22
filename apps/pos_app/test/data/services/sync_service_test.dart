@@ -32,6 +32,8 @@ import 'package:pos_app/data/models/modifiers/modifier_option_entity.dart';
 import 'package:pos_app/data/models/modifiers/category_modifier_group_entity.dart';
 import 'package:pos_app/data/models/modifiers/product_modifier_group_entity.dart';
 import 'package:pos_app/data/models/sales/cash_movement_entity.dart';
+import 'package:pos_app/data/mappers/sales_mapper.dart';
+import 'package:pos_app/domain/models/sales/promotion.dart';
 import 'package:pos_app/data/models/inventory/movement_sync_state_entity.dart';
 import 'package:pos_app/data/models/inventory/movement_entity.dart';
 import 'package:pos_app/data/models/inventory/forensic_alert_entity.dart';
@@ -8836,6 +8838,23 @@ void main() {
                   'isStackable': true,
                   'isActive': true,
                 },
+                {
+                  // Convenio comercial: el vínculo con el cliente debe
+                  // sobrevivir el viaje cloud -> SQLite o el engine del POS
+                  // no puede aplicarlo a la venta.
+                  'id': 'promo-convenio-101',
+                  'tenantId': 'tenant-1',
+                  'name': 'Convenio ACME',
+                  'type': 'convenio',
+                  'targetCustomerId': 'cust-101',
+                  'code': 'CONV-ACME',
+                  'restrictionType': 'customer',
+                  'usedCount': 3,
+                  'discountValue': 15.0,
+                  'priority': 9,
+                  'isStackable': false,
+                  'isActive': true,
+                },
               ],
               'customers': [
                 {
@@ -8884,10 +8903,27 @@ void main() {
           // Promotion hydrated.
           final savedPromotions = await database.promotionDao
               .getAllPromotions();
-          expect(savedPromotions, hasLength(1));
-          expect(savedPromotions.first.name, '2x1 Jueves');
-          expect(savedPromotions.first.daysOfWeek, '4,5');
-          expect(savedPromotions.first.priority, 5);
+          expect(savedPromotions, hasLength(2));
+          expect(savedPromotions.first.name, 'Convenio ACME');
+          final promo2x1 = savedPromotions.firstWhere(
+            (p) => p.id == 'promo-101',
+          );
+          expect(promo2x1.daysOfWeek, '4,5');
+          expect(promo2x1.priority, 5);
+          // Convenio: los cuatro campos nuevos llegan intactos desde el cloud.
+          final convenio = savedPromotions.firstWhere(
+            (p) => p.id == 'promo-convenio-101',
+          );
+          expect(convenio.type, 'convenio');
+          expect(convenio.targetCustomerId, 'cust-101');
+          expect(convenio.code, 'CONV-ACME');
+          expect(convenio.restrictionType, 'customer');
+          expect(convenio.usedCount, 3);
+          expect(convenio.discountValue, 15.0);
+          // Y sobreviven el mapper entity -> dominio que consume el engine.
+          final convenioDomain = SalesMapper.toPromotionDomain(convenio);
+          expect(convenioDomain.type, PromotionType.convenio);
+          expect(convenioDomain.targetCustomerId, 'cust-101');
 
           // Customer hydrated.
           final savedCustomer = await database.customerDao.getCustomerById(
