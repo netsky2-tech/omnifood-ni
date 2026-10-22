@@ -5,7 +5,7 @@ const BACKEND_URL = "http://localhost:3000";
 const ADMIN_CREDENTIALS = {
   email: "sofia@omnifood.ni",
   pass: "password123",
-  tenantSlug: "pilot-cafe-pruebas",
+  tenantSlug: "soho-test-fixture",
 };
 
 const TENANT_ID = "e05bf002-b1d3-45f2-a46a-3592e1cc1431";
