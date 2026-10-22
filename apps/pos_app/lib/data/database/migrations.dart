@@ -3442,7 +3442,10 @@ final migration77_78 = Migration(77, 78, (database) async {
   final hasAuthorityPolicy = authorityColumns.any(
     (column) => column['name'] == 'negative_stock_policy',
   );
-  if (!hasAuthorityPolicy) {
+  // A legacy database may predate the table entirely; onCreate creates it
+  // with every column, so there is nothing to alter. PRAGMA returns no rows
+  // for a missing table.
+  if (authorityColumns.isNotEmpty && !hasAuthorityPolicy) {
     await database.execute(
       "ALTER TABLE authority_insumos ADD COLUMN negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'",
     );
@@ -3452,7 +3455,7 @@ final migration77_78 = Migration(77, 78, (database) async {
   final hasInsumoPolicy = insumoColumns.any(
     (column) => column['name'] == 'negative_stock_policy',
   );
-  if (!hasInsumoPolicy) {
+  if (insumoColumns.isNotEmpty && !hasInsumoPolicy) {
     await database.execute(
       "ALTER TABLE insumos ADD COLUMN negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'",
     );
@@ -3474,7 +3477,8 @@ final migration78_79 = Migration(78, 79, (database) async {
   final hasEffect = optionColumns.any(
     (column) => column['name'] == 'inventory_effect',
   );
-  if (!hasEffect) {
+  // A legacy database may predate the table; onCreate creates it complete.
+  if (optionColumns.isNotEmpty && !hasEffect) {
     await database.execute(
       "ALTER TABLE modifier_options ADD COLUMN inventory_effect TEXT NOT NULL DEFAULT 'NONE'",
     );
@@ -3502,7 +3506,7 @@ final migration78_79 = Migration(78, 79, (database) async {
   final hasOptionId = itemModifierColumns.any(
     (column) => column['name'] == 'option_id',
   );
-  if (!hasOptionId) {
+  if (itemModifierColumns.isNotEmpty && !hasOptionId) {
     await database.execute(
       'ALTER TABLE invoice_item_modifiers ADD COLUMN option_id TEXT',
     );
@@ -3550,7 +3554,7 @@ final migration79_80 = Migration(79, 80, (database) async {
   final hasIsActive = authorityColumns.any(
     (column) => column['name'] == 'isActive',
   );
-  if (!hasIsActive) {
+  if (authorityColumns.isNotEmpty && !hasIsActive) {
     await database.execute(
       "ALTER TABLE authority_insumos ADD COLUMN isActive INTEGER NOT NULL DEFAULT 1",
     );
@@ -3568,6 +3572,9 @@ final migration80_81 = Migration(80, 81, (database) async {
   final columns = await database.rawQuery(
     'PRAGMA table_info(invoice_item_modifiers)',
   );
+  if (columns.isEmpty) {
+    return;
+  }
   final existing = columns
       .map((column) => column['name'] as String?)
       .whereType<String>()
@@ -3602,6 +3609,9 @@ final migration80_81 = Migration(80, 81, (database) async {
 /// absence reads as "the cloud said nothing".
 final migration81_82 = Migration(81, 82, (database) async {
   final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  if (columns.isEmpty) {
+    return;
+  }
   final existing = columns
       .map((column) => column['name'] as String?)
       .whereType<String>()
@@ -3626,6 +3636,9 @@ final migration81_82 = Migration(81, 82, (database) async {
 /// aggregate, exactly as before.
 final migration82_83 = Migration(82, 83, (database) async {
   final columns = await database.rawQuery('PRAGMA table_info(insumos)');
+  if (columns.isEmpty) {
+    return;
+  }
   final existing = columns
       .map((column) => column['name'] as String?)
       .whereType<String>()
