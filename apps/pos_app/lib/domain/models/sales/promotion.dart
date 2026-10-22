@@ -8,6 +8,7 @@ enum PromotionType {
   percentageDiscount,
   fixedDiscount,
   comboPackage,
+  convenio, // convenio individual con un cliente/empresa (targetCustomerId)
 }
 
 @freezed
@@ -18,6 +19,10 @@ class Promotion with _$Promotion {
     required PromotionType type,
     String? targetProductId,
     String? targetCategoryId,
+    String? targetCustomerId, // FK a customer cuando es convenio individual
+    String? code, // código corto de referencia interna del convenio
+    String? restrictionType, // 'global' | 'customer'
+    @Default(0) int usedCount, // usos consumidos del convenio
     @Default(0) int buyQuantity,
     @Default(0) int getQuantity,
     @Default(0.0) double discountValue,

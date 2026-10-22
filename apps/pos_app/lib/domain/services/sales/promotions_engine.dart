@@ -7,6 +7,8 @@ class AppliedPromotionInfo {
   final double discountAmount;
   final String? targetProductId;
   final String? targetCategoryId;
+  final String? targetCustomerId; // convenio: cliente/empresa a la que aplica
+  final String? code; // código corto de referencia del convenio
 
   const AppliedPromotionInfo({
     required this.promotionId,
@@ -14,6 +16,8 @@ class AppliedPromotionInfo {
     required this.discountAmount,
     this.targetProductId,
     this.targetCategoryId,
+    this.targetCustomerId,
+    this.code,
   });
 }
 
@@ -42,6 +46,7 @@ class PromotionsEngine {
     required List<CartItem> cart,
     required List<Promotion> promotions,
     DateTime? currentTime,
+    String? selectedCustomerId, // cliente/empresa seleccionado en la venta
   }) {
     if (cart.isEmpty || promotions.isEmpty) {
       return PromotionEvaluationResult.empty;
@@ -150,6 +155,25 @@ class PromotionsEngine {
 
         case PromotionType.comboPackage:
           break;
+
+        case PromotionType.convenio:
+          // Convenio individual: solo aplica si el cliente seleccionado en
+          // la venta es el target del convenio. El descuento se aplica como
+          // porcentaje (discountValue = 0..100) sobre las líneas del carrito.
+          final targetCustomerId = promo.targetCustomerId;
+          if (targetCustomerId == null || targetCustomerId.isEmpty) break;
+          if (selectedCustomerId == null || selectedCustomerId != targetCustomerId) break;
+          if (promo.discountValue <= 0 || promo.discountValue > 100) break;
+
+          final pct = (promo.discountValue / 100.0).clamp(0.0, 1.0);
+          for (final item in cart) {
+            final lineGross = item.unitPrice * item.quantity;
+            final discount = lineGross * pct;
+            discountForThisPromo += discount;
+            itemDiscounts[item.productId] =
+                (itemDiscounts[item.productId] ?? 0.0) + discount;
+          }
+          break;
       }
 
       if (discountForThisPromo > 0) {
@@ -161,6 +185,8 @@ class PromotionsEngine {
             discountAmount: discountForThisPromo,
             targetProductId: promo.targetProductId,
             targetCategoryId: promo.targetCategoryId,
+            targetCustomerId: promo.targetCustomerId,
+            code: promo.code,
           ),
         );
 

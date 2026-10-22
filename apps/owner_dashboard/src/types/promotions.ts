@@ -3,6 +3,7 @@ export const PromotionType = {
   PERCENTAGE_DISCOUNT: 'percentageDiscount',
   FIXED_DISCOUNT: 'fixedDiscount',
   COMBO_PACKAGE: 'comboPackage',
+  CONVENIO: 'convenio',
 } as const;
 
 export type PromotionType = typeof PromotionType[keyof typeof PromotionType];
@@ -14,6 +15,10 @@ export interface Promotion {
   type: PromotionType;
   target_product_id?: string | null;
   target_category_id?: string | null;
+  target_customer_id?: string | null;
+  code?: string | null;
+  restriction_type?: 'global' | 'customer' | null;
+  used_count?: number;
   buy_quantity: number;
   get_quantity: number;
   discount_value: number;
@@ -38,6 +43,15 @@ export interface CreatePromotionDto {
   // "no category target" (global). '' is never sent: the form omits the
   // key on create and the backend rejects empty strings.
   target_category_id?: string | null;
+  // §17.6: the customer target comes from a governed selector, never a
+  // free-text UUID input. '' means nothing selected.
+  target_customer_id?: string | null;
+  // Código corto de referencia interna del convenio (ej. "CONV-A"). Único
+  // por tenant. Opcional: si no se envía, la promoción no tiene código.
+  code?: string | null;
+  // 'global' (aplica a cualquier cliente) o 'customer' (solo al
+  // target_customer_id). Default 'global'.
+  restriction_type?: 'global' | 'customer' | null;
   buy_quantity?: number;
   get_quantity?: number;
   discount_value?: number;
@@ -58,6 +72,10 @@ export interface UpdatePromotionDto {
   // T0.5'd: mirrors the backend contract — a uuid, or an explicit null
   // meaning "clear to global". '' is never sent on update.
   target_category_id?: string | null;
+  // §17.6: the customer target comes from a governed selector.
+  target_customer_id?: string | null;
+  code?: string | null;
+  restriction_type?: 'global' | 'customer' | null;
   buy_quantity?: number;
   get_quantity?: number;
   discount_value?: number;
@@ -81,4 +99,5 @@ export const PROMOTION_TYPE_LABELS = {
   [PromotionType.PERCENTAGE_DISCOUNT]: 'Descuento Porcentaje',
   [PromotionType.FIXED_DISCOUNT]: 'Descuento Fijo',
   [PromotionType.COMBO_PACKAGE]: 'Combo',
+  [PromotionType.CONVENIO]: 'Convenio con Cliente',
 } as const;

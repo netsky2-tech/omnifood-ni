@@ -83,4 +83,21 @@ export class CreatePromotionDto {
   @IsOptional()
   @IsBoolean()
   is_stackable?: boolean = true;
+
+  // Código corto de referencia interna del convenio/promoción (ej. "CONV-A").
+  // Único por tenant. Opcional: si no se envía, la promoción no tiene código.
+  @IsOptional()
+  @IsString()
+  code?: string | null;
+
+  // FK opcional al Customer al que aplica este convenio. NULL = promoción global.
+  @IsOptional()
+  @IsUUID()
+  target_customer_id?: string | null;
+
+  // Tipo de restricción: 'global' (aplica a cualquier cliente) o 'customer'
+  // (aplica solo al target_customer_id). Opcional, default 'global'.
+  @IsOptional()
+  @IsString()
+  restriction_type?: 'global' | 'customer' | null;
 }

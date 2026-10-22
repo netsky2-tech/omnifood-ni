@@ -85,4 +85,19 @@ export class UpdatePromotionDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  // Código corto de referencia interna del convenio/promoción (ej. "CONV-A").
+  @IsOptional()
+  @IsString()
+  code?: string | null;
+
+  // FK opcional al Customer al que aplica este convenio. NULL = promoción global.
+  @IsOptional()
+  @IsUUID()
+  target_customer_id?: string | null;
+
+  // Tipo de restricción: 'global' o 'customer'.
+  @IsOptional()
+  @IsString()
+  restriction_type?: 'global' | 'customer' | null;
 }

@@ -25,6 +25,14 @@ mixin _$Promotion {
   PromotionType get type => throw _privateConstructorUsedError;
   String? get targetProductId => throw _privateConstructorUsedError;
   String? get targetCategoryId => throw _privateConstructorUsedError;
+  String? get targetCustomerId =>
+      throw _privateConstructorUsedError; // FK a customer cuando es convenio individual
+  String? get code =>
+      throw _privateConstructorUsedError; // código corto de referencia interna del convenio
+  String? get restrictionType =>
+      throw _privateConstructorUsedError; // 'global' | 'customer'
+  int get usedCount =>
+      throw _privateConstructorUsedError; // usos consumidos del convenio
   int get buyQuantity => throw _privateConstructorUsedError;
   int get getQuantity => throw _privateConstructorUsedError;
   double get discountValue => throw _privateConstructorUsedError;
@@ -58,6 +66,10 @@ abstract class $PromotionCopyWith<$Res> {
       PromotionType type,
       String? targetProductId,
       String? targetCategoryId,
+      String? targetCustomerId,
+      String? code,
+      String? restrictionType,
+      int usedCount,
       int buyQuantity,
       int getQuantity,
       double discountValue,
@@ -90,6 +102,10 @@ class _$PromotionCopyWithImpl<$Res, $Val extends Promotion>
     Object? type = null,
     Object? targetProductId = freezed,
     Object? targetCategoryId = freezed,
+    Object? targetCustomerId = freezed,
+    Object? code = freezed,
+    Object? restrictionType = freezed,
+    Object? usedCount = null,
     Object? buyQuantity = null,
     Object? getQuantity = null,
     Object? discountValue = null,
@@ -124,6 +140,22 @@ class _$PromotionCopyWithImpl<$Res, $Val extends Promotion>
           ? _value.targetCategoryId
           : targetCategoryId // ignore: cast_nullable_to_non_nullable
               as String?,
+      targetCustomerId: freezed == targetCustomerId
+          ? _value.targetCustomerId
+          : targetCustomerId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      code: freezed == code
+          ? _value.code
+          : code // ignore: cast_nullable_to_non_nullable
+              as String?,
+      restrictionType: freezed == restrictionType
+          ? _value.restrictionType
+          : restrictionType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      usedCount: null == usedCount
+          ? _value.usedCount
+          : usedCount // ignore: cast_nullable_to_non_nullable
+              as int,
       buyQuantity: null == buyQuantity
           ? _value.buyQuantity
           : buyQuantity // ignore: cast_nullable_to_non_nullable
@@ -190,6 +222,10 @@ abstract class _$$PromotionImplCopyWith<$Res>
       PromotionType type,
       String? targetProductId,
       String? targetCategoryId,
+      String? targetCustomerId,
+      String? code,
+      String? restrictionType,
+      int usedCount,
       int buyQuantity,
       int getQuantity,
       double discountValue,
@@ -220,6 +256,10 @@ class __$$PromotionImplCopyWithImpl<$Res>
     Object? type = null,
     Object? targetProductId = freezed,
     Object? targetCategoryId = freezed,
+    Object? targetCustomerId = freezed,
+    Object? code = freezed,
+    Object? restrictionType = freezed,
+    Object? usedCount = null,
     Object? buyQuantity = null,
     Object? getQuantity = null,
     Object? discountValue = null,
@@ -254,6 +294,22 @@ class __$$PromotionImplCopyWithImpl<$Res>
           ? _value.targetCategoryId
           : targetCategoryId // ignore: cast_nullable_to_non_nullable
               as String?,
+      targetCustomerId: freezed == targetCustomerId
+          ? _value.targetCustomerId
+          : targetCustomerId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      code: freezed == code
+          ? _value.code
+          : code // ignore: cast_nullable_to_non_nullable
+              as String?,
+      restrictionType: freezed == restrictionType
+          ? _value.restrictionType
+          : restrictionType // ignore: cast_nullable_to_non_nullable
+              as String?,
+      usedCount: null == usedCount
+          ? _value.usedCount
+          : usedCount // ignore: cast_nullable_to_non_nullable
+              as int,
       buyQuantity: null == buyQuantity
           ? _value.buyQuantity
           : buyQuantity // ignore: cast_nullable_to_non_nullable
@@ -315,6 +371,10 @@ class _$PromotionImpl implements _Promotion {
       required this.type,
       this.targetProductId,
       this.targetCategoryId,
+      this.targetCustomerId,
+      this.code,
+      this.restrictionType,
+      this.usedCount = 0,
       this.buyQuantity = 0,
       this.getQuantity = 0,
       this.discountValue = 0.0,
@@ -342,6 +402,19 @@ class _$PromotionImpl implements _Promotion {
   final String? targetProductId;
   @override
   final String? targetCategoryId;
+  @override
+  final String? targetCustomerId;
+// FK a customer cuando es convenio individual
+  @override
+  final String? code;
+// código corto de referencia interna del convenio
+  @override
+  final String? restrictionType;
+// 'global' | 'customer'
+  @override
+  @JsonKey()
+  final int usedCount;
+// usos consumidos del convenio
   @override
   @JsonKey()
   final int buyQuantity;
@@ -388,7 +461,7 @@ class _$PromotionImpl implements _Promotion {
 
   @override
   String toString() {
-    return 'Promotion(id: $id, name: $name, type: $type, targetProductId: $targetProductId, targetCategoryId: $targetCategoryId, buyQuantity: $buyQuantity, getQuantity: $getQuantity, discountValue: $discountValue, minOrderAmount: $minOrderAmount, daysOfWeek: $daysOfWeek, startTime: $startTime, endTime: $endTime, startDate: $startDate, endDate: $endDate, priority: $priority, isStackable: $isStackable, isActive: $isActive)';
+    return 'Promotion(id: $id, name: $name, type: $type, targetProductId: $targetProductId, targetCategoryId: $targetCategoryId, targetCustomerId: $targetCustomerId, code: $code, restrictionType: $restrictionType, usedCount: $usedCount, buyQuantity: $buyQuantity, getQuantity: $getQuantity, discountValue: $discountValue, minOrderAmount: $minOrderAmount, daysOfWeek: $daysOfWeek, startTime: $startTime, endTime: $endTime, startDate: $startDate, endDate: $endDate, priority: $priority, isStackable: $isStackable, isActive: $isActive)';
   }
 
   @override
@@ -403,6 +476,13 @@ class _$PromotionImpl implements _Promotion {
                 other.targetProductId == targetProductId) &&
             (identical(other.targetCategoryId, targetCategoryId) ||
                 other.targetCategoryId == targetCategoryId) &&
+            (identical(other.targetCustomerId, targetCustomerId) ||
+                other.targetCustomerId == targetCustomerId) &&
+            (identical(other.code, code) || other.code == code) &&
+            (identical(other.restrictionType, restrictionType) ||
+                other.restrictionType == restrictionType) &&
+            (identical(other.usedCount, usedCount) ||
+                other.usedCount == usedCount) &&
             (identical(other.buyQuantity, buyQuantity) ||
                 other.buyQuantity == buyQuantity) &&
             (identical(other.getQuantity, getQuantity) ||
@@ -429,25 +509,30 @@ class _$PromotionImpl implements _Promotion {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      name,
-      type,
-      targetProductId,
-      targetCategoryId,
-      buyQuantity,
-      getQuantity,
-      discountValue,
-      minOrderAmount,
-      const DeepCollectionEquality().hash(_daysOfWeek),
-      startTime,
-      endTime,
-      startDate,
-      endDate,
-      priority,
-      isStackable,
-      isActive);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        name,
+        type,
+        targetProductId,
+        targetCategoryId,
+        targetCustomerId,
+        code,
+        restrictionType,
+        usedCount,
+        buyQuantity,
+        getQuantity,
+        discountValue,
+        minOrderAmount,
+        const DeepCollectionEquality().hash(_daysOfWeek),
+        startTime,
+        endTime,
+        startDate,
+        endDate,
+        priority,
+        isStackable,
+        isActive
+      ]);
 
   @JsonKey(ignore: true)
   @override
@@ -470,6 +555,10 @@ abstract class _Promotion implements Promotion {
       required final PromotionType type,
       final String? targetProductId,
       final String? targetCategoryId,
+      final String? targetCustomerId,
+      final String? code,
+      final String? restrictionType,
+      final int usedCount,
       final int buyQuantity,
       final int getQuantity,
       final double discountValue,
@@ -497,6 +586,14 @@ abstract class _Promotion implements Promotion {
   @override
   String? get targetCategoryId;
   @override
+  String? get targetCustomerId;
+  @override // FK a customer cuando es convenio individual
+  String? get code;
+  @override // código corto de referencia interna del convenio
+  String? get restrictionType;
+  @override // 'global' | 'customer'
+  int get usedCount;
+  @override // usos consumidos del convenio
   int get buyQuantity;
   @override
   int get getQuantity;

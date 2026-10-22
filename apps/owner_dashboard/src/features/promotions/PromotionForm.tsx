@@ -34,6 +34,10 @@ import {
   useProductSearch,
   useProductById,
 } from '@/features/catalog/use-product-search';
+import {
+  useCustomerSearch,
+  useCustomerById,
+} from '@/features/customers/use-customer-search';
 import { toast } from '@/hooks/use-toast';
 import { DialogFooter } from '@/components/ui/dialog';
 import { getApiErrorMessage } from '@/lib/api-error';
@@ -73,6 +77,16 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const storedProductId = initialData?.target_product_id || undefined;
   const { data: storedProduct } = useProductById(storedProductId);
 
+  const [customerSearch, setCustomerSearch] = useState('');
+  const {
+    data: customerSearchData,
+    isLoading: isCustomerSearchLoading,
+    isError: isCustomerSearchError,
+    refetch: refetchCustomers,
+  } = useCustomerSearch(customerSearch);
+  const storedCustomerId = initialData?.target_customer_id || undefined;
+  const { data: storedCustomer } = useCustomerById(storedCustomerId);
+
   const form = useForm<PromotionFormData>({
     resolver: zodResolver(promotionFormSchema),
     defaultValues: {
@@ -93,6 +107,9 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
       priority: 0,
       is_stackable: true,
       is_active: true,
+      code: '',
+      target_customer_id: '',
+      restriction_type: 'global',
     },
     mode: 'onChange',
   });
@@ -101,6 +118,8 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const watchedDays = form.watch('days_of_week');
   const watchedCategoryId = form.watch('target_category_id');
   const watchedProductId = form.watch('target_product_id');
+  const watchedCustomerId = form.watch('target_customer_id');
+  const watchedRestrictionType = form.watch('restriction_type');
 
   useEffect(() => {
     if (initialData) {
@@ -122,6 +141,9 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
         priority: initialData.priority,
         is_stackable: initialData.is_stackable,
         is_active: initialData.is_active,
+        code: initialData.code || '',
+        target_customer_id: initialData.target_customer_id || '',
+        restriction_type: initialData.restriction_type || 'global',
       });
     }
   }, [initialData, form]);
@@ -142,7 +164,16 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
     // - UPDATE: send an explicit null so Object.assign clears the column
     //   (omitting the key would leave the old target untouched).
     // A selected uuid is always sent unchanged.
-    const { target_category_id, target_product_id, start_date, end_date, ...rest } = data;
+    const {
+      target_category_id,
+      target_product_id,
+      target_customer_id,
+      code,
+      restriction_type,
+      start_date,
+      end_date,
+      ...rest
+    } = data;
     // Promo-fix: date inputs carry 'YYYY-MM-DD'; the backend's DTOs and
     // bigint columns expect epoch-ms numbers.
     // R3-001: a cleared date differs by mode — and S6 makes that difference
@@ -173,6 +204,10 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           end_date: end_date ? dateInputValueToEpochMs(end_date) : null,
           target_category_id: target_category_id ? target_category_id : null,
           target_product_id: target_product_id ? target_product_id : undefined,
+          // §17.6: '' means "nothing selected" → explicit null clears the FK.
+          target_customer_id: target_customer_id ? target_customer_id : null,
+          code: code || null,
+          restriction_type: restriction_type || 'global',
         };
         await updatePromotion.mutateAsync({ id: initialData!.id, dto });
         toast({ variant: 'success', title: 'Promoción actualizada' });
@@ -192,6 +227,9 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           ...(end_date ? { end_date: dateInputValueToEpochMs(end_date) } : {}),
           ...(target_category_id ? { target_category_id } : {}),
           ...(target_product_id ? { target_product_id } : {}),
+          ...(target_customer_id ? { target_customer_id } : {}),
+          ...(code ? { code } : {}),
+          ...(restriction_type ? { restriction_type } : {}),
         };
         await createPromotion.mutateAsync(payload);
         toast({ variant: 'success', title: 'Promoción creada' });
@@ -324,6 +362,89 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
             )}
           </div>
         </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="code">Código del Convenio (opcional)</Label>
+            <Input
+              id="code"
+              placeholder="Ej: CONV-A"
+              {...form.register('code')}
+            />
+            <p className="text-xs text-muted-foreground">
+              Código corto de referencia interna del convenio. Único por
+              negocio.
+            </p>
+            {form.formState.errors.code && (
+              <p className="text-sm text-destructive mt-1">
+                {form.formState.errors.code.message}
+              </p>
+            )}
+          </div>
+          <div>
+            <Label htmlFor="restriction_type">Alcance del Descuento</Label>
+            <Select
+              onValueChange={(value) => {
+                if (!value) return;
+                const restriction = value as 'global' | 'customer';
+                form.setValue('restriction_type', restriction, { shouldValidate: true });
+                // Al cambiar a global, limpiar el cliente seleccionado
+                if (restriction === 'global') {
+                  form.setValue('target_customer_id', '', { shouldValidate: true });
+                }
+              }}
+              value={watchedRestrictionType ?? 'global'}
+            >
+              <SelectTrigger aria-label="Alcance del Descuento">
+                <SelectValue placeholder="Seleccione alcance" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="global">Global (todos los clientes)</SelectItem>
+                <SelectItem value="customer">Cliente / Empresa específica</SelectItem>
+              </SelectContent>
+            </Select>
+            {form.formState.errors.restriction_type && (
+              <p className="text-sm text-destructive mt-1">
+                {form.formState.errors.restriction_type.message}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {watchedRestrictionType === 'customer' && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <EntitySearchSelect
+                inputId="target-customer-search"
+                label="Cliente / Empresa del Convenio *"
+                value={watchedCustomerId ?? ''}
+                onChange={(id) =>
+                  form.setValue('target_customer_id', id, { shouldValidate: true })
+                }
+                options={(customerSearchData?.data ?? []).map((customer) => ({
+                  id: customer.id,
+                  label: customer.name,
+                  hint: customer.tax_id ? `NIT: ${customer.tax_id}` : undefined,
+                }))}
+                search={customerSearch}
+                onSearchChange={setCustomerSearch}
+                isLoading={isCustomerSearchLoading}
+                isError={isCustomerSearchError}
+                onRetry={() => void refetchCustomers()}
+                emptyMessage="No hay clientes todavía. Cree clientes en el módulo de Clientes."
+                selectedLabel={storedCustomer?.name}
+                total={customerSearchData?.total}
+                onVerTodos={() => setCustomerSearch('')}
+                placeholder="Ej: nombre empresa, NIT"
+              />
+              {form.formState.errors.target_customer_id && (
+                <p className="text-sm text-destructive mt-1">
+                  {form.formState.errors.target_customer_id.message}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {showBuyGetFields && (
           <div className="grid gap-4 sm:grid-cols-2">

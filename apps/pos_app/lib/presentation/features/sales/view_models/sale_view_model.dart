@@ -1365,6 +1365,10 @@ class SaleViewModel extends ChangeNotifier {
   /// a value that belongs to ONE cart must not survive into the next
   /// (cleared in [clearCart]).
   Map<String, double> _promotionItemDiscounts = const {};
+  /// Qué promoción de convenio se aplicó en esta venta (para trazabilidad
+  /// de "qué empresas compran mediante convenio"). Null si no se aplicó
+  /// ningún convenio.
+  String? _appliedConvenioPromotionId;
   double _manualDiscount = 0.0;
   double get totalDiscounts =>
       _promotionDiscount + _manualDiscount + loyaltyDiscount;
@@ -1511,9 +1515,15 @@ class SaleViewModel extends ChangeNotifier {
     final result = _promotionsEngine.evaluate(
       cart: _cart,
       promotions: _promotions,
+      selectedCustomerId: _selectedCustomer?.id,
     );
     _promotionDiscount = result.totalDiscount;
     _promotionItemDiscounts = result.itemDiscounts;
+    // Trazabilidad: registrar qué promoción de convenio se aplicó (si aplica).
+    _appliedConvenioPromotionId = result.appliedPromotions
+        .where((p) => p.targetCustomerId != null)
+        .map((p) => p.promotionId)
+        .firstOrNull;
   }
 
   Future<void> loadProducts() async {
@@ -1887,6 +1897,7 @@ class SaleViewModel extends ChangeNotifier {
     // map would smuggle the previous cart's promotion provenance into the
     // next sale.
     _promotionItemDiscounts = const {};
+    _appliedConvenioPromotionId = null;
     _manualDiscount = 0.0;
     _pointsToRedeem = 0.0;
     _activeLoadedHoldTicket = null;

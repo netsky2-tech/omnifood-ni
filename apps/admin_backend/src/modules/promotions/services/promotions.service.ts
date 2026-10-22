@@ -6,9 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
-import { Promotion } from '../entities/promotion.entity';
+import { Promotion, PromotionType } from '../entities/promotion.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
+import { Customer } from '../../customers/entities/customer.entity';
 import { CreatePromotionDto } from '../dto/create-promotion.dto';
 import { UpdatePromotionDto } from '../dto/update-promotion.dto';
 
@@ -48,6 +49,9 @@ export class PromotionsService {
       tenantId,
       async (manager) => {
         await this.assertValidTargetCategory(manager, tenantId, dto);
+        await this.assertValidTargetCustomer(manager, tenantId, dto);
+        await this.assertUniqueCode(manager, tenantId, dto);
+        this.assertConvenioRequiresCustomer(dto);
         const promotion = manager.getRepository(Promotion).create({
           ...dto,
           tenant_id: tenantId,
@@ -75,6 +79,9 @@ export class PromotionsService {
         // Validated against the CURRENT dto value, inside the same
         // transaction that will persist it.
         await this.assertValidTargetCategory(manager, tenantId, dto);
+        await this.assertValidTargetCustomer(manager, tenantId, dto);
+        await this.assertUniqueCode(manager, tenantId, dto, id);
+        this.assertConvenioRequiresCustomer(dto);
         Object.assign(promotion, dto);
         return manager.getRepository(Promotion).save(promotion);
       },
@@ -167,5 +174,87 @@ export class PromotionsService {
       throw new NotFoundException(`Promotion with ID ${id} not found`);
     }
     return promotion;
+  }
+
+  /**
+   * Valida que, si se asigna un target_customer_id, exista un Customer activo
+   * en el mismo tenant. El lookup es tenant-scoped: nunca revela si un uuid
+   * pertenece a otro tenant.
+   */
+  private async assertValidTargetCustomer(
+    manager: EntityManager,
+    tenantId: string,
+    dto: CreatePromotionDto | UpdatePromotionDto,
+  ): Promise<void> {
+    const customerId = dto.target_customer_id;
+    if (customerId === undefined || customerId === null) {
+      return;
+    }
+    if (!UUID_PATTERN.test(customerId)) {
+      throw new BadRequestException(
+        'target_customer_id must be a UUID referencing a customer',
+      );
+    }
+    const customer = await manager.getRepository(Customer).findOne({
+      where: {
+        id: customerId,
+        tenant_id: tenantId,
+        is_active: true,
+      },
+    });
+    if (!customer) {
+      throw new BadRequestException(
+        `target_customer_id ${customerId} is not an active customer of this tenant`,
+      );
+    }
+  }
+
+  /**
+   * Valida que el código (`code`) sea único dentro del tenant. En update se
+   * excluye la propia promoción (`excludeId`) para permitir re-guardar sin
+   * cambios.
+   */
+  private async assertUniqueCode(
+    manager: EntityManager,
+    tenantId: string,
+    dto: CreatePromotionDto | UpdatePromotionDto,
+    excludeId?: string,
+  ): Promise<void> {
+    const code = dto.code;
+    if (code === undefined || code === null || code === '') {
+      return;
+    }
+    const where: Record<string, unknown> = { tenant_id: tenantId, code };
+    if (excludeId) {
+      // typeorm no soporta "id != excludeId" directamente en where simple;
+      // consultamos y descartamos la propia fila.
+    }
+    const existing = await manager.getRepository(Promotion).findOne({
+      where,
+    });
+    if (existing && existing.id !== excludeId) {
+      throw new BadRequestException(
+        `The code "${code}" is already used by another promotion in this tenant`,
+      );
+    }
+  }
+
+  /**
+   * Cuando el tipo es CONVENIO o restriction_type es 'customer', se requiere
+   * un target_customer_id. Sin él la promoción no sabe a quién aplicar el
+   * descuento del convenio.
+   */
+  private assertConvenioRequiresCustomer(
+    dto: CreatePromotionDto | UpdatePromotionDto,
+  ): void {
+    const isConvenio = dto.type === PromotionType.CONVENIO;
+    const isCustomerRestricted = dto.restriction_type === 'customer';
+    if (isConvenio || isCustomerRestricted) {
+      if (!dto.target_customer_id) {
+        throw new BadRequestException(
+          'A convenio/customer-restricted promotion requires a target_customer_id',
+        );
+      }
+    }
   }
 }

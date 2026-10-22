@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog';
 import { useCatalogValues } from '@/features/catalog/use-catalog';
 import { useProductById } from '@/features/catalog/use-product-search';
+import { useCustomerById } from '@/features/customers/use-customer-search';
 import { PromotionForm } from './PromotionForm';
 import { type Promotion, PromotionType, PROMOTION_TYPE_LABELS } from '@/types/promotions';
 import { formatCurrency, formatDate, DAYS_OF_WEEK } from '@/lib/utils';
@@ -48,9 +49,15 @@ import { getApiErrorMessage } from '@/lib/api-error';
  */
 function ProductTargetLabel({ id }: { id: string }) {
   const { data: product } = useProductById(id);
+
   return <>Producto: {product?.name ?? `…${id.slice(-8)}`}</>;
 }
 
+function CustomerTargetLabel({ id }: { id: string }) {
+  const { data: customer } = useCustomerById(id);
+
+  return <>Cliente: {customer?.name ?? `…${id.slice(-8)}`}</>;
+}
 export function PromotionsList() {
   const { canPerformAction } = useRbac();
   const canWrite = canPerformAction('promotions.write');
@@ -217,6 +224,7 @@ export function PromotionsList() {
               <TableHead>Nombre</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Objetivo</TableHead>
+              <TableHead>Cliente / Convenio</TableHead>
               <TableHead>Programación</TableHead>
               <TableHead className="text-right">Valor</TableHead>
               <TableHead>Prioridad</TableHead>
@@ -227,7 +235,7 @@ export function PromotionsList() {
           <TableBody>
             {filteredPromotions.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                   No se encontraron promociones
                 </TableCell>
               </TableRow>
@@ -247,6 +255,11 @@ export function PromotionsList() {
                     {promotion.target_product_id ? <ProductTargetLabel id={promotion.target_product_id} /> : ''}
                     {promotion.target_category_id ? `Categoría: ${formatCategoryTarget(promotion.target_category_id)}` : ''}
                     {!promotion.target_product_id && !promotion.target_category_id ? 'Global' : ''}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {promotion.code && <span>{promotion.code}</span>}
+                    {promotion.target_customer_id && <CustomerTargetLabel id={promotion.target_customer_id} />}
+                    {!promotion.code && !promotion.target_customer_id ? '—' : ''}
                   </TableCell>
                   <TableCell className="text-sm">
                     <div className="flex flex-wrap gap-1">
@@ -401,6 +414,18 @@ export function PromotionsList() {
                   <div className="col-span-2">
                     <p className="text-muted-foreground">Categoría objetivo</p>
                     <p className="font-medium">{formatCategoryTarget(viewingPromotion.target_category_id)}</p>
+                  </div>
+                )}
+                {viewingPromotion.code && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Código del Convenio</p>
+                    <p className="font-medium">{viewingPromotion.code}</p>
+                  </div>
+                )}
+                {viewingPromotion.target_customer_id && (
+                  <div className="col-span-2">
+                    <p className="text-muted-foreground">Cliente / Empresa del Convenio</p>
+                    <p className="font-medium"><CustomerTargetLabel id={viewingPromotion.target_customer_id} /></p>
                   </div>
                 )}
               </div>

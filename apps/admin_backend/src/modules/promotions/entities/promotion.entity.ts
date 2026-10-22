@@ -10,17 +10,22 @@ import {
 } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
+import { Customer } from '../../customers/entities/customer.entity';
 
 export enum PromotionType {
   BUY_X_GET_Y_FREE = 'buyXGetYFree',
   PERCENTAGE_DISCOUNT = 'percentageDiscount',
   FIXED_DISCOUNT = 'fixedDiscount',
   COMBO_PACKAGE = 'comboPackage',
+  CONVENIO = 'convenio',
 }
 
 @Entity('promotions')
 @Index('idx_promotions_tenant_active', ['tenant_id', 'is_active'])
 @Index('idx_promotions_tenant_priority', ['tenant_id', 'priority'])
+@Index('idx_promotions_tenant_code_unique', ['tenant_id', 'code'], {
+  unique: true,
+})
 export class Promotion {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -119,6 +124,29 @@ export class Promotion {
 
   @Column({ name: 'is_active', default: true })
   is_active: boolean;
+
+  // Código corto de referencia interna del convenio/promoción (ej. "CONV-A").
+  // Único por tenant. No es un UUID de cliente: es una referencia operativa
+  // legible que el backoffice usa para identificar el convenio.
+  @Column({ type: 'varchar', nullable: true, unique: false })
+  code?: string | null;
+
+  // FK opcional al Customer al que aplica este convenio. Cuando se asigna, la
+  // promoción es un convenio individual con ese cliente/empresa. NULL = promoción
+  // global (aplica a cualquier cliente que cumpla las demás reglas).
+  @Column({ type: 'uuid', nullable: true })
+  target_customer_id?: string | null;
+
+  @Column({ type: 'varchar', nullable: true })
+  restriction_type?: 'global' | 'customer' | null;
+
+  // Contador de usos consumidos del convenio (para trazabilidad y límites futuros).
+  @Column({ type: 'int', default: 0 })
+  used_count: number;
+
+  @ManyToOne(() => Customer, { createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'target_customer_id' })
+  target_customer?: Customer;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   created_at: Date;

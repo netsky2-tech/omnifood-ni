@@ -28,6 +28,20 @@ export const promotionFormSchema = z.object({
       message: 'Seleccione una categoría de producto válida',
     })
     .optional(),
+  // §17.6: the customer target comes from a governed selector, never a
+  // free-text UUID input. '' means nothing selected (global).
+  target_customer_id: z
+    .string()
+    .refine((value) => value === '' || CATEGORY_UUID_PATTERN.test(value), {
+      message: 'Seleccione un cliente válido',
+    })
+    .optional(),
+  // Código corto de referencia interna del convenio (ej. "CONV-A"). Único
+  // por tenant. Opcional: si se envía, no debe quedar vacío.
+  code: z.string().trim().min(1, 'El código no puede quedar vacío').optional().or(z.literal('')),
+  // 'global' (aplica a cualquier cliente) o 'customer' (solo al
+  // target_customer_id). Default 'global'.
+  restriction_type: z.enum(['global', 'customer']).optional().nullable(),
   buy_quantity: z.coerce.number().int().min(0).optional(),
   get_quantity: z.coerce.number().int().min(0).optional(),
   discount_value: z.coerce.number().min(0).optional(),
@@ -53,13 +67,16 @@ export const promotionFormSchema = z.object({
   priority: z.coerce.number().int().min(0).optional(),
   is_stackable: z.boolean().optional(),
   is_active: z.boolean().optional(),
-}).refine(
+  }).refine(
   (data) => {
     if (data.type === PromotionType.BUY_X_GET_Y_FREE) {
       return data.buy_quantity && data.buy_quantity > 0 && data.get_quantity && data.get_quantity > 0;
     }
     if (data.type === PromotionType.PERCENTAGE_DISCOUNT || data.type === PromotionType.FIXED_DISCOUNT) {
       return data.discount_value && data.discount_value > 0;
+    }
+    if (data.type === PromotionType.CONVENIO || data.restriction_type === 'customer') {
+      return Boolean(data.target_customer_id && data.target_customer_id !== '');
     }
     return true;
   },
