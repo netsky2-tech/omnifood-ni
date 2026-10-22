@@ -99,6 +99,19 @@ export class CountSessionEntry {
   @Column({ type: 'varchar', nullable: true })
   notes: string | null;
 
+  /**
+   * A-01: the lot this observation was made in. NULLABLE and additive: an
+   * entry written before this migration (and a count of an insumo without
+   * lots) keeps its exact shape, and the absence reads as "the operator did
+   * not say which lot".
+   */
+  @Column({ name: 'batch_id', type: 'uuid', nullable: true })
+  batch_id: string | null;
+
+  /** The lot number as seen on the shelf (the evidence of the observation). */
+  @Column({ name: 'batch_number', type: 'varchar', length: 64, nullable: true })
+  batch_number: string | null;
+
   @Column({ name: 'is_disputed', type: 'boolean' })
   is_disputed: boolean;
 

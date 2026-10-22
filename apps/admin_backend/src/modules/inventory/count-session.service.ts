@@ -13,6 +13,7 @@ import {
   shouldCreateHighValueInventoryAlert,
 } from './forensic-alert.service';
 import { Insumo } from './entities/insumo.entity';
+import { Batch } from './entities/batch.entity';
 import { CountSession } from './entities/count-session.entity';
 import { CountSessionEntry } from './entities/count-session-entry.entity';
 import {
@@ -145,6 +146,9 @@ export class CountSessionService {
           line_index: lineIndex,
           entry_index: entryIndex,
           counted_quantity: entry.countedQuantity,
+          // A-01: the lot the observation was made in.
+          batch_id: entry.batchId ?? null,
+          batch_number: entry.batchNumber ?? null,
           counted_at: entry.countedAt ? new Date(entry.countedAt) : null,
           actor_label: entry.actorLabel ?? null,
           notes: entry.notes ?? null,
@@ -213,6 +217,46 @@ export class CountSessionService {
           quantity: Math.abs(variance),
           operationDay: toCalendarDay(document.postedAt ?? document.cutoffAt),
         });
+      } else {
+        // A-01: a POSITIVE variance is stock that APPEARS, and it has to
+        // enter the lot it was seen in. Without a lot it would enter the
+        // aggregate alone and the next sale would find the aggregate and
+        // the lots disagreeing (the divergence FD-01 declares).
+        //
+        // So for a lot-managed insumo the operator MUST say in which lot the
+        // surplus is: the count is not posted until they do. That is the
+        // "no se crea algo sin lote" rule, enforced where the fact enters
+        // the books.
+        const batchId = approvedEntry.batchId ?? null;
+        if (!batchId) {
+          const hasLots = await manager
+            .getRepository(Batch)
+            .exists({ where: { tenant_id: tenantId, insumo_id: line.insumoId } });
+          if (hasLots) {
+            throw new BadRequestException(
+              `El conteo de '${line.insumoName}' encontró más existencia de la ` +
+                `que el sistema tenía, pero no dijo EN QUÉ LOTE está ese ` +
+                `sobrante. Un lote sin fecha de vencimiento real no se puede ` +
+                `inventar: la diferencia tiene que entrar por el lote que se ` +
+                `contó.`,
+            );
+          }
+        } else {
+          const batchRepo = manager.getRepository(Batch);
+          const batch = await batchRepo.findOne({
+            where: { id: batchId, tenant_id: tenantId, insumo_id: line.insumoId },
+          });
+          if (!batch) {
+            throw new BadRequestException(
+              `El conteo de '${line.insumoName}' apunta a un lote que no ` +
+                `existe o no es de ese insumo: ${batchId}`,
+            );
+          }
+          batch.remaining_stock = round4(
+            Number(batch.remaining_stock) + variance,
+          );
+          await batchRepo.save(batch);
+        }
       }
 
       const movement = movementRepo.create({

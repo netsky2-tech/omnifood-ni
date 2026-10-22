@@ -339,6 +339,76 @@ describe('CountSessionService persistence contract (Real PostgreSQL DB, migratio
     expect(movements[0].source_document_id).toBe(document.id);
   });
 
+  // A-01: the count says IN WHICH LOT the stock it found is. A positive
+  // variance is stock that APPEARS; without a lot it would enter the
+  // aggregate alone and the next sale would find the aggregate and the lots
+  // disagreeing. The industry does the same: cycle counts include lot
+  // checks, not just quantity.
+  it('A-01: a positive variance enters the lot it was counted in, and without a lot the count is refused', async () => {
+    const tenantId = await seedTenant('a01-count-lot');
+    const insumoId = await seedInsumo({
+      tenantId,
+      name: 'Leche entera',
+      stock: 50,
+      cppNio: 12,
+    });
+    const batchId = randomUUID();
+    await admin.query(
+      `INSERT INTO batches
+         (id, tenant_id, insumo_id, batch_number, received_date,
+          expiration_date, remaining_stock, cost)
+       VALUES ($1, $2, $3, 'LOTE-A01', CURRENT_DATE, CURRENT_DATE + 30,
+               50.0000, 12.0000)`,
+      [batchId, tenantId, insumoId],
+    );
+
+    const document = buildDocument(insumoId);
+    // The observation says which lot it was made in.
+    document.lines[0].entries[1].batchId = batchId;
+    document.lines[0].entries[1].batchNumber = 'LOTE-A01';
+
+    await buildService().replayCountSession({ tenantId, document });
+
+    // The physical truth entered ITS lot (the count found 12 where the system
+    // had 10 ⇒ +2): the aggregate and the lots agree again.
+    const lots = await admin.query<Array<{ remaining_stock: string }>>(
+      'SELECT remaining_stock FROM batches WHERE id = $1',
+      [batchId],
+    );
+    expect(Number(lots[0].remaining_stock)).toBe(52);
+
+    const aggregate = await admin.query<Array<{ stock: string }>>(
+      'SELECT stock FROM insumos WHERE id = $1',
+      [insumoId],
+    );
+    expect(Number(aggregate[0].stock)).toBe(52);
+  });
+
+  it('A-01: a positive variance on a lot-managed insumo is refused until the operator says in which lot', async () => {
+    const tenantId = await seedTenant('a01-count-nolot');
+    const insumoId = await seedInsumo({
+      tenantId,
+      name: 'Leche entera (sin lote declarado)',
+      stock: 50,
+      cppNio: 12,
+    });
+    await admin.query(
+      `INSERT INTO batches
+         (id, tenant_id, insumo_id, batch_number, received_date,
+          expiration_date, remaining_stock, cost)
+       VALUES ($1, $2, $3, 'LOTE-A01B', CURRENT_DATE, CURRENT_DATE + 30,
+               50.0000, 12.0000)`,
+      [randomUUID(), tenantId, insumoId],
+    );
+
+    const document = buildDocument(insumoId);
+    // No lot on the approved entry.
+
+    await expect(
+      buildService().replayCountSession({ tenantId, document }),
+    ).rejects.toThrow(/EN QUÉ LOTE/);
+  });
+
   it('S13: re-sending the identical document does not duplicate the session, its entries, nor the ledger effect', async () => {
     const tenantId = await seedTenant('r19-count-session-idempotent');
     const insumoId = await seedInsumo({
