@@ -4,6 +4,8 @@ import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
+import 'package:pos_app/data/models/sales/promotion_entity.dart';
+import 'package:pos_app/domain/models/sales/promotion.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/presentation/features/sales/widgets/customer_select_dialog.dart';
@@ -305,6 +307,46 @@ void main() {
       expect(mockViewModel.selectedCustomer?.id, equals('c-1'));
     });
 
+    testWidgets('lays out on a phone-sized surface with the app-wide ElevatedButton theme', (tester) async {
+      // Regression: the app theme sets `minimumSize: Size.fromHeight(48)`
+      // (infinite width). Inside the dialog the "Nuevo" button sits in a Row
+      // with unbounded width, so an unclamped infinite minimum aborted layout
+      // of the whole body: the dialog painted nothing on device while widget
+      // tests with the default theme stayed green.
+      tester.view.physicalSize = const Size(1080, 2316);
+      tester.view.devicePixelRatio = 2.8;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            useMaterial3: true,
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, mockViewModel),
+                child: const Text('ABRIR DIALOGO'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('ABRIR DIALOGO'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Seleccionar Cliente'), findsOneWidget);
+      expect(find.text('Nuevo'), findsOneWidget);
+      expect(find.text('Lucía Méndez'), findsOneWidget);
+    });
+
     testWidgets('valida RUC/Cédula en caliente y crea cliente express desde el modal', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -351,6 +393,156 @@ void main() {
 
       expect(mockViewModel.selectedCustomer, isNotNull);
       expect(mockViewModel.selectedCustomer!.name, equals('Farmacia San Rafael'));
+    });
+  });
+
+  group('Convenio discount lifecycle (SQLite Real)', () {
+    late AppDatabase database;
+    late SaleViewModel viewModel;
+    late Customer convenioCustomer;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      database = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'commercial_exchange_rate', value: '36.50'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'bcn_official_exchange_rate', value: '36.6241'),
+      );
+      viewModel = SaleViewModel(
+        FakeSalesRepository(),
+        FakeInventoryRepository(),
+        FakeAuthRepository(),
+        database,
+        TableOrderService(database),
+        false,
+        TenantConfigService(database.localConfigDao),
+        KitchenOrderService(database),
+        PrinterConfigService(database.localConfigDao),
+      );
+      viewModel.setCompanyTaxRegime(TaxRegime.regimenGeneral);
+      convenioCustomer = await viewModel.createExpressCustomer(
+        name: 'Distribuidora La Unión',
+        taxId: 'J0310000000123',
+      );
+      // createExpressCustomer auto-selects; start from a clean cart state so
+      // each test drives selection on purpose.
+      viewModel.clearCustomer();
+      viewModel.addToCart(
+        const Product(
+          id: 'prod-01',
+          name: 'Espresso Simple',
+          uom: 'UND',
+          stock: 100.0,
+          averageCost: 10.0,
+          sellPrice: 50.0,
+          category: 'Bebidas',
+        ),
+      );
+    });
+
+    tearDown(() async {
+      await database.close();
+    });
+
+    Future<void> seedPromotion({
+      required String id,
+      required PromotionType type,
+      required double discountValue,
+      int priority = 0,
+      bool isStackable = true,
+      String? targetCustomerId,
+    }) async {
+      await database.promotionDao.savePromotion(
+        PromotionEntity(
+          id: id,
+          name: id,
+          type: type.name,
+          targetCustomerId: targetCustomerId,
+          discountValue: discountValue,
+          priority: priority,
+          isStackable: isStackable,
+        ),
+      );
+      await viewModel.loadPromotions();
+    }
+
+    test('selecting the convenio customer applies its discount', () async {
+      await seedPromotion(
+        id: 'conv-union',
+        type: PromotionType.convenio,
+        discountValue: 10,
+        targetCustomerId: convenioCustomer.id,
+      );
+
+      expect(viewModel.promoDiscounts, 0.0);
+
+      await viewModel.selectCustomer(convenioCustomer);
+
+      expect(viewModel.promoDiscounts, 5.0);
+      expect(viewModel.total, 45.0);
+    });
+
+    test('clearing the customer clears the convenio discount', () async {
+      await seedPromotion(
+        id: 'conv-union',
+        type: PromotionType.convenio,
+        discountValue: 10,
+        targetCustomerId: convenioCustomer.id,
+      );
+      await viewModel.selectCustomer(convenioCustomer);
+      expect(viewModel.promoDiscounts, 5.0);
+
+      viewModel.clearCustomer();
+
+      expect(viewModel.promoDiscounts, 0.0);
+      expect(viewModel.total, 50.0);
+    });
+
+    test('a non-stackable higher-priority promo wins over the convenio', () async {
+      await seedPromotion(
+        id: 'global-10',
+        type: PromotionType.percentageDiscount,
+        discountValue: 10,
+        priority: 10,
+        isStackable: false,
+      );
+      await seedPromotion(
+        id: 'conv-union',
+        type: PromotionType.convenio,
+        discountValue: 20,
+        targetCustomerId: convenioCustomer.id,
+      );
+
+      await viewModel.selectCustomer(convenioCustomer);
+
+      // Only the non-stackable promotion applies: 10% of 50, not 10% + 20%.
+      expect(viewModel.promoDiscounts, 5.0);
+    });
+
+    test('stackable promotions add up with the convenio', () async {
+      await seedPromotion(
+        id: 'global-10',
+        type: PromotionType.percentageDiscount,
+        discountValue: 10,
+        priority: 10,
+      );
+      await seedPromotion(
+        id: 'conv-union',
+        type: PromotionType.convenio,
+        discountValue: 20,
+        targetCustomerId: convenioCustomer.id,
+      );
+
+      await viewModel.selectCustomer(convenioCustomer);
+
+      // 10% + 20% of 50 = 15.
+      expect(viewModel.promoDiscounts, 15.0);
     });
   });
 }

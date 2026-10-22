@@ -676,6 +676,10 @@ class SaleViewModel extends ChangeNotifier {
     _customerTaxId = customer?.taxId;
     _pointsToRedeem = 0.0;
     clearReward();
+    // A convenio promotion is scoped to `targetCustomerId`, so changing the
+    // customer changes which promotions are eligible. Without this call the
+    // convenio discount only appeared on the next unrelated cart mutation.
+    _applyPromotions();
     await _reEvaluateLoyalty();
     notifyListeners();
   }
@@ -687,6 +691,9 @@ class SaleViewModel extends ChangeNotifier {
     _pointsToRedeem = 0.0;
     _currentEvaluation = null;
     clearReward();
+    // Dropping the customer must also drop any convenio discount scoped to
+    // them; otherwise the cart kept a discount nobody is entitled to.
+    _applyPromotions();
     notifyListeners();
   }
 
