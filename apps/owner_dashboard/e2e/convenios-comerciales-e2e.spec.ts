@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const BACKEND_URL = "http://localhost:3000";
+const BACKEND_URL = "http://localhost:3000/api";
 const DASHBOARD_URL = "http://localhost:5173";
 
 const ADMIN_CREDENTIALS = {

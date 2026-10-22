@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-const BACKEND_URL = "http://localhost:3000";
+const BACKEND_URL = "http://localhost:3000/api";
 
 const ADMIN_CREDENTIALS = {
   email: "owner.b.a6b4d092-b1c5-4071-b754-f7cb573236c9@test.com",
