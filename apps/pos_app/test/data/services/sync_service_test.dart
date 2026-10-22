@@ -122,6 +122,9 @@ class MockSalesRepository implements SalesRepository {
   }
 
   @override
+  Future<int> getInventoryDivergenceCount() async => 0;
+
+  @override
   Future<void> acknowledgeSaleSync({
     required String invoiceId,
     required String? outcome,

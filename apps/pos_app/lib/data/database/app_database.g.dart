@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 81,
+      version: 82,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -266,7 +266,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `customer_name` TEXT, `customer_tax_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `customer_name` TEXT, `customer_tax_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `cloud_inventory_outcome` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, `discount_origin_json` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -3233,6 +3233,7 @@ class _$InvoiceDao extends InvoiceDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -3278,6 +3279,7 @@ class _$InvoiceDao extends InvoiceDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -3333,6 +3335,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3380,6 +3383,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3427,6 +3431,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3473,6 +3478,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3523,6 +3529,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3570,6 +3577,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3624,6 +3632,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3686,6 +3695,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3704,6 +3714,23 @@ class _$InvoiceDao extends InvoiceDao {
     return _queryAdapter.query(
         'SELECT COUNT(*) FROM invoices WHERE inventory_outcome = \'APPLIED_INVENTORY_PENDING\'',
         mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<int?> getInventoryDivergenceCount() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM invoices WHERE cloud_inventory_outcome = \'APPLIED_WITH_DIVERGENCE\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> updateCloudInventoryOutcome(
+    String invoiceId,
+    String outcome,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE invoices SET cloud_inventory_outcome = ?2 WHERE id = ?1',
+        arguments: [invoiceId, outcome]);
   }
 
   @override
@@ -4140,6 +4167,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -4407,6 +4435,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -4525,6 +4554,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -4573,6 +4603,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,

@@ -851,6 +851,15 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
       ) as _i56.Future<int>);
 
   @override
+  _i56.Future<int> getInventoryDivergenceCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryDivergenceCount,
+          [],
+        ),
+        returnValue: _i56.Future<int>.value(0),
+      ) as _i56.Future<int>);
+
+  @override
   _i56.Future<_i2.ReprintPreparation> prepareReprintInvoice(
     String? invoiceId,
     String? reasonCode, {
@@ -2677,6 +2686,32 @@ class MockInvoiceDao extends _i1.Mock implements _i28.InvoiceDao {
         ),
         returnValue: _i56.Future<int?>.value(),
       ) as _i56.Future<int?>);
+
+  @override
+  _i56.Future<int?> getInventoryDivergenceCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryDivergenceCount,
+          [],
+        ),
+        returnValue: _i56.Future<int?>.value(),
+      ) as _i56.Future<int?>);
+
+  @override
+  _i56.Future<void> updateCloudInventoryOutcome(
+    String? invoiceId,
+    String? outcome,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateCloudInventoryOutcome,
+          [
+            invoiceId,
+            outcome,
+          ],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
 }
 
 /// A class which mocks [InvoiceItemDao].

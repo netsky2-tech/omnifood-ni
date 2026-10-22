@@ -1447,6 +1447,32 @@ class MockInvoiceDao extends _i1.Mock implements _i25.InvoiceDao {
         ),
         returnValue: _i53.Future<int?>.value(),
       ) as _i53.Future<int?>);
+
+  @override
+  _i53.Future<int?> getInventoryDivergenceCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryDivergenceCount,
+          [],
+        ),
+        returnValue: _i53.Future<int?>.value(),
+      ) as _i53.Future<int?>);
+
+  @override
+  _i53.Future<void> updateCloudInventoryOutcome(
+    String? invoiceId,
+    String? outcome,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateCloudInventoryOutcome,
+          [
+            invoiceId,
+            outcome,
+          ],
+        ),
+        returnValue: _i53.Future<void>.value(),
+        returnValueForMissingStub: _i53.Future<void>.value(),
+      ) as _i53.Future<void>);
 }
 
 /// A class which mocks [InvoiceItemDao].

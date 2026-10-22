@@ -40,6 +40,7 @@ import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'widgets/fx_rate_block_banner.dart';
 import 'widgets/inventory_enrichment_warning_banner.dart';
+import 'widgets/inventory_divergence_banner.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
 import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dart';
@@ -603,6 +604,10 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
           ? Column(
               children: [
                 const InventoryEnrichmentWarningBanner(),
+                // FD-01: the sales the cloud applied while declaring that
+                // part of the stock was not backed. Informational only — it
+                // never blocks a sale, a shift close or the DGI numbering.
+                const InventoryDivergenceBanner(),
                 if (catalogCategories.isNotEmpty)
                   CategoryFilterBar(
                     categories: catalogCategories,

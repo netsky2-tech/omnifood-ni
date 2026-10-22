@@ -232,6 +232,9 @@ class _NoopSalesRepository implements SalesRepository {
       throw UnimplementedError();
 
   @override
+  Future<int> getInventoryDivergenceCount() async => 0;
+
+  @override
   Future<void> voidInvoice(String invoiceId, String reason,
           {String? reasonDetail}) =>
       Future.value();

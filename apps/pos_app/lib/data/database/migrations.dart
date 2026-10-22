@@ -3588,6 +3588,31 @@ final migration80_81 = Migration(80, 81, (database) async {
   }
 });
 
+/// FD-01 (Unidad 3): what the CLOUD declared about each sale's inventory.
+///
+/// A separate column from `inventory_outcome` on purpose: the local outcome
+/// is what THIS terminal computed (the enrichment warning counts it), and
+/// this one is what the cloud declared after applying the sale
+/// ('APPLIED_WITH_DIVERGENCE' ⇒ part of the stock was not backed and the
+/// difference waits to be reconciled in the backoffice). One column for the
+/// two truths would erase one of them.
+///
+/// NULLABLE and additive: a sale written before this migration (and a sale
+/// the cloud accepted without a difference) keeps its exact shape, and the
+/// absence reads as "the cloud said nothing".
+final migration81_82 = Migration(81, 82, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('cloud_inventory_outcome')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN cloud_inventory_outcome TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3660,6 +3685,7 @@ final allMigrations = [
   migration78_79,
   migration79_80,
   migration80_81,
+  migration81_82,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

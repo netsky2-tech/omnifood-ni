@@ -291,6 +291,58 @@ void main() {
     );
 
     test(
+      'FD-01: the divergence count sees the sales the cloud applied with a declared difference',
+      () async {
+        final invoice = InvoiceEntity(
+          id: 'inv-div-count',
+          number: '001-001-01-00000010',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'u1',
+          subtotal: 50,
+          totalTax: 0,
+          total: 50,
+          type: 'regular',
+          syncStatus: 'pending',
+          inventoryOutcome: 'APPLIED',
+        );
+        await database.invoiceDao.insertInvoice(invoice);
+
+        final movement = MovementEntity(
+          id: 'corr-div-count',
+          insumoId: 'ins-1',
+          type: 'sale',
+          quantity: -1.0,
+          previousStock: 10.0,
+          newStock: 9.0,
+          timestamp: DateTime.now().toIso8601String(),
+          deliveryOwner: MovementDeliveryOwner.saleSync,
+          deliveryState: MovementDeliveryState.localApplied,
+          saleId: 'inv-div-count',
+          saleCorrelationId: 'corr-div-count',
+        );
+        await database.salesTransactionDao.insertMovement(movement);
+
+        // Before the sync: nothing declared.
+        expect(await repository.getInventoryDivergenceCount(), 0);
+
+        await repository.acknowledgeSaleSync(
+          invoiceId: 'inv-div-count',
+          outcome: 'APPLIED_WITH_DIVERGENCE',
+          acknowledgedCorrelationIds: ['corr-div-count'],
+        );
+
+        // After: the difference is on record, and the LOCAL outcome is
+        // untouched (it is what this terminal computed — a different truth).
+        expect(await repository.getInventoryDivergenceCount(), 1);
+        final stored = await database.invoiceDao.getInvoiceById(
+          'inv-div-count',
+        );
+        expect(stored?.inventoryOutcome, 'APPLIED');
+        expect(stored?.cloudInventoryOutcome, 'APPLIED_WITH_DIVERGENCE');
+      },
+    );
+
+    test(
       'acknowledgeSaleSync marks invoice synced when outcome is APPLIED_NO_INVENTORY_IMPACT and ACK set is empty',
       () async {
         final invoice = InvoiceEntity(

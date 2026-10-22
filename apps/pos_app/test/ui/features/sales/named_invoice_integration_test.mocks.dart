@@ -861,6 +861,16 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
       ) as _i56.Future<int>);
 
   @override
+  _i56.Future<int> getInventoryDivergenceCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryDivergenceCount,
+          [],
+        ),
+        returnValue: _i56.Future<int>.value(0),
+        returnValueForMissingStub: _i56.Future<int>.value(0),
+      ) as _i56.Future<int>);
+
+  @override
   _i56.Future<_i2.ReprintPreparation> prepareReprintInvoice(
     String? invoiceId,
     String? reasonCode, {

@@ -92,6 +92,17 @@ class InvoiceEntity {
   final String? inventoryOutcome;
   @ColumnInfo(name: 'inventory_outcome_reason')
   final String? inventoryOutcomeReason;
+
+  /// FD-01: what the CLOUD said about this sale's inventory.
+  ///
+  /// A separate column from [inventoryOutcome] on purpose: the local outcome
+  /// is what THIS terminal computed (it drives the enrichment warning),
+  /// while this one is what the cloud declared after applying the sale
+  /// ('APPLIED_WITH_DIVERGENCE' ⇒ part of the stock was not backed and the
+  /// difference waits to be reconciled in the backoffice). Overwriting one
+  /// with the other would erase one of the two truths.
+  @ColumnInfo(name: 'cloud_inventory_outcome')
+  final String? cloudInventoryOutcome;
   @ColumnInfo(name: 'bcn_official_rate')
   final double bcnOfficialRate;
   @ColumnInfo(name: 'commercial_rate')
@@ -199,6 +210,7 @@ class InvoiceEntity {
     this.inventoryPolicyVersion,
     this.inventoryOutcome,
     this.inventoryOutcomeReason,
+    this.cloudInventoryOutcome,
     this.bcnOfficialRate = 36.6241,
     this.commercialRate = 36.50,
     this.totalUsd = 0.0,
