@@ -31,7 +31,9 @@ mixin _$Customer {
   DateTime? get createdAt => throw _privateConstructorUsedError;
   DateTime? get updatedAt => throw _privateConstructorUsedError;
   String get syncStatus => throw _privateConstructorUsedError;
-  String? get customerCode => throw _privateConstructorUsedError;
+  String? get customerCode =>
+      throw _privateConstructorUsedError; // Opaque, tenant-scoped identifier for QR/code lookup
+  String? get customerType => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -56,7 +58,8 @@ abstract class $CustomerCopyWith<$Res> {
       DateTime? createdAt,
       DateTime? updatedAt,
       String syncStatus,
-      String? customerCode});
+      String? customerCode,
+      String? customerType});
 }
 
 /// @nodoc
@@ -84,6 +87,7 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
     Object? updatedAt = freezed,
     Object? syncStatus = null,
     Object? customerCode = freezed,
+    Object? customerType = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -134,6 +138,10 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
           ? _value.customerCode
           : customerCode // ignore: cast_nullable_to_non_nullable
               as String?,
+      customerType: freezed == customerType
+          ? _value.customerType
+          : customerType // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -158,7 +166,8 @@ abstract class _$$CustomerImplCopyWith<$Res>
       DateTime? createdAt,
       DateTime? updatedAt,
       String syncStatus,
-      String? customerCode});
+      String? customerCode,
+      String? customerType});
 }
 
 /// @nodoc
@@ -184,6 +193,7 @@ class __$$CustomerImplCopyWithImpl<$Res>
     Object? updatedAt = freezed,
     Object? syncStatus = null,
     Object? customerCode = freezed,
+    Object? customerType = freezed,
   }) {
     return _then(_$CustomerImpl(
       id: null == id
@@ -234,6 +244,10 @@ class __$$CustomerImplCopyWithImpl<$Res>
           ? _value.customerCode
           : customerCode // ignore: cast_nullable_to_non_nullable
               as String?,
+      customerType: freezed == customerType
+          ? _value.customerType
+          : customerType // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -253,7 +267,8 @@ class _$CustomerImpl implements _Customer {
       this.createdAt,
       this.updatedAt,
       this.syncStatus = 'synced',
-      this.customerCode});
+      this.customerCode,
+      this.customerType});
 
   factory _$CustomerImpl.fromJson(Map<String, dynamic> json) =>
       _$$CustomerImplFromJson(json);
@@ -286,10 +301,13 @@ class _$CustomerImpl implements _Customer {
   final String syncStatus;
   @override
   final String? customerCode;
+// Opaque, tenant-scoped identifier for QR/code lookup
+  @override
+  final String? customerType;
 
   @override
   String toString() {
-    return 'Customer(id: $id, name: $name, taxId: $taxId, phone: $phone, email: $email, address: $address, pointsBalance: $pointsBalance, isActive: $isActive, createdAt: $createdAt, updatedAt: $updatedAt, syncStatus: $syncStatus, customerCode: $customerCode)';
+    return 'Customer(id: $id, name: $name, taxId: $taxId, phone: $phone, email: $email, address: $address, pointsBalance: $pointsBalance, isActive: $isActive, createdAt: $createdAt, updatedAt: $updatedAt, syncStatus: $syncStatus, customerCode: $customerCode, customerType: $customerType)';
   }
 
   @override
@@ -314,7 +332,9 @@ class _$CustomerImpl implements _Customer {
             (identical(other.syncStatus, syncStatus) ||
                 other.syncStatus == syncStatus) &&
             (identical(other.customerCode, customerCode) ||
-                other.customerCode == customerCode));
+                other.customerCode == customerCode) &&
+            (identical(other.customerType, customerType) ||
+                other.customerType == customerType));
   }
 
   @JsonKey(ignore: true)
@@ -332,7 +352,8 @@ class _$CustomerImpl implements _Customer {
       createdAt,
       updatedAt,
       syncStatus,
-      customerCode);
+      customerCode,
+      customerType);
 
   @JsonKey(ignore: true)
   @override
@@ -361,7 +382,8 @@ abstract class _Customer implements Customer {
       final DateTime? createdAt,
       final DateTime? updatedAt,
       final String syncStatus,
-      final String? customerCode}) = _$CustomerImpl;
+      final String? customerCode,
+      final String? customerType}) = _$CustomerImpl;
 
   factory _Customer.fromJson(Map<String, dynamic> json) =
       _$CustomerImpl.fromJson;
@@ -390,6 +412,8 @@ abstract class _Customer implements Customer {
   String get syncStatus;
   @override
   String? get customerCode;
+  @override // Opaque, tenant-scoped identifier for QR/code lookup
+  String? get customerType;
   @override
   @JsonKey(ignore: true)
   _$$CustomerImplCopyWith<_$CustomerImpl> get copyWith =>

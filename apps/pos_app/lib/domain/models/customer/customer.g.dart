@@ -24,6 +24,7 @@ _$CustomerImpl _$$CustomerImplFromJson(Map<String, dynamic> json) =>
           : DateTime.parse(json['updatedAt'] as String),
       syncStatus: json['syncStatus'] as String? ?? 'synced',
       customerCode: json['customerCode'] as String?,
+      customerType: json['customerType'] as String?,
     );
 
 Map<String, dynamic> _$$CustomerImplToJson(_$CustomerImpl instance) =>
@@ -40,4 +41,5 @@ Map<String, dynamic> _$$CustomerImplToJson(_$CustomerImpl instance) =>
       'updatedAt': instance.updatedAt?.toIso8601String(),
       'syncStatus': instance.syncStatus,
       'customerCode': instance.customerCode,
+      'customerType': instance.customerType,
     };
