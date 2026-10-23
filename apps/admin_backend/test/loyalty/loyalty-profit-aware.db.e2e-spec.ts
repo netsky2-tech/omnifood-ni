@@ -86,7 +86,7 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
 
     await bootstrap.query(`CREATE TABLE "${schema}".customers (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text NOT NULL, name text NOT NULL,
-      tax_id text, phone text, email text, address text,
+      tax_id text, phone text, email text, customer_type text, address text,
       points_balance numeric(12,2) DEFAULT 0.0, is_active boolean DEFAULT true,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
