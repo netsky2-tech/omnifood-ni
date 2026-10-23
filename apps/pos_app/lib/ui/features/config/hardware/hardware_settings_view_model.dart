@@ -323,10 +323,20 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       // nothing configured the preview simply omits the RUC line.
       final previewRuc = _config.fiscalRuc;
 
+      // NHILOS §45.1: the test print shows the REAL Caja line so the
+      // operator validates the tag that will appear on live tickets.
+      String? cajaLabel;
+      try {
+        cajaLabel = await _configService.getCajaLabel();
+      } catch (_) {
+        cajaLabel = null;
+      }
+
       final result = await _printerPort.printInvoice(
         sampleInvoice,
         items: sampleItems,
         payments: samplePayments,
+        cajaLabel: cajaLabel,
         businessName: _config.headerBusinessName,
         legalName: _config.headerLegalName,
         ruc: previewRuc,

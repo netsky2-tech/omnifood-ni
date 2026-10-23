@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:pos_app/domain/services/update/ota_discovery_service.dart';
+import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:provider/provider.dart';
 
 import 'terminal_identity_view_model.dart';
@@ -62,6 +63,8 @@ class TerminalIdentityView extends StatelessWidget {
                 _buildStatusCard(context, viewModel),
                 const SizedBox(height: 16),
                 _buildPrinterProfileCard(context, viewModel),
+                const SizedBox(height: 16),
+                const _CajaLabelCard(),
                 const SizedBox(height: 16),
                 const _ServerConfigCard(),
                 if (viewModel.otaCoordinator != null) ...[
@@ -531,6 +534,113 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                       canClear ? () => _clear(viewModel) : null,
                 ),
               ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Operator-assigned Caja label for THIS terminal (NHILOS §45.1).
+///
+/// NOT fiscal identity: the serial stays the technical identity and is never
+/// printed. Blank means "unassigned" and the ticket omits the Caja line
+/// entirely, so an untouched terminal keeps printing exactly what it printed
+/// before this field existed.
+class _CajaLabelCard extends StatefulWidget {
+  const _CajaLabelCard();
+
+  @override
+  State<_CajaLabelCard> createState() => _CajaLabelCardState();
+}
+
+class _CajaLabelCardState extends State<_CajaLabelCard> {
+  final TextEditingController _cajaController = TextEditingController();
+  bool _initialized = false;
+
+  @override
+  void dispose() {
+    _cajaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save(TerminalIdentityViewModel viewModel) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saleViewModel = context.read<SaleViewModel>();
+    final ok = await viewModel.saveCajaLabel(_cajaController.text);
+    if (!mounted) return;
+    if (ok) {
+      // The detail screen must mirror the paper (§24.2) without a restart.
+      await saleViewModel.refreshTerminalCajaLabel();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            viewModel.cajaLabel == null
+                ? 'Caja borrada. El ticket ya no mostrará la línea de Caja.'
+                : 'Caja «${viewModel.cajaLabel}» guardada.',
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final viewModel = context.watch<TerminalIdentityViewModel>();
+    if (!_initialized) {
+      _cajaController.text = viewModel.cajaLabel ?? '';
+      _initialized = true;
+    }
+    final error = viewModel.cajaLabelError;
+
+    return Card(
+      key: const Key('caja_label_card'),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Caja / Punto de venta',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Etiqueta que se imprime en el ticket para identificar esta '
+              'caja. No es el identificador fiscal de la terminal: ese es el '
+              'serial del dispositivo y nunca se imprime. Déjelo vacío para '
+              'no imprimir la línea.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('caja_label_input'),
+              controller: _cajaController,
+              maxLength: 20,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Caja',
+                hintText: 'Ej.: 1, BARRA, MESA 3',
+                helperText: 'Se imprime como «Caja: 1». Vacío = no se imprime.',
+              ),
+              onSubmitted: (_) => _save(viewModel),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 8),
+              Text(error, style: TextStyle(color: Colors.red.shade700)),
+            ],
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton.icon(
+                key: const Key('save_caja_label_button'),
+                icon: const Icon(Icons.save_outlined),
+                label: const Text('Guardar Caja'),
+                onPressed: () => _save(viewModel),
+              ),
             ),
           ],
         ),

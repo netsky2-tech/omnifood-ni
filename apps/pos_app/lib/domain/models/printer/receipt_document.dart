@@ -3,6 +3,7 @@ import '../config/tax_regime.dart';
 import '../sales/invoice.dart';
 import '../sales/invoice_item.dart';
 import '../sales/payment.dart';
+import '../../services/sales/post_paid_feedback_service.dart';
 
 /// A customer-block value counts as a fact only when it is non-blank and is
 /// not the legacy 'N/A' placeholder (case-insensitive). This mirrors
@@ -221,6 +222,13 @@ class ReceiptDocument {
   final String? phone;
   final String? terminalId;
 
+  /// Operator-assigned cash-register label for THIS terminal (e.g. "1",
+  /// "BARRA"). Operational alias, NOT fiscal identity: [terminalId] stays the
+  /// technical device id (serial). Null/blank -> the receipt omits the Caja
+  /// line entirely, so an unlabelled terminal keeps printing exactly what it
+  /// printed before this field existed.
+  final String? cajaLabel;
+
   final String documentTitle;
   final String documentNumber;
   final DateTime date;
@@ -276,6 +284,20 @@ class ReceiptDocument {
   /// configured it — null prints nothing, never a placeholder.
   final String? fiscalAuthorizationNumber;
 
+  /// Voluntary tip snapshot captured at checkout (Batch 7 Slice 2). It is NOT
+  /// part of the fiscal total (DGI INV-16.1): it renders as its own
+  /// non-taxable block and never alters [total] or [totalUsd]. Zero when no
+  /// tip was selected — a zero tip prints nothing.
+  final double tipAmountNio;
+  final double tipAmountUsd;
+  final double? tipPercentage;
+
+  /// Post-paid loyalty feedback (points/stamps earned or redeemed). It is
+  /// presentation-only: it never affects fiscal figures. Null or without
+  /// content renders no loyalty block. It is available only at first issuance
+  /// because it is not persisted on the invoice.
+  final PostPaidFeedback? loyaltyFeedback;
+
   const ReceiptDocument({
     required this.businessName,
     this.legalName,
@@ -284,6 +306,7 @@ class ReceiptDocument {
     this.address,
     this.phone,
     this.terminalId,
+    this.cajaLabel,
     required this.documentTitle,
     required this.documentNumber,
     required this.date,
@@ -313,10 +336,24 @@ class ReceiptDocument {
     this.fiscalAuthorizationNumber,
     this.isReprint = false,
     this.reprintAt,
+    this.tipAmountNio = 0.0,
+    this.tipAmountUsd = 0.0,
+    this.tipPercentage,
+    this.loyaltyFeedback,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
   bool get isGlobalTaxExempt => isTaxExempt || globalTaxOverride;
+
+  /// True when a voluntary tip was captured. A zero tip is indistinguishable
+  /// from "no tip": neither prints a tip block.
+  bool get hasTip => tipAmountNio > 0;
+
+  /// Amount the customer actually pays: fiscal total + voluntary tip. The
+  /// payment breakdown is registered against this figure, so printing both
+  /// keeps the receipt internally consistent.
+  double get totalWithTipNio => total + tipAmountNio;
+  double get totalWithTipUsd => totalUsd + tipAmountUsd;
 
   /// REQ-8 (slice 8a): [_resolveDocTitle] maps InvoiceType.creditNote to this
   /// exact title, so the formatter can gate the origin-reference block on the
@@ -332,6 +369,7 @@ class ReceiptDocument {
         address: address,
         phone: phone,
         terminalId: terminalId,
+        cajaLabel: cajaLabel,
         documentTitle: documentTitle,
         documentNumber: documentNumber,
         date: date,
@@ -361,6 +399,10 @@ class ReceiptDocument {
         fiscalAuthorizationNumber: fiscalAuthorizationNumber,
         isReprint: isReprint,
         reprintAt: reprintAt,
+        tipAmountNio: tipAmountNio,
+        tipAmountUsd: tipAmountUsd,
+        tipPercentage: tipPercentage,
+        loyaltyFeedback: loyaltyFeedback,
       );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
@@ -377,6 +419,11 @@ class ReceiptDocument {
     String? address,
     String? phone,
     String? cashierName,
+
+    /// Operator-assigned cash-register label for THIS terminal (NHILOS
+    /// §45.1). Never the device serial: the serial is [Invoice.terminalId]
+    /// and stays off the paper. Blank -> no Caja line.
+    String? cajaLabel,
     String? customerName,
     String? customerRuc,
     required TaxRegime taxRegime,
@@ -387,6 +434,7 @@ class ReceiptDocument {
     bool isReprint = false,
     DateTime? reprintAt,
     String? originDocumentReference,
+    PostPaidFeedback? loyaltyFeedback,
   }) {
     final receiptLines = items
         .map((item) => ReceiptLine.fromInvoiceItem(item, taxRegime: taxRegime))
@@ -449,6 +497,9 @@ class ReceiptDocument {
       address: (address != null && address.trim().isNotEmpty) ? address.trim() : null,
       phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
       terminalId: invoice.terminalId,
+      cajaLabel: (cajaLabel != null && cajaLabel.trim().isNotEmpty)
+          ? cajaLabel.trim()
+          : null,
       documentTitle: docTitle,
       documentNumber: invoice.number,
       date: invoice.createdAt,
@@ -497,6 +548,13 @@ class ReceiptDocument {
               : null,
       isReprint: isReprint,
       reprintAt: reprintAt,
+      // Tip snapshot as issued: printed verbatim, never recomputed (DGI
+      // INV-16.1 — the tip is outside the taxable total). A null stored tip
+      // is the same absence as zero and prints nothing.
+      tipAmountNio: invoice.tipAmountNio ?? 0.0,
+      tipAmountUsd: invoice.tipAmountUsd ?? 0.0,
+      tipPercentage: invoice.tipPercentage,
+      loyaltyFeedback: loyaltyFeedback,
     );
   }
 

@@ -85,6 +85,7 @@ class IPosPrinterAdapter implements PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    String? cajaLabel,
     String? customerName,
     String? customerRuc,
     List<int>? logoRasterBytes,
@@ -114,53 +115,32 @@ class IPosPrinterAdapter implements PrinterPort {
     final formatter = ReceiptLayoutFormatter.fromPaperWidth(
       normalizedPaperWidthMm,
     );
-    final List<ReceiptTextRun> receiptRuns;
-    final String formattedText;
-    if (loyaltyFeedback?.hasContent ?? false) {
-      formattedText = formatter.formatInvoiceText(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: businessName,
-        legalName: legalName,
-        ruc: ruc,
-        address: address,
-        phone: phone,
-        cashierName: cashierName,
-        customerName: customerName,
-        customerRuc: customerRuc,
-        taxRegime: taxRegime,
-        isTaxExempt: isTaxExempt,
-        loyaltyFeedback: loyaltyFeedback,
-        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
-      );
-      // The legacy invoice adapter has no run segmentation: it always
-      // travels as a single normal-size payload (unchanged contract).
-      receiptRuns = [ReceiptTextRun(formattedText, ReceiptTextRunSize.normal)];
-    } else {
-      final document = ReceiptDocument.fromInvoice(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: businessName,
-        legalName: legalName,
-        ruc: ruc,
-        address: address,
-        phone: phone,
-        cashierName: cashierName,
-        customerName: customerName,
-        customerRuc: customerRuc,
-        taxRegime: taxRegime,
-        isTaxExempt: isTaxExempt,
-        logoRasterBytes: logoRasterBytes,
-        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
-        isReprint: isReprint,
-        reprintAt: reprintAt,
-        originDocumentReference: originDocumentReference,
-      );
-      receiptRuns = formatter.formatReceiptDocumentTextRuns(document);
-      formattedText = receiptRuns.map((run) => run.text).join();
-    }
+    // One canonical document for every sale: loyalty, tip, discounts and the
+    // reprint/void banners can never diverge by code path.
+    final document = ReceiptDocument.fromInvoice(
+      invoice,
+      items: items,
+      payments: payments,
+      businessName: businessName,
+      legalName: legalName,
+      ruc: ruc,
+      address: address,
+      phone: phone,
+      cashierName: cashierName,
+      cajaLabel: cajaLabel,
+      customerName: customerName,
+      customerRuc: customerRuc,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
+      logoRasterBytes: logoRasterBytes,
+      fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+      isReprint: isReprint,
+      reprintAt: reprintAt,
+      originDocumentReference: originDocumentReference,
+      loyaltyFeedback: loyaltyFeedback,
+    );
+    final receiptRuns = formatter.formatReceiptDocumentTextRuns(document);
+    final formattedText = receiptRuns.map((run) => run.text).join();
 
     try {
       // 1. If logo is provided, print it using native Nyx bitmap printing

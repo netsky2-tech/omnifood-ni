@@ -51,6 +51,17 @@ class PrinterConfigService {
   /// honoured at the moment the ticket is produced.
   static const String taxRegimeKey = 'tax_regime';
 
+  /// Operator-assigned cash-register label for THIS terminal (NHILOS §45.1),
+  /// e.g. "1", "BARRA", "MESA 3".
+  ///
+  /// NOT fiscal identity and NOT synced business profile: the fiscal identity
+  /// remains the device id ([TerminalIdentityService.localDeviceIdKey], the
+  /// hardware serial). This is a per-device operational alias so the paper and
+  /// the detail screen can say which point of sale issued the document.
+  /// Absent/blank means "not assigned" and the Caja line is omitted — never a
+  /// fabricated "CAJA 1".
+  static const String cajaLabelKey = 'terminal_caja_label';
+
   final LocalConfigDao _configDao;
   final StreamController<PrinterConfig> _configStreamController =
       StreamController<PrinterConfig>.broadcast();
@@ -92,6 +103,25 @@ class PrinterConfigService {
       key: paperWidthMmKey,
       value: paperWidthMm.toString(),
       description: 'Paper width in mm (58 or 80)',
+    ));
+  }
+
+  /// The operator-assigned Caja label for this terminal, or `null` when it
+  /// was never assigned (blank is treated as unassigned).
+  Future<String?> getCajaLabel() async {
+    final entity = await _configDao.getConfigByKey(cajaLabelKey);
+    final value = entity?.value.trim() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  /// Persists the Caja label. Blank/empty clears it (the receipt then omits
+  /// the line entirely, matching a terminal that never set one).
+  Future<void> saveCajaLabel(String? label) async {
+    final value = label?.trim() ?? '';
+    await _configDao.saveConfig(LocalConfigEntity(
+      key: cajaLabelKey,
+      value: value,
+      description: 'Etiqueta operativa de Caja para este terminal',
     ));
   }
 

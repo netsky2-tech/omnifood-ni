@@ -49,6 +49,12 @@ class _PrinterConfigServiceSpy implements PrinterConfigService {
   Future<String?> getTaxRegime() => _delegate.getTaxRegime();
 
   @override
+  Future<String?> getCajaLabel() => _delegate.getCajaLabel();
+
+  @override
+  Future<void> saveCajaLabel(String? label) => _delegate.saveCajaLabel(label);
+
+  @override
   Future<void> confirmPrinterProfile({
     required PrinterDriverType driverType,
     required int paperWidthMm,

@@ -256,6 +256,55 @@ void main() {
     );
   });
 
+  group('Caja label (NHILOS §45.1)', () {
+    test('loads the persisted label', () async {
+      when(() => printerConfigService.getCajaLabel())
+          .thenAnswer((_) async => 'BARRA');
+      final vm = buildViewModel();
+      await pumpEventLoop();
+      expect(vm.cajaLabel, 'BARRA');
+    });
+
+    test('save trims, persists and refreshes the loaded value', () async {
+      when(() => printerConfigService.saveCajaLabel(any()))
+          .thenAnswer((_) async {});
+      when(() => printerConfigService.getCajaLabel())
+          .thenAnswer((_) async => 'Caja 2');
+      final vm = buildViewModel();
+      await pumpEventLoop();
+
+      final ok = await vm.saveCajaLabel('  Caja 2  ');
+
+      expect(ok, isTrue);
+      expect(vm.cajaLabel, 'Caja 2');
+      expect(vm.cajaLabelError, isNull);
+      verify(() => printerConfigService.saveCajaLabel('  Caja 2  ')).called(1);
+    });
+
+    test('a failed save surfaces an error and never crashes', () async {
+      when(() => printerConfigService.saveCajaLabel(any()))
+          .thenThrow(Exception('disk'));
+      final vm = buildViewModel();
+      await pumpEventLoop();
+
+      final ok = await vm.saveCajaLabel('1');
+
+      expect(ok, isFalse);
+      expect(vm.cajaLabelError, contains('Error al guardar la Caja'));
+    });
+
+    test('an unreadable label never breaks the identity load', () async {
+      when(() => printerConfigService.getCajaLabel())
+          .thenThrow(Exception('disk'));
+      final vm = buildViewModel(persistedValue: 'POS-01');
+      await pumpEventLoop();
+
+      expect(vm.errorMessage, isNull);
+      expect(vm.terminalId, 'POS-01');
+      expect(vm.cajaLabel, isNull);
+    });
+  });
+
   group('TerminalIdentityViewModel server-URL rejection copy', () {
     test(
       'the notAbsolute rejection example names the official API host, not a staging host',

@@ -724,6 +724,21 @@ class InvoiceDetailsPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text('Fecha: ${DateFormat('dd/MM/yyyy HH:mm').format(invoice.createdAt)}'),
+          // NHILOS §24.2/§45.1: the detail mirrors the paper line by line.
+          // The Caja is the operator-assigned alias for THIS terminal (never
+          // the serial); unassigned prints nothing on paper, so nothing is
+          // shown here either.
+          Builder(
+            builder: (context) {
+              final cajaLabel = context.select<SaleViewModel, String?>(
+                (vm) => vm.terminalCajaLabel,
+              );
+              if (cajaLabel == null || cajaLabel.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return Text('Caja: $cajaLabel');
+            },
+          ),
           // D-14: the operator's name, resolved from the view model's
           // id→name map — never the device-observed UUID.
           Text('Usuario: ${viewModel.userNameFor(invoice.userId)}'),
@@ -799,15 +814,23 @@ class InvoiceDetailsPanel extends StatelessWidget {
                           ?.isCuotaFija !=
                       true)
                     _detailSummaryRow('IVA:', invoice.totalTax),
-                  if (totals.tip > 0) _detailSummaryRow('Propina:', totals.tip),
+                  // NHILOS §24.2: the detail must be 1:1 with the paper. The
+                  // paper prints TOTAL CORDOBAS (fiscal), then PROPINA, then
+                  // TOTAL A PAGAR = fiscal + tip. The tip is voluntary and
+                  // never part of the taxable `invoice.total`.
+                  if (totals.tip > 0) ...[
+                    _detailSummaryRow('TOTAL CORDOBAS:', invoice.total),
+                    _detailSummaryRow('Propina:', totals.tip),
+                  ],
                   const SizedBox(height: 6),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('TOTAL:',
-                          style: TextStyle(
+                      Text(totals.tip > 0 ? 'TOTAL A PAGAR:' : 'TOTAL:',
+                          style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 20)),
-                      Text('C\$ ${invoice.total.toStringAsFixed(2)}',
+                      Text(
+                          'C\$ ${(invoice.total + totals.tip).toStringAsFixed(2)}',
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 20,

@@ -54,6 +54,7 @@ class MockPrinterAdapter implements PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    String? cajaLabel,
     String? customerName,
     String? customerRuc,
     List<int>? logoRasterBytes,
@@ -88,68 +89,32 @@ class MockPrinterAdapter implements PrinterPort {
     }
 
     final layoutFormatter = ReceiptLayoutFormatter.fromPaperWidth(paperWidthMm);
-    final String text;
-    final List<int> bytes;
-    if (loyaltyFeedback?.hasContent ?? false) {
-      text = layoutFormatter.formatInvoiceText(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: businessName,
-        legalName: legalName,
-        ruc: ruc,
-        address: address,
-        phone: phone,
-        cashierName: cashierName,
-        customerName: customerName,
-        customerRuc: customerRuc,
-        taxRegime: taxRegime,
-        isTaxExempt: isTaxExempt,
-        loyaltyFeedback: loyaltyFeedback,
-        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
-      );
-      bytes = layoutFormatter.formatInvoiceEscPos(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: businessName,
-        legalName: legalName,
-        ruc: ruc,
-        address: address,
-        phone: phone,
-        cashierName: cashierName,
-        customerName: customerName,
-        customerRuc: customerRuc,
-        taxRegime: taxRegime,
-        isTaxExempt: isTaxExempt,
-        logoRasterBytes: logoRasterBytes,
-        loyaltyFeedback: loyaltyFeedback,
-        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
-      );
-    } else {
-      final document = ReceiptDocument.fromInvoice(
-        invoice,
-        items: items,
-        payments: payments,
-        businessName: businessName,
-        legalName: legalName,
-        ruc: ruc,
-        address: address,
-        phone: phone,
-        cashierName: cashierName,
-        customerName: customerName,
-        customerRuc: customerRuc,
-        taxRegime: taxRegime,
-        isTaxExempt: isTaxExempt,
-        logoRasterBytes: logoRasterBytes,
-        fiscalAuthorizationNumber: fiscalAuthorizationNumber,
-        isReprint: isReprint,
-        reprintAt: reprintAt,
-        originDocumentReference: originDocumentReference,
-      );
-      text = layoutFormatter.formatReceiptDocumentText(document);
-      bytes = layoutFormatter.formatReceiptDocumentEscPos(document);
-    }
+    // One canonical document for every sale: loyalty, tip, discounts and the
+    // reprint/void banners can never diverge by code path.
+    final document = ReceiptDocument.fromInvoice(
+      invoice,
+      items: items,
+      payments: payments,
+      businessName: businessName,
+      legalName: legalName,
+      ruc: ruc,
+      address: address,
+      phone: phone,
+      cashierName: cashierName,
+      cajaLabel: cajaLabel,
+      customerName: customerName,
+      customerRuc: customerRuc,
+      taxRegime: taxRegime,
+      isTaxExempt: isTaxExempt,
+      logoRasterBytes: logoRasterBytes,
+      fiscalAuthorizationNumber: fiscalAuthorizationNumber,
+      isReprint: isReprint,
+      reprintAt: reprintAt,
+      originDocumentReference: originDocumentReference,
+      loyaltyFeedback: loyaltyFeedback,
+    );
+    final text = layoutFormatter.formatReceiptDocumentText(document);
+    final bytes = layoutFormatter.formatReceiptDocumentEscPos(document);
 
     lastPrintedText = text;
     lastPrintedBytes = bytes;

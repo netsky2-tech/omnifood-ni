@@ -22,6 +22,46 @@ void main() {
     service.dispose();
   });
 
+  group('Caja label (NHILOS §45.1)', () {
+    test('unassigned returns null (never a fabricated default)', () async {
+      when(mockDao.getConfigByKey(PrinterConfigService.cajaLabelKey))
+          .thenAnswer((_) async => null);
+      expect(await service.getCajaLabel(), isNull);
+    });
+
+    test('a whitespace-only row is treated as unassigned', () async {
+      when(mockDao.getConfigByKey(PrinterConfigService.cajaLabelKey))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'terminal_caja_label', value: '   '));
+      expect(await service.getCajaLabel(), isNull);
+    });
+
+    test('a persisted label is trimmed and returned', () async {
+      when(mockDao.getConfigByKey(PrinterConfigService.cajaLabelKey))
+          .thenAnswer((_) async => LocalConfigEntity(
+                key: 'terminal_caja_label', value: '  BARRA  '));
+      expect(await service.getCajaLabel(), 'BARRA');
+    });
+
+    test('saving trims the value and persists under the documented key',
+        () async {
+      when(mockDao.saveConfig(any)).thenAnswer((_) async {});
+      await service.saveCajaLabel('  Caja 2  ');
+      final saved = verify(mockDao.saveConfig(captureAny)).captured.single
+          as LocalConfigEntity;
+      expect(saved.key, PrinterConfigService.cajaLabelKey);
+      expect(saved.value, 'Caja 2');
+    });
+
+    test('saving blank clears the label', () async {
+      when(mockDao.saveConfig(any)).thenAnswer((_) async {});
+      await service.saveCajaLabel('   ');
+      final saved = verify(mockDao.saveConfig(captureAny)).captured.single
+          as LocalConfigEntity;
+      expect(saved.value, isEmpty);
+    });
+  });
+
   group('PrinterConfigService Tests', () {
     test('returns default configuration when local_configs is empty', () async {
       when(mockDao.getConfigByKey(any)).thenAnswer((_) async => null);

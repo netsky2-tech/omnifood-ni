@@ -62,6 +62,8 @@ class TerminalIdentityViewModel extends ChangeNotifier {
   String? _errorMessage;
   ApiBaseUrlResolution? _serverResolution;
   String? _serverErrorMessage;
+  String? _cajaLabel;
+  String? _cajaLabelError;
 
   /// Canonical terminal id persisted on this device, or `null` when the
   /// terminal has no identity yet.
@@ -103,6 +105,14 @@ class TerminalIdentityViewModel extends ChangeNotifier {
   /// or of the server configuration read. Null when the last action succeeded.
   String? get serverErrorMessage => _serverErrorMessage;
 
+  /// Operator-assigned Caja label for THIS terminal (NHILOS §45.1), or null
+  /// when unassigned. Operational alias only — the fiscal identity remains
+  /// [terminalId] (the device serial) and the serial is never printed.
+  String? get cajaLabel => _cajaLabel;
+
+  /// Failure of the last Caja-label save, or null when it succeeded.
+  String? get cajaLabelError => _cajaLabelError;
+
   /// Loads the persisted identity, the printer profile, and the server URL
   /// resolution. Read failures surface an error message; they never crash.
   Future<void> load() async {
@@ -128,6 +138,13 @@ class TerminalIdentityViewModel extends ChangeNotifier {
       final printerConfig = await _printerConfigService.getPrinterConfig();
       _printerDriverLabel = driverLabelFor(printerConfig.driverType);
       _paperWidthMm = printerConfig.paperWidthMm;
+      // Optional display label: a read failure must never break the identity
+      // surface. Unreadable = unassigned (the ticket omits the line).
+      try {
+        _cajaLabel = await _printerConfigService.getCajaLabel();
+      } catch (_) {
+        _cajaLabel = null;
+      }
 
       _serverResolution = await _apiBaseUrlService
           .resolve(buildTimeApiUrl: _buildTimeApiUrl);
@@ -136,6 +153,23 @@ class TerminalIdentityViewModel extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Persists the operator-assigned Caja label. Blank clears it — the receipt
+  /// then omits the line entirely (never a fabricated default). A failure
+  /// never crashes the view.
+  Future<bool> saveCajaLabel(String label) async {
+    try {
+      await _printerConfigService.saveCajaLabel(label);
+      _cajaLabel = await _printerConfigService.getCajaLabel();
+      _cajaLabelError = null;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _cajaLabelError = 'Error al guardar la Caja: $e';
+      notifyListeners();
+      return false;
     }
   }
 

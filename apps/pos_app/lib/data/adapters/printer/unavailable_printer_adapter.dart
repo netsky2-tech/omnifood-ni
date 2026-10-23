@@ -51,6 +51,7 @@ class UnavailablePrinterAdapter implements PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+    String? cajaLabel,
     String? customerName,
     String? customerRuc,
     List<int>? logoRasterBytes,

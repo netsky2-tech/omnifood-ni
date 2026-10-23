@@ -885,6 +885,26 @@ class SaleViewModel extends ChangeNotifier {
 
   bool _taxRegimeOverrideActive = false;
 
+  /// Operator-assigned Caja label for THIS terminal (NHILOS §45.1). Loaded
+  /// from local config so the sales-history detail can mirror the paper 1:1
+  /// (§24.2). Null when unassigned — the surfaces omit the line instead of
+  /// inventing one. Never the device serial.
+  String? _terminalCajaLabel;
+  String? get terminalCajaLabel => _terminalCajaLabel;
+
+  /// Re-reads the Caja label after the operator edits it. Keeps the detail
+  /// screen (§24.2) and the paper in sync without restarting the app.
+  Future<void> refreshTerminalCajaLabel() async {
+    // Display-only alias: an unreadable label is "unassigned", never an
+    // error that could block the screen or a sale.
+    try {
+      _terminalCajaLabel = await _printerConfigService.getCajaLabel();
+    } catch (_) {
+      _terminalCajaLabel = null;
+    }
+    notifyListeners();
+  }
+
   void setCompanyTaxRegime(TaxRegime? regime) {
     _taxRegimeOverrideActive = true;
     _companyTaxRegime = regime;
@@ -1716,6 +1736,11 @@ class SaleViewModel extends ChangeNotifier {
 
   Future<void> checkActiveSession() async {
     await loadCompanyTaxRegime();
+    try {
+      _terminalCajaLabel = await _printerConfigService.getCajaLabel();
+    } catch (_) {
+      _terminalCajaLabel = null;
+    }
     // Issue #552: the open-session lookup is scoped to BOTH the acting user
     // and the terminal — the same two values openSession/checkout stamp.
     // The topology-blind getActiveSession() would bind a cashier to another
@@ -2598,6 +2623,16 @@ class SaleViewModel extends ChangeNotifier {
   }) async {
     try {
       final config = await _printerConfigService.getPrinterConfig();
+      // NHILOS §45.1: the Caja is an operator-assigned alias for THIS
+      // terminal, read live (like the logo/paper width). Unset -> the print
+      // path passes null and the renderer omits the line entirely.
+      String? cajaLabel;
+      try {
+        cajaLabel = await _printerConfigService.getCajaLabel();
+      } catch (_) {
+        // A missing label must never block a committed sale from printing.
+        cajaLabel = null;
+      }
       final items = await _database.invoiceItemDao.getItemsByInvoiceId(
         invoice.id,
       );
@@ -2727,6 +2762,7 @@ class SaleViewModel extends ChangeNotifier {
         address: fromSnapshot ? fiscalHeader['address'] : config.headerAddress,
         phone: fromSnapshot ? fiscalHeader['phone'] : config.headerPhone,
         cashierName: cashierName,
+        cajaLabel: cajaLabel,
         logoRasterBytes: logoRasterBytes,
         taxRegime: effectiveRegime,
         isTaxExempt: invoice.globalTaxOverride,

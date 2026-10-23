@@ -418,6 +418,13 @@ class InvoiceFiscalCalculator {
     /// the document (DT 09-2007 QUINTO). Null when unconfigured — null
     /// renders nothing on paper, never a placeholder.
     String? fiscalAuthorizationNumber,
+
+    /// Voluntary tip snapshot (Batch 7 Slice 2). Outside the taxable total
+    /// (DGI INV-16.1); rendered as its own non-taxable block. Defaults to no
+    /// tip, so existing callers keep printing the exact same document.
+    double tipAmountNio = 0.0,
+    double tipAmountUsd = 0.0,
+    double? tipPercentage,
   }) {
     final effectivePayments = <ReceiptPayment>[];
     if (payments != null && payments.isNotEmpty) {
@@ -516,6 +523,9 @@ class InvoiceFiscalCalculator {
           (fiscalAuthorizationNumber != null && fiscalAuthorizationNumber.trim().isNotEmpty)
               ? fiscalAuthorizationNumber.trim()
               : null,
+      tipAmountNio: tipAmountNio,
+      tipAmountUsd: tipAmountUsd,
+      tipPercentage: tipPercentage,
     );
   }
 }

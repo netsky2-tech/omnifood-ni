@@ -64,6 +64,12 @@ abstract class PrinterPort {
     String? address,
     String? phone,
     String? cashierName,
+
+    /// Operator-assigned cash-register label for THIS terminal (NHILOS
+    /// §45.1). Operational alias only — the device serial stays in
+    /// [Invoice.terminalId] and is never printed. Blank -> no Caja line, so
+    /// unlabelled terminals keep the exact prior output.
+    String? cajaLabel,
     String? customerName,
     String? customerRuc,
     List<int>? logoRasterBytes,
