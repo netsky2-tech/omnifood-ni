@@ -587,12 +587,30 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as _i15.Future<List<_i6.Customer>>);
 
   @override
+  _i15.Future<List<_i6.Customer>> loadMoreCustomers({
+    required int? offset,
+    int? limit = 50,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #loadMoreCustomers,
+          [],
+          {
+            #offset: offset,
+            #limit: limit,
+          },
+        ),
+        returnValue: _i15.Future<List<_i6.Customer>>.value(<_i6.Customer>[]),
+      ) as _i15.Future<List<_i6.Customer>>);
+
+  @override
   _i15.Future<_i6.Customer> createExpressCustomer({
     required String? name,
     String? taxId,
     String? phone,
     String? email,
     String? address,
+    String? customerType,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -604,6 +622,7 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
             #phone: phone,
             #email: email,
             #address: address,
+            #customerType: customerType,
           },
         ),
         returnValue: _i15.Future<_i6.Customer>.value(_FakeCustomer_4(
@@ -617,6 +636,7 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
               #phone: phone,
               #email: email,
               #address: address,
+              #customerType: customerType,
             },
           ),
         )),

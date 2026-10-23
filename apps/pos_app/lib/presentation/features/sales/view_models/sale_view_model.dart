@@ -754,15 +754,35 @@ class SaleViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Page size for the customer picker's default (unfiltered) list.
+  ///
+  /// The picker must never materialize the whole customer table: on a busy
+  /// tenant that means loading and mapping thousands of rows on the UI
+  /// isolate before the first frame (NHILOS §15). It loads one page at a
+  /// time and appends on scroll.
+  static const int customerListPageSize = 50;
+
   Future<List<Customer>> searchCustomers(String query) async {
     if (query.trim().isEmpty) {
-      final entities = await _database.customerDao.getAllCustomers();
-      return entities.map(CustomerMapper.toDomain).toList();
+      return loadMoreCustomers(offset: 0);
     }
     final entities = await _database.customerDao.searchCustomers(
       query.trim(),
       20,
     );
+    return entities.map(CustomerMapper.toDomain).toList();
+  }
+
+  /// Loads the next page of active customers ordered by name.
+  ///
+  /// [offset] is the number of rows already rendered. Returns an empty list
+  /// when the table is exhausted, which lets the picker stop paging.
+  Future<List<Customer>> loadMoreCustomers({
+    required int offset,
+    int limit = customerListPageSize,
+  }) async {
+    final entities =
+        await _database.customerDao.getCustomersPage(limit, offset);
     return entities.map(CustomerMapper.toDomain).toList();
   }
 
@@ -772,6 +792,7 @@ class SaleViewModel extends ChangeNotifier {
     String? phone,
     String? email,
     String? address,
+    String? customerType,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final id = const Uuid().v4();
@@ -791,6 +812,10 @@ class SaleViewModel extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
+      customerType:
+          customerType == 'EMPRESA' || customerType == 'PERSONA'
+              ? customerType
+              : null,
     );
     await _database.customerDao.saveCustomer(entity);
     final domain = CustomerMapper.toDomain(entity);

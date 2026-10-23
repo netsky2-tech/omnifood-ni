@@ -36,7 +36,9 @@ function makeDataSource(customersRepo: RepoStub): {
   return { dataSource, manager };
 }
 
-function sampleCustomer(overrides: Partial<CustomerSyncItemDto> = {}): CustomerSyncItemDto {
+function sampleCustomer(
+  overrides: Partial<CustomerSyncItemDto> = {},
+): CustomerSyncItemDto {
   return {
     id: 'cust-uuid-1',
     name: 'Juan Perez',
@@ -67,9 +69,7 @@ describe('CustomerSyncIngestionService', () => {
       customers: [item],
     });
 
-    expect(result.results).toEqual([
-      { id: 'cust-uuid-1', status: 'ACCEPTED' },
-    ]);
+    expect(result.results).toEqual([{ id: 'cust-uuid-1', status: 'ACCEPTED' }]);
     expect(customers.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'cust-uuid-1',
@@ -81,6 +81,39 @@ describe('CustomerSyncIngestionService', () => {
         address: 'Managua, Nicaragua',
         is_active: true,
       }),
+      ['id'],
+    );
+  });
+
+  it('persists customerType EMPRESA from the terminal (#952)', async () => {
+    await service.ingestCustomerBatch('tenant-1', {
+      customers: [sampleCustomer({ customerType: 'EMPRESA' })],
+    });
+
+    expect(customers.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ customer_type: 'EMPRESA' }),
+      ['id'],
+    );
+  });
+
+  it('accepts snake_case customer_type and normalizes PERSONA (#952)', async () => {
+    await service.ingestCustomerBatch('tenant-1', {
+      customers: [sampleCustomer({ customer_type: 'PERSONA' })],
+    });
+
+    expect(customers.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ customer_type: 'PERSONA' }),
+      ['id'],
+    );
+  });
+
+  it('ignores an invalid customerType value (#952)', async () => {
+    await service.ingestCustomerBatch('tenant-1', {
+      customers: [sampleCustomer({ customerType: 'SOCIEDAD' })],
+    });
+
+    expect(customers.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ customer_type: null }),
       ['id'],
     );
   });

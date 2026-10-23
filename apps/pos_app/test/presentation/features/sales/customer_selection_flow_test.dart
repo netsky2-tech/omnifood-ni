@@ -6,6 +6,7 @@ import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/sales/promotion_entity.dart';
 import 'package:pos_app/domain/models/sales/promotion.dart';
+import 'package:pos_app/data/models/customer/customer_entity.dart';
 import 'package:pos_app/domain/models/customer/customer.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/presentation/features/sales/widgets/customer_select_dialog.dart';
@@ -128,6 +129,7 @@ class MockableSaleViewModel extends ChangeNotifier implements SaleViewModel {
     String? phone,
     String? email,
     String? address,
+    String? customerType,
   }) async {
     final customer = Customer(
       id: 'c-new',
@@ -136,6 +138,7 @@ class MockableSaleViewModel extends ChangeNotifier implements SaleViewModel {
       phone: phone,
       email: email,
       address: address,
+      customerType: customerType,
     );
     _mockCustomers.add(customer);
     selectCustomer(customer);
@@ -210,6 +213,38 @@ void main() {
       expect(dbCustomer!.name, equals('Pedro Solís'));
     });
 
+    test('persiste customerType EMPRESA y PERSONA en SQLite (#952)', () async {
+      final empresa = await viewModel.createExpressCustomer(
+        name: 'Distribuidora Central S.A.',
+        taxId: 'J0310000000888',
+        customerType: 'EMPRESA',
+      );
+      final persona = await viewModel.createExpressCustomer(
+        name: 'Pedro Solís',
+        customerType: 'PERSONA',
+      );
+
+      expect(empresa.customerType, equals('EMPRESA'));
+      expect(persona.customerType, equals('PERSONA'));
+
+      final dbEmpresa =
+          await database.customerDao.getCustomerById(empresa.id);
+      final dbPersona =
+          await database.customerDao.getCustomerById(persona.id);
+      expect(dbEmpresa?.customerType, equals('EMPRESA'));
+      expect(dbPersona?.customerType, equals('PERSONA'));
+    });
+
+    test('cliente sin tipo queda como legacy (null = PERSONA) (#952)', () async {
+      final customer = await viewModel.createExpressCustomer(
+        name: 'Cliente Antiguo',
+      );
+
+      expect(customer.customerType, isNull);
+      final dbCustomer = await database.customerDao.getCustomerById(customer.id);
+      expect(dbCustomer?.customerType, isNull);
+    });
+
     test('búsqueda predictiva en base de datos local SQLite', () async {
       await viewModel.createExpressCustomer(
         name: 'Carlos Ruiz',
@@ -225,6 +260,46 @@ void main() {
       final searchResults = await viewModel.searchCustomers('María');
       expect(searchResults.length, equals(1));
       expect(searchResults.first.name, equals('María Fernández'));
+    });
+
+    test('la lista inicial se pagina y no materializa toda la tabla (§15)',
+        () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await database.customerDao.saveCustomers(
+        List<CustomerEntity>.generate(
+          120,
+          (i) => CustomerEntity(
+            id: 'page-$i',
+            name: 'Cliente ${i.toString().padLeft(3, '0')}',
+            pointsBalance: 0.0,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+            syncStatus: 'synced',
+          ),
+        ),
+      );
+
+      final page1 = await viewModel.searchCustomers('');
+      expect(page1.length, SaleViewModel.customerListPageSize);
+      expect(page1.first.name, 'Cliente 000');
+
+      final page2 =
+          await viewModel.loadMoreCustomers(offset: page1.length);
+      expect(page2.length, SaleViewModel.customerListPageSize);
+
+      final page3 = await viewModel.loadMoreCustomers(offset: 100);
+      expect(page3.length, 20);
+
+      final page4 = await viewModel.loadMoreCustomers(offset: 120);
+      expect(page4, isEmpty);
+
+      final ids = <String>{
+        ...page1.map((c) => c.id),
+        ...page2.map((c) => c.id),
+        ...page3.map((c) => c.id),
+      };
+      expect(ids.length, 120, reason: 'páginas sin solapamiento ni huecos');
     });
 
     test('asocia el customerId a la Factura generada durante processSale', () async {
@@ -288,11 +363,10 @@ void main() {
 
       // Buscar "Lucía" in the search field (not the customer code input)
       await tester.enterText(
-        find.byWidgetPredicate((widget) {
-          return widget is TextField && widget.decoration?.hintText?.contains('Buscar por Nombre') == true;
-        }),
+        find.byKey(const Key('customer_search_input')),
         'Lucía',
       );
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
 
       expect(find.text('Lucía Méndez'), findsOneWidget);
@@ -305,46 +379,6 @@ void main() {
       // Diálogo se cierra y cliente queda seleccionado en ViewModel
       expect(mockViewModel.selectedCustomer?.name, equals('Lucía Méndez'));
       expect(mockViewModel.selectedCustomer?.id, equals('c-1'));
-    });
-
-    testWidgets('lays out on a phone-sized surface with the app-wide ElevatedButton theme', (tester) async {
-      // Regression: the app theme sets `minimumSize: Size.fromHeight(48)`
-      // (infinite width). Inside the dialog the "Nuevo" button sits in a Row
-      // with unbounded width, so an unclamped infinite minimum aborted layout
-      // of the whole body: the dialog painted nothing on device while widget
-      // tests with the default theme stayed green.
-      tester.view.physicalSize = const Size(1080, 2316);
-      tester.view.devicePixelRatio = 2.8;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData(
-            useMaterial3: true,
-            elevatedButtonTheme: ElevatedButtonThemeData(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-            ),
-          ),
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => CustomerSelectDialog.show(context, mockViewModel),
-                child: const Text('ABRIR DIALOGO'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('ABRIR DIALOGO'));
-      await tester.pumpAndSettle();
-
-      expect(tester.takeException(), isNull);
-      expect(find.text('Seleccionar Cliente'), findsOneWidget);
-      expect(find.text('Nuevo'), findsOneWidget);
-      expect(find.text('Lucía Méndez'), findsOneWidget);
     });
 
     testWidgets('valida RUC/Cédula en caliente y crea cliente express desde el modal', (tester) async {
@@ -394,8 +428,45 @@ void main() {
       expect(mockViewModel.selectedCustomer, isNotNull);
       expect(mockViewModel.selectedCustomer!.name, equals('Farmacia San Rafael'));
     });
-  });
+    testWidgets('lays out on a phone-sized surface with the app-wide ElevatedButton theme', (tester) async {
+      // Regression: the app theme sets `minimumSize: Size.fromHeight(48)`
+      // (infinite width). Inside the dialog the "Nuevo" button sits in a Row
+      // with unbounded width, so an unclamped infinite minimum aborted layout
+      // of the whole body: the dialog painted nothing on device while widget
+      // tests with the default theme stayed green.
+      tester.view.physicalSize = const Size(1080, 2316);
+      tester.view.devicePixelRatio = 2.8;
+      addTearDown(tester.view.reset);
 
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(
+            useMaterial3: true,
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+            ),
+          ),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, mockViewModel),
+                child: const Text('ABRIR DIALOGO'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('ABRIR DIALOGO'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Seleccionar Cliente'), findsOneWidget);
+      expect(find.text('Nuevo'), findsOneWidget);
+      expect(find.text('Lucía Méndez'), findsOneWidget);
+    });
   group('Convenio discount lifecycle (SQLite Real)', () {
     late AppDatabase database;
     late SaleViewModel viewModel;
@@ -544,5 +615,5 @@ void main() {
       // 10% + 20% of 50 = 15.
       expect(viewModel.promoDiscounts, 15.0);
     });
-  });
+  });  });
 }

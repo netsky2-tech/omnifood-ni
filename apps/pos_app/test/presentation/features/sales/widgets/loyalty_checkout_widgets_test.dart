@@ -58,6 +58,7 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
     String? phone,
     String? email,
     String? address,
+    String? customerType,
   }) async {
     final customer = Customer(
       id: 'c-new',
@@ -66,6 +67,7 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
       phone: phone,
       email: email,
       address: address,
+      customerType: customerType,
     );
     await selectCustomer(customer);
     return customer;

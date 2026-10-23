@@ -30,6 +30,9 @@ class CustomerEntity {
   @ColumnInfo(name: 'customer_code')
   final String? customerCode;
 
+  @ColumnInfo(name: 'customer_type')
+  final String? customerType;
+
   CustomerEntity({
     required this.id,
     required this.name,
@@ -43,5 +46,6 @@ class CustomerEntity {
     required this.updatedAt,
     this.syncStatus = 'synced',
     this.customerCode,
+    this.customerType,
   });
 }

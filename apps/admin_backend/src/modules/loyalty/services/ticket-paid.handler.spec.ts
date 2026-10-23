@@ -142,6 +142,48 @@ describe('TicketPaidHandler', () => {
     expect(mockLedgerService.appendTransaction).toHaveBeenCalledTimes(1);
   });
 
+  it('does NOT accumulate for an EMPRESA customer (#952)', async () => {
+    mgrCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+      customer_type: 'EMPRESA',
+    });
+    mgrProgramRepo.find.mockResolvedValue([makeProgram()]);
+
+    const result = await handler.handle(makeSnapshot());
+
+    expect(result).toEqual([]);
+    expect(mockLedgerService.appendTransaction).not.toHaveBeenCalled();
+  });
+
+  it('accumulates normally for a PERSONA customer (#952)', async () => {
+    mgrCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+      customer_type: 'PERSONA',
+    });
+    mgrProgramRepo.find.mockResolvedValue([makeProgram()]);
+
+    const result = await handler.handle(makeSnapshot());
+
+    expect(result).toHaveLength(1);
+    expect(mockLedgerService.appendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('accumulates for a legacy customer with no customer_type (#952)', async () => {
+    mgrCustomerRepo.findOne.mockResolvedValue({
+      id: 'cust-1',
+      is_active: true,
+      customer_type: null,
+    });
+    mgrProgramRepo.find.mockResolvedValue([makeProgram()]);
+
+    const result = await handler.handle(makeSnapshot());
+
+    expect(result).toHaveLength(1);
+    expect(mockLedgerService.appendTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it('generates EARN for multiple programs', async () => {
     mgrCustomerRepo.findOne.mockResolvedValue({
       id: 'cust-1',

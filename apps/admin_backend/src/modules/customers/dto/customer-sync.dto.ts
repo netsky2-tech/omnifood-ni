@@ -46,6 +46,14 @@ export class CustomerSyncItemDto {
 
   @IsOptional()
   @IsString()
+  customerType?: string;
+
+  @IsOptional()
+  @IsString()
+  customer_type?: string;
+
+  @IsOptional()
+  @IsString()
   createdAt?: string;
 
   @IsOptional()

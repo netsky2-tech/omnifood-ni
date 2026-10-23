@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -39,13 +41,22 @@ class CustomerSelectDialog extends StatefulWidget {
 }
 
 class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
+  static const int _pageSize = SaleViewModel.customerListPageSize;
+  static const Duration _searchDebounceDuration = Duration(milliseconds: 250);
+
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _codeController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  Timer? _searchDebounce;
   List<Customer> _searchResults = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
   bool _isCreatingNew = false;
+  String _activeQuery = '';
   String? _identificationError;
-  String? _customerType; // 'PERSONA' | 'EMPRESA', null = PERSONA por defecto
+  // Governed value (NHILOS §17.5). Explicit default so the operator always
+  // knows what is stored; EMPRESA is the only type that skips loyalty.
+  String _customerType = 'PERSONA';
 
   // New Customer Form Controllers
   final TextEditingController _nameController = TextEditingController();
@@ -55,18 +66,21 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   final TextEditingController _addressController = TextEditingController();
 
   String? _taxIdError;
+  String? _nameError;
   String? _formError;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onListScroll);
     _loadInitialCustomers();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _scrollController.dispose();
     _searchController.dispose();
-    _codeController.dispose();
     _nameController.dispose();
     _taxIdController.dispose();
     _phoneController.dispose();
@@ -78,10 +92,15 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   Future<void> _loadInitialCustomers() async {
     try {
       final results = await widget.viewModel.searchCustomers('');
-      if (mounted) {
+      // A fast operator may already be typing; never let the empty-query
+      // page overwrite a live search.
+      if (mounted && _activeQuery.isEmpty) {
         setState(() {
           _searchResults = results;
           _isLoading = false;
+          // A full page means the table may hold more; the scroll listener
+          // fetches the next one instead of materializing everything now.
+          _hasMore = results.length >= _pageSize;
         });
       }
     } catch (_) {
@@ -91,26 +110,83 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
     }
   }
 
-  Future<void> _onSearchChanged(String query) async {
-    setState(() => _isLoading = true);
+  /// Debounces the live search so a fast typist does not fire one SQLite
+  /// query per keystroke (NHILOS §13 feedback stays immediate via the field,
+  /// results settle 250 ms after the last key).
+  void _onSearchChanged(String query) {
+    // Rebuild immediately so the clear/identify affordances track the text.
+    setState(() {});
+    _activeQuery = query;
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(_searchDebounceDuration, () => _runSearch(query));
+  }
+
+  Future<void> _runSearch(String query) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _identificationError = null;
+    });
     try {
       final results = await widget.viewModel.searchCustomers(query);
-      if (mounted) {
-        setState(() {
-          _searchResults = results;
-          _isLoading = false;
-        });
-      }
+      if (!mounted || _activeQuery != query) return;
+      setState(() {
+        _searchResults = results;
+        _isLoading = false;
+        _hasMore = query.trim().isEmpty && results.length >= _pageSize;
+      });
     } catch (_) {
-      if (mounted) {
+      if (mounted && _activeQuery == query) {
         setState(() => _isLoading = false);
       }
     }
   }
 
-  Future<void> _onCodeSubmitted() async {
-    final code = _codeController.text.trim();
-    if (code.isEmpty) return;
+  void _onListScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore || _activeQuery.trim().isNotEmpty) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final next = await widget.viewModel.loadMoreCustomers(
+        offset: _searchResults.length,
+      );
+      if (!mounted) return;
+      setState(() {
+        _searchResults = [..._searchResults, ...next];
+        _hasMore = next.length >= _pageSize;
+        _isLoadingMore = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isLoadingMore = false);
+    }
+  }
+
+  void _clearSearch() {
+    _searchDebounce?.cancel();
+    _searchController.clear();
+    _activeQuery = '';
+    setState(() => _identificationError = null);
+    _runSearch('');
+  }
+
+  /// Exact identification from the single unified input (NHILOS §13: the
+  /// operator searches by the field they know — name, phone, cédula or code).
+  /// Typing already filters the list; submitting/scanning additionally asks
+  /// the identification adapters for an exact customer code / QR match.
+  Future<void> _onIdentifySubmitted() async {
+    final input = _searchController.text.trim();
+    if (input.isEmpty) return;
+
+    // A pending debounce must not overwrite the identification outcome.
+    _searchDebounce?.cancel();
+    _activeQuery = input;
 
     setState(() {
       _isLoading = true;
@@ -118,7 +194,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
     });
 
     try {
-      final customer = await widget.viewModel.identifyCustomer(code);
+      final customer = await widget.viewModel.identifyCustomer(input);
       if (mounted) {
         if (customer != null) {
           // identifyCustomer already selects the customer internally
@@ -126,9 +202,19 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
           // selectCustomer call here would re-run loyalty evaluation twice.
           Navigator.of(context).pop(customer);
         } else {
+          // The identification adapters only know exact codes/phones; fall
+          // back to the text search so the list can still show candidates.
+          final fallback = await widget.viewModel.searchCustomers(input);
+          if (!mounted) return;
           setState(() {
-            _identificationError = 'Cliente no encontrado con ese código';
             _isLoading = false;
+            _searchResults = fallback;
+            _hasMore = false;
+            // If the live search shows candidates, the list is the feedback;
+            // only surface an error when there is nothing to tap.
+            _identificationError = fallback.isEmpty
+                ? 'No se encontró un cliente que coincida con «$input»'
+                : null;
           });
         }
       }
@@ -161,6 +247,12 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
 
   Future<void> _handleScannedRawValue(String rawValue) async {
     if (!mounted) return;
+    // Debug-only evidence for on-device QR verification (no PII: the payload
+    // is the opaque tenant-scoped customer code).
+    assert(() {
+      debugPrint('CUSTOMER_QR_DETECTED raw=$rawValue');
+      return true;
+    }());
     // Close the camera overlay first, then identify in the dialog context.
     Navigator.of(context).pop();
 
@@ -171,6 +263,10 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
 
     try {
       final customer = await widget.viewModel.identifyCustomer(rawValue);
+      assert(() {
+        debugPrint('CUSTOMER_QR_RESULT id=${customer?.id}');
+        return true;
+      }());
       if (!mounted) return;
       if (customer != null) {
         // identifyCustomer already selects the customer internally
@@ -210,7 +306,10 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   Future<void> _submitNewCustomer() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _formError = 'El nombre del cliente es obligatorio');
+      setState(() {
+        _nameError = 'El nombre del cliente es obligatorio';
+        _formError = null;
+      });
       return;
     }
 
@@ -225,6 +324,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
 
     setState(() {
       _formError = null;
+      _nameError = null;
       _isLoading = true;
     });
 
@@ -235,6 +335,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
         phone: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
         email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
         address: _addressController.text.trim().isNotEmpty ? _addressController.text.trim() : null,
+        customerType: _customerType,
       );
 
       if (mounted) {
@@ -252,6 +353,13 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    // Shrink with the soft keyboard. A fixed `size.height * 0.7` plus the
+    // keyboard overflows the dialog on phones (NHILOS §17.1 / §46).
+    final availableHeight = media.size.height - media.viewInsets.bottom;
+    final contentHeight =
+        (availableHeight - 180).clamp(120.0, 720.0).toDouble();
+
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
@@ -285,108 +393,136 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
       ),
       content: SizedBox(
         width: 480,
-        height: MediaQuery.of(context).size.height * 0.7,
+        height: contentHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (!_isCreatingNew) ...[
-              // QR scan + Code input row
-              Row(
-                children: [
-                  IconButton(
+              // Unified identification field (NHILOS §13/§17.5): ONE input for
+              // name, phone, cédula or exact customer code. Typing filters live;
+              // submitting (Enter or →) asks the adapters for an exact match.
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final searchField = TextField(
+                    key: const Key('customer_search_input'),
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _onIdentifySubmitted(),
+                    decoration: InputDecoration(
+                      labelText: 'Buscar cliente',
+                      hintText: 'Nombre, teléfono, cédula o código',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_searchController.text.isNotEmpty)
+                            IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              tooltip: 'Limpiar búsqueda',
+                              onPressed: _clearSearch,
+                            ),
+                          IconButton(
+                            key: const Key('customer_identify_button'),
+                            icon: const Icon(Icons.arrow_forward, size: 20),
+                            tooltip: 'Identificar con el texto exacto',
+                            onPressed: _searchController.text.trim().isEmpty
+                                ? null
+                                : _onIdentifySubmitted,
+                          ),
+                        ],
+                      ),
+                      suffixIconConstraints:
+                          const BoxConstraints(minWidth: 88, minHeight: 48),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                  );
+                  final qrButton = IconButton(
                     key: const Key('qr_scan_button'),
                     icon: const Icon(Icons.qr_code_scanner),
                     tooltip: 'Escanear código QR del cliente',
                     onPressed: _onQrScanRequested,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      key: const Key('customer_code_input'),
-                      controller: _codeController,
-                      decoration: InputDecoration(
-                        hintText: 'Código del cliente...',
-                        prefixIcon: const Icon(Icons.pin_outlined, size: 20),
-                        suffixIcon: _codeController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  _codeController.clear();
-                                  setState(() => _identificationError = null);
-                                },
-                              )
-                            : null,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        isDense: true,
+                  );
+                  final newButton = ElevatedButton.icon(
+                    onPressed: () => setState(() => _isCreatingNew = true),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Nuevo'),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      textInputAction: TextInputAction.go,
-                      onSubmitted: (_) => _onCodeSubmitted(),
-                      onChanged: (_) => setState(() {}),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  IconButton(
-                    key: const Key('customer_code_submit'),
-                    icon: const Icon(Icons.login, size: 20),
-                    tooltip: 'Identificar por código',
-                    onPressed: _onCodeSubmitted,
-                  ),
-                ],
+                  );
+
+                  // Phones keep the primary action on its own full-width row
+                  // so the field never collapses below its icon affordances.
+                  if (constraints.maxWidth < 400) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            qrButton,
+                            Expanded(child: searchField),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        newButton,
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    children: [
+                      qrButton,
+                      Expanded(child: searchField),
+                      const SizedBox(width: 8),
+                      newButton,
+                    ],
+                  );
+                },
               ),
               if (_identificationError != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    _identificationError!,
-                    style: TextStyle(color: Colors.red.shade700, fontSize: 12),
+                Semantics(
+                  liveRegion: true,
+                  container: true,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          color: Colors.red.shade700,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _identificationError!,
+                            style: TextStyle(
+                              color: Colors.red.shade700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              const SizedBox(height: 8),
-              // Existing search bar + New button
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _onSearchChanged,
-                      decoration: InputDecoration(
-                        hintText: 'Buscar por Nombre, Teléfono o Cédula...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _onSearchChanged('');
-                                },
-                              )
-                            : null,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // The app-wide `elevatedButtonTheme` sets
-                  // `minimumSize: Size.fromHeight(48)`, which means an INFINITE
-                  // minimum width. In this unbounded Row that throws
-                  // "BoxConstraints forces an infinite width" inside the
-                  // button's padding and aborts the whole body layout: on
-                  // device only the dim barrier rendered and the dialog looked
-                  // empty. Clamping the button gives it a finite width.
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 132),
-                    child: ElevatedButton.icon(
-                      onPressed: () => setState(() => _isCreatingNew = true),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Nuevo'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                    ),
-                  ),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(top: 6, left: 4, right: 4),
+                child: Text(
+                  'La lista se filtra al escribir. Pulsa → para un código exacto.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -397,7 +533,8 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                 icon: const Icon(Icons.person_off_outlined, color: Colors.grey),
                 label: const Text('Consumidor Final (Sin Cliente Asignado)'),
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
               ),
@@ -407,30 +544,94 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                     ? const Center(child: CircularProgressIndicator())
                     : _searchResults.isEmpty
                         ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.search_off, size: 48, color: Colors.grey),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'No se encontraron clientes.',
-                                  style: TextStyle(color: Colors.grey, fontSize: 16),
-                                ),
-                                const SizedBox(height: 12),
-                                ElevatedButton(
-                                  onPressed: () {
-                                    _nameController.text = _searchController.text;
-                                    setState(() => _isCreatingNew = true);
-                                  },
-                                  child: const Text('Registrar como nuevo'),
-                                ),
-                              ],
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.search_off,
+                                    size: 48,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _searchController.text.trim().isEmpty
+                                        ? 'Aún no hay clientes registrados.'
+                                        : 'Sin resultados para «${_searchController.text.trim()}».',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _searchController.text.trim().isEmpty
+                                        ? 'Registra el primer cliente para empezar.'
+                                        : 'Revisa el término o limpia la búsqueda.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (_searchController.text.trim().isNotEmpty)
+                                    TextButton.icon(
+                                      onPressed: _clearSearch,
+                                      icon: const Icon(Icons.clear, size: 18),
+                                      label: const Text('Limpiar búsqueda'),
+                                    ),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      _nameController.text =
+                                          _searchController.text.trim();
+                                      setState(() => _isCreatingNew = true);
+                                    },
+                                    icon: const Icon(Icons.person_add_alt_1, size: 18),
+                                    label: const Text('Registrar como nuevo'),
+                                    style: ElevatedButton.styleFrom(
+                                      minimumSize: const Size(0, 48),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           )
                         : ListView.separated(
-                            itemCount: _searchResults.length,
+                            controller: _scrollController,
+                            // One extra synthetic row communicates that more
+                            // data exists and hosts the next-page loader
+                            // (NHILOS §15: never make the operator guess).
+                            itemCount: _searchResults.length +
+                                ((_hasMore || _isLoadingMore) ? 1 : 0),
                             separatorBuilder: (_, __) => const Divider(height: 1),
                             itemBuilder: (context, index) {
+                              if (index >= _searchResults.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  child: Center(
+                                    child: _isLoadingMore
+                                        ? const SizedBox(
+                                            height: 20,
+                                            width: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : Text(
+                                            'Desliza para cargar más clientes…',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                  ),
+                                );
+                              }
                               final customer = _searchResults[index];
                               final isSelected = widget.viewModel.selectedCustomer?.id == customer.id;
                               return ListTile(
@@ -506,25 +707,51 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                   child: Column(
                     children: [
                       if (_formError != null)
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.red.shade200),
-                          ),
-                          child: Text(
-                            _formError!,
-                            style: TextStyle(color: Colors.red.shade900, fontSize: 13),
+                        Semantics(
+                          liveRegion: true,
+                          container: true,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.shade200),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red.shade700,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _formError!,
+                                    style: TextStyle(
+                                      color: Colors.red.shade900,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       TextField(
                         controller: _nameController,
-                        decoration: const InputDecoration(
+                        onChanged: (_) {
+                          if (_nameError != null) {
+                            setState(() => _nameError = null);
+                          }
+                        },
+                        decoration: InputDecoration(
                           labelText: 'Nombre Completo / Razón Social *',
-                          prefixIcon: Icon(Icons.person_outline),
-                          border: OutlineInputBorder(),
+                          prefixIcon: const Icon(Icons.person_outline),
+                          border: const OutlineInputBorder(),
+                          errorText: _nameError,
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -569,45 +796,65 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      // Customer type selector (PERSONA / EMPRESA)
-                      // Permite al cliente clasificar el tipo; el backend bloquea
-                      // acumulación y canje para EMPRESA. Por defecto es PERSONA.
+                      // Governed selector (NHILOS §17.5): the operator picks a
+                      // known value, not free text. EMPRESA skips loyalty, so
+                      // the consequence is stated inline (§17.4) to prevent the
+                      // probable error of classifying a company as a person.
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Tipo de cliente *',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              'Tipo de cliente:',
-                              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                            child: RadioListTile<String>(
+                              key: const Key('customer_type_persona'),
+                              contentPadding: EdgeInsets.zero,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              title: const Text('Persona'),
+                              value: 'PERSONA',
+                              groupValue: _customerType,
+                              onChanged: (String? value) {
+                                if (value == null) return;
+                                setState(() => _customerType = value);
+                              },
                             ),
                           ),
-                          SizedBox(width: 8),
                           Expanded(
-                            child: Row(
-                              children: [
-                                // PERSONA radio
-                                RadioListTile<String?>(
-                                  title: const Text('Persona'),
-                                  value: 'PERSONA',
-                                  groupValue: _customerType,
-                                  onChanged: (String? value) {
-                                    setState(() => _customerType = value);
-                                  },
-                                  dense: true,
-                                ),
-                                // EMPRESA radio
-                                RadioListTile<String?>(
-                                  title: const Text('Empresa'),
-                                  value: 'EMPRESA',
-                                  groupValue: _customerType,
-                                  onChanged: (String? value) {
-                                    setState(() => _customerType = value);
-                                  },
-                                  dense: true,
-                                ),
-                              ],
+                            child: RadioListTile<String>(
+                              key: const Key('customer_type_empresa'),
+                              contentPadding: EdgeInsets.zero,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.padded,
+                              title: const Text('Empresa'),
+                              value: 'EMPRESA',
+                              groupValue: _customerType,
+                              onChanged: (String? value) {
+                                if (value == null) return;
+                                setState(() => _customerType = value);
+                              },
                             ),
                           ),
                         ],
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Empresa: no acumula puntos de lealtad.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -621,6 +868,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                     child: OutlinedButton(
                       onPressed: () => setState(() => _isCreatingNew = false),
                       style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),
@@ -632,6 +880,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _submitNewCustomer,
                       style: ElevatedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                       ),

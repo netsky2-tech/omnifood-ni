@@ -1321,6 +1321,7 @@ export class InboundSyncService {
       phone: c.phone ?? null,
       email: c.email ?? null,
       address: c.address ?? null,
+      customerType: c.customer_type ?? null,
       pointsBalance: Number(c.points_balance),
       isActive: c.is_active,
       createdAt: c.created_at,

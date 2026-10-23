@@ -1826,6 +1826,8 @@ class SyncService {
         'address': customer.address!.trim(),
       if (customer.customerCode != null && customer.customerCode!.trim().isNotEmpty)
         'customerCode': customer.customerCode!.trim(),
+      if (customer.customerType != null && customer.customerType!.trim().isNotEmpty)
+        'customerType': customer.customerType!.trim(),
       'createdAt': DateTime.fromMillisecondsSinceEpoch(
         customer.createdAt,
         isUtc: true,
@@ -4705,6 +4707,8 @@ class SyncService {
                   DateTime.now().millisecondsSinceEpoch,
               syncStatus: keepLocalSyncStatus ? localSyncStatus! : 'synced',
               customerCode: existing?.customerCode,
+              customerType: map['customerType']?.toString() ??
+                  existing?.customerType,
             ),
           );
         }

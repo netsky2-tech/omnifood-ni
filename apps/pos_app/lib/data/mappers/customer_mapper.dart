@@ -21,6 +21,7 @@ class CustomerMapper {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(entity.updatedAt),
       syncStatus: entity.syncStatus,
       customerCode: entity.customerCode,
+      customerType: entity.customerType,
     );
   }
 
@@ -39,6 +40,7 @@ class CustomerMapper {
       updatedAt: domain.updatedAt?.millisecondsSinceEpoch ?? now,
       syncStatus: domain.syncStatus,
       customerCode: domain.customerCode,
+      customerType: domain.customerType,
     );
   }
 

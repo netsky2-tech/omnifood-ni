@@ -331,6 +331,8 @@ export interface InboundSyncCustomerDto {
   phone: string | null;
   email: string | null;
   address: string | null;
+  /** PERSONA (default) or EMPRESA; EMPRESA never accumulates loyalty. */
+  customerType: 'PERSONA' | 'EMPRESA' | null;
   pointsBalance: number;
   isActive: boolean;
   createdAt: Date;

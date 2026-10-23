@@ -89,13 +89,18 @@ export class CustomerSyncIngestionService {
     const phone = item.phone?.trim() || null;
     const email = item.email?.trim() || null;
     const address = item.address?.trim() || null;
+    const rawCustomerType = (item.customerType ?? item.customer_type)?.trim();
+    const customerType =
+      rawCustomerType === 'EMPRESA' || rawCustomerType === 'PERSONA'
+        ? rawCustomerType
+        : (existing?.customer_type ?? null);
 
     const createdAtRaw = item.createdAt ?? item.created_at;
     const updatedAtRaw = item.updatedAt ?? item.updated_at;
 
     const createdAt = createdAtRaw
       ? parseFiscalTimestamp(createdAtRaw)
-      : existing?.created_at ?? new Date();
+      : (existing?.created_at ?? new Date());
 
     const updatedAt = updatedAtRaw
       ? parseFiscalTimestamp(updatedAtRaw)
@@ -109,6 +114,7 @@ export class CustomerSyncIngestionService {
       phone,
       email,
       address,
+      customer_type: customerType,
       points_balance: existing?.points_balance ?? 0.0,
       is_active: true,
       created_at: createdAt,

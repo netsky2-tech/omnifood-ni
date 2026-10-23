@@ -37,8 +37,28 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
     notifyListeners();
   }
 
+  /// Optional override so tests can control live search results.
+  Future<List<Customer>> Function(String query)? onSearch;
+
   @override
-  Future<List<Customer>> searchCustomers(String query) async => [];
+  Future<List<Customer>> searchCustomers(String query) async {
+    if (onSearch != null) return onSearch!(query);
+    return [];
+  }
+
+  /// Optional override so tests can control next-page loading.
+  Future<List<Customer>> Function(int offset)? onLoadMore;
+  final List<int> loadMoreOffsets = [];
+
+  @override
+  Future<List<Customer>> loadMoreCustomers({
+    required int offset,
+    int limit = 50,
+  }) async {
+    loadMoreOffsets.add(offset);
+    if (onLoadMore != null) return onLoadMore!(offset);
+    return [];
+  }
 
   @override
   Future<Customer> createExpressCustomer({
@@ -47,6 +67,7 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
     String? phone,
     String? email,
     String? address,
+    String? customerType,
   }) async {
     final customer = Customer(
       id: 'c-new',
@@ -55,6 +76,7 @@ class StubSaleViewModel extends ChangeNotifier implements SaleViewModel {
       phone: phone,
       email: email,
       address: address,
+      customerType: customerType,
     );
     await selectCustomer(customer);
     return customer;
@@ -145,7 +167,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+      expect(find.byKey(const Key('customer_search_input')), findsOneWidget);
     });
 
     testWidgets('Code submit button is visible', (tester) async {
@@ -153,7 +175,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('customer_code_submit')), findsOneWidget);
+      expect(find.byKey(const Key('customer_identify_button')), findsOneWidget);
     });
 
     testWidgets('Code input submits and calls identifyCustomer', (tester) async {
@@ -162,10 +184,12 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-        find.byKey(const Key('customer_code_input')),
+        find.byKey(const Key('customer_search_input')),
         'NHL1:DEF456',
       );
-      await tester.tap(find.byKey(const Key('customer_code_submit')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer_identify_button')));
       await tester.pumpAndSettle();
 
       expect(viewModel.lastIdentifiedInput, 'NHL1:DEF456');
@@ -185,10 +209,12 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-        find.byKey(const Key('customer_code_input')),
+        find.byKey(const Key('customer_search_input')),
         'NHL1:DEF456',
       );
-      await tester.tap(find.byKey(const Key('customer_code_submit')));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer_identify_button')));
       await tester.pumpAndSettle();
 
       expect(viewModel.selectedCustomer?.id, 'c-2');
@@ -266,7 +292,7 @@ void main() {
 
       expect(find.textContaining('Código no reconocido'), findsOneWidget);
       // Manual entry still available after a failed scan.
-      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+      expect(find.byKey(const Key('customer_search_input')), findsOneWidget);
     });
 
     testWidgets('close control exits the scanner overlay and preserves '
@@ -285,7 +311,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Escanear código del cliente'), findsNothing);
-      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+      expect(find.byKey(const Key('customer_search_input')), findsOneWidget);
     });
 
     testWidgets('Escape key closes the scanner overlay (NHILOS §46)',
@@ -304,7 +330,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Escanear código del cliente'), findsNothing);
-      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+      expect(find.byKey(const Key('customer_search_input')), findsOneWidget);
     });
 
     testWidgets('camera-unavailable fallback exits to manual entry',
@@ -324,7 +350,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Escanear código del cliente'), findsNothing);
-      expect(find.byKey(const Key('customer_code_input')), findsOneWidget);
+      expect(find.byKey(const Key('customer_search_input')), findsOneWidget);
     });
 
     testWidgets('repeated detections report the code only once',
@@ -358,6 +384,350 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(viewModel.identifyCallCount, 1);
+    });
+  });
+
+  group('CustomerSelectDialog — alta de cliente (#952)', () {
+    late StubSaleViewModel viewModel;
+
+    setUp(() {
+      viewModel = StubSaleViewModel();
+    });
+
+    Future<void> openNewCustomerForm(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Nuevo'));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tapCustomerType(WidgetTester tester, Key key) async {
+      final radio = find.descendant(
+        of: find.byKey(key),
+        matching: find.byType(Radio<String>),
+      );
+      await tester.ensureVisible(radio);
+      await tester.pumpAndSettle();
+      await tester.tap(radio);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('muestra el selector gobernado con ayuda de Empresa',
+        (tester) async {
+      await openNewCustomerForm(tester);
+
+      expect(find.text('Tipo de cliente *'), findsOneWidget);
+      expect(find.text('Persona'), findsOneWidget);
+      expect(find.text('Empresa'), findsOneWidget);
+      expect(
+        find.text('Empresa: no acumula puntos de lealtad.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('valida nombre obligatorio y no crea el cliente',
+        (tester) async {
+      await openNewCustomerForm(tester);
+
+      await tester.tap(find.text('Guardar y Seleccionar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('El nombre del cliente es obligatorio'), findsOneWidget);
+      expect(viewModel.selectedCustomer, isNull);
+    });
+
+    testWidgets('valida RUC/Cédula inválido y bloquea el envio',
+        (tester) async {
+      await openNewCustomerForm(tester);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nombre Completo / Razón Social *'),
+        'Distribuidora Central S.A.',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cédula / RUC (Opcional)'),
+        '12345-INVALID',
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Cédula o RUC inválido'), findsOneWidget);
+
+      await tester.tap(find.text('Guardar y Seleccionar'));
+      await tester.pumpAndSettle();
+      expect(viewModel.selectedCustomer, isNull);
+    });
+
+    testWidgets('por defecto crea PERSONA', (tester) async {
+      await openNewCustomerForm(tester);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nombre Completo / Razón Social *'),
+        'Pedro Solís',
+      );
+      await tester.tap(find.text('Guardar y Seleccionar'));
+      await tester.pumpAndSettle();
+
+      expect(viewModel.selectedCustomer, isNotNull);
+      expect(viewModel.selectedCustomer!.customerType, 'PERSONA');
+    });
+
+    testWidgets('al elegir Empresa envia customerType EMPRESA', (tester) async {
+      await openNewCustomerForm(tester);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nombre Completo / Razón Social *'),
+        'Distribuidora Central S.A.',
+      );
+      expect(find.text('Guardar y Seleccionar'), findsOneWidget,
+          reason: 'submit before type tap');
+      await tapCustomerType(tester, const Key('customer_type_empresa'));
+      expect(find.text('Nuevo Cliente'), findsOneWidget,
+          reason: 'dialog still open after type tap');
+
+      await tester.ensureVisible(find.text('Guardar y Seleccionar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Guardar y Seleccionar'));
+      await tester.pumpAndSettle();
+
+      expect(viewModel.selectedCustomer, isNotNull);
+      expect(viewModel.selectedCustomer!.customerType, 'EMPRESA');
+    });
+
+    testWidgets('la alerta de identificación usa icono, no solo color',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('customer_search_input')),
+        'CODIGO-DESCONOCIDO',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer_identify_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No se encontró un cliente que coincida'), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+    });
+
+    testWidgets('el teclado abierto no produce overflow (responsive)',
+        (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('customer_search_input')),
+        'Lucía',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Seleccionar Cliente'), findsOneWidget);
+    });
+
+    testWidgets('el input unificado distingue sin datos de sin resultados',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Aún no hay clientes registrados.'), findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const Key('customer_search_input')),
+        'zzz',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sin resultados para «zzz».'), findsOneWidget);
+      expect(find.text('Limpiar búsqueda'), findsOneWidget);
+    });
+
+    testWidgets('submit sin coincidencia no alerta si la lista tiene resultados',
+        (tester) async {
+      viewModel.onSearch = (_) async => const [
+            Customer(id: 'c-9', name: 'Lucía Méndez'),
+          ];
+      viewModel.onIdentify = (_) async => null;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('customer_search_input')),
+        'Lucía',
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('customer_identify_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Lucía Méndez'), findsOneWidget);
+      expect(
+        find.textContaining('No se encontró un cliente que coincida'),
+        findsNothing,
+      );
+    });
+
+    testWidgets('layout angosto apila la accion Nuevo sin overflow',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 740);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('customer_search_input')), findsOneWidget);
+      expect(find.text('Nuevo'), findsOneWidget);
+    });
+
+    testWidgets('pagina la lista y carga mas al llegar al final', (tester) async {
+      tester.view.physicalSize = const Size(900, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final firstPage = List<Customer>.generate(
+        50,
+        (i) => Customer(id: 'p-$i', name: 'Cliente ${i.toString().padLeft(3, '0')}'),
+      );
+      final secondPage = List<Customer>.generate(
+        5,
+        (i) => Customer(id: 'q-$i', name: 'Zeta $i'),
+      );
+      viewModel.onSearch = (query) async =>
+          query.trim().isEmpty ? firstPage : firstPage;
+      viewModel.onLoadMore = (_) async => secondPage;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Cliente 000'), findsOneWidget);
+      expect(viewModel.loadMoreOffsets, isEmpty);
+
+      for (var i = 0; i < 12 && viewModel.loadMoreOffsets.isEmpty; i++) {
+        await tester.drag(find.byType(ListView), const Offset(0, -600));
+        await tester.pumpAndSettle();
+      }
+
+      expect(viewModel.loadMoreOffsets, equals([50]));
+    });
+
+    testWidgets('el boton de identificar esta deshabilitado con el campo vacio',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => CustomerSelectDialog.show(context, viewModel),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<IconButton>(
+        find.byKey(const Key('customer_identify_button')),
+      );
+      expect(button.onPressed, isNull);
     });
   });
 }

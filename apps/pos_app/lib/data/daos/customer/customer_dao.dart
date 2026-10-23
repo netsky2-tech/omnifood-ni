@@ -6,6 +6,16 @@ abstract class CustomerDao {
   @Query('SELECT * FROM customers WHERE is_active = 1 ORDER BY name ASC')
   Future<List<CustomerEntity>> getAllCustomers();
 
+  /// Keyset-free page for the customer picker (NHILOS §15). The dialog must
+  /// never materialize the whole customer table: it loads one page at a time.
+  @Query('''
+    SELECT * FROM customers
+    WHERE is_active = 1
+    ORDER BY name ASC
+    LIMIT :limit OFFSET :offset
+  ''')
+  Future<List<CustomerEntity>> getCustomersPage(int limit, int offset);
+
   @Query('SELECT * FROM customers WHERE id = :id')
   Future<CustomerEntity?> getCustomerById(String id);
 

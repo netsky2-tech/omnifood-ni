@@ -20,4 +20,8 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  @IsOptional()
+  @IsString()
+  customer_type?: 'PERSONA' | 'EMPRESA';
 }

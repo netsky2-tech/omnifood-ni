@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 74,
+      version: 75,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -302,7 +302,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `kitchen_order_items` (`id` TEXT NOT NULL, `kitchen_order_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `status` TEXT NOT NULL, `notes` TEXT, `modifiers_json` TEXT, FOREIGN KEY (`kitchen_order_id`) REFERENCES `kitchen_orders` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `customer_code` TEXT, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `customers` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `tax_id` TEXT, `phone` TEXT, `email` TEXT, `address` TEXT, `points_balance` REAL NOT NULL, `is_active` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `customer_code` TEXT, `customer_type` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `customer_point_transactions` (`id` TEXT NOT NULL, `customer_id` TEXT NOT NULL, `invoice_id` TEXT, `type` TEXT NOT NULL, `points` REAL NOT NULL, `balance_after` REAL NOT NULL, `conversion_rate` REAL NOT NULL, `reason` TEXT, `created_at` INTEGER NOT NULL, `sync_status` TEXT NOT NULL, `loyalty_program_id` TEXT, `ticket_id` TEXT, `reward_id` TEXT, `transaction_type` TEXT, `units` INTEGER, `reversal_of_transaction_id` TEXT, `idempotency_key` TEXT, `source_event_id` TEXT, `actor_user_id` TEXT, `branch_id` TEXT, `terminal_id` TEXT, `program_version` INTEGER, `reward_version` INTEGER, `commercial_snapshot` TEXT, `origin` TEXT, `occurred_at` INTEGER, `recorded_at` INTEGER, `legacy_imported` INTEGER NOT NULL, `source_sequence` INTEGER, PRIMARY KEY (`id`))');
         await database.execute(
@@ -6309,7 +6309,8 @@ class _$CustomerDao extends CustomerDao {
                   'created_at': item.createdAt,
                   'updated_at': item.updatedAt,
                   'sync_status': item.syncStatus,
-                  'customer_code': item.customerCode
+                  'customer_code': item.customerCode,
+                  'customer_type': item.customerType
                 }),
         _customerEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -6327,7 +6328,8 @@ class _$CustomerDao extends CustomerDao {
                   'created_at': item.createdAt,
                   'updated_at': item.updatedAt,
                   'sync_status': item.syncStatus,
-                  'customer_code': item.customerCode
+                  'customer_code': item.customerCode,
+                  'customer_type': item.customerType
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -6356,7 +6358,19 @@ class _$CustomerDao extends CustomerDao {
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
             syncStatus: row['sync_status'] as String,
-            customerCode: row['customer_code'] as String?));
+            customerCode: row['customer_code'] as String?,
+            customerType: row['customer_type'] as String?));
+  }
+
+  @override
+  Future<List<CustomerEntity>> getCustomersPage(
+    int limit,
+    int offset,
+  ) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM customers     WHERE is_active = 1     ORDER BY name ASC     LIMIT ?1 OFFSET ?2',
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?, customerType: row['customer_type'] as String?),
+        arguments: [limit, offset]);
   }
 
   @override
@@ -6374,7 +6388,8 @@ class _$CustomerDao extends CustomerDao {
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
             syncStatus: row['sync_status'] as String,
-            customerCode: row['customer_code'] as String?),
+            customerCode: row['customer_code'] as String?,
+            customerType: row['customer_type'] as String?),
         arguments: [id]);
   }
 
@@ -6394,7 +6409,8 @@ class _$CustomerDao extends CustomerDao {
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
             syncStatus: row['sync_status'] as String,
-            customerCode: row['customer_code'] as String?),
+            customerCode: row['customer_code'] as String?,
+            customerType: row['customer_type'] as String?),
         arguments: [taxId]);
   }
 
@@ -6414,7 +6430,8 @@ class _$CustomerDao extends CustomerDao {
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
             syncStatus: row['sync_status'] as String,
-            customerCode: row['customer_code'] as String?),
+            customerCode: row['customer_code'] as String?,
+            customerType: row['customer_type'] as String?),
         arguments: [phone]);
   }
 
@@ -6422,7 +6439,7 @@ class _$CustomerDao extends CustomerDao {
   Future<CustomerEntity?> getCustomerByCode(String customerCode) async {
     return _queryAdapter.query(
         'SELECT * FROM customers WHERE customer_code = ?1 AND is_active = 1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?),
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?, customerType: row['customer_type'] as String?),
         arguments: [customerCode]);
   }
 
@@ -6433,7 +6450,7 @@ class _$CustomerDao extends CustomerDao {
   ) async {
     return _queryAdapter.queryList(
         'SELECT * FROM customers      WHERE is_active = 1        AND (         name LIKE \'%\' || ?1 || \'%\'          OR tax_id LIKE \'%\' || ?1 || \'%\'          OR phone LIKE \'%\' || ?1 || \'%\'       )     ORDER BY name ASC      LIMIT ?2',
-        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?),
+        mapper: (Map<String, Object?> row) => CustomerEntity(id: row['id'] as String, name: row['name'] as String, taxId: row['tax_id'] as String?, phone: row['phone'] as String?, email: row['email'] as String?, address: row['address'] as String?, pointsBalance: row['points_balance'] as double, isActive: (row['is_active'] as int) != 0, createdAt: row['created_at'] as int, updatedAt: row['updated_at'] as int, syncStatus: row['sync_status'] as String, customerCode: row['customer_code'] as String?, customerType: row['customer_type'] as String?),
         arguments: [query, limit]);
   }
 
@@ -6459,7 +6476,8 @@ class _$CustomerDao extends CustomerDao {
             createdAt: row['created_at'] as int,
             updatedAt: row['updated_at'] as int,
             syncStatus: row['sync_status'] as String,
-            customerCode: row['customer_code'] as String?));
+            customerCode: row['customer_code'] as String?,
+            customerType: row['customer_type'] as String?));
   }
 
   @override

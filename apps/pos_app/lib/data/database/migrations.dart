@@ -3328,6 +3328,21 @@ final migration73_74 = Migration(73, 74, (database) async {
   }
 });
 
+final migration74_75 = Migration(74, 75, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(customers)');
+  // A fresh install creates the table with the column via onCreate; legacy
+  // fixtures may predate it. PRAGMA returns no rows for a missing table.
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns.map((column) => column['name']).toSet();
+  if (!existing.contains('customer_type')) {
+    await database.execute(
+      'ALTER TABLE customers ADD COLUMN customer_type TEXT',
+    );
+  }
+});
+
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3393,6 +3408,7 @@ final allMigrations = [
   migration71_72,
   migration72_73,
   migration73_74,
+  migration74_75,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

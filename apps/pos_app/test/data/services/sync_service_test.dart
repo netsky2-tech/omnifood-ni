@@ -9135,6 +9135,7 @@ void main() {
                   'name': 'Cliente Sincronizado',
                   'pointsBalance': 77.0,
                   'isActive': true,
+                  'customerType': 'EMPRESA',
                 },
               ],
             },
@@ -9163,6 +9164,56 @@ void main() {
           expect(syncedCustomer!.pointsBalance, 77.0);
           expect(syncedCustomer.customerCode, 'LOCAL-002');
           expect(syncedCustomer.syncStatus, 'synced');
+          // #952: the terminal mirrors the cloud-assigned customer type so the
+          // EMPRESA loyalty gate is honored before/after sync.
+          expect(syncedCustomer.customerType, 'EMPRESA');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'pushOutboundCustomers carries customerType to the cloud (#952)',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          await database.customerDao.saveCustomer(
+            CustomerEntity(
+              id: 'cust-empresa',
+              name: 'Distribuidora Central S.A.',
+              taxId: 'J0310000000888',
+              pointsBalance: 0.0,
+              createdAt: 1787000000000,
+              updatedAt: 1787000000000,
+              syncStatus: 'pending',
+              customerType: 'EMPRESA',
+            ),
+          );
+
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          await syncServiceWithDb.triggerManualSync();
+
+          final customerPost = capturedPosts.firstWhere(
+            (post) => post.path == '/customers/sync',
+          );
+          final body = customerPost.body as Map<String, dynamic>;
+          final customers = body['customers'] as List<dynamic>;
+          expect(customers, hasLength(1));
+          expect(
+            (customers.first as Map<String, dynamic>)['customerType'],
+            'EMPRESA',
+          );
         } finally {
           await database.close();
         }
