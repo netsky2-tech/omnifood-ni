@@ -60,6 +60,8 @@ export class TicketPaidHandler {
 
     if (!customer) return [];
 
+    if (customer.customer_type === 'EMPRESA') return [];
+
     const results: EarningResult[] = [];
 
     for (const program of activePrograms) {

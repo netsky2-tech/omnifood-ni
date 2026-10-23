@@ -45,6 +45,7 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
   bool _isLoading = true;
   bool _isCreatingNew = false;
   String? _identificationError;
+  String? _customerType; // 'PERSONA' | 'EMPRESA', null = PERSONA por defecto
 
   // New Customer Form Controllers
   final TextEditingController _nameController = TextEditingController();
@@ -567,6 +568,48 @@ class _CustomerSelectDialogState extends State<CustomerSelectDialog> {
                           border: OutlineInputBorder(),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      // Customer type selector (PERSONA / EMPRESA)
+                      // Permite al cliente clasificar el tipo; el backend bloquea
+                      // acumulación y canje para EMPRESA. Por defecto es PERSONA.
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Tipo de cliente:',
+                              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Row(
+                              children: [
+                                // PERSONA radio
+                                RadioListTile<String?>(
+                                  title: const Text('Persona'),
+                                  value: 'PERSONA',
+                                  groupValue: _customerType,
+                                  onChanged: (String? value) {
+                                    setState(() => _customerType = value);
+                                  },
+                                  dense: true,
+                                ),
+                                // EMPRESA radio
+                                RadioListTile<String?>(
+                                  title: const Text('Empresa'),
+                                  value: 'EMPRESA',
+                                  groupValue: _customerType,
+                                  onChanged: (String? value) {
+                                    setState(() => _customerType = value);
+                                  },
+                                  dense: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                     ],
                   ),
                 ),

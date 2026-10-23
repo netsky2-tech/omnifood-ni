@@ -38,6 +38,9 @@ export class Customer {
   email?: string | null;
 
   @Column({ type: 'varchar', nullable: true })
+  customer_type?: 'PERSONA' | 'EMPRESA' | null;
+
+  @Column({ type: 'varchar', nullable: true })
   address?: string | null;
 
   @Column({
