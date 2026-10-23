@@ -210,7 +210,7 @@ export function Sidebar() {
             <img
               src="/logo.png"
               alt="NHILOS POS"
-              className="h-9 w-9 shrink-0 rounded-lg object-contain bg-white p-0.5 shadow-xs"
+              className="h-9 w-9 shrink-0 rounded-lg object-contain shadow-xs"
             />
             <div className="flex flex-col">
               <span className="text-base font-bold tracking-tight text-white leading-tight">
@@ -267,7 +267,7 @@ export function Sidebar() {
                 <img
                   src="/logo.png"
                   alt="NHILOS POS"
-                  className="h-9 w-9 shrink-0 rounded-lg object-contain bg-white p-0.5 shadow-xs"
+                  className="h-9 w-9 shrink-0 rounded-lg object-contain shadow-xs"
                 />
                 <div className="flex flex-col min-w-0">
                   <span className="text-base font-bold tracking-tight text-white leading-tight truncate">
@@ -288,7 +288,7 @@ export function Sidebar() {
             <div className="flex w-full items-center justify-between">
               <button
                 type="button"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white p-0.5 shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40 overflow-hidden"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/40 overflow-hidden"
                 onClick={toggleSidebar}
                 aria-label="Expandir barra lateral"
                 title="NHILOS POS — Expandir"

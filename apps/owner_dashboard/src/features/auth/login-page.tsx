@@ -36,7 +36,7 @@ export function LoginPage() {
       <div className="fixed inset-0 flex overflow-y-auto overscroll-contain items-center justify-center bg-muted/30 px-4 py-8">
         <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg my-auto">
           <div className="mb-8 text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white p-2 mb-3 shadow-md border border-border">
+            <div className="inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl mb-3 shadow-md border border-border">
               <img
                 src="/logo.png"
                 alt="NHILOS POS"
@@ -70,7 +70,7 @@ export function LoginPage() {
     <div className="fixed inset-0 flex overflow-y-auto overscroll-contain items-center justify-center bg-muted/30 px-4 py-8">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 sm:p-8 shadow-lg my-auto">
         <div className="mb-8 text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-white p-2 mb-3 shadow-md border border-border">
+          <div className="inline-flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl mb-3 shadow-md border border-border">
             <img
               src="/logo.png"
               alt="NHILOS POS"
