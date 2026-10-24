@@ -9,6 +9,7 @@
     "build": "remotion render src/index.ts ShowcaseMaster out/showcase-master.mp4",
     "build:reel": "remotion render src/index.ts SocialReel out/social-reel.mp4",
     "build:square": "remotion render src/index.ts SocialSquare out/social-square.mp4",
+    "generate:voiceover": "python3 scripts/generate-voiceover.py",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
