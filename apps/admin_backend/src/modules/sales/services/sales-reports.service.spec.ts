@@ -9,6 +9,8 @@ import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
 import { User, UserRole } from '../../identity/entities/user.entity';
+import { Customer } from '../../customers/entities/customer.entity';
+import { Promotion } from '../../promotions/entities/promotion.entity';
 
 describe('SalesReportsService', () => {
   let service: SalesReportsService;
@@ -19,6 +21,12 @@ describe('SalesReportsService', () => {
     find: jest.Mock;
   };
   let mockPaymentRepo: {
+    find: jest.Mock;
+  };
+  let mockCustomerRepo: {
+    find: jest.Mock;
+  };
+  let mockPromotionRepo: {
     find: jest.Mock;
   };
   // Issue #556 stage 12d F1: the users read runs through the tenant-bound
@@ -48,6 +56,12 @@ describe('SalesReportsService', () => {
     mockPaymentRepo = {
       find: jest.fn(),
     };
+    mockCustomerRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    mockPromotionRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
     pooledUserRepo = {
       find: jest.fn(),
     };
@@ -75,6 +89,8 @@ describe('SalesReportsService', () => {
               // keep their original target.
               if (entity === Invoice) return mockInvoiceRepo;
               if (entity === User) return boundUserRepo;
+              if (entity === Customer) return mockCustomerRepo;
+              if (entity === Promotion) return mockPromotionRepo;
               const entityName =
                 typeof entity === 'function' && 'name' in entity
                   ? (entity as { name: string }).name
@@ -1709,6 +1725,144 @@ describe('SalesReportsService', () => {
         order: { created_at: 'ASC' },
       });
       expect(pooledInvoiceRepo.find).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getCorporateMetrics', () => {
+    it('aggregates company purchases, discounts from convenios and computes KPIs', async () => {
+      const companyId = 'cust-bac-123';
+      const companyCustomer = {
+        id: companyId,
+        tenant_id: tenantId,
+        name: 'Banco Atlántico S.A.',
+        tax_id: 'J0310000001234',
+        customer_type: 'EMPRESA',
+      };
+      const activeConvenio = {
+        id: 'promo-bac',
+        tenant_id: tenantId,
+        name: 'Convenio Empleados BAC',
+        code: 'CONV-BAC',
+        target_customer_id: companyId,
+        is_active: true,
+      };
+
+      const testInvoices = [
+        {
+          id: 'inv-1',
+          tenant_id: tenantId,
+          customerId: companyId,
+          customerName: 'Banco Atlántico S.A.',
+          customerTaxId: 'J0310000001234',
+          subtotal: 500.0,
+          total: 575.0,
+          isCanceled: false,
+          created_at: new Date('2026-08-15T12:00:00Z'),
+          items: [
+            {
+              id: 'item-1',
+              productName: 'Combo Almuerzo',
+              quantity: 2,
+              unitPrice: 287.5,
+              total: 500.0,
+              discount: 75.0,
+              discountOrigin: { promotion: 75.0 },
+            },
+          ],
+        },
+        {
+          id: 'inv-2',
+          tenant_id: tenantId,
+          customerId: companyId,
+          customerName: 'Banco Atlántico S.A.',
+          customerTaxId: 'J0310000001234',
+          subtotal: 300.0,
+          total: 345.0,
+          isCanceled: false,
+          created_at: new Date('2026-08-16T13:00:00Z'),
+          items: [
+            {
+              id: 'item-2',
+              productName: 'Café y Postre',
+              quantity: 1,
+              unitPrice: 325.0,
+              total: 300.0,
+              discount: 25.0,
+              discountOrigin: { promotion: 25.0 },
+            },
+          ],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(testInvoices);
+      mockCustomerRepo.find.mockResolvedValue([companyCustomer]);
+      mockPromotionRepo.find.mockResolvedValue([activeConvenio]);
+
+      const result = await service.getCorporateMetrics(tenantId, {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+      });
+
+      expect(setConfigQueries).toEqual([
+        { sql: TENANT_CONTEXT_SET_CONFIG_SQL, parameters: [tenantId] },
+      ]);
+      expect(result.companies).toHaveLength(1);
+      const companySummary = result.companies[0];
+      expect(companySummary.customerId).toBe(companyId);
+      expect(companySummary.customerName).toBe('Banco Atlántico S.A.');
+      expect(companySummary.convenioCode).toBe('CONV-BAC');
+      expect(companySummary.convenioName).toBe('Convenio Empleados BAC');
+      expect(companySummary.ticketCount).toBe(2);
+      expect(companySummary.netSalesNio).toBe(800.0);
+      expect(companySummary.discountNio).toBe(100.0);
+      expect(companySummary.grossSalesNio).toBe(900.0);
+      // rate = (100 / 900) * 100 = 11.11%
+      expect(companySummary.effectiveDiscountRate).toBe(11.11);
+      // avg ticket = 800 / 2 = 400
+      expect(companySummary.averageTicketNio).toBe(400.0);
+
+      expect(result.kpis.totalCorporateNetSalesNio).toBe(800.0);
+      expect(result.kpis.totalCorporateDiscountNio).toBe(100.0);
+      expect(result.kpis.totalCorporateGrossSalesNio).toBe(900.0);
+      expect(result.kpis.totalCorporateTickets).toBe(2);
+      expect(result.kpis.overallAverageTicketNio).toBe(400.0);
+      expect(result.kpis.overallEffectiveDiscountRate).toBe(11.11);
+      expect(result.kpis.activeCompaniesCount).toBe(1);
+    });
+
+    it('includes registered corporate customers with active convenios even if they have 0 purchases in period', async () => {
+      const companyId = 'cust-inactiva-456';
+      const companyCustomer = {
+        id: companyId,
+        tenant_id: tenantId,
+        name: 'Empresa Sin Compras S.A.',
+        tax_id: 'J0319999999999',
+        customer_type: 'EMPRESA',
+      };
+      const activeConvenio = {
+        id: 'promo-inactiva',
+        tenant_id: tenantId,
+        name: 'Convenio Inactivo',
+        code: 'CONV-INACTIVO',
+        target_customer_id: companyId,
+        is_active: true,
+      };
+
+      mockInvoiceRepo.find.mockResolvedValue([]);
+      mockCustomerRepo.find.mockResolvedValue([companyCustomer]);
+      mockPromotionRepo.find.mockResolvedValue([activeConvenio]);
+
+      const result = await service.getCorporateMetrics(tenantId, {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+      });
+
+      expect(result.companies).toHaveLength(1);
+      expect(result.companies[0].ticketCount).toBe(0);
+      expect(result.companies[0].netSalesNio).toBe(0);
+      expect(result.companies[0].discountNio).toBe(0);
+      expect(result.kpis.totalCorporateTickets).toBe(0);
+      expect(result.kpis.activeCompaniesCount).toBe(1);
     });
   });
 });

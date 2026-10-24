@@ -4,22 +4,45 @@ import { useState } from 'react';
 import { UserPlus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useSafeSearchParams } from '@/lib/safe-search-params';
 import { CustomerLoyaltyProfile } from '@/features/loyalty/customer-loyalty-profile';
 import { LoyaltyPage } from '@/features/loyalty/loyalty-page';
 import { CustomersList } from './customers-list';
+import { CorporateMetricsTab } from './corporate-metrics-tab';
 
-type TabId = 'directory' | 'loyalty' | 'programs';
+type TabId = 'directory' | 'corporate-metrics' | 'loyalty' | 'programs';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'directory', label: 'Directorio' },
+  { id: 'corporate-metrics', label: 'Convenios y Empresas' },
   { id: 'loyalty', label: 'Perfil de Lealtad' },
   { id: 'programs', label: 'Programas y Recompensas' },
 ];
 
 export function CustomersPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('directory');
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const tabParam = searchParams.get('tab') as TabId | null;
+  const initialTab: TabId =
+    tabParam && TABS.some((t) => t.id === tabParam) ? tabParam : 'directory';
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+
+  const handleTabChange = (tab: TabId) => {
+    setActiveTab(tab);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (tab === 'directory') {
+          next.delete('tab');
+        } else {
+          next.set('tab', tab);
+        }
+        return next;
+      },
+      { replace: true },
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -47,7 +70,7 @@ export function CustomersPage() {
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.id
                   ? 'border-primary text-primary'
@@ -85,6 +108,7 @@ export function CustomersPage() {
             onCreateOpenChange={setCreateOpen}
           />
         )}
+        {activeTab === 'corporate-metrics' && <CorporateMetricsTab />}
         {activeTab === 'loyalty' && <CustomerLoyaltyProfile />}
         {activeTab === 'programs' && <LoyaltyPage />}
       </div>

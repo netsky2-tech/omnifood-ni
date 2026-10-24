@@ -71,6 +71,7 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
     getHourlySales: jest.Mock;
     getTopProducts: jest.Mock;
     getCashierPerformance: jest.Mock;
+    getCorporateMetrics: jest.Mock;
   };
   let mockFiscalReportsService: {
     getMonthlySummary: jest.Mock;
@@ -146,6 +147,34 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
             invoiceCount: 10,
             totalSales: 5000,
             ticketAverage: 500,
+          },
+        ],
+      }),
+      getCorporateMetrics: jest.fn().mockResolvedValue({
+        generatedAt: '2026-08-26T18:00:00.000Z',
+        kpis: {
+          totalCorporateGrossSalesNio: 1000,
+          totalCorporateDiscountNio: 100,
+          totalCorporateNetSalesNio: 900,
+          totalCorporateTickets: 2,
+          overallAverageTicketNio: 450,
+          overallEffectiveDiscountRate: 10,
+          activeCompaniesCount: 1,
+        },
+        companies: [
+          {
+            customerId: 'c-1',
+            customerName: 'Banco Atlántico S.A.',
+            customerTaxId: 'J0310000001234',
+            customerType: 'EMPRESA',
+            convenioCode: 'CONV-BAC',
+            convenioName: 'Convenio Empleados BAC',
+            ticketCount: 2,
+            grossSalesNio: 1000,
+            discountNio: 100,
+            netSalesNio: 900,
+            effectiveDiscountRate: 10,
+            averageTicketNio: 450,
           },
         ],
       }),
@@ -668,6 +697,31 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
       'tenant-1',
       expect.any(Object) as unknown,
     );
+  });
+
+  it('allows MANAGER on corporate-metrics endpoint and returns report', async () => {
+    const jwtService = app.get(JwtService);
+    const response = await request(getHttpServer())
+      .get('/sales/reports/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31')
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .expect(200);
+
+    const body = response.body;
+    expect(body.companies).toHaveLength(1);
+    expect(body.companies[0].customerName).toBe('Banco Atlántico S.A.');
+    expect(body.kpis.totalCorporateNetSalesNio).toBe(900);
+    expect(mockSalesReportsService.getCorporateMetrics).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({ startDate: '2026-08-01', endDate: '2026-08-31' }),
+    );
+  });
+
+  it('returns 403 for CASHIER on corporate-metrics endpoint', async () => {
+    const jwtService = app.get(JwtService);
+    await request(getHttpServer())
+      .get('/sales/reports/corporate-metrics')
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
+      .expect(403);
   });
 
   it('allows MANAGER on fiscal/monthly-summary endpoint', async () => {

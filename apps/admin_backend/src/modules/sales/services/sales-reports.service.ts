@@ -27,10 +27,16 @@ import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
 import { User } from '../../identity/entities/user.entity';
+import { Customer } from '../../customers/entities/customer.entity';
+import { Promotion } from '../../promotions/entities/promotion.entity';
 import {
   CashierPerformanceItemDto,
   CashierPerformanceQueryDto,
   CashierPerformanceReportDto,
+  CorporateCustomerSummaryDto,
+  CorporateMetricsKpisDto,
+  CorporateMetricsQueryDto,
+  CorporateMetricsReportDto,
   DailySeriesQueryDto,
   DailySeriesReportDto,
   HourlySalesBucketDto,
@@ -748,5 +754,208 @@ export class SalesReportsService {
       start,
       end,
     };
+  }
+
+  async getCorporateMetrics(
+    tenantId: string,
+    query?: CorporateMetricsQueryDto,
+  ): Promise<CorporateMetricsReportDto> {
+    const bounds = this.resolvePeriodBounds(query?.startDate, query?.endDate);
+    const start = bounds.startInclusiveUtc;
+    const end = bounds.endInclusiveUtc;
+
+    const whereClause: FindOptionsWhere<Invoice> = {
+      tenant_id: tenantId,
+      isCanceled: false,
+    };
+
+    if (start && end) {
+      whereClause.created_at = Between(start, end);
+    } else if (start) {
+      whereClause.created_at = MoreThanOrEqual(start);
+    } else if (end) {
+      whereClause.created_at = LessThanOrEqual(end);
+    }
+
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const invoices = await manager.getRepository(Invoice).find({
+          where: whereClause,
+          relations: ['items'],
+        });
+
+        const customers = await manager.getRepository(Customer).find({
+          where: { tenant_id: tenantId },
+        });
+        const customerMap = new Map<string, Customer>();
+        for (const c of customers) {
+          customerMap.set(c.id, c);
+        }
+
+        const promotions = await manager.getRepository(Promotion).find({
+          where: { tenant_id: tenantId, is_active: true },
+        });
+        const convenioByCustomerId = new Map<string, Promotion>();
+        for (const p of promotions) {
+          if (p.target_customer_id) {
+            convenioByCustomerId.set(p.target_customer_id, p);
+          }
+        }
+
+        interface CustomerBucket {
+          customerId: string;
+          customerName: string;
+          customerTaxId: string | null;
+          customerType: string | null;
+          ticketCount: number;
+          grossSalesNio: number;
+          discountNio: number;
+          netSalesNio: number;
+        }
+
+        const buckets = new Map<string, CustomerBucket>();
+
+        // Pre-populate any customer of type 'EMPRESA' or with an active convenio
+        for (const cust of customers) {
+          if (cust.customer_type === 'EMPRESA' || convenioByCustomerId.has(cust.id)) {
+            buckets.set(cust.id, {
+              customerId: cust.id,
+              customerName: cust.name,
+              customerTaxId: cust.tax_id || null,
+              customerType: cust.customer_type || null,
+              ticketCount: 0,
+              grossSalesNio: 0,
+              discountNio: 0,
+              netSalesNio: 0,
+            });
+          }
+        }
+
+        for (const inv of invoices) {
+          const cId = inv.customerId?.trim();
+          if (!cId || cId === 'CONSUMIDOR FINAL' || cId === 'ANONYMOUS') continue;
+
+          let bucket = buckets.get(cId);
+          if (!bucket) {
+            const cust = customerMap.get(cId);
+            // Only aggregate if the customer is an EMPRESA or has a linked convenio
+            if (cust?.customer_type === 'EMPRESA' || convenioByCustomerId.has(cId)) {
+              bucket = {
+                customerId: cId,
+                customerName: cust?.name || inv.customerName || 'Empresa sin nombre',
+                customerTaxId: cust?.tax_id || inv.customerTaxId || null,
+                customerType: cust?.customer_type || 'EMPRESA',
+                ticketCount: 0,
+                grossSalesNio: 0,
+                discountNio: 0,
+                netSalesNio: 0,
+              };
+              buckets.set(cId, bucket);
+            } else {
+              // Individual consumer or anonymous sale without convenio; skip from B2B metrics
+              continue;
+            }
+          }
+
+          bucket.ticketCount += 1;
+
+          let invPromoDiscount = 0;
+          if (inv.items && inv.items.length > 0) {
+            for (const item of inv.items) {
+              let itemPromoDiscount = 0;
+              if (item.discountOrigin && typeof item.discountOrigin === 'object') {
+                const promoVal = (item.discountOrigin as Record<string, unknown>).promotion;
+                if (typeof promoVal === 'number' && promoVal > 0) {
+                  itemPromoDiscount = promoVal;
+                }
+              }
+              if (itemPromoDiscount === 0 && Number(item.discount || 0) > 0) {
+                itemPromoDiscount = Number(item.discount || 0);
+              }
+              invPromoDiscount += itemPromoDiscount;
+            }
+          }
+
+          const invNetSales = Number(inv.subtotal || 0);
+          bucket.netSalesNio += invNetSales;
+          bucket.discountNio += invPromoDiscount;
+          bucket.grossSalesNio += invNetSales + invPromoDiscount;
+        }
+
+        const companies: CorporateCustomerSummaryDto[] = [];
+        let totalGross = 0;
+        let totalDiscount = 0;
+        let totalNet = 0;
+        let totalTickets = 0;
+
+        for (const bucket of buckets.values()) {
+          const convenio = convenioByCustomerId.get(bucket.customerId);
+          const gross = round2(bucket.grossSalesNio);
+          const discount = round2(bucket.discountNio);
+          const net = round2(bucket.netSalesNio);
+          const rate = gross > 0 ? round2((discount / gross) * 100) : 0;
+          const avgTicket =
+            bucket.ticketCount > 0 ? round2(net / bucket.ticketCount) : 0;
+
+          totalGross += gross;
+          totalDiscount += discount;
+          totalNet += net;
+          totalTickets += bucket.ticketCount;
+
+          companies.push({
+            customerId: bucket.customerId,
+            customerName: bucket.customerName,
+            customerTaxId: bucket.customerTaxId,
+            customerType: bucket.customerType,
+            convenioCode: convenio?.code || null,
+            convenioName: convenio?.name || null,
+            ticketCount: bucket.ticketCount,
+            grossSalesNio: gross,
+            discountNio: discount,
+            netSalesNio: net,
+            effectiveDiscountRate: rate,
+            averageTicketNio: avgTicket,
+          });
+        }
+
+        // Sort ranking by netSalesNio descending, then ticketCount descending
+        companies.sort((a, b) => {
+          if (b.netSalesNio !== a.netSalesNio) {
+            return b.netSalesNio - a.netSalesNio;
+          }
+          return b.ticketCount - a.ticketCount;
+        });
+
+        totalGross = round2(totalGross);
+        totalDiscount = round2(totalDiscount);
+        totalNet = round2(totalNet);
+        const overallAvgTicket =
+          totalTickets > 0 ? round2(totalNet / totalTickets) : 0;
+        const overallRate =
+          totalGross > 0 ? round2((totalDiscount / totalGross) * 100) : 0;
+
+        const kpis: CorporateMetricsKpisDto = {
+          totalCorporateGrossSalesNio: totalGross,
+          totalCorporateDiscountNio: totalDiscount,
+          totalCorporateNetSalesNio: totalNet,
+          totalCorporateTickets: totalTickets,
+          overallAverageTicketNio: overallAvgTicket,
+          overallEffectiveDiscountRate: overallRate,
+          activeCompaniesCount: companies.filter(
+            (c) => c.ticketCount > 0 || c.convenioCode !== null,
+          ).length,
+        };
+
+        return {
+          startDate: query?.startDate,
+          endDate: query?.endDate,
+          generatedAt: new Date().toISOString(),
+          kpis,
+          companies,
+        };
+      },
+    );
   }
 }

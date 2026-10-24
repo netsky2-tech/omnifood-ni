@@ -307,3 +307,47 @@ export interface DailySeriesReportDto {
   reportingPeriod: ReportingPeriodMetadataDto;
   generatedAt: string;
 }
+
+export class CorporateMetricsQueryDto {
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+}
+
+export interface CorporateCustomerSummaryDto {
+  customerId: string;
+  customerName: string;
+  customerTaxId: string | null;
+  customerType: string | null;
+  convenioCode: string | null;
+  convenioName: string | null;
+  ticketCount: number;
+  grossSalesNio: number;
+  discountNio: number;
+  netSalesNio: number;
+  effectiveDiscountRate: number;
+  averageTicketNio: number;
+}
+
+export interface CorporateMetricsKpisDto {
+  totalCorporateGrossSalesNio: number;
+  totalCorporateDiscountNio: number;
+  totalCorporateNetSalesNio: number;
+  totalCorporateTickets: number;
+  overallAverageTicketNio: number;
+  overallEffectiveDiscountRate: number;
+  activeCompaniesCount: number;
+}
+
+export interface CorporateMetricsReportDto {
+  startDate?: string;
+  endDate?: string;
+  generatedAt: string;
+  kpis: CorporateMetricsKpisDto;
+  companies: CorporateCustomerSummaryDto[];
+}
+

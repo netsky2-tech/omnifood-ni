@@ -21,6 +21,8 @@ import { SalesExportService } from '../services/sales-export.service';
 import {
   CashierPerformanceQueryDto,
   CashierPerformanceReportDto,
+  CorporateMetricsQueryDto,
+  CorporateMetricsReportDto,
   DailySeriesQueryDto,
   DailySeriesReportDto,
   HourlySalesQueryDto,
@@ -107,6 +109,22 @@ export class ReportsController {
     @Query() query: CashierPerformanceQueryDto,
   ): Promise<CashierPerformanceReportDto> {
     return this.salesReportsService.getCashierPerformance(tenantId, query);
+  }
+
+  @Get('corporate-metrics')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
+  async getCorporateMetrics(
+    @GetTenantId() tenantId: string,
+    @Query() query: CorporateMetricsQueryDto,
+  ): Promise<CorporateMetricsReportDto> {
+    return this.salesReportsService.getCorporateMetrics(tenantId, query);
   }
 
   // T5 (S5, OWASP API6:2023): heavy fiscal/report reads are limited per

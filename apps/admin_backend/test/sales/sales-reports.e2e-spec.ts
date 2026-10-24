@@ -42,7 +42,10 @@ import {
   HourlySalesReportDto,
   TopProductsReportDto,
   CashierPerformanceReportDto,
+  CorporateMetricsReportDto,
 } from '../../src/modules/sales/dto/sales-reports.dto';
+import { Customer } from '../../src/modules/customers/entities/customer.entity';
+import { Promotion } from '../../src/modules/promotions/entities/promotion.entity';
 import {
   MonthlyFiscalSummaryReportDto,
   VoidedInvoicesReportDto,
@@ -78,6 +81,12 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     find: jest.Mock;
   };
   let mockUserRepo: {
+    find: jest.Mock;
+  };
+  let mockCustomerRepo: {
+    find: jest.Mock;
+  };
+  let mockPromotionRepo: {
     find: jest.Mock;
   };
   // The tenant-bound transaction fake, copied from
@@ -354,6 +363,8 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
     mockShiftRepo = { find: jest.fn() };
     mockMovementRepo = { find: jest.fn() };
     mockUserRepo = { find: jest.fn() };
+    mockCustomerRepo = { find: jest.fn() };
+    mockPromotionRepo = { find: jest.fn() };
 
     transactionalManager = {
       query: jest.fn(async () => []),
@@ -364,7 +375,11 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
             ? mockUserRepo
             : entity === CashMovement
               ? mockMovementRepo
-              : mockShiftRepo,
+              : entity === Customer
+                ? mockCustomerRepo
+                : entity === Promotion
+                  ? mockPromotionRepo
+                  : mockShiftRepo,
       ),
     };
     transactionalDataSource = {
@@ -440,6 +455,25 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
 
     mockMovementRepo.find.mockResolvedValue(sampleMovements);
     mockUserRepo.find.mockResolvedValue(sampleUsers);
+    mockCustomerRepo.find.mockResolvedValue([
+      {
+        id: 'J0310000123456',
+        tenant_id: tenantId,
+        name: 'Corporación Retail S.A.',
+        tax_id: 'J0310000123456',
+        customer_type: 'EMPRESA',
+      },
+    ]);
+    mockPromotionRepo.find.mockResolvedValue([
+      {
+        id: 'promo-1',
+        tenant_id: tenantId,
+        name: 'Convenio Retail 10%',
+        code: 'CONV-RET',
+        target_customer_id: 'J0310000123456',
+        is_active: true,
+      },
+    ]);
 
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [JwtModule.register({ secret: jwtSecret })],
@@ -620,6 +654,24 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       expect(body.cashiers[0].cashierName).toBe('Elena Morales');
       expect(body.cashiers[0].invoiceCount).toBe(2);
       expect(body.cashiers[0].totalSales).toBe(1650);
+    });
+
+    it('GET /sales/reports/corporate-metrics aggregates B2B purchases, convenios and returns KPIs', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/sales/reports/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31')
+        .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
+        .expect(200);
+
+      const body = res.body as CorporateMetricsReportDto;
+      expect(body.companies.length).toBeGreaterThanOrEqual(1);
+      const retailCompany = body.companies.find((c) => c.customerId === 'J0310000123456');
+      expect(retailCompany).toBeDefined();
+      expect(retailCompany?.customerName).toBe('Corporación Retail S.A.');
+      expect(retailCompany?.convenioCode).toBe('CONV-RET');
+      expect(retailCompany?.ticketCount).toBe(1);
+      expect(retailCompany?.netSalesNio).toBe(1000);
+      expect(body.kpis.totalCorporateNetSalesNio).toBe(1000);
+      expect(body.kpis.totalCorporateTickets).toBe(1);
     });
   });
 
