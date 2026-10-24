@@ -15,7 +15,7 @@ sobre qué y en qué orden se leen.
 | Carpeta | Qué contiene |
 |---|---|
 | [`gobernanza/`](gobernanza/) | Las reglas del set y el informe que las originó |
-| [`identidad/`](identidad/) | El encargo de identidad, el paquete de inicio y la guía de entregables |
+| [`identidad/`](identidad/) | El manual de marca oficial (`Nhilos Manual.pdf`), el encargo de identidad, el paquete de inicio y la guía de entregables |
 | [`claims/`](claims/) | El registro de lo que el producto realmente hace, con evidencia |
 | [`web/`](web/) | Mensaje, arquitectura de información, contenido y gates no funcionales del sitio |
 | [`producto/`](producto/) | Contenido de la página profunda de producto y el inventario de medios |
