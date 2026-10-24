@@ -1,11 +1,10 @@
 'use client';
 
-import { Building2, Calendar, Tag, AlertCircle } from 'lucide-react';
+import { Building2, Calendar, AlertCircle } from 'lucide-react';
 import { StatCard } from '@/components/ui/stat-card';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSafeSearchParams } from '@/lib/safe-search-params';
@@ -177,7 +176,7 @@ export function CorporateMetricsTab() {
           {/* KPI Cards Strip */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label="Facturación Neta B2B"
+              label="Facturación Neta"
               value={formatCurrency(data.kpis.totalCorporateNetSalesNio)}
               subtitle={`Bruto: ${formatCurrency(data.kpis.totalCorporateGrossSalesNio)}`}
             />
@@ -187,14 +186,14 @@ export function CorporateMetricsTab() {
               subtitle={`Tasa efectiva: ${data.kpis.overallEffectiveDiscountRate}%`}
             />
             <StatCard
-              label="Tickets Corporativos"
+              label="Tickets"
               value={String(data.kpis.totalCorporateTickets)}
               subtitle={`${data.kpis.activeCompaniesCount} empresas activas`}
             />
             <StatCard
-              label="Ticket Promedio B2B"
+              label="Ticket Promedio"
               value={formatCurrency(data.kpis.overallAverageTicketNio)}
-              subtitle="Por transacción corporativa"
+              subtitle="Por transacción"
             />
           </div>
 
@@ -262,24 +261,13 @@ export function CorporateMetricsTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          {company.convenioCode || company.convenioName ? (
-                            <div className="flex items-center gap-1.5">
-                              <Badge
-                                variant="outline"
-                                className="bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
-                              >
-                                <Tag className="mr-1 h-3 w-3" />
-                                {company.convenioCode || 'CONVENIO'}
-                              </Badge>
-                              {company.convenioName && (
-                                <span
-                                  className="text-xs text-muted-foreground truncate max-w-[140px]"
-                                  title={company.convenioName}
-                                >
-                                  {company.convenioName}
-                                </span>
-                              )}
-                            </div>
+                          {company.convenioName || company.convenioCode ? (
+                            <span
+                              className="font-medium text-foreground"
+                              title={company.convenioName || company.convenioCode || ''}
+                            >
+                              {company.convenioName || company.convenioCode}
+                            </span>
                           ) : (
                             <span className="text-xs text-muted-foreground italic">
                               Sin convenio formal

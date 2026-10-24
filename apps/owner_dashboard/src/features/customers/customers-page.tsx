@@ -5,25 +5,23 @@ import { UserPlus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSafeSearchParams } from '@/lib/safe-search-params';
-import { CustomerLoyaltyProfile } from '@/features/loyalty/customer-loyalty-profile';
-import { LoyaltyPage } from '@/features/loyalty/loyalty-page';
 import { CustomersList } from './customers-list';
 import { CorporateMetricsTab } from './corporate-metrics-tab';
 
-type TabId = 'directory' | 'corporate-metrics' | 'loyalty' | 'programs';
+type TabId = 'directory' | 'metrics';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'directory', label: 'Directorio' },
-  { id: 'corporate-metrics', label: 'Convenios y Empresas' },
-  { id: 'loyalty', label: 'Perfil de Lealtad' },
-  { id: 'programs', label: 'Programas y Recompensas' },
+  { id: 'metrics', label: 'Métricas' },
 ];
 
 export function CustomersPage() {
   const [searchParams, setSearchParams] = useSafeSearchParams();
-  const tabParam = searchParams.get('tab') as TabId | null;
+  const tabParam = searchParams.get('tab') as string | null;
   const initialTab: TabId =
-    tabParam && TABS.some((t) => t.id === tabParam) ? tabParam : 'directory';
+    tabParam === 'metrics' || tabParam === 'corporate-metrics'
+      ? 'metrics'
+      : 'directory';
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -51,7 +49,7 @@ export function CustomersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Directorio de clientes, convenios comerciales y programas de fidelización.
+            Directorio de clientes y convenios comerciales.
           </p>
         </div>
 
@@ -108,9 +106,7 @@ export function CustomersPage() {
             onCreateOpenChange={setCreateOpen}
           />
         )}
-        {activeTab === 'corporate-metrics' && <CorporateMetricsTab />}
-        {activeTab === 'loyalty' && <CustomerLoyaltyProfile />}
-        {activeTab === 'programs' && <LoyaltyPage />}
+        {activeTab === 'metrics' && <CorporateMetricsTab />}
       </div>
     </div>
   );

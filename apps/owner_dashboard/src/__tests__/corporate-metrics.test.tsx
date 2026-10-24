@@ -88,21 +88,20 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
     );
 
     // Verify 4 KPIs
-    expect(screen.getByText('Facturación Neta B2B')).toBeInTheDocument();
+    expect(screen.getByText('Facturación Neta')).toBeInTheDocument();
     expect(screen.getByText('Descuentos Otorgados')).toBeInTheDocument();
-    expect(screen.getByText('Tickets Corporativos')).toBeInTheDocument();
-    expect(screen.getByText('Ticket Promedio B2B')).toBeInTheDocument();
+    expect(screen.getAllByText('Tickets').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Ticket Promedio')).toBeInTheDocument();
     expect(screen.getAllByText('30').length).toBeGreaterThanOrEqual(2);
 
-    // Verify table row and badge
+    // Verify table row and convenio description
     expect(screen.getByText('Banco Atlántico S.A.')).toBeInTheDocument();
     expect(screen.getByText(/RUC: J0310000001234/)).toBeInTheDocument();
-    expect(screen.getByText('CONV-BAC')).toBeInTheDocument();
     expect(screen.getByText('Convenio Empleados BAC')).toBeInTheDocument();
     expect(screen.getByText('10%')).toBeInTheDocument();
   });
 
-  it('renders convenio name with fallback badge when convenioCode is null or empty', () => {
+  it('renders convenio name directly when convenioCode is null or empty', () => {
     const mockReport: metricsApiModule.CorporateMetricsReport = {
       startDate: '2026-08-01',
       endDate: '2026-08-31',
@@ -148,7 +147,6 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
     );
 
     expect(screen.getByText('Claro Nicaragua S.A.')).toBeInTheDocument();
-    expect(screen.getByText('CONVENIO')).toBeInTheDocument();
     expect(screen.getByText('Convenio Corporativo Claro')).toBeInTheDocument();
     expect(screen.queryByText(/sin convenio formal/i)).not.toBeInTheDocument();
   });
