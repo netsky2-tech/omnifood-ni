@@ -17,6 +17,7 @@ import {
 } from '../entities/cash-movement.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
+import { SalesReportsService } from './sales-reports.service';
 
 describe('SalesExportService', () => {
   let service: SalesExportService;
@@ -59,6 +60,7 @@ describe('SalesExportService', () => {
   // proving the derived output while the Cuota Fija tests below prove the
   // regime actually governs the labels.
   let mockFiscalSetup: { getFiscalSetup: jest.Mock };
+  let mockSalesReportsService: { getCorporateMetrics: jest.Mock };
   // The tenant-bound transaction fake: the manager hands back the same
   // repository mocks the pooled tokens provide, so the existing behavior
   // assertions keep working unchanged while the guard test below proves the
@@ -115,6 +117,54 @@ describe('SalesExportService', () => {
         taxRateIva: 0.15,
       }),
     };
+    mockSalesReportsService = {
+      getCorporateMetrics: jest.fn().mockResolvedValue({
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        generatedAt: '2026-08-31T23:59:59Z',
+        kpis: {
+          totalCorporateGrossSalesNio: 15000,
+          totalCorporateDiscountNio: 1500,
+          totalCorporateNetSalesNio: 13500,
+          totalCorporateTickets: 30,
+          overallAverageTicketNio: 450,
+          overallEffectiveDiscountRate: 10,
+          activeCompaniesCount: 1,
+        },
+        companies: [
+          {
+            customerId: 'cust-bac',
+            customerName: 'Banco Atlántico S.A.',
+            customerTaxId: 'J0310000001234',
+            customerType: 'EMPRESA',
+            convenioCode: 'CONV-BAC',
+            convenioName: 'Convenio Empleados BAC',
+            ticketCount: 30,
+            grossSalesNio: 15000,
+            discountNio: 1500,
+            netSalesNio: 13500,
+            effectiveDiscountRate: 10,
+            averageTicketNio: 450,
+            topProducts: [
+              {
+                productId: 'prod-1',
+                productName: 'Combo Almuerzo',
+                quantity: 20,
+                netSalesNio: 9000,
+                discountNio: 1000,
+              },
+            ],
+            timePattern: {
+              daysOfWeek: [],
+              peakHours: [],
+            },
+          },
+        ],
+        overallTopProducts: [],
+        overallDayDistribution: [],
+        overallPeakHours: [],
+      }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -139,6 +189,10 @@ describe('SalesExportService', () => {
         {
           provide: FiscalSetupService,
           useValue: mockFiscalSetup,
+        },
+        {
+          provide: SalesReportsService,
+          useValue: mockSalesReportsService,
         },
       ],
     }).compile();
@@ -211,9 +265,7 @@ describe('SalesExportService', () => {
       // Post-review fix (HIGH): the catalog lookup mock resolves empty by
       // default, so the legacy id falls back to the fiscal literal — the
       // internal UUID must NEVER surface in the sales book.
-      expect(jsonResult.data.records[0].customerName).toBe(
-        'CONSUMIDOR FINAL',
-      );
+      expect(jsonResult.data.records[0].customerName).toBe('CONSUMIDOR FINAL');
       expect(jsonResult.data.records[1].documentType).toBe('ANULADA');
       expect(jsonResult.data.records[1].status).toBe('ANULADA');
 
@@ -319,7 +371,9 @@ describe('SalesExportService', () => {
           format: 'xlsx',
         });
         const workbook = new ExcelJS.Workbook();
-        await workbook.xlsx.load(xlsxResult.buffer as unknown as ExcelJS.Buffer);
+        await workbook.xlsx.load(
+          xlsxResult.buffer as unknown as ExcelJS.Buffer,
+        );
         const headerValues = workbook
           .getWorksheet('Libro de Ventas DGI')
           .getRow(1).values as unknown[];
@@ -436,9 +490,7 @@ describe('SalesExportService', () => {
           format: 'json',
         });
 
-        const totals = computeSalesReportingTotals(
-          originInvoices as never,
-        );
+        const totals = computeSalesReportingTotals(originInvoices as never);
         const row = jsonResult.data.records[0];
         expect(row.manualDiscountNio).toBe(totals.manualDiscountNio);
         expect(row.promotionDiscountNio).toBe(totals.promotionDiscountNio);
@@ -466,7 +518,7 @@ describe('SalesExportService', () => {
           customerTaxId: 'J0310000009999',
           created_at: new Date('2026-08-26T12:00:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -504,10 +556,13 @@ describe('SalesExportService', () => {
           customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T13:00:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
       ]);
       customerQueryBuilder.getMany.mockResolvedValue([
-        { id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01', name: 'SOHO Cliente SRL' },
+        {
+          id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
+          name: 'SOHO Cliente SRL',
+        },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -572,7 +627,7 @@ describe('SalesExportService', () => {
           customerId: 'J0310000000000',
           created_at: new Date('2026-08-26T15:00:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
         {
           id: 'inv-legacy-uuid',
           tenant_id: tenantId,
@@ -586,10 +641,13 @@ describe('SalesExportService', () => {
           customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T15:05:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
       ]);
       customerQueryBuilder.getMany.mockResolvedValue([
-        { id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01', name: 'SOHO Cliente SRL' },
+        {
+          id: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
+          name: 'SOHO Cliente SRL',
+        },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -601,9 +659,7 @@ describe('SalesExportService', () => {
       // The export completed: the non-UUID row degraded, the UUID row
       // resolved, and no internal id leaked.
       expect(jsonResult.data.totalRecords).toBe(2);
-      expect(jsonResult.data.records[0].customerName).toBe(
-        'CONSUMIDOR FINAL',
-      );
+      expect(jsonResult.data.records[0].customerName).toBe('CONSUMIDOR FINAL');
       expect(jsonResult.data.records[1].customerName).toBe('SOHO Cliente SRL');
 
       // SQL contract: the non-UUID id went through the text comparison.
@@ -643,7 +699,7 @@ describe('SalesExportService', () => {
           customerId: '3f2b8a4c-9d1e-4c7a-b2f3-5a6c7d8e9f01',
           created_at: new Date('2026-08-26T16:00:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
         {
           id: 'inv-degrade-2',
           tenant_id: tenantId,
@@ -657,7 +713,7 @@ describe('SalesExportService', () => {
           customerName: 'Snapshot Siempre Gana',
           created_at: new Date('2026-08-26T16:05:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
       ]);
       customerQueryBuilder.getMany.mockRejectedValue(
         new Error('permission denied for table customers'),
@@ -676,9 +732,7 @@ describe('SalesExportService', () => {
 
       // The export survived the catalog failure.
       expect(jsonResult.data.totalRecords).toBe(2);
-      expect(jsonResult.data.records[0].customerName).toBe(
-        'CONSUMIDOR FINAL',
-      );
+      expect(jsonResult.data.records[0].customerName).toBe('CONSUMIDOR FINAL');
       // The present snapshot is untouched by the degradation.
       expect(jsonResult.data.records[1].customerName).toBe(
         'Snapshot Siempre Gana',
@@ -769,10 +823,13 @@ describe('SalesExportService', () => {
           customerId: 'a1b2c3d4-e5f6-4789-8abc-def012345678',
           created_at: new Date('2026-08-26T14:00:00.000Z'),
           items: [],
-        } as unknown as Invoice,
+        },
       ]);
       customerQueryBuilder.getMany.mockResolvedValue([
-        { id: 'a1b2c3d4-e5f6-4789-8abc-def012345678', name: 'Nombre Actual Del Catalogo' },
+        {
+          id: 'a1b2c3d4-e5f6-4789-8abc-def012345678',
+          name: 'Nombre Actual Del Catalogo',
+        },
       ]);
 
       const jsonResult = await service.exportSalesBook(tenantId, {
@@ -1040,6 +1097,10 @@ describe('SalesExportService', () => {
             provide: FiscalSetupService,
             useValue: mockFiscalSetup,
           },
+          {
+            provide: SalesReportsService,
+            useValue: mockSalesReportsService,
+          },
         ],
       }).compile();
       const bound = module.get<SalesExportService>(SalesExportService);
@@ -1182,6 +1243,10 @@ describe('SalesExportService', () => {
           {
             provide: FiscalSetupService,
             useValue: mockFiscalSetup,
+          },
+          {
+            provide: SalesReportsService,
+            useValue: mockSalesReportsService,
           },
         ],
       }).compile();
@@ -1357,6 +1422,10 @@ describe('SalesExportService', () => {
           },
           { provide: DataSource, useValue: boundDataSource },
           { provide: FiscalSetupService, useValue: mockFiscalSetup },
+          {
+            provide: SalesReportsService,
+            useValue: mockSalesReportsService,
+          },
         ],
       }).compile();
       const bound = module.get<SalesExportService>(SalesExportService);
@@ -1683,6 +1752,10 @@ describe('SalesExportService', () => {
           },
           { provide: DataSource, useValue: boundDataSource },
           { provide: FiscalSetupService, useValue: mockFiscalSetup },
+          {
+            provide: SalesReportsService,
+            useValue: mockSalesReportsService,
+          },
         ],
       }).compile();
       const bound = module.get<SalesExportService>(SalesExportService);
@@ -2177,6 +2250,64 @@ describe('SalesExportService', () => {
         totalExemptNio: 0,
         totalTaxNio: 90,
       });
+    });
+  });
+
+  describe('exportCorporateMetrics', () => {
+    it('generates an Excel spreadsheet (xlsx) for corporate metrics ranking', async () => {
+      const result = await service.exportCorporateMetrics(tenantId, {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        format: 'xlsx',
+      });
+
+      expect(result.format).toBe('xlsx');
+      expect(result.contentType).toBe(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(result.filename).toBe(
+        'reporte_convenios_2026-08-01_2026-08-31.xlsx',
+      );
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+      expect(mockSalesReportsService.getCorporateMetrics).toHaveBeenCalledWith(
+        tenantId,
+        {
+          startDate: '2026-08-01',
+          endDate: '2026-08-31',
+        },
+      );
+    });
+
+    it('generates a PDF document for corporate metrics', async () => {
+      const result = await service.exportCorporateMetrics(tenantId, {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        format: 'pdf',
+      });
+
+      expect(result.format).toBe('pdf');
+      expect(result.contentType).toBe('application/pdf');
+      expect(result.filename).toBe(
+        'reporte_convenios_2026-08-01_2026-08-31.pdf',
+      );
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
+    });
+
+    it('generates company-specific consumption detail when companyId is provided', async () => {
+      const result = await service.exportCorporateMetrics(tenantId, {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        format: 'xlsx',
+        companyId: 'cust-bac',
+      });
+
+      expect(result.filename).toBe(
+        'consumo_cust-bac_2026-08-01_2026-08-31.xlsx',
+      );
+      expect(result.buffer).toBeInstanceOf(Buffer);
+      expect(result.buffer.length).toBeGreaterThan(0);
     });
   });
 });

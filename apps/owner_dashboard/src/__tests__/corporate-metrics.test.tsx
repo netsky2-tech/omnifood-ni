@@ -140,12 +140,18 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
     expect(screen.getByText('Combo Almuerzo Ejecutivo')).toBeInTheDocument();
     expect(screen.getByText('12:00 PM')).toBeInTheDocument();
 
+    // Verify Excel and PDF export buttons (Phase 3)
+    expect(screen.getByRole('button', { name: /exportar a excel/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exportar a pdf/i })).toBeInTheDocument();
+
     // Verify row expansion
     const companyRow = screen.getByText('Banco Atlántico S.A.');
     fireEvent.click(companyRow);
     expect(screen.getByText(/Detalle de Consumo — Banco Atlántico S.A./)).toBeInTheDocument();
     expect(screen.getByText('Platos y Productos Preferidos')).toBeInTheDocument();
     expect(screen.getByText('Horarios y Días Habituales de Visita')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exportar excel de banco atlántico s\.a\./i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /exportar pdf de banco atlántico s\.a\./i })).toBeInTheDocument();
   });
 
   it('renders convenio name directly when convenioCode is null or empty', () => {

@@ -45,6 +45,7 @@ import {
   ZReportQueryDto,
 } from '../dto/fiscal-reports.dto';
 import {
+  ExportCorporateMetricsQueryDto,
   ExportSalesBookQueryDto,
   ExportZReportsQueryDto,
   SalesBookExportDto,
@@ -227,6 +228,38 @@ export class ReportsController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<ZReportsExportDto | string | Buffer> {
     const result = await this.salesExportService.exportZReports(
+      tenantId,
+      query,
+    );
+    if (result.format !== 'json') {
+      res.setHeader('Content-Type', result.contentType);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${result.filename}"`,
+      );
+      if (result.buffer) {
+        return result.buffer;
+      }
+      return result.content ?? '';
+    }
+    return result.data;
+  }
+
+  @Get('export/corporate-metrics')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @UseGuards(ThrottlerGuard)
+  @Throttle({
+    [TENANT_REPORT_THROTTLER_NAME]: {
+      limit: REPORTS_PER_TENANT_LIMIT,
+      ttl: REPORT_THROTTLE_TTL_MS,
+    },
+  })
+  async exportCorporateMetrics(
+    @GetTenantId() tenantId: string,
+    @Query() query: ExportCorporateMetricsQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<CorporateMetricsReportDto | string | Buffer> {
+    const result = await this.salesExportService.exportCorporateMetrics(
       tenantId,
       query,
     );

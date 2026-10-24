@@ -30,6 +30,24 @@ export class ExportZReportsQueryDto {
   format?: ExportFormat;
 }
 
+export class ExportCorporateMetricsQueryDto {
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsIn(['csv', 'json', 'xlsx', 'pdf'])
+  format?: ExportFormat;
+
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+}
+
 export interface SalesBookRowDto {
   date: string;
   invoiceNumber: string;

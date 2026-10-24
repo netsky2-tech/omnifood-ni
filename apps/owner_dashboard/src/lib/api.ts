@@ -364,9 +364,30 @@ export async function apiFetch<T>(
 
 export type ApiClientMethodOptions = Omit<ApiRequestInit, "method" | "body">;
 
+export async function apiFetchBlob(path: string): Promise<Blob> {
+  const token =
+    accessToken ||
+    (typeof sessionStorage !== "undefined"
+      ? sessionStorage.getItem(STORAGE_KEY_ACCESS)
+      : null);
+  const response = await fetch(`${getApiBaseUrl()}${path}`, {
+    method: "GET",
+    headers: {
+      ...(token && isNonBlankString(token)
+        ? { Authorization: `Bearer ${token}` }
+        : {}),
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Error al descargar archivo: ${response.statusText}`);
+  }
+  return response.blob();
+}
+
 export const api = {
   get: <T>(path: string, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "GET", ...opts }),
+  getBlob: (path: string) => apiFetchBlob(path),
   post: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>
     apiFetch<T>(path, { method: "POST", body, ...opts }),
   put: <T>(path: string, body?: unknown, opts?: ApiClientMethodOptions) =>

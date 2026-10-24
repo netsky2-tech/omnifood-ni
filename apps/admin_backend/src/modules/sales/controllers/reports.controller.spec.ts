@@ -81,6 +81,7 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
   let mockSalesExportService: {
     exportSalesBook: jest.Mock;
     exportZReports: jest.Mock;
+    exportCorporateMetrics: jest.Mock;
     getXReport: jest.Mock;
     getZReport: jest.Mock;
   };
@@ -379,6 +380,14 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
             });
           },
         ),
+      exportCorporateMetrics: jest.fn().mockResolvedValue({
+        format: 'xlsx',
+        filename: 'reporte_convenios.xlsx',
+        contentType:
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        buffer: Buffer.from('mock-xlsx-data'),
+        data: {},
+      }),
     };
 
     const moduleRef = await Test.createTestingModule({
@@ -718,6 +727,22 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
         startDate: '2026-08-01',
         endDate: '2026-08-31',
       }),
+    );
+  });
+
+  it('allows MANAGER to export corporate-metrics in xlsx format', async () => {
+    const jwtService = app.get(JwtService);
+    await request(getHttpServer())
+      .get(
+        '/sales/reports/export/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31&format=xlsx',
+      )
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .expect(200)
+      .expect('Content-Type', /spreadsheetml\.sheet/);
+
+    expect(mockSalesExportService.exportCorporateMetrics).toHaveBeenCalledWith(
+      'tenant-1',
+      expect.objectContaining({ format: 'xlsx' }),
     );
   });
 

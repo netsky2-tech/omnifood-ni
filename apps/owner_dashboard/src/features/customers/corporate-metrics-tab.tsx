@@ -9,6 +9,8 @@ import {
   UtensilsCrossed,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/stat-card';
 import { LoadingState } from '@/components/ui/loading-state';
@@ -16,9 +18,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { useSafeSearchParams } from '@/lib/safe-search-params';
 import {
   useCorporateMetrics,
+  downloadCorporateMetricsFile,
   type CorporateCustomerSummary,
 } from './corporate-metrics-api';
 
@@ -46,6 +50,7 @@ function getTodayISO(): string {
 }
 
 export function CorporateMetricsTab() {
+  const { toast } = useToast();
   const [searchParams, setSearchParams] = useSafeSearchParams();
   const startDate = searchParams.get('startDate') || getStartOfMonthISO();
   const endDate = searchParams.get('endDate') || getTodayISO();
@@ -73,6 +78,57 @@ export function CorporateMetricsTab() {
     startDate || undefined,
     endDate || undefined,
   );
+
+  const handleExportRanking = async (format: 'xlsx' | 'pdf') => {
+    if (!data || data.companies.length === 0) return;
+    try {
+      await downloadCorporateMetricsFile({
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        format,
+      });
+
+      toast({
+        variant: 'success',
+        title: `Reporte de Convenios (${format.toUpperCase()})`,
+        description: `Se descargó el reporte de convenios en formato ${format.toUpperCase()}.`,
+      });
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Error al exportar',
+        description: `No se pudo generar el archivo ${format.toUpperCase()} de convenios.`,
+      });
+    }
+  };
+
+  const handleExportCompanyDetail = async (
+    company: CorporateCustomerSummary,
+    format: 'xlsx' | 'pdf',
+  ) => {
+    if (!company.topProducts || company.topProducts.length === 0) return;
+    try {
+      await downloadCorporateMetricsFile({
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        format,
+        companyId: company.customerId,
+        companyName: company.customerName,
+      });
+
+      toast({
+        variant: 'success',
+        title: `Detalle de consumo (${format.toUpperCase()})`,
+        description: `Se descargó el reporte de productos para ${company.customerName}.`,
+      });
+    } catch {
+      toast({
+        variant: 'destructive',
+        title: 'Error al exportar',
+        description: 'No se pudo generar el detalle de consumo.',
+      });
+    }
+  };
 
   const handleSetCurrentMonth = () => {
     updateDates(getStartOfMonthISO(), getTodayISO());
@@ -357,16 +413,40 @@ export function CorporateMetricsTab() {
 
           {/* Companies Ranking Table with Expandable Detail */}
           <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
-            <div className="border-b border-border bg-muted/40 px-4 py-3 sm:px-6 flex items-center justify-between">
+            <div className="border-b border-border bg-muted/40 px-4 py-3 sm:px-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-primary" />
                 <h2 className="text-base font-semibold text-foreground">
                   Rendimiento por Empresa y Convenio
                 </h2>
               </div>
-              <span className="text-xs text-muted-foreground">
-                Haga clic en una empresa para ver sus productos y horarios
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground hidden lg:inline mr-2">
+                  Haga clic en una empresa para ver sus productos y horarios
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExportRanking('xlsx')}
+                  disabled={!data || data.companies.length === 0}
+                  className="h-8 gap-1.5 text-xs font-medium border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  aria-label="Exportar a Excel"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  <span>Excel</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExportRanking('pdf')}
+                  disabled={!data || data.companies.length === 0}
+                  className="h-8 gap-1.5 text-xs font-medium border-rose-300 text-rose-800 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950"
+                  aria-label="Exportar a PDF"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>PDF</span>
+                </Button>
+              </div>
             </div>
 
             {data.companies.length === 0 ? (
@@ -411,6 +491,7 @@ export function CorporateMetricsTab() {
                           company={company}
                           isExpanded={isExpanded}
                           onToggle={() => toggleExpand(company.customerId)}
+                          onExportDetail={handleExportCompanyDetail}
                         />
                       );
                     })}
@@ -429,10 +510,15 @@ function CompanyRowWithDetail({
   company,
   isExpanded,
   onToggle,
+  onExportDetail,
 }: {
   company: CorporateCustomerSummary;
   isExpanded: boolean;
   onToggle: () => void;
+  onExportDetail: (
+    company: CorporateCustomerSummary,
+    format: 'xlsx' | 'pdf',
+  ) => void;
 }) {
   return (
     <>
@@ -508,9 +594,41 @@ function CompanyRowWithDetail({
                 <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
                   Detalle de Consumo — {company.customerName}
                 </span>
-                <span className="text-xs text-muted-foreground">
-                  {company.ticketCount} compras registradas
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground mr-1">
+                    {company.ticketCount} compras registradas
+                  </span>
+                  {company.topProducts && company.topProducts.length > 0 && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExportDetail(company, 'xlsx');
+                        }}
+                        className="h-6 gap-1 text-[11px] px-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300"
+                        aria-label={`Exportar Excel de ${company.customerName}`}
+                      >
+                        <FileSpreadsheet className="h-3 w-3" />
+                        <span>Excel</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onExportDetail(company, 'pdf');
+                        }}
+                        className="h-6 gap-1 text-[11px] px-2 border-rose-300 text-rose-800 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300"
+                        aria-label={`Exportar PDF de ${company.customerName}`}
+                      >
+                        <FileText className="h-3 w-3" />
+                        <span>PDF</span>
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
 
               {company.ticketCount === 0 ? (

@@ -24,6 +24,7 @@ import {
 } from '../entities/cash-shift.entity';
 import { CashMovement } from '../entities/cash-movement.entity';
 import {
+  ExportCorporateMetricsQueryDto,
   ExportFormat,
   ExportResult,
   ExportSalesBookQueryDto,
@@ -33,6 +34,8 @@ import {
   ZReportRowDto,
   ZReportsExportDto,
 } from '../dto/sales-export.dto';
+import { CorporateMetricsReportDto } from '../dto/sales-reports.dto';
+import { SalesReportsService } from './sales-reports.service';
 import {
   XReportDto,
   XReportQueryDto,
@@ -127,6 +130,7 @@ export class SalesExportService {
     // effective fiscal configuration — the regime is the single source of
     // IVA treatment, so no export header may hardcode a percentage.
     private readonly fiscalSetupService: FiscalSetupService,
+    private readonly salesReportsService: SalesReportsService,
   ) {}
 
   /**
@@ -420,7 +424,10 @@ export class SalesExportService {
         offset < unresolvedIds.length;
         offset += CUSTOMER_ID_CHUNK_SIZE
       ) {
-        const chunk = unresolvedIds.slice(offset, offset + CUSTOMER_ID_CHUNK_SIZE);
+        const chunk = unresolvedIds.slice(
+          offset,
+          offset + CUSTOMER_ID_CHUNK_SIZE,
+        );
         const customers = await manager
           .getRepository(Customer)
           .createQueryBuilder('customer')
@@ -1330,5 +1337,265 @@ export class SalesExportService {
     }
 
     return { start, end };
+  }
+
+  async exportCorporateMetrics(
+    tenantId: string,
+    query?: ExportCorporateMetricsQueryDto,
+  ): Promise<ExportResult<CorporateMetricsReportDto>> {
+    const format = query?.format ?? 'xlsx';
+    const report = await this.salesReportsService.getCorporateMetrics(
+      tenantId,
+      {
+        startDate: query?.startDate,
+        endDate: query?.endDate,
+      },
+    );
+
+    const fileSuffix = `${query?.startDate ?? 'inicio'}_${query?.endDate ?? 'fin'}`;
+    const filename = query?.companyId
+      ? `consumo_${query.companyId.slice(0, 8)}_${fileSuffix}.${format}`
+      : `reporte_convenios_${fileSuffix}.${format}`;
+
+    let buffer: Buffer | undefined;
+    let contentType = 'application/json';
+
+    if (format === 'xlsx') {
+      contentType =
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      buffer = await this.generateCorporateMetricsXlsx(
+        report,
+        query?.companyId,
+      );
+    } else if (format === 'pdf') {
+      contentType = 'application/pdf';
+      buffer = await this.generateCorporateMetricsPdf(report, query?.companyId);
+    }
+
+    return {
+      format,
+      filename,
+      contentType,
+      buffer,
+      data: report,
+    };
+  }
+
+  private async generateCorporateMetricsXlsx(
+    report: CorporateMetricsReportDto,
+    companyId?: string,
+  ): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'NHILOS POS';
+    workbook.created = new Date();
+
+    if (companyId) {
+      const company = report.companies.find((c) => c.customerId === companyId);
+      const sheetName = (company?.customerName || 'Detalle Empresa').slice(
+        0,
+        31,
+      );
+      const sheet = workbook.addWorksheet(sheetName);
+
+      sheet.columns = [
+        { header: 'Producto', key: 'productName', width: 30 },
+        { header: 'Cantidad (uds)', key: 'quantity', width: 16 },
+        { header: 'Venta Neta (NIO)', key: 'netSalesNio', width: 18 },
+        { header: 'Descuento Otorgado (NIO)', key: 'discountNio', width: 22 },
+      ];
+
+      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF003757' },
+      };
+
+      for (const p of company?.topProducts ?? []) {
+        sheet.addRow({
+          productName: p.productName,
+          quantity: p.quantity,
+          netSalesNio: p.netSalesNio,
+          discountNio: p.discountNio,
+        });
+      }
+    } else {
+      const sheet = workbook.addWorksheet('Convenios y Empresas');
+
+      sheet.columns = [
+        { header: 'Empresa', key: 'customerName', width: 28 },
+        { header: 'RUC / Cédula', key: 'customerTaxId', width: 18 },
+        { header: 'Convenio Activo', key: 'convenioName', width: 26 },
+        { header: 'Tickets', key: 'ticketCount', width: 12 },
+        { header: 'Venta Bruta (NIO)', key: 'grossSalesNio', width: 18 },
+        { header: 'Descuentos (NIO)', key: 'discountNio', width: 18 },
+        { header: 'Venta Neta (NIO)', key: 'netSalesNio', width: 18 },
+        {
+          header: '% Descuento Efectivo',
+          key: 'effectiveDiscountRate',
+          width: 20,
+        },
+        { header: 'Ticket Promedio (NIO)', key: 'averageTicketNio', width: 20 },
+      ];
+
+      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF003757' },
+      };
+
+      for (const c of report.companies) {
+        sheet.addRow({
+          customerName: c.customerName,
+          customerTaxId: c.customerTaxId || 'Sin RUC',
+          convenioName:
+            c.convenioName || c.convenioCode || 'Sin convenio formal',
+          ticketCount: c.ticketCount,
+          grossSalesNio: c.grossSalesNio,
+          discountNio: c.discountNio,
+          netSalesNio: c.netSalesNio,
+          effectiveDiscountRate: `${c.effectiveDiscountRate}%`,
+          averageTicketNio: c.averageTicketNio,
+        });
+      }
+    }
+
+    const uint8Array = await workbook.xlsx.writeBuffer();
+    return Buffer.from(uint8Array);
+  }
+
+  private async generateCorporateMetricsPdf(
+    report: CorporateMetricsReportDto,
+    companyId?: string,
+  ): Promise<Buffer> {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margin: 40,
+    });
+
+    const primaryColor = '#003757';
+
+    doc
+      .fontSize(18)
+      .fillColor(primaryColor)
+      .text('NHILOS POS', { continued: true })
+      .fontSize(10)
+      .fillColor('#666666')
+      .text('  |  Reporte de Convenios Comerciales', { align: 'right' });
+
+    doc.moveDown(0.5);
+
+    const periodText =
+      report.startDate && report.endDate
+        ? `Período: ${report.startDate} a ${report.endDate}`
+        : 'Período: Histórico consolidado';
+
+    doc
+      .fontSize(10)
+      .fillColor('#444444')
+      .text(periodText)
+      .text(
+        `Generado: ${new Date().toLocaleDateString('es-NI')} ${new Date().toLocaleTimeString('es-NI')}`,
+      );
+
+    doc.moveDown(1);
+
+    if (companyId) {
+      const company = report.companies.find((c) => c.customerId === companyId);
+      doc
+        .fontSize(13)
+        .fillColor(primaryColor)
+        .text(`Detalle de Consumo: ${company?.customerName || 'Empresa'}`);
+      doc.moveDown(0.5);
+
+      doc.rect(40, doc.y, 515, 20).fill(primaryColor);
+      const headerY = doc.y + 5;
+      doc.fontSize(9).fillColor('#FFFFFF');
+      doc.text('Producto', 45, headerY);
+      doc.text('Cantidad', 280, headerY);
+      doc.text('Venta Neta (C$)', 360, headerY);
+      doc.text('Descuento (C$)', 460, headerY);
+
+      doc.y = headerY + 18;
+      let currentY = doc.y;
+      for (const p of company?.topProducts ?? []) {
+        doc.fillColor('#222222').fontSize(9);
+        doc.text(p.productName, 45, currentY);
+        doc.text(`${p.quantity} uds`, 280, currentY);
+        doc.text(`C$ ${p.netSalesNio.toFixed(2)}`, 360, currentY);
+        doc.text(`C$ ${p.discountNio.toFixed(2)}`, 460, currentY);
+        currentY += 18;
+      }
+    } else {
+      doc.rect(40, doc.y, 515, 45).fill('#F8FAFC');
+      const kpiY = doc.y - 38;
+      doc
+        .fontSize(9)
+        .fillColor('#666666')
+        .text('Venta Neta Total', 50, kpiY)
+        .text('Descuentos Cedidos', 180, kpiY)
+        .text('Tickets B2B', 320, kpiY)
+        .text('Ticket Promedio', 420, kpiY);
+
+      doc
+        .fontSize(11)
+        .fillColor(primaryColor)
+        .text(
+          `C$ ${report.kpis.totalCorporateNetSalesNio.toFixed(2)}`,
+          50,
+          kpiY + 15,
+        )
+        .fillColor('#E11D48')
+        .text(
+          `-C$ ${report.kpis.totalCorporateDiscountNio.toFixed(2)}`,
+          180,
+          kpiY + 15,
+        )
+        .fillColor(primaryColor)
+        .text(`${report.kpis.totalCorporateTickets}`, 320, kpiY + 15)
+        .text(
+          `C$ ${report.kpis.overallAverageTicketNio.toFixed(2)}`,
+          420,
+          kpiY + 15,
+        );
+
+      doc.y = kpiY + 45;
+      doc.moveDown(1);
+
+      doc.fontSize(12).fillColor(primaryColor).text('Ranking por Empresa');
+      doc.moveDown(0.5);
+
+      doc.rect(40, doc.y, 515, 20).fill(primaryColor);
+      const thY = doc.y + 5;
+      doc.fillColor('#FFFFFF').fontSize(8);
+      doc.text('Empresa', 45, thY);
+      doc.text('Convenio', 180, thY);
+      doc.text('Tickets', 310, thY);
+      doc.text('Venta Neta (C$)', 370, thY);
+      doc.text('Descuento (C$)', 460, thY);
+
+      let rowY = thY + 18;
+      for (const c of report.companies) {
+        doc.fillColor('#222222').fontSize(8);
+        doc.text(c.customerName.slice(0, 24), 45, rowY);
+        doc.text(
+          (c.convenioName || c.convenioCode || 'Sin convenio').slice(0, 22),
+          180,
+          rowY,
+        );
+        doc.text(`${c.ticketCount}`, 310, rowY);
+        doc.text(`C$ ${c.netSalesNio.toFixed(2)}`, 370, rowY);
+        doc.text(`C$ ${c.discountNio.toFixed(2)}`, 460, rowY);
+        rowY += 16;
+        if (rowY > 750) {
+          doc.addPage();
+          rowY = 50;
+        }
+      }
+    }
+
+    doc.end();
+    return buildPdfBuffer(doc);
   }
 }

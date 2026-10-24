@@ -86,6 +86,35 @@ export function fetchCorporateMetrics(
     : api.get<CorporateMetricsReport>(url);
 }
 
+export async function downloadCorporateMetricsFile(params: {
+  startDate?: string;
+  endDate?: string;
+  format: 'xlsx' | 'pdf';
+  companyId?: string;
+  companyName?: string;
+}): Promise<void> {
+  const { companyName, ...queryParams } = params;
+  const query = toQueryParams(queryParams);
+  const blob = await api.getBlob(
+    `/sales/reports/export/corporate-metrics${query}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fileSuffix = `${params.startDate ?? 'inicio'}_${params.endDate ?? 'fin'}`;
+  const cleanName = companyName
+    ? companyName.replace(/[^a-zA-Z0-9]/g, '_')
+    : params.companyId?.slice(0, 8);
+  const filename = cleanName
+    ? `consumo_${cleanName}_${fileSuffix}.${params.format}`
+    : `reporte_convenios_${fileSuffix}.${params.format}`;
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function useCorporateMetrics(startDate?: string, endDate?: string) {
   const tenantId = useTenantId();
   return useQuery({
