@@ -2,6 +2,33 @@ import { useQuery } from '@tanstack/react-query';
 import { api, type ApiClientMethodOptions } from '@/lib/api';
 import { useTenantId } from '@/lib/tenant';
 
+export interface CorporateCustomerProduct {
+  productId: string;
+  productName: string;
+  quantity: number;
+  netSalesNio: number;
+  discountNio: number;
+}
+
+export interface CorporateDayDistribution {
+  dayOfWeek: number; // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  dayName: string;
+  ticketCount: number;
+  netSalesNio: number;
+}
+
+export interface CorporatePeakHour {
+  hour: number; // 0..23 (hora local)
+  formattedHour: string;
+  ticketCount: number;
+  netSalesNio: number;
+}
+
+export interface CorporateCustomerTimePattern {
+  daysOfWeek: CorporateDayDistribution[];
+  peakHours: CorporatePeakHour[];
+}
+
 export interface CorporateCustomerSummary {
   customerId: string;
   customerName: string;
@@ -15,6 +42,8 @@ export interface CorporateCustomerSummary {
   netSalesNio: number;
   effectiveDiscountRate: number;
   averageTicketNio: number;
+  topProducts?: CorporateCustomerProduct[];
+  timePattern?: CorporateCustomerTimePattern;
 }
 
 export interface CorporateMetricsKpis {
@@ -33,6 +62,9 @@ export interface CorporateMetricsReport {
   generatedAt: string;
   kpis: CorporateMetricsKpis;
   companies: CorporateCustomerSummary[];
+  overallTopProducts?: CorporateCustomerProduct[];
+  overallDayDistribution?: CorporateDayDistribution[];
+  overallPeakHours?: CorporatePeakHour[];
 }
 
 function toQueryParams(params: Record<string, string | number | undefined>): string {

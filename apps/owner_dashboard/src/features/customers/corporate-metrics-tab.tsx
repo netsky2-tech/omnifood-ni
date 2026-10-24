@@ -1,6 +1,15 @@
 'use client';
 
-import { Building2, Calendar, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import {
+  Building2,
+  Calendar,
+  AlertCircle,
+  Clock,
+  UtensilsCrossed,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { StatCard } from '@/components/ui/stat-card';
 import { LoadingState } from '@/components/ui/loading-state';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -8,7 +17,10 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSafeSearchParams } from '@/lib/safe-search-params';
-import { useCorporateMetrics } from './corporate-metrics-api';
+import {
+  useCorporateMetrics,
+  type CorporateCustomerSummary,
+} from './corporate-metrics-api';
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('es-NI', {
@@ -37,6 +49,8 @@ export function CorporateMetricsTab() {
   const [searchParams, setSearchParams] = useSafeSearchParams();
   const startDate = searchParams.get('startDate') || getStartOfMonthISO();
   const endDate = searchParams.get('endDate') || getTodayISO();
+
+  const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
 
   const updateDates = (newStart: string, newEnd: string) => {
     setSearchParams(
@@ -89,6 +103,10 @@ export function CorporateMetricsTab() {
     };
 
     updateDates(format(thirtyDaysAgo), format(now));
+  };
+
+  const toggleExpand = (companyId: string) => {
+    setExpandedCompanyId((prev) => (prev === companyId ? null : companyId));
   };
 
   return (
@@ -197,7 +215,147 @@ export function CorporateMetricsTab() {
             />
           </div>
 
-          {/* Companies Ranking Table */}
+          {/* Behavior & Pattern Section: Top Products & Peak Hours */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Top Products Card */}
+            <div className="rounded-lg border border-border bg-card p-5 shadow-xs">
+              <div className="mb-4 flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <UtensilsCrossed className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold text-foreground text-sm">
+                    Productos Más Consumidos en Convenios
+                  </h3>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Consolidado general
+                </span>
+              </div>
+
+              {!data.overallTopProducts || data.overallTopProducts.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  Sin consumo de productos registrado en este período.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {data.overallTopProducts.slice(0, 5).map((prod, index) => (
+                    <div
+                      key={prod.productId}
+                      className="flex items-center justify-between text-xs"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted font-bold text-[10px] text-muted-foreground">
+                          {index + 1}
+                        </span>
+                        <span
+                          className="font-medium text-foreground truncate"
+                          title={prod.productName}
+                        >
+                          {prod.productName}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0 text-right tabular-nums">
+                        <span className="text-muted-foreground">
+                          {prod.quantity} ud{prod.quantity !== 1 ? 's' : ''}
+                        </span>
+                        <span className="font-semibold text-foreground w-20">
+                          {formatCurrency(prod.netSalesNio)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Afluencia Semanal y Horarios Pico */}
+            <div className="rounded-lg border border-border bg-card p-5 shadow-xs">
+              <div className="mb-4 flex items-center justify-between border-b border-border/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold text-foreground text-sm">
+                    Afluencia Semanal y Horarios Pico
+                  </h3>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Hora de Managua (UTC-6)
+                </span>
+              </div>
+
+              {/* Day Distribution Bar */}
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Días con Mayor Demanda
+                </p>
+                <div className="grid grid-cols-7 gap-1.5 text-center">
+                  {(data.overallDayDistribution || []).map((day) => {
+                    const maxTickets = Math.max(
+                      ...(data.overallDayDistribution || []).map((d) => d.ticketCount),
+                      1,
+                    );
+                    const heightPct = Math.round((day.ticketCount / maxTickets) * 100);
+                    const isPeak = day.ticketCount > 0 && day.ticketCount === maxTickets;
+
+                    return (
+                      <div
+                        key={day.dayOfWeek}
+                        className="flex flex-col items-center gap-1"
+                      >
+                        <div className="flex h-12 w-full items-end justify-center rounded bg-muted/40 p-0.5">
+                          <div
+                            style={{ height: `${Math.max(heightPct, 8)}%` }}
+                            className={`w-full rounded-xs transition-all ${
+                              isPeak
+                                ? 'bg-primary'
+                                : day.ticketCount > 0
+                                  ? 'bg-primary/50'
+                                  : 'bg-muted-foreground/15'
+                            }`}
+                            title={`${day.dayName}: ${day.ticketCount} tickets (${formatCurrency(day.netSalesNio)})`}
+                          />
+                        </div>
+                        <span className="text-[10px] font-medium text-muted-foreground truncate w-full">
+                          {day.dayName.slice(0, 3)}
+                        </span>
+                        <span className="text-[10px] font-semibold tabular-nums text-foreground">
+                          {day.ticketCount}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Peak Hours Badges */}
+                <div className="pt-2 border-t border-border/40">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Franjas Horarias Preferidas
+                  </p>
+                  {!data.overallPeakHours || data.overallPeakHours.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      Sin visitas registradas en este período.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {data.overallPeakHours.slice(0, 4).map((peak) => (
+                        <div
+                          key={peak.hour}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2.5 py-1 text-xs"
+                        >
+                          <span className="font-semibold text-foreground">
+                            {peak.formattedHour}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            ({peak.ticketCount} ticket{peak.ticketCount !== 1 ? 's' : ''})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Companies Ranking Table with Expandable Detail */}
           <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
             <div className="border-b border-border bg-muted/40 px-4 py-3 sm:px-6 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -207,7 +365,7 @@ export function CorporateMetricsTab() {
                 </h2>
               </div>
               <span className="text-xs text-muted-foreground">
-                Ordenado por mayor facturación neta
+                Haga clic en una empresa para ver sus productos y horarios
               </span>
             </div>
 
@@ -232,7 +390,8 @@ export function CorporateMetricsTab() {
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-border bg-muted/20 text-xs font-semibold text-muted-foreground">
                     <tr>
-                      <th className="px-4 py-3 sm:px-6">Empresa</th>
+                      <th className="w-8 px-2 py-3"></th>
+                      <th className="px-4 py-3">Empresa</th>
                       <th className="px-4 py-3">Convenio Activo</th>
                       <th className="px-4 py-3 text-right">Tickets</th>
                       <th className="px-4 py-3 text-right">Venta Bruta</th>
@@ -243,63 +402,18 @@ export function CorporateMetricsTab() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {data.companies.map((company) => (
-                      <tr
-                        key={company.customerId}
-                        className="transition-colors hover:bg-muted/30"
-                      >
-                        <td className="px-4 py-3.5 sm:px-6">
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-foreground">
-                              {company.customerName}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {company.customerTaxId
-                                ? `RUC: ${company.customerTaxId}`
-                                : 'Sin RUC registrado'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          {company.convenioName || company.convenioCode ? (
-                            <span
-                              className="font-medium text-foreground"
-                              title={company.convenioName || company.convenioCode || ''}
-                            >
-                              {company.convenioName || company.convenioCode}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">
-                              Sin convenio formal
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-right tabular-nums text-foreground">
-                          {company.ticketCount}
-                        </td>
-                        <td className="px-4 py-3.5 text-right tabular-nums text-muted-foreground">
-                          {formatCurrency(company.grossSalesNio)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right tabular-nums text-rose-600 dark:text-rose-400 font-medium">
-                          {company.discountNio > 0
-                            ? `-${formatCurrency(company.discountNio)}`
-                            : 'C$0.00'}
-                        </td>
-                        <td className="px-4 py-3.5 text-right tabular-nums font-bold text-foreground">
-                          {formatCurrency(company.netSalesNio)}
-                        </td>
-                        <td className="px-4 py-3.5 text-right tabular-nums text-muted-foreground font-medium">
-                          {company.effectiveDiscountRate > 0
-                            ? `${company.effectiveDiscountRate}%`
-                            : '0%'}
-                        </td>
-                        <td className="px-4 py-3.5 text-right tabular-nums text-foreground sm:pr-6">
-                          {company.ticketCount > 0
-                            ? formatCurrency(company.averageTicketNio)
-                            : '—'}
-                        </td>
-                      </tr>
-                    ))}
+                    {data.companies.map((company) => {
+                      const isExpanded = expandedCompanyId === company.customerId;
+
+                      return (
+                        <CompanyRowWithDetail
+                          key={company.customerId}
+                          company={company}
+                          isExpanded={isExpanded}
+                          onToggle={() => toggleExpand(company.customerId)}
+                        />
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -308,5 +422,187 @@ export function CorporateMetricsTab() {
         </>
       )}
     </div>
+  );
+}
+
+function CompanyRowWithDetail({
+  company,
+  isExpanded,
+  onToggle,
+}: {
+  company: CorporateCustomerSummary;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <tr
+        onClick={onToggle}
+        className="cursor-pointer transition-colors hover:bg-muted/30"
+      >
+        <td className="w-8 px-2 py-3.5 text-center text-muted-foreground">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 inline" />
+          ) : (
+            <ChevronRight className="h-4 w-4 inline" />
+          )}
+        </td>
+        <td className="px-4 py-3.5">
+          <div className="flex flex-col">
+            <span className="font-semibold text-foreground">
+              {company.customerName}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {company.customerTaxId
+                ? `RUC: ${company.customerTaxId}`
+                : 'Sin RUC registrado'}
+            </span>
+          </div>
+        </td>
+        <td className="px-4 py-3.5">
+          {company.convenioName || company.convenioCode ? (
+            <span
+              className="font-medium text-foreground text-sm"
+              title={company.convenioName || company.convenioCode || ''}
+            >
+              {company.convenioName || company.convenioCode}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">
+              Sin convenio formal
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-3.5 text-right tabular-nums text-foreground">
+          {company.ticketCount}
+        </td>
+        <td className="px-4 py-3.5 text-right tabular-nums text-muted-foreground">
+          {formatCurrency(company.grossSalesNio)}
+        </td>
+        <td className="px-4 py-3.5 text-right tabular-nums text-rose-600 dark:text-rose-400 font-medium">
+          {company.discountNio > 0
+            ? `-${formatCurrency(company.discountNio)}`
+            : 'C$0.00'}
+        </td>
+        <td className="px-4 py-3.5 text-right tabular-nums font-bold text-foreground">
+          {formatCurrency(company.netSalesNio)}
+        </td>
+        <td className="px-4 py-3.5 text-right tabular-nums text-muted-foreground font-medium">
+          {company.effectiveDiscountRate > 0
+            ? `${company.effectiveDiscountRate}%`
+            : '0%'}
+        </td>
+        <td className="px-4 py-3.5 text-right tabular-nums text-foreground sm:pr-6">
+          {company.ticketCount > 0
+            ? formatCurrency(company.averageTicketNio)
+            : '—'}
+        </td>
+      </tr>
+
+      {/* Expanded Details Row */}
+      {isExpanded && (
+        <tr className="bg-muted/15 border-b border-border">
+          <td colSpan={9} className="p-4 sm:px-8 sm:py-5">
+            <div className="rounded-lg border border-border/70 bg-card p-4 shadow-2xs space-y-4">
+              <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
+                  Detalle de Consumo — {company.customerName}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {company.ticketCount} compras registradas
+                </span>
+              </div>
+
+              {company.ticketCount === 0 ? (
+                <p className="text-xs text-muted-foreground italic py-2">
+                  Esta empresa no ha registrado transacciones en el rango de fechas seleccionado.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  {/* Top Products */}
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <UtensilsCrossed className="h-3.5 w-3.5 text-primary" />
+                      Platos y Productos Preferidos
+                    </p>
+                    {!company.topProducts || company.topProducts.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Sin datos de productos específicos.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {company.topProducts.map((p, i) => (
+                          <div
+                            key={p.productId}
+                            className="flex items-center justify-between text-xs"
+                          >
+                            <span className="text-foreground truncate max-w-[200px]">
+                              {i + 1}. {p.productName}
+                            </span>
+                            <span className="tabular-nums text-muted-foreground">
+                              {p.quantity} uds • {formatCurrency(p.netSalesNio)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Preferred Hours & Days */}
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      Horarios y Días Habituales de Visita
+                    </p>
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px] mb-1">
+                          Horas pico de visita:
+                        </span>
+                        {!company.timePattern?.peakHours ||
+                        company.timePattern.peakHours.length === 0 ? (
+                          <span className="text-muted-foreground italic">
+                            Sin registro de horario.
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {company.timePattern.peakHours.map((h) => (
+                              <span
+                                key={h.hour}
+                                className="inline-block rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-foreground"
+                              >
+                                {h.formattedHour} ({h.ticketCount} v.)
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2">
+                        <span className="text-muted-foreground block text-[11px] mb-1">
+                          Días con mayor afluencia:
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {(company.timePattern?.daysOfWeek || [])
+                            .filter((d) => d.ticketCount > 0)
+                            .map((d) => (
+                              <span
+                                key={d.dayOfWeek}
+                                className="inline-block rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                              >
+                                {d.dayName}: {d.ticketCount}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

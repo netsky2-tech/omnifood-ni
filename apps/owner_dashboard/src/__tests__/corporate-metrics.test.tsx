@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -70,7 +70,41 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
           netSalesNio: 13500,
           effectiveDiscountRate: 10,
           averageTicketNio: 450,
+          topProducts: [
+            {
+              productId: 'p-1',
+              productName: 'Combo Almuerzo Ejecutivo',
+              quantity: 20,
+              netSalesNio: 9000,
+              discountNio: 1000,
+            },
+          ],
+          timePattern: {
+            daysOfWeek: [
+              { dayOfWeek: 1, dayName: 'Lunes', ticketCount: 10, netSalesNio: 4500 },
+              { dayOfWeek: 5, dayName: 'Viernes', ticketCount: 20, netSalesNio: 9000 },
+            ],
+            peakHours: [
+              { hour: 12, formattedHour: '12:00 PM', ticketCount: 18, netSalesNio: 8000 },
+            ],
+          },
         },
+      ],
+      overallTopProducts: [
+        {
+          productId: 'p-1',
+          productName: 'Combo Almuerzo Ejecutivo',
+          quantity: 20,
+          netSalesNio: 9000,
+          discountNio: 1000,
+        },
+      ],
+      overallDayDistribution: [
+        { dayOfWeek: 1, dayName: 'Lunes', ticketCount: 10, netSalesNio: 4500 },
+        { dayOfWeek: 5, dayName: 'Viernes', ticketCount: 20, netSalesNio: 9000 },
+      ],
+      overallPeakHours: [
+        { hour: 12, formattedHour: '12:00 PM', ticketCount: 18, netSalesNio: 8000 },
       ],
     };
 
@@ -99,6 +133,19 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
     expect(screen.getByText(/RUC: J0310000001234/)).toBeInTheDocument();
     expect(screen.getByText('Convenio Empleados BAC')).toBeInTheDocument();
     expect(screen.getByText('10%')).toBeInTheDocument();
+
+    // Verify widgets of Phase 2
+    expect(screen.getByText('Productos Más Consumidos en Convenios')).toBeInTheDocument();
+    expect(screen.getByText('Afluencia Semanal y Horarios Pico')).toBeInTheDocument();
+    expect(screen.getByText('Combo Almuerzo Ejecutivo')).toBeInTheDocument();
+    expect(screen.getByText('12:00 PM')).toBeInTheDocument();
+
+    // Verify row expansion
+    const companyRow = screen.getByText('Banco Atlántico S.A.');
+    fireEvent.click(companyRow);
+    expect(screen.getByText(/Detalle de Consumo — Banco Atlántico S.A./)).toBeInTheDocument();
+    expect(screen.getByText('Platos y Productos Preferidos')).toBeInTheDocument();
+    expect(screen.getByText('Horarios y Días Habituales de Visita')).toBeInTheDocument();
   });
 
   it('renders convenio name directly when convenioCode is null or empty', () => {

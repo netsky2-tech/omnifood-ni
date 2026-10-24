@@ -33,10 +33,14 @@ import {
   CashierPerformanceItemDto,
   CashierPerformanceQueryDto,
   CashierPerformanceReportDto,
+  CorporateCustomerProductDto,
   CorporateCustomerSummaryDto,
+  CorporateCustomerTimePatternDto,
+  CorporateDayDistributionDto,
   CorporateMetricsKpisDto,
   CorporateMetricsQueryDto,
   CorporateMetricsReportDto,
+  CorporatePeakHourDto,
   DailySeriesQueryDto,
   DailySeriesReportDto,
   HourlySalesBucketDto,
@@ -59,6 +63,23 @@ const round2 = (value: number): number =>
 
 const round4 = (value: number): number =>
   Number((Math.round((value + Number.EPSILON) * 10000) / 10000).toFixed(4));
+
+const SPANISH_DAY_NAMES = [
+  'Domingo',
+  'Lunes',
+  'Martes',
+  'Miércoles',
+  'Jueves',
+  'Viernes',
+  'Sábado',
+];
+
+const formatHourAmPm = (hour: number): string => {
+  if (hour === 0) return '12:00 AM';
+  if (hour < 12) return `${hour}:00 AM`;
+  if (hour === 12) return '12:00 PM';
+  return `${hour - 12}:00 PM`;
+};
 
 @Injectable()
 export class SalesReportsService {
@@ -804,6 +825,14 @@ export class SalesReportsService {
           }
         }
 
+        interface CustomerProductAccumulator {
+          productId: string;
+          productName: string;
+          quantity: number;
+          netSalesNio: number;
+          discountNio: number;
+        }
+
         interface CustomerBucket {
           customerId: string;
           customerName: string;
@@ -813,23 +842,54 @@ export class SalesReportsService {
           grossSalesNio: number;
           discountNio: number;
           netSalesNio: number;
+          products: Map<string, CustomerProductAccumulator>;
+          dayCounts: number[];
+          dayNetSales: number[];
+          hourCounts: number[];
+          hourNetSales: number[];
         }
 
         const buckets = new Map<string, CustomerBucket>();
 
+        const globalProducts = new Map<string, CustomerProductAccumulator>();
+        const globalDayCounts = new Array(7).fill(0);
+        const globalDayNetSales = new Array(7).fill(0);
+        const globalHourCounts = new Array(24).fill(0);
+        const globalHourNetSales = new Array(24).fill(0);
+
+        const createEmptyBucket = (
+          id: string,
+          name: string,
+          taxId: string | null,
+          type: string | null,
+        ): CustomerBucket => ({
+          customerId: id,
+          customerName: name,
+          customerTaxId: taxId,
+          customerType: type,
+          ticketCount: 0,
+          grossSalesNio: 0,
+          discountNio: 0,
+          netSalesNio: 0,
+          products: new Map<string, CustomerProductAccumulator>(),
+          dayCounts: new Array(7).fill(0),
+          dayNetSales: new Array(7).fill(0),
+          hourCounts: new Array(24).fill(0),
+          hourNetSales: new Array(24).fill(0),
+        });
+
         // Pre-populate any customer of type 'EMPRESA' or with an active convenio
         for (const cust of customers) {
           if (cust.customer_type === 'EMPRESA' || convenioByCustomerId.has(cust.id)) {
-            buckets.set(cust.id, {
-              customerId: cust.id,
-              customerName: cust.name,
-              customerTaxId: cust.tax_id || null,
-              customerType: cust.customer_type || null,
-              ticketCount: 0,
-              grossSalesNio: 0,
-              discountNio: 0,
-              netSalesNio: 0,
-            });
+            buckets.set(
+              cust.id,
+              createEmptyBucket(
+                cust.id,
+                cust.name,
+                cust.tax_id || null,
+                cust.customer_type || null,
+              ),
+            );
           }
         }
 
@@ -842,16 +902,12 @@ export class SalesReportsService {
             const cust = customerMap.get(cId);
             // Only aggregate if the customer is an EMPRESA or has a linked convenio
             if (cust?.customer_type === 'EMPRESA' || convenioByCustomerId.has(cId)) {
-              bucket = {
-                customerId: cId,
-                customerName: cust?.name || inv.customerName || 'Empresa sin nombre',
-                customerTaxId: cust?.tax_id || inv.customerTaxId || null,
-                customerType: cust?.customer_type || 'EMPRESA',
-                ticketCount: 0,
-                grossSalesNio: 0,
-                discountNio: 0,
-                netSalesNio: 0,
-              };
+              bucket = createEmptyBucket(
+                cId,
+                cust?.name || inv.customerName || 'Empresa sin nombre',
+                cust?.tax_id || inv.customerTaxId || null,
+                cust?.customer_type || 'EMPRESA',
+              );
               buckets.set(cId, bucket);
             } else {
               // Individual consumer or anonymous sale without convenio; skip from B2B metrics
@@ -860,6 +916,24 @@ export class SalesReportsService {
           }
 
           bucket.ticketCount += 1;
+
+          const invNetSales = Number(inv.subtotal || 0);
+
+          // Managua local date time (UTC-6 year-round)
+          const epochMs = new Date(inv.created_at).getTime() - 6 * 3600 * 1000;
+          const localDate = new Date(epochMs);
+          const dayOfWeek = localDate.getUTCDay(); // 0..6
+          const hour = localDate.getUTCHours(); // 0..23
+
+          bucket.dayCounts[dayOfWeek] += 1;
+          bucket.dayNetSales[dayOfWeek] += invNetSales;
+          bucket.hourCounts[hour] += 1;
+          bucket.hourNetSales[hour] += invNetSales;
+
+          globalDayCounts[dayOfWeek] += 1;
+          globalDayNetSales[dayOfWeek] += invNetSales;
+          globalHourCounts[hour] += 1;
+          globalHourNetSales[hour] += invNetSales;
 
           let invPromoDiscount = 0;
           if (inv.items && inv.items.length > 0) {
@@ -875,14 +949,105 @@ export class SalesReportsService {
                 itemPromoDiscount = Number(item.discount || 0);
               }
               invPromoDiscount += itemPromoDiscount;
+
+              const pKey = item.productId || item.productName || 'unknown-product';
+              const itemQty = Number(item.quantity || 0);
+              const itemNet = Number(item.total || 0);
+
+              // Accumulate in company products
+              let companyProd = bucket.products.get(pKey);
+              if (!companyProd) {
+                companyProd = {
+                  productId: item.productId || pKey,
+                  productName: item.productName || 'Producto',
+                  quantity: 0,
+                  netSalesNio: 0,
+                  discountNio: 0,
+                };
+                bucket.products.set(pKey, companyProd);
+              }
+              companyProd.quantity += itemQty;
+              companyProd.netSalesNio += itemNet;
+              companyProd.discountNio += itemPromoDiscount;
+
+              // Accumulate in global products
+              let globProd = globalProducts.get(pKey);
+              if (!globProd) {
+                globProd = {
+                  productId: item.productId || pKey,
+                  productName: item.productName || 'Producto',
+                  quantity: 0,
+                  netSalesNio: 0,
+                  discountNio: 0,
+                };
+                globalProducts.set(pKey, globProd);
+              }
+              globProd.quantity += itemQty;
+              globProd.netSalesNio += itemNet;
+              globProd.discountNio += itemPromoDiscount;
             }
           }
 
-          const invNetSales = Number(inv.subtotal || 0);
           bucket.netSalesNio += invNetSales;
           bucket.discountNio += invPromoDiscount;
           bucket.grossSalesNio += invNetSales + invPromoDiscount;
         }
+
+        const buildTopProducts = (
+          productsMap: Map<string, CustomerProductAccumulator>,
+          limit = 5,
+        ): CorporateCustomerProductDto[] => {
+          const list = Array.from(productsMap.values()).map((p) => ({
+            productId: p.productId,
+            productName: p.productName,
+            quantity: round2(p.quantity),
+            netSalesNio: round2(p.netSalesNio),
+            discountNio: round2(p.discountNio),
+          }));
+
+          list.sort((a, b) => {
+            if (b.quantity !== a.quantity) {
+              return b.quantity - a.quantity;
+            }
+            return b.netSalesNio - a.netSalesNio;
+          });
+
+          return list.slice(0, limit);
+        };
+
+        const buildTimePattern = (
+          dayCounts: number[],
+          dayNetSales: number[],
+          hourCounts: number[],
+          hourNetSales: number[],
+        ): CorporateCustomerTimePatternDto => {
+          const daysOfWeek: CorporateDayDistributionDto[] = dayCounts.map(
+            (count, dayIndex) => ({
+              dayOfWeek: dayIndex,
+              dayName: SPANISH_DAY_NAMES[dayIndex],
+              ticketCount: count,
+              netSalesNio: round2(dayNetSales[dayIndex]),
+            }),
+          );
+
+          const peakHours: CorporatePeakHourDto[] = hourCounts
+            .map((count, hourIndex) => ({
+              hour: hourIndex,
+              formattedHour: formatHourAmPm(hourIndex),
+              ticketCount: count,
+              netSalesNio: round2(hourNetSales[hourIndex]),
+            }))
+            .filter((h) => h.ticketCount > 0)
+            .sort((a, b) => {
+              if (b.ticketCount !== a.ticketCount) {
+                return b.ticketCount - a.ticketCount;
+              }
+              return b.netSalesNio - a.netSalesNio;
+            })
+            .slice(0, 5);
+
+          return { daysOfWeek, peakHours };
+        };
 
         const companies: CorporateCustomerSummaryDto[] = [];
         let totalGross = 0;
@@ -917,6 +1082,13 @@ export class SalesReportsService {
             netSalesNio: net,
             effectiveDiscountRate: rate,
             averageTicketNio: avgTicket,
+            topProducts: buildTopProducts(bucket.products, 5),
+            timePattern: buildTimePattern(
+              bucket.dayCounts,
+              bucket.dayNetSales,
+              bucket.hourCounts,
+              bucket.hourNetSales,
+            ),
           });
         }
 
@@ -948,12 +1120,22 @@ export class SalesReportsService {
           ).length,
         };
 
+        const globalTimePattern = buildTimePattern(
+          globalDayCounts,
+          globalDayNetSales,
+          globalHourCounts,
+          globalHourNetSales,
+        );
+
         return {
           startDate: query?.startDate,
           endDate: query?.endDate,
           generatedAt: new Date().toISOString(),
           kpis,
           companies,
+          overallTopProducts: buildTopProducts(globalProducts, 10),
+          overallDayDistribution: globalTimePattern.daysOfWeek,
+          overallPeakHours: globalTimePattern.peakHours,
         };
       },
     );

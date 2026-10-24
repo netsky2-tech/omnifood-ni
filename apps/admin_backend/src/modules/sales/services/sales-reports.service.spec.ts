@@ -1821,6 +1821,17 @@ describe('SalesReportsService', () => {
       // avg ticket = 800 / 2 = 400
       expect(companySummary.averageTicketNio).toBe(400.0);
 
+      // Top products for this company
+      expect(companySummary.topProducts).toHaveLength(2);
+      expect(companySummary.topProducts[0].productName).toBe('Combo Almuerzo');
+      expect(companySummary.topProducts[0].quantity).toBe(2);
+      expect(companySummary.topProducts[0].netSalesNio).toBe(500);
+      expect(companySummary.topProducts[0].discountNio).toBe(75);
+
+      // Time pattern for this company
+      expect(companySummary.timePattern.daysOfWeek).toHaveLength(7);
+      expect(companySummary.timePattern.peakHours.length).toBeGreaterThanOrEqual(1);
+
       expect(result.kpis.totalCorporateNetSalesNio).toBe(800.0);
       expect(result.kpis.totalCorporateDiscountNio).toBe(100.0);
       expect(result.kpis.totalCorporateGrossSalesNio).toBe(900.0);
@@ -1828,6 +1839,12 @@ describe('SalesReportsService', () => {
       expect(result.kpis.overallAverageTicketNio).toBe(400.0);
       expect(result.kpis.overallEffectiveDiscountRate).toBe(11.11);
       expect(result.kpis.activeCompaniesCount).toBe(1);
+
+      // Overall top products and time patterns
+      expect(result.overallTopProducts).toHaveLength(2);
+      expect(result.overallTopProducts[0].productName).toBe('Combo Almuerzo');
+      expect(result.overallDayDistribution).toHaveLength(7);
+      expect(result.overallPeakHours.length).toBeGreaterThanOrEqual(1);
     });
 
     it('includes registered corporate customers with active convenios even if they have 0 purchases in period', async () => {

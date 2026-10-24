@@ -670,8 +670,12 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       expect(retailCompany?.convenioCode).toBe('CONV-RET');
       expect(retailCompany?.ticketCount).toBe(1);
       expect(retailCompany?.netSalesNio).toBe(1000);
+      expect(retailCompany?.topProducts).toBeDefined();
       expect(body.kpis.totalCorporateNetSalesNio).toBe(1000);
       expect(body.kpis.totalCorporateTickets).toBe(1);
+      expect(body.overallTopProducts).toBeDefined();
+      expect(body.overallDayDistribution).toHaveLength(7);
+      expect(body.overallPeakHours).toBeDefined();
     });
   });
 

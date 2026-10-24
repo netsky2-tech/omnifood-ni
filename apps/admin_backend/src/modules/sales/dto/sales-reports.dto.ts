@@ -318,6 +318,33 @@ export class CorporateMetricsQueryDto {
   endDate?: string;
 }
 
+export interface CorporateCustomerProductDto {
+  productId: string;
+  productName: string;
+  quantity: number;
+  netSalesNio: number;
+  discountNio: number;
+}
+
+export interface CorporateDayDistributionDto {
+  dayOfWeek: number; // 0 = Domingo, 1 = Lunes, ..., 6 = Sábado
+  dayName: string;
+  ticketCount: number;
+  netSalesNio: number;
+}
+
+export interface CorporatePeakHourDto {
+  hour: number; // 0..23 (hora local de Managua)
+  formattedHour: string;
+  ticketCount: number;
+  netSalesNio: number;
+}
+
+export interface CorporateCustomerTimePatternDto {
+  daysOfWeek: CorporateDayDistributionDto[];
+  peakHours: CorporatePeakHourDto[];
+}
+
 export interface CorporateCustomerSummaryDto {
   customerId: string;
   customerName: string;
@@ -331,6 +358,8 @@ export interface CorporateCustomerSummaryDto {
   netSalesNio: number;
   effectiveDiscountRate: number;
   averageTicketNio: number;
+  topProducts: CorporateCustomerProductDto[];
+  timePattern: CorporateCustomerTimePatternDto;
 }
 
 export interface CorporateMetricsKpisDto {
@@ -349,5 +378,8 @@ export interface CorporateMetricsReportDto {
   generatedAt: string;
   kpis: CorporateMetricsKpisDto;
   companies: CorporateCustomerSummaryDto[];
+  overallTopProducts: CorporateCustomerProductDto[];
+  overallDayDistribution: CorporateDayDistributionDto[];
+  overallPeakHours: CorporatePeakHourDto[];
 }
 
