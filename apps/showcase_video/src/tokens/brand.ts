@@ -29,7 +29,7 @@ export const COMPOSITION_PRESETS = {
     width: 1920,
     height: 1080,
     fps: VIDEO_FPS,
-    durationInFrames: 990, // 33.0 segundos exactos (90 + 240 + 300 + 270 + 90)
+    durationInFrames: 1125, // 37.5 segundos (165 + 240 + 300 + 270 + 150)
   },
   socialReel: {
     id: 'SocialReel',

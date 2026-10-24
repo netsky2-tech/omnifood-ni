@@ -9,8 +9,8 @@ import { OutroScene } from '../scenes/OutroScene';
 export const ShowcaseMaster: React.FC = () => {
   return (
     <Series>
-      {/* 1. Intro de Marca: 90 frames (3.0s) */}
-      <Series.Sequence durationInFrames={90}>
+      {/* 1. Intro de Marca: 165 frames (5.5s) — cubre holgadamente los 145 frames de locución */}
+      <Series.Sequence durationInFrames={165}>
         <Audio src={staticFile('audio/scene_1_intro.mp3')} volume={1} />
         <IntroScene />
       </Series.Sequence>
@@ -33,8 +33,8 @@ export const ShowcaseMaster: React.FC = () => {
         <POSCheckoutScene />
       </Series.Sequence>
 
-      {/* 5. Outro Oficial (Logo PNG, NHILOS POS y Slogan): 90 frames (3.0s) */}
-      <Series.Sequence durationInFrames={90}>
+      {/* 5. Outro Oficial (Logo PNG, NHILOS POS y Slogan): 150 frames (5.0s) — cubre los 121 frames de locución */}
+      <Series.Sequence durationInFrames={150}>
         <Audio src={staticFile('audio/scene_5_outro.mp3')} volume={1} />
         <OutroScene />
       </Series.Sequence>

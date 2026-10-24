@@ -40,7 +40,7 @@ async def generate_all():
     for idx, scene in enumerate(SCENES, 1):
         target_path = os.path.join(OUTPUT_DIR, scene["filename"])
         print(f"  -> [{idx}/{len(SCENES)}] Generando {scene['filename']}...")
-        communicate = edge_tts.Communicate(scene["text"], VOICE, rate="+0%", pitch="+0Hz")
+        communicate = edge_tts.Communicate(scene["text"], VOICE, rate="+8%", pitch="+0Hz")
         await communicate.save(target_path)
         size_kb = os.path.getsize(target_path) / 1024
         print(f"     Listo ({size_kb:.1f} KB) -> {target_path}")
