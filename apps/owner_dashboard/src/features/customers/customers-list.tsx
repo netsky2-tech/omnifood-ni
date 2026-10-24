@@ -12,7 +12,6 @@ import {
   Handshake,
   PlusCircle,
   FilterX,
-  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -92,16 +91,16 @@ export function CustomersList({ search, createOpen, onCreateOpenChange }: Custom
   }, [promotions]);
 
   // Apply in-memory filter for convenio if selected
-  const rawCustomers = data?.data ?? [];
   const customers = useMemo(() => {
+    const list = data?.data ?? [];
     if (convenioFilter === 'with_convenio') {
-      return rawCustomers.filter((c) => conveniosByCustomerId.has(c.id));
+      return list.filter((c) => conveniosByCustomerId.has(c.id));
     }
     if (convenioFilter === 'without_convenio') {
-      return rawCustomers.filter((c) => !conveniosByCustomerId.has(c.id));
+      return list.filter((c) => !conveniosByCustomerId.has(c.id));
     }
-    return rawCustomers;
-  }, [rawCustomers, convenioFilter, conveniosByCustomerId]);
+    return list;
+  }, [data?.data, convenioFilter, conveniosByCustomerId]);
 
   const totalCount = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / CUSTOMER_PAGE_SIZE));
