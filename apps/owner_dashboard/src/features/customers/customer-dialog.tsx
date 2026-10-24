@@ -45,7 +45,7 @@ function CustomerForm({ customerToEdit, onClose }: CustomerFormProps) {
   const updateCustomer = useUpdateCustomer();
 
   const [name, setName] = useState(customerToEdit?.name ?? '');
-  const [taxId, setTaxId] = useState(customerToEdit?.tax_id ?? '');
+  const [taxNumber, setTaxNumber] = useState(customerToEdit?.tax_id ?? '');
   const [phone, setPhone] = useState(customerToEdit?.phone ?? '');
   const [email, setEmail] = useState(customerToEdit?.email ?? '');
   const [address, setAddress] = useState(customerToEdit?.address ?? '');
@@ -72,7 +72,7 @@ function CustomerForm({ customerToEdit, onClose }: CustomerFormProps) {
     const payload: CreateCustomerInput = {
       name: trimmedName,
       customer_type: customerType,
-      ...(taxId.trim() ? { tax_id: taxId.trim() } : {}),
+      ...(taxNumber.trim() ? { tax_id: taxNumber.trim() } : {}),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       ...(email.trim() ? { email: email.trim() } : {}),
       ...(address.trim() ? { address: address.trim() } : {}),
@@ -83,7 +83,7 @@ function CustomerForm({ customerToEdit, onClose }: CustomerFormProps) {
         const updatePayload: UpdateCustomerInput = {
           name: trimmedName,
           customer_type: customerType,
-          tax_id: taxId.trim() || undefined,
+          tax_id: taxNumber.trim() || undefined,
           phone: phone.trim() || undefined,
           email: email.trim() || undefined,
           address: address.trim() || undefined,
@@ -172,11 +172,11 @@ function CustomerForm({ customerToEdit, onClose }: CustomerFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="customer-tax-id">RUC / Cédula</Label>
+          <Label htmlFor="customer-tax-number">RUC / Cédula</Label>
           <Input
-            id="customer-tax-id"
-            value={taxId}
-            onChange={(e) => setTaxId(e.target.value)}
+            id="customer-tax-number"
+            value={taxNumber}
+            onChange={(e) => setTaxNumber(e.target.value)}
             placeholder="Ej: J0310000000123 o 001-120590-0001A"
             disabled={isPending}
           />
