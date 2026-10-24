@@ -480,6 +480,10 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
   ) {
     final result = viewModel.controlledSaleResult;
     final checks = result?.checks ?? const {};
+    // Issue #957: contract V2 proves the fiscal sequence without selling, so
+    // this phase is never a sale and never produces a ticket.
+    final isInvoiceFreeContract =
+        (viewModel.attempt?.contractVersion ?? 1) >= 2;
 
     return Card(
       child: Padding(
@@ -488,32 +492,44 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Fase 2 · Venta de verificación sin conexión',
+              isInvoiceFreeContract
+                  ? 'Fase 2 · Verificación fiscal sin venta'
+                  : 'Fase 2 · Venta de verificación sin conexión',
               style: Theme.of(context).textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
             Text(
-              'La venta de verificación se registra localmente y no necesita '
-              'conexión. Después de esta fase sigue la reconexión para '
-              'enviar la evidencia al backend.',
+              isInvoiceFreeContract
+                  ? 'La verificación se ejecuta localmente y no necesita '
+                      'conexión: comprueba el próximo folio disponible sin '
+                      'emitir ninguna factura. Después de esta fase sigue la '
+                      'reconexión para enviar la evidencia al backend.'
+                  : 'La venta de verificación se registra localmente y no '
+                      'necesita conexión. Después de esta fase sigue la '
+                      'reconexión para enviar la evidencia al backend.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
-            _buildFiscalConsequenceNotice(context),
+            _buildFiscalConsequenceNotice(
+              context,
+              isInvoiceFree: isInvoiceFreeContract,
+            ),
             if (result != null) ...[
-              Text(
-                'Ticket de verificación',
-                style: Theme.of(context).textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              SelectableText(
-                result.verificationTicketId ?? '-',
-                key: const Key('verification_ticket_id'),
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
-              ),
+              if (!isInvoiceFreeContract) ...[
+                Text(
+                  'Ticket de verificación',
+                  style: Theme.of(context).textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                SelectableText(
+                  result.verificationTicketId ?? '-',
+                  key: const Key('verification_ticket_id'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontFamily: 'monospace',
+                      ),
+                ),
+              ],
               const SizedBox(height: 4),
               Text(
                 'Estado del intento: '
@@ -542,7 +558,11 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                       width: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Ejecutar venta de verificación'),
+                  : Text(
+                      isInvoiceFreeContract
+                          ? 'Verificar secuencia fiscal'
+                          : 'Ejecutar venta de verificación',
+                    ),
             ),
             if (viewModel.preOfflineChecksSucceeded != true) ...[
               const SizedBox(height: 8),
@@ -581,7 +601,10 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
   /// line stays the notice's only emitted-number claim, D-18). Unreadable
   /// configuration → a generic warning. In every state the phase remains
   /// executable, including fully offline.
-  Widget _buildFiscalConsequenceNotice(BuildContext context) {
+  Widget _buildFiscalConsequenceNotice(
+    BuildContext context, {
+    bool isInvoiceFree = false,
+  }) {
     final snapshot = _fiscalSeries;
     if (snapshot == null && !_fiscalSeriesLoadFailed) {
       // Configuration still loading: render nothing rather than inventing
@@ -589,10 +612,14 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
       return const SizedBox.shrink();
     }
 
-    const irreversibleStatement =
-        'Esta fase emite una factura fiscal real que consume un número '
-        'consecutivo DGI de forma permanente: no puede deshacerse ni '
-        'reutilizarse.';
+    final irreversibleStatement = isInvoiceFree
+        ? 'Esta fase NO emite ninguna factura ni consume ningún número '
+            'consecutivo DGI. Solo comprueba que el próximo folio disponible '
+            'sea correcto; el número no queda tomado hasta que se emita una '
+            'venta real.'
+        : 'Esta fase emite una factura fiscal real que consume un número '
+            'consecutivo DGI de forma permanente: no puede deshacerse ni '
+            'reutilizarse.';
 
     final prefix = snapshot?.prefix?.trim() ?? '';
     final configuredCurrent = snapshot == null
@@ -640,7 +667,9 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
       final folio = prefix.isEmpty
           ? '$currentNumber'
           : '$prefix${currentNumber.toString().padLeft(8, '0')}';
-      folioText = 'Folio que se emitirá: $folio';
+      folioText = isInvoiceFree
+          ? 'Próximo folio disponible (no se consume): $folio'
+          : 'Folio que se emitirá: $folio';
     }
 
     // Exact mirror of the runner's lag check: with a local series row and a
@@ -653,6 +682,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     // emitted folio: the folio line above stays the notice's only
     // emitted-number claim, so the two lines can never disagree when a
     // persisted invoice is ahead of the cloud maximum (D-18).
+    final phaseVerb = isInvoiceFree ? 'continuar la activación' : 'vender';
     final cloudMax = cloudHighest ?? 0;
     final hasLocalSeriesRow = snapshot != null && snapshot.prefix != null;
     final isCursorLaggingCloud =
@@ -664,14 +694,15 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
       laggingWarning = configuredCurrent == null
           ? 'Esta terminal no tiene un consecutivo local configurado, y la '
               'nube ya emitió hasta el número $cloudMax. La activación se '
-              'negará a vender hasta que la secuencia fiscal se reconcilie; '
-              'este estado no se corrige solo. Detenga la venta y llame a '
-              'soporte antes de continuar.'
+              'negará a $phaseVerb hasta que la secuencia fiscal se '
+              'reconcilie; este estado no se corrige solo. Detenga el '
+              'proceso y llame a soporte antes de continuar.'
           : 'El consecutivo local de esta terminal ($configuredCurrent) '
               'está por detrás del último número ya emitido en la nube '
-              '($cloudMax). La activación se negará a vender hasta que la '
-              'secuencia fiscal se reconcilie; este estado no se corrige '
-              'solo. Detenga la venta y llame a soporte antes de continuar.';
+              '($cloudMax). La activación se negará a $phaseVerb hasta que '
+              'la secuencia fiscal se reconcilie; este estado no se corrige '
+              'solo. Detenga el proceso y llame a soporte antes de '
+              'continuar.';
     } else if (!showFolio) {
       if (snapshot != null && snapshot.prefix == null) {
         // Bootstrap case: the activation provisions the series when the
@@ -681,17 +712,18 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
           bootstrapWarning =
               'La serie fiscal no está configurada. La activación '
               'aprovisionará la serie continuando desde el máximo ya '
-              'emitido en la nube ($cloudMax), y esta venta emitirá el '
-              'número ${cloudMax + 1}. Si la autorización DGI del cliente '
-              'comienza en otro número, configure primero la serie fiscal '
-              'en Configuración del Negocio; de lo contrario, esta venta '
-              'no usará el número inicial autorizado del cliente.';
+              'emitido en la nube ($cloudMax), y el próximo folio disponible '
+              'será el número ${cloudMax + 1}. Si la autorización DGI del '
+              'cliente comienza en otro número, configure primero la serie '
+              'fiscal en Configuración del Negocio; de lo contrario, la '
+              'primera venta comercial no usará el número inicial '
+              'autorizado del cliente.';
         } else {
           bootstrapWarning =
               'La serie fiscal no está configurada. La activación '
-              'aprovisionará una serie inicial y esta venta emitirá el '
-              'número 1. Si la autorización DGI del cliente comienza en '
-              'otro número, configure primero la serie fiscal en '
+              'aprovisionará una serie inicial y el próximo folio disponible '
+              'será el número 1. Si la autorización DGI del cliente comienza '
+              'en otro número, configure primero la serie fiscal en '
               'Configuración del Negocio; de lo contrario, la primera '
               'venta comercial no será el número autorizado inicial.';
         }

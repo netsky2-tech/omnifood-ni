@@ -10,6 +10,7 @@ import '../models/activation/activation_check_result_local_entity.dart';
 import '../../domain/models/sales/invoice.dart';
 import '../../domain/models/sales/invoice_item.dart';
 import '../../domain/models/sales/payment.dart';
+import '../../domain/models/printer/receipt_document.dart';
 import '../../domain/ports/printer_port.dart';
 import '../../core/utils/nicaragua_fiscal_validator.dart';
 import '../../domain/services/config/printer_config_service.dart';
@@ -265,48 +266,24 @@ class ActivationPreOfflineRunner {
         rucHash = sha256
             .convert(utf8.encode(NicaraguaFiscalValidator.clean(effectiveRuc)))
             .toString();
-        final testInvoiceId = 'onb1.10-test-$trimmedAttemptId';
-      final testInvoice = Invoice(
-        id: testInvoiceId,
-        number: 'ONB1.10-$trimmedAttemptId',
-        createdAt: DateTime.parse(now),
-        userId: params.authorizedUserId.trim(),
-        subtotal: 0,
-        totalTax: 0,
-        total: 0,
-        paymentStatus: PaymentStatus.paid,
-      );
-      testPrintResult = await (await _resolvePrinter()).printInvoice(
-        testInvoice,
-        items: [
-          InvoiceItem(
-            id: '$testInvoiceId-item',
-            invoiceId: testInvoiceId,
-            productId: 'activation-test-print',
-            productName: 'ONB1.10 PRUEBA IMPRESORA',
-            quantity: 1,
-            unitPrice: 0,
-            originalTaxRate: 0,
-            appliedTaxRate: 0,
-            taxAmount: 0,
-            total: 0,
+        // Issue #957: the test page is NOT a fiscal document. It never takes
+        // a DGI number, never prints the regime header, the issuer RUC, the
+        // authorization code or any amount, and it leads with an explicit
+        // "NO ES FACTURA" banner. The RUC gate above still runs: it proves the
+        // fiscal configuration is complete before activation, which is a
+        // separate concern from what the paper shows.
+        testPrintResult = await (await _resolvePrinter()).printReceiptDocument(
+          ReceiptDocument.nonFiscalTestPage(
+            businessName: effectiveConfig.headerBusinessName,
+            legalName: effectiveConfig.headerLegalName,
+            address: effectiveConfig.headerAddress,
+            phone: effectiveConfig.headerPhone,
+            cashierName: params.authorizedUserId.trim(),
+            date: DateTime.parse(now),
+            taxRegime: effectiveRegime,
           ),
-        ],
-        payments: [
-          Payment(
-            id: '$testInvoiceId-payment',
-            invoiceId: testInvoiceId,
-            method: PaymentMethod.cash,
-            amount: 0,
-            amountNio: 0,
-          ),
-        ],
-        businessName: effectiveConfig.headerBusinessName,
-        cashierName: params.authorizedUserId.trim(),
-        paperWidthMm: effectiveConfig.paperWidthMm,
-        taxRegime: effectiveRegime,
-        ruc: effectiveRuc,
-      );
+          paperWidthMm: effectiveConfig.paperWidthMm,
+        );
       }
     }
     final testPrintPass = testPrintResult?.isSuccess ?? false;
@@ -329,20 +306,25 @@ class ActivationPreOfflineRunner {
       testPrintEvidence['rucHash'] = rucHashValue;
     }
 
+    // Issue #957: contract V2 renamed the check because the page it proves is
+    // explicitly non-fiscal. Legacy (V1) attempts keep emitting TEST_PRINT so
+    // an in-flight attempt finalizes against the contract it was started with.
+    final testPrintCheckCode =
+        attempt.contractVersion >= 2 ? 'NON_FISCAL_TEST_PRINT' : 'TEST_PRINT';
     final check5 = ActivationCheckResultLocalEntity(
       id: const Uuid().v4(),
       tenantId: trimmedTenantId,
       activationAttemptId: trimmedAttemptId,
-      checkCode: 'TEST_PRINT',
+      checkCode: testPrintCheckCode,
       status: testPrintPass ? 'PASS' : 'FAIL',
       evidenceType: 'RECEIPT_FEED_CORROBORATION',
       evidenceRef: testPrintPass ? 'PRINT_COMMAND_ACCEPTED' : 'PRINT_TEST_FAILED',
       recordedAt: now,
       detailsSanitizedJson: jsonEncode(testPrintEvidence),
     );
-    checks['TEST_PRINT'] = check5;
+    checks[testPrintCheckCode] = check5;
     if (!testPrintPass) {
-      blockers.add('TEST_PRINT_FAILED: $testPrintFailure');
+      blockers.add('${testPrintCheckCode}_FAILED: $testPrintFailure');
     }
 
     // 6. SQLITE_DURABILITY

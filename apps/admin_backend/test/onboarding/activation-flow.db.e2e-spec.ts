@@ -389,6 +389,15 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     }
   });
 
+  // This suite is the LEGACY (V1 / invoice-based) flow regression: attempts
+  // created here carry invoice evidence and must stay finalizable in flight
+  // after issue #957 introduced contract V2. New terminals get V2, which is
+  // covered by activation.service.db.spec.ts and the POS suite.
+  const pinLegacyContract = (attemptId: string) =>
+    dataSource
+      .getRepository(ActivationAttempt)
+      .update({ id: attemptId }, { contractVersion: 1 });
+
   it('1. Enforces strict RBAC: rejects start activation without onboarding.activation.manage (403)', async () => {
     const res = await request(app.getHttpServer())
       .post('/api/onboarding/activation/attempts')
@@ -522,6 +531,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attempt2Id = startRes.body.id;
+    await pinLegacyContract(attempt2Id);
     expect(attempt2Id).not.toBe(createdAttemptId);
     await persistVerificationSaleEvidence(attempt2Id);
 
@@ -643,6 +653,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attemptWarnId = startRes.body.id;
+    await pinLegacyContract(attemptWarnId);
     await persistVerificationSaleEvidence(
       attemptWarnId,
       tenantWarnId,
@@ -801,6 +812,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attemptSkipId = startRes.body.id;
+    await pinLegacyContract(attemptSkipId);
     await persistVerificationSaleEvidence(
       attemptSkipId,
       tenantSkipId,
@@ -946,6 +958,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attemptFailId = startRes.body.id;
+    await pinLegacyContract(attemptFailId);
     await persistVerificationSaleEvidence(
       attemptFailId,
       tenantFailId,
@@ -992,9 +1005,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(finalizeRes.status).toBe(201);
     expect(finalizeRes.body.status).toBe(ActivationAttemptStatus.FAIL);
-    expect(finalizeRes.body.failureCode).toBe(
-      'CHECK_FAILED_SALE_RECEIPT_PATH',
-    );
+    expect(finalizeRes.body.failureCode).toBe('CHECK_FAILED_SALE_RECEIPT_PATH');
 
     // FAIL attempt with valid readiness reverts to SALE_READY (not ACTIVATED)
     const sessionFail = await dataSource
@@ -1073,6 +1084,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(startRes.status).toBe(201);
     const attemptId = startRes.body.id;
+    await pinLegacyContract(attemptId);
     await persistVerificationSaleEvidence(attemptId, tenantConvId, userConvId);
 
     // Ingest 9 checks as PASS
@@ -1190,7 +1202,9 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
     // 3. Accepts Support token on existing attempt and records audit trail in PostgreSQL
     const activeAttempt = await dataSource
       .getRepository(ActivationAttempt)
-      .findOne({ where: { tenantId } });
+      .findOne({
+        where: { tenantId, status: ActivationAttemptStatus.PASS },
+      });
 
     const overrideRes = await request(app.getHttpServer())
       .post(
@@ -1219,9 +1233,14 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
   });
 
   it('12. ONB1.7F Diagnostic Controls: GET /api/onboarding/activation/attempts/:id/diagnostics returns complete check matrix and audit trail', async () => {
+    // Pin the diagnostics test to the fully-evidenced LEGACY (V1) attempt:
+    // its matrix documents that legacy attempts keep their 10-check contract
+    // after #957, while V2 attempts report the 9 invoice-free checks.
     const activeAttempt = await dataSource
       .getRepository(ActivationAttempt)
-      .findOne({ where: { tenantId } });
+      .findOne({
+        where: { tenantId, status: ActivationAttemptStatus.PASS },
+      });
 
     const diagRes = await request(app.getHttpServer())
       .get(
@@ -1231,6 +1250,7 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
 
     expect(diagRes.status).toBe(200);
     expect(diagRes.body.attempt.id).toBe(activeAttempt?.id);
+    expect(diagRes.body.attempt.contractVersion).toBe(1);
     expect(diagRes.body.session).toBeDefined();
     expect(diagRes.body.checksMatrix).toHaveLength(10);
     expect(diagRes.body.readiness).toBeDefined();

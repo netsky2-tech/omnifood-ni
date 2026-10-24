@@ -58,6 +58,13 @@ class ActivationVerificationSaleCleanupRunner {
       );
     }
 
+    // Issue #957: contract V2 activation never issues a verification invoice,
+    // so there is nothing to void. Succeed as a no-op instead of reporting a
+    // missing ticket as a failure.
+    if (attempt.contractVersion >= 2) {
+      return const VoidVerificationSaleResult(isSuccess: true);
+    }
+
     final ticketId = attempt.verificationTicketId;
     if (ticketId == null || ticketId.isEmpty) {
       return const VoidVerificationSaleResult(

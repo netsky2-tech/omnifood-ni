@@ -3328,6 +3328,24 @@ final migration73_74 = Migration(73, 74, (database) async {
   }
 });
 
+/// Issue #957: activation evidence contract stamped by the backend on the
+/// attempt (1 = legacy invoice-based, 2 = invoice-free). Legacy rows keep 1.
+final migration75_76 = Migration(75, 76, (database) async {
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(activation_attempts_local)',
+  );
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns.map((column) => column['name']).toSet();
+  if (!existing.contains('contract_version')) {
+    await database.execute(
+      'ALTER TABLE activation_attempts_local '
+      'ADD COLUMN contract_version INTEGER NOT NULL DEFAULT 1',
+    );
+  }
+});
+
 final migration74_75 = Migration(74, 75, (database) async {
   final columns = await database.rawQuery('PRAGMA table_info(customers)');
   // A fresh install creates the table with the column via onCreate; legacy
@@ -3409,6 +3427,7 @@ final allMigrations = [
   migration72_73,
   migration73_74,
   migration74_75,
+  migration75_76,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

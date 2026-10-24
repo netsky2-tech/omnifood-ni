@@ -24,6 +24,13 @@ class ActivationAttemptLocalEntity {
   @ColumnInfo(name: 'verification_product_id')
   final String verificationProductId;
 
+  /// Activation evidence contract the backend stamped on the attempt.
+  /// 1 = legacy invoice-based evidence, 2 = invoice-free evidence (#957).
+  /// Defaults to 1 so a row written before this column existed keeps the
+  /// legacy behavior instead of silently pretending to be V2.
+  @ColumnInfo(name: 'contract_version')
+  final int contractVersion;
+
   @ColumnInfo(name: 'verification_ticket_id')
   final String? verificationTicketId;
 
@@ -50,6 +57,7 @@ class ActivationAttemptLocalEntity {
     required this.requiredFiscalRevision,
     required this.requiredFiscalFingerprint,
     required this.verificationProductId,
+    this.contractVersion = 1,
     this.verificationTicketId,
     this.serverTimeAnchorAt,
     this.anchorMonotonicTicks,
@@ -63,6 +71,7 @@ class ActivationAttemptLocalEntity {
     int? requiredFiscalRevision,
     String? requiredFiscalFingerprint,
     String? verificationProductId,
+    int? contractVersion,
     String? verificationTicketId,
     String? serverTimeAnchorAt,
     int? anchorMonotonicTicks,
@@ -80,6 +89,7 @@ class ActivationAttemptLocalEntity {
           requiredFiscalFingerprint ?? this.requiredFiscalFingerprint,
       verificationProductId:
           verificationProductId ?? this.verificationProductId,
+      contractVersion: contractVersion ?? this.contractVersion,
       verificationTicketId: verificationTicketId ?? this.verificationTicketId,
       serverTimeAnchorAt: serverTimeAnchorAt ?? this.serverTimeAnchorAt,
       anchorMonotonicTicks: anchorMonotonicTicks ?? this.anchorMonotonicTicks,

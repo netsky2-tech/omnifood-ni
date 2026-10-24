@@ -38,7 +38,8 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
   'FISCAL_SEQUENCE_RECOVERY_REQUIRED':
       'La secuencia fiscal de este terminal requiere reconciliación con la nube.',
   'NO_ACTIVE_ATTEMPT': 'No hay un intento de activación en curso.',
-  'TERMINAL_MISMATCH': 'La terminal registrada no corresponde a este dispositivo.',
+  'TERMINAL_MISMATCH':
+      'La terminal registrada no corresponde a este dispositivo.',
   'TENANT_MISMATCH': 'El intento de activación pertenece a otro comercio.',
   'ACTIVE_ATTEMPT_FETCH_FAILED':
       'No se pudo consultar el intento de activación. Verifique la conexión e intente de nuevo.',
@@ -54,14 +55,22 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
       'La venta de verificación solo puede ejecutarse cuando el intento está en curso. Reinicie el proceso desde el dashboard.',
   'ATTEMPT_NOT_READY_FOR_SYNC':
       'La sincronización no está disponible en este estado del intento. Verifique que las fases anteriores se completaron correctamente.',
-  'SESSION_USER_UNRESOLVED': 'No se pudo identificar al usuario autorizado de la sesión.',
-  'TERMINAL_PRIMING_FAILED': 'Falló la preparación de la terminal en el servidor.',
+  'SESSION_USER_UNRESOLVED':
+      'No se pudo identificar al usuario autorizado de la sesión.',
+  'TERMINAL_PRIMING_FAILED':
+      'Falló la preparación de la terminal en el servidor.',
   'TERMINAL_PRIMING_PAYLOAD_MALFORMED':
       'La respuesta de preparación de la terminal no es utilizable. Verifique la conexión e intente de nuevo.',
   'PRINTER_AVAILABLE_FAILED':
       'La impresora no está lista. Revise su estado en Configuración → Hardware e Impresora.',
   'TEST_PRINT_FAILED':
       'La impresión de prueba falló. Verifique la impresora y el papel en Configuración → Hardware e Impresora.',
+  'NON_FISCAL_TEST_PRINT_FAILED':
+      'La prueba de impresión sin validez fiscal falló. Verifique la impresora y el papel en Configuración → Hardware e Impresora.',
+  'VERIFICATION_SEQUENCE_DRY_RUN_INVALID':
+      'La verificación de la secuencia fiscal no produjo un folio verificable. Revise la serie fiscal en Configuración del Negocio e intente de nuevo.',
+  'ACTIVATION_CONTRACT_MISMATCH':
+      'Este terminal está ejecutando una versión anterior del sistema de activación. Actualice la aplicación para completar la activación sin emitir una factura.',
   // Round-2 F-10d: the verification sale fails closed when the terminal has
   // no FX rates yet (a freshly installed terminal never receives them before
   // activation). The copy names the exact screen that owns the two fields.
@@ -139,9 +148,11 @@ const Map<String, String> kActivationCheckStatusLabels = <String, String>{
 /// Sources:
 /// - `lib/data/services/activation_pre_offline_runner.dart`
 ///   (TERMINAL_LINKED, REQUIRED_CONFIG_LOCAL, AUTHORIZED_USER_LOCAL,
-///   PRINTER_AVAILABLE, TEST_PRINT, SQLITE_DURABILITY).
+///   PRINTER_AVAILABLE, TEST_PRINT for contract V1 /
+///   NON_FISCAL_TEST_PRINT for contract V2, SQLITE_DURABILITY).
 /// - `lib/data/services/activation_controlled_sale_runner.dart`
-///   (OFFLINE_SALE_PAID, SALE_RECEIPT_PATH, OUTBOX_DURABLE).
+///   (OFFLINE_SALE_PAID, SALE_RECEIPT_PATH, OUTBOX_DURABLE for V1;
+///   VERIFICATION_SEQUENCE_DRY_RUN for V2).
 /// - `lib/data/services/activation_reconnect_sync_runner.dart`
 ///   (POST_RECONNECT_SYNC).
 const Map<String, String> kActivationCheckCodeLabels = <String, String>{
@@ -150,7 +161,9 @@ const Map<String, String> kActivationCheckCodeLabels = <String, String>{
   'AUTHORIZED_USER_LOCAL': 'Usuario autorizado',
   'PRINTER_AVAILABLE': 'Impresora disponible',
   'TEST_PRINT': 'Impresión de prueba',
+  'NON_FISCAL_TEST_PRINT': 'Impresión de prueba sin validez fiscal',
   'SQLITE_DURABILITY': 'Durabilidad de la base de datos',
+  'VERIFICATION_SEQUENCE_DRY_RUN': 'Verificación de la secuencia fiscal',
   'OFFLINE_SALE_PAID': 'Venta fuera de línea pagada',
   'SALE_RECEIPT_PATH': 'Ticket de la venta',
   'OUTBOX_DURABLE': 'Evidencia guardada localmente',
@@ -173,7 +186,8 @@ const Map<String, String> kActivationEvidenceRefLabels = <String, String>{
   'PRINT_TEST_FAILED': 'Falló la impresión de prueba',
   'RECEIPT_PRINTED_OK': 'Ticket impreso correctamente',
   'RECEIPT_PRINT_FAILED': 'No se pudo imprimir el ticket',
-  'RECEIPT_SKIPPED_BY_USER_CONFIG': 'Impresión omitida por configuración del usuario',
+  'RECEIPT_SKIPPED_BY_USER_CONFIG':
+      'Impresión omitida por configuración del usuario',
   'RECEIPT_BLOCKED_UNRESOLVED_TAX_REGIME':
       'Impresión bloqueada: régimen de impuestos sin resolver',
   'OUTBOX_CONSOLIDATED': 'Evidencia consolidada para sincronizar',
@@ -383,7 +397,8 @@ const Map<String, String> kAuditLedgerActionLabels = <String, String>{
 /// [localize] convention — the detail box is diagnostic, so the raw detail
 /// stays visible (D2/D6).
 const Map<String, String> kSyncErrorLabels = <String, String>{
-  'DEVICE_REVOKED': 'Dispositivo revocado por el servidor. Requiere reactivación.',
+  'DEVICE_REVOKED':
+      'Dispositivo revocado por el servidor. Requiere reactivación.',
   'AUTH_BLOCKED: Reautenticación requerida con el servidor nube (HTTP 401/403)':
       'Reautenticación requerida con el servidor nube (HTTP 401/403)',
   'AuditLogs': 'Registros de auditoría',
@@ -483,30 +498,30 @@ const Map<String, String> kAuditMetadataKeyLabels = <String, String>{
 
 /// Registry of every exported label family. The regression guard walks this
 /// map, so any family added here is automatically covered by the test.
-const Map<String, Map<String, String>> kAllLabelMaps = <String,
-    Map<String, String>>{
-  'kActivationBlockerLabels': kActivationBlockerLabels,
-  'kActivationAttemptStatusLabels': kActivationAttemptStatusLabels,
-  'kActivationCheckStatusLabels': kActivationCheckStatusLabels,
-  'kActivationCheckCodeLabels': kActivationCheckCodeLabels,
-  'kActivationEvidenceRefLabels': kActivationEvidenceRefLabels,
-  'kPaymentMethodLabels': kPaymentMethodLabels,
-  'kCashMovementTypeLabels': kCashMovementTypeLabels,
-  'kUserRoleLabels': kUserRoleLabels,
-  'kCountSessionStatusLabels': kCountSessionStatusLabels,
-  'kForensicSeverityLabels': kForensicSeverityLabels,
-  'kForensicAlertTypeLabels': kForensicAlertTypeLabels,
-  'kForensicAlertStatusLabels': kForensicAlertStatusLabels,
-  'kForensicMovementTypeLabels': kForensicMovementTypeLabels,
-  'kVoidReasonLabels': kVoidReasonLabels,
-  'kReprintReasonLabels': kReprintReasonLabels,
-  'kSyncErrorLabels': kSyncErrorLabels,
-  'kAuthorityInertRecipeLabels': kAuthorityInertRecipeLabels,
-  'kAuditDegradedLabels': kAuditDegradedLabels,
-  'kAuditLedgerActionLabels': kAuditLedgerActionLabels,
-  'kAuditMetadataKeyLabels': kAuditMetadataKeyLabels,
-  'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
-};
+const Map<String, Map<String, String>> kAllLabelMaps =
+    <String, Map<String, String>>{
+      'kActivationBlockerLabels': kActivationBlockerLabels,
+      'kActivationAttemptStatusLabels': kActivationAttemptStatusLabels,
+      'kActivationCheckStatusLabels': kActivationCheckStatusLabels,
+      'kActivationCheckCodeLabels': kActivationCheckCodeLabels,
+      'kActivationEvidenceRefLabels': kActivationEvidenceRefLabels,
+      'kPaymentMethodLabels': kPaymentMethodLabels,
+      'kCashMovementTypeLabels': kCashMovementTypeLabels,
+      'kUserRoleLabels': kUserRoleLabels,
+      'kCountSessionStatusLabels': kCountSessionStatusLabels,
+      'kForensicSeverityLabels': kForensicSeverityLabels,
+      'kForensicAlertTypeLabels': kForensicAlertTypeLabels,
+      'kForensicAlertStatusLabels': kForensicAlertStatusLabels,
+      'kForensicMovementTypeLabels': kForensicMovementTypeLabels,
+      'kVoidReasonLabels': kVoidReasonLabels,
+      'kReprintReasonLabels': kReprintReasonLabels,
+      'kSyncErrorLabels': kSyncErrorLabels,
+      'kAuthorityInertRecipeLabels': kAuthorityInertRecipeLabels,
+      'kAuditDegradedLabels': kAuditDegradedLabels,
+      'kAuditLedgerActionLabels': kAuditLedgerActionLabels,
+      'kAuditMetadataKeyLabels': kAuditMetadataKeyLabels,
+      'kActivationBackendVerdictLabels': kActivationBackendVerdictLabels,
+    };
 
 /// Returns the Spanish label for [code] from [labels], or [code] itself when
 /// unknown. Never throws and never renders a placeholder: unknown codes pass

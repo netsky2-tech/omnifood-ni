@@ -21,6 +21,11 @@ class ActivationAttemptSnapshot {
 
   final String verificationProductId;
 
+  /// Activation evidence contract stamped by the backend (1 = legacy
+  /// invoice-based, 2 = invoice-free). Absent payloads are treated as V1 by
+  /// the sync port so a POS updated ahead of the backend keeps working.
+  final int contractVersion;
+
   /// Backend-assigned timestamp (serialized `startedAt`) of the attempt.
   final String assignedAt;
 
@@ -38,6 +43,7 @@ class ActivationAttemptSnapshot {
     required this.requiredFiscalRevision,
     required this.requiredFiscalFingerprint,
     required this.verificationProductId,
+    this.contractVersion = 1,
     required this.assignedAt,
     required this.serverTimeAnchorAt,
   });

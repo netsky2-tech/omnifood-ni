@@ -328,9 +328,18 @@ class DioActivationSyncPort implements ActivationSyncPort {
       requiredFiscalRevision: requiredFiscalRevision.toInt(),
       requiredFiscalFingerprint: requiredFiscalFingerprint,
       verificationProductId: verificationProductId,
+      contractVersion: _parseContractVersion(data['contractVersion']),
       assignedAt: (data['startedAt'] as String?)?.trim() ?? '',
       serverTimeAnchorAt: serverTimeAnchor,
     );
+  }
+
+  /// Contract version is additive: an older backend that predates it simply
+  /// omits the field, and the attempt is treated as legacy V1. A present but
+  /// unusable value fails closed to V1 rather than inventing a newer contract.
+  int _parseContractVersion(Object? raw) {
+    if (raw is num && raw.toInt() >= 2) return raw.toInt();
+    return 1;
   }
 
   bool _isSuccess(int? statusCode) =>
