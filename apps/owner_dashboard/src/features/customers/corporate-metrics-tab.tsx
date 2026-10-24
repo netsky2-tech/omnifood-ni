@@ -262,21 +262,23 @@ export function CorporateMetricsTab() {
                           </div>
                         </td>
                         <td className="px-4 py-3.5">
-                          {company.convenioCode ? (
+                          {company.convenioCode || company.convenioName ? (
                             <div className="flex items-center gap-1.5">
                               <Badge
                                 variant="outline"
                                 className="bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
                               >
                                 <Tag className="mr-1 h-3 w-3" />
-                                {company.convenioCode}
+                                {company.convenioCode || 'CONVENIO'}
                               </Badge>
-                              <span
-                                className="text-xs text-muted-foreground truncate max-w-[140px]"
-                                title={company.convenioName || ''}
-                              >
-                                {company.convenioName}
-                              </span>
+                              {company.convenioName && (
+                                <span
+                                  className="text-xs text-muted-foreground truncate max-w-[140px]"
+                                  title={company.convenioName}
+                                >
+                                  {company.convenioName}
+                                </span>
+                              )}
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground italic">

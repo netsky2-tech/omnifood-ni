@@ -102,6 +102,57 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
     expect(screen.getByText('10%')).toBeInTheDocument();
   });
 
+  it('renders convenio name with fallback badge when convenioCode is null or empty', () => {
+    const mockReport: metricsApiModule.CorporateMetricsReport = {
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+      generatedAt: '2026-08-31T23:59:59Z',
+      kpis: {
+        totalCorporateGrossSalesNio: 5000,
+        totalCorporateDiscountNio: 500,
+        totalCorporateNetSalesNio: 4500,
+        totalCorporateTickets: 10,
+        overallAverageTicketNio: 450,
+        overallEffectiveDiscountRate: 10,
+        activeCompaniesCount: 1,
+      },
+      companies: [
+        {
+          customerId: 'cust-claro',
+          customerName: 'Claro Nicaragua S.A.',
+          customerTaxId: 'J0310000005555',
+          customerType: 'EMPRESA',
+          convenioCode: null, // Sin código manual ingresado
+          convenioName: 'Convenio Corporativo Claro',
+          ticketCount: 10,
+          grossSalesNio: 5000,
+          discountNio: 500,
+          netSalesNio: 4500,
+          effectiveDiscountRate: 10,
+          averageTicketNio: 450,
+        },
+      ],
+    };
+
+    vi.spyOn(metricsApiModule, 'useCorporateMetrics').mockReturnValue({
+      data: mockReport,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    render(
+      <TestWrapper>
+        <CorporateMetricsTab />
+      </TestWrapper>,
+    );
+
+    expect(screen.getByText('Claro Nicaragua S.A.')).toBeInTheDocument();
+    expect(screen.getByText('CONVENIO')).toBeInTheDocument();
+    expect(screen.getByText('Convenio Corporativo Claro')).toBeInTheDocument();
+    expect(screen.queryByText(/sin convenio formal/i)).not.toBeInTheDocument();
+  });
+
   it('renders actionable empty state when no corporate records are found in period', () => {
     const emptyReport: metricsApiModule.CorporateMetricsReport = {
       startDate: '2026-08-01',
