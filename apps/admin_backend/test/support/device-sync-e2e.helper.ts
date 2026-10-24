@@ -132,9 +132,13 @@ const createDeviceSyncTables = async (
       warnings_count int NOT NULL DEFAULT 0,
       failure_code varchar(128),
       idempotency_key varchar(256),
+      contract_version int NOT NULL DEFAULT 1,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE "${schema}".onboarding_activation_attempts
+      ADD COLUMN IF NOT EXISTS contract_version int NOT NULL DEFAULT 1;
 
     CREATE TABLE IF NOT EXISTS "${schema}".device_sync_credentials (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
