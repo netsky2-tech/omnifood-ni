@@ -5,14 +5,16 @@ import { UserPlus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSafeSearchParams } from '@/lib/safe-search-params';
+import { CustomerLoyaltyProfile } from '@/features/loyalty/customer-loyalty-profile';
 import { CustomersList } from './customers-list';
 import { CorporateMetricsTab } from './corporate-metrics-tab';
 
-type TabId = 'directory' | 'metrics';
+type TabId = 'directory' | 'metrics' | 'loyalty';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'directory', label: 'Directorio' },
   { id: 'metrics', label: 'Métricas' },
+  { id: 'loyalty', label: 'Perfil de Lealtad' },
 ];
 
 export function CustomersPage() {
@@ -21,7 +23,9 @@ export function CustomersPage() {
   const initialTab: TabId =
     tabParam === 'metrics' || tabParam === 'corporate-metrics'
       ? 'metrics'
-      : 'directory';
+      : tabParam === 'loyalty'
+        ? 'loyalty'
+        : 'directory';
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
@@ -49,7 +53,7 @@ export function CustomersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Clientes</h1>
           <p className="text-sm text-muted-foreground">
-            Directorio de clientes y convenios comerciales.
+            Directorio de clientes, convenios comerciales y perfil de lealtad.
           </p>
         </div>
 
@@ -107,6 +111,7 @@ export function CustomersPage() {
           />
         )}
         {activeTab === 'metrics' && <CorporateMetricsTab />}
+        {activeTab === 'loyalty' && <CustomerLoyaltyProfile />}
       </div>
     </div>
   );
