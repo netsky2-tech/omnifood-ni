@@ -1389,6 +1389,29 @@ export class SalesExportService {
     workbook.creator = 'NHILOS POS';
     workbook.created = new Date();
 
+    const navyHeaderFill: ExcelJS.Fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF003757' }, // Deep Navy institucional
+    };
+
+    const lightZebraFill: ExcelJS.Fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF8FAFC' },
+    };
+
+    const thinBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
+
+    const currencyFmt = '"C$"#,##0.00';
+    const percentFmt = '0.00"%"';
+    const integerFmt = '#,##0';
+
     if (companyId) {
       const company = report.companies.find((c) => c.customerId === companyId);
       const sheetName = (company?.customerName || 'Detalle Empresa').slice(
@@ -1397,67 +1420,240 @@ export class SalesExportService {
       );
       const sheet = workbook.addWorksheet(sheetName);
 
-      sheet.columns = [
-        { header: 'Producto', key: 'productName', width: 30 },
-        { header: 'Cantidad (uds)', key: 'quantity', width: 16 },
-        { header: 'Venta Neta (NIO)', key: 'netSalesNio', width: 18 },
-        { header: 'Descuento Otorgado (NIO)', key: 'discountNio', width: 22 },
-      ];
-
-      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      sheet.getRow(1).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF003757' },
+      sheet.mergeCells('A1:D1');
+      sheet.getCell('A1').value =
+        'NHILOS POS — Detalle de Consumo por Convenio';
+      sheet.getCell('A1').font = {
+        size: 14,
+        bold: true,
+        color: { argb: 'FF003757' },
       };
 
+      sheet.mergeCells('A2:D2');
+      sheet.getCell('A2').value =
+        `Empresa: ${company?.customerName || 'N/A'} (RUC: ${company?.customerTaxId || 'Sin RUC'}) | Convenio: ${company?.convenioName || company?.convenioCode || 'General'}`;
+      sheet.getCell('A2').font = {
+        size: 10,
+        italic: true,
+        color: { argb: 'FF475569' },
+      };
+
+      sheet.mergeCells('A3:D3');
+      sheet.getCell('A3').value =
+        `Período: ${report.startDate || 'Inicio'} al ${report.endDate || 'Actualidad'} | Generado: ${new Date().toLocaleString('es-NI')}`;
+      sheet.getCell('A3').font = { size: 9, color: { argb: 'FF64748B' } };
+
+      const hRow = sheet.getRow(5);
+      hRow.values = [
+        'Producto',
+        'Cantidad (uds)',
+        'Venta Neta',
+        'Descuento Otorgado',
+      ];
+      hRow.height = 24;
+      hRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      hRow.alignment = { vertical: 'middle' };
+      for (let col = 1; col <= 4; col++) {
+        hRow.getCell(col).fill = navyHeaderFill;
+      }
+
+      sheet.columns = [
+        { key: 'productName', width: 34 },
+        { key: 'quantity', width: 16 },
+        { key: 'netSalesNio', width: 20 },
+        { key: 'discountNio', width: 22 },
+      ];
+
+      let currentRowIdx = 6;
+      let totalQty = 0;
+      let totalNet = 0;
+      let totalDisc = 0;
+
       for (const p of company?.topProducts ?? []) {
-        sheet.addRow({
-          productName: p.productName,
-          quantity: p.quantity,
-          netSalesNio: p.netSalesNio,
-          discountNio: p.discountNio,
-        });
+        const row = sheet.getRow(currentRowIdx);
+        row.values = [p.productName, p.quantity, p.netSalesNio, p.discountNio];
+        row.getCell(2).numFmt = integerFmt;
+        row.getCell(2).alignment = { horizontal: 'right' };
+        row.getCell(3).numFmt = currencyFmt;
+        row.getCell(3).alignment = { horizontal: 'right' };
+        row.getCell(4).numFmt = currencyFmt;
+        row.getCell(4).alignment = { horizontal: 'right' };
+
+        for (let col = 1; col <= 4; col++) {
+          const cell = row.getCell(col);
+          cell.border = thinBorder;
+          if (currentRowIdx % 2 === 0) cell.fill = lightZebraFill;
+        }
+
+        totalQty += p.quantity;
+        totalNet += p.netSalesNio;
+        totalDisc += p.discountNio;
+        currentRowIdx++;
+      }
+
+      const totRow = sheet.getRow(currentRowIdx);
+      totRow.values = ['Total General', totalQty, totalNet, totalDisc];
+      totRow.font = { bold: true };
+      totRow.getCell(2).numFmt = integerFmt;
+      totRow.getCell(3).numFmt = currencyFmt;
+      totRow.getCell(4).numFmt = currencyFmt;
+      for (let col = 1; col <= 4; col++) {
+        totRow.getCell(col).border = {
+          top: { style: 'thin' },
+          bottom: { style: 'double' },
+        };
       }
     } else {
       const sheet = workbook.addWorksheet('Convenios y Empresas');
 
-      sheet.columns = [
-        { header: 'Empresa', key: 'customerName', width: 28 },
-        { header: 'RUC / Cédula', key: 'customerTaxId', width: 18 },
-        { header: 'Convenio Activo', key: 'convenioName', width: 26 },
-        { header: 'Tickets', key: 'ticketCount', width: 12 },
-        { header: 'Venta Bruta (NIO)', key: 'grossSalesNio', width: 18 },
-        { header: 'Descuentos (NIO)', key: 'discountNio', width: 18 },
-        { header: 'Venta Neta (NIO)', key: 'netSalesNio', width: 18 },
-        {
-          header: '% Descuento Efectivo',
-          key: 'effectiveDiscountRate',
-          width: 20,
-        },
-        { header: 'Ticket Promedio (NIO)', key: 'averageTicketNio', width: 20 },
-      ];
-
-      sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      sheet.getRow(1).fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF003757' },
+      sheet.mergeCells('A1:I1');
+      sheet.getCell('A1').value =
+        'NHILOS POS — Reporte Ejecutivo de Convenios Comerciales';
+      sheet.getCell('A1').font = {
+        size: 14,
+        bold: true,
+        color: { argb: 'FF003757' },
       };
 
+      sheet.mergeCells('A2:I2');
+      sheet.getCell('A2').value =
+        `Período: ${report.startDate || 'Inicio'} al ${report.endDate || 'Actualidad'} | Generado: ${new Date().toLocaleString('es-NI')}`;
+      sheet.getCell('A2').font = {
+        size: 9,
+        italic: true,
+        color: { argb: 'FF475569' },
+      };
+
+      sheet.getRow(4).values = [
+        'Venta Neta',
+        'Descuentos Totales',
+        'Tickets Totales',
+        'Ticket Promedio',
+        'Tasa Efectiva Global',
+      ];
+      sheet.getRow(4).font = {
+        size: 9,
+        bold: true,
+        color: { argb: 'FF475569' },
+      };
+
+      sheet.getRow(5).values = [
+        report.kpis.totalCorporateNetSalesNio,
+        report.kpis.totalCorporateDiscountNio,
+        report.kpis.totalCorporateTickets,
+        report.kpis.overallAverageTicketNio,
+        report.kpis.overallEffectiveDiscountRate / 100,
+      ];
+      sheet.getRow(5).font = {
+        size: 12,
+        bold: true,
+        color: { argb: 'FF003757' },
+      };
+      sheet.getRow(5).getCell(1).numFmt = currencyFmt;
+      sheet.getRow(5).getCell(2).numFmt = currencyFmt;
+      sheet.getRow(5).getCell(3).numFmt = integerFmt;
+      sheet.getRow(5).getCell(4).numFmt = currencyFmt;
+      sheet.getRow(5).getCell(5).numFmt = percentFmt;
+
+      for (let col = 1; col <= 5; col++) {
+        sheet.getRow(4).getCell(col).fill = lightZebraFill;
+        sheet.getRow(5).getCell(col).fill = lightZebraFill;
+        sheet.getRow(4).getCell(col).border = thinBorder;
+        sheet.getRow(5).getCell(col).border = thinBorder;
+      }
+
+      const headerRow = sheet.getRow(7);
+      headerRow.values = [
+        'Empresa',
+        'RUC / Cédula',
+        'Convenio Activo',
+        'Tickets',
+        'Venta Bruta',
+        'Descuentos',
+        'Venta Neta',
+        '% Efectivo',
+        'Ticket Promedio',
+      ];
+      headerRow.height = 24;
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.alignment = { vertical: 'middle' };
+      for (let col = 1; col <= 9; col++) {
+        headerRow.getCell(col).fill = navyHeaderFill;
+      }
+
+      sheet.columns = [
+        { key: 'customerName', width: 30 },
+        { key: 'customerTaxId', width: 18 },
+        { key: 'convenioName', width: 28 },
+        { key: 'ticketCount', width: 12 },
+        { key: 'grossSalesNio', width: 18 },
+        { key: 'discountNio', width: 18 },
+        { key: 'netSalesNio', width: 18 },
+        { key: 'effectiveDiscountRate', width: 16 },
+        { key: 'averageTicketNio', width: 18 },
+      ];
+
+      let currentRowIdx = 8;
       for (const c of report.companies) {
-        sheet.addRow({
-          customerName: c.customerName,
-          customerTaxId: c.customerTaxId || 'Sin RUC',
-          convenioName:
-            c.convenioName || c.convenioCode || 'Sin convenio formal',
-          ticketCount: c.ticketCount,
-          grossSalesNio: c.grossSalesNio,
-          discountNio: c.discountNio,
-          netSalesNio: c.netSalesNio,
-          effectiveDiscountRate: `${c.effectiveDiscountRate}%`,
-          averageTicketNio: c.averageTicketNio,
-        });
+        const row = sheet.getRow(currentRowIdx);
+        row.values = [
+          c.customerName,
+          c.customerTaxId || 'Sin RUC',
+          c.convenioName || c.convenioCode || 'Sin convenio formal',
+          c.ticketCount,
+          c.grossSalesNio,
+          c.discountNio,
+          c.netSalesNio,
+          c.effectiveDiscountRate / 100,
+          c.averageTicketNio,
+        ];
+
+        row.getCell(4).numFmt = integerFmt;
+        row.getCell(4).alignment = { horizontal: 'right' };
+        row.getCell(5).numFmt = currencyFmt;
+        row.getCell(5).alignment = { horizontal: 'right' };
+        row.getCell(6).numFmt = currencyFmt;
+        row.getCell(6).alignment = { horizontal: 'right' };
+        row.getCell(7).numFmt = currencyFmt;
+        row.getCell(7).alignment = { horizontal: 'right' };
+        row.getCell(8).numFmt = percentFmt;
+        row.getCell(8).alignment = { horizontal: 'right' };
+        row.getCell(9).numFmt = currencyFmt;
+        row.getCell(9).alignment = { horizontal: 'right' };
+
+        for (let col = 1; col <= 9; col++) {
+          const cell = row.getCell(col);
+          cell.border = thinBorder;
+          if (currentRowIdx % 2 === 0) cell.fill = lightZebraFill;
+        }
+        currentRowIdx++;
+      }
+
+      const totRow = sheet.getRow(currentRowIdx);
+      totRow.values = [
+        'Total General',
+        '',
+        `${report.companies.length} empresas`,
+        report.kpis.totalCorporateTickets,
+        report.kpis.totalCorporateGrossSalesNio,
+        report.kpis.totalCorporateDiscountNio,
+        report.kpis.totalCorporateNetSalesNio,
+        report.kpis.overallEffectiveDiscountRate / 100,
+        report.kpis.overallAverageTicketNio,
+      ];
+      totRow.font = { bold: true };
+      totRow.getCell(4).numFmt = integerFmt;
+      totRow.getCell(5).numFmt = currencyFmt;
+      totRow.getCell(6).numFmt = currencyFmt;
+      totRow.getCell(7).numFmt = currencyFmt;
+      totRow.getCell(8).numFmt = percentFmt;
+      totRow.getCell(9).numFmt = currencyFmt;
+
+      for (let col = 1; col <= 9; col++) {
+        totRow.getCell(col).border = {
+          top: { style: 'thin' },
+          bottom: { style: 'double' },
+        };
       }
     }
 
@@ -1474,126 +1670,167 @@ export class SalesExportService {
       margin: 40,
     });
 
-    const primaryColor = '#003757';
+    const primaryColor = '#003757'; // Deep Navy
+    const accentEmerald = '#00BF81'; // Emerald Green
+    const subtleBorder = '#E2E8F0';
 
+    // Top Emerald Brand Bar
+    doc.rect(40, 25, 515, 3).fill(accentEmerald);
+
+    // Header Title & Logo Text
     doc
       .fontSize(18)
       .fillColor(primaryColor)
-      .text('NHILOS POS', { continued: true })
-      .fontSize(10)
-      .fillColor('#666666')
-      .text('  |  Reporte de Convenios Comerciales', { align: 'right' });
-
-    doc.moveDown(0.5);
+      .text('NHILOS POS', 40, 38)
+      .fontSize(9)
+      .fillColor('#64748B')
+      .text('REPORTE EJECUTIVO DE CONVENIOS Y CLIENTES CORPORATIVOS', 40, 60);
 
     const periodText =
       report.startDate && report.endDate
-        ? `Período: ${report.startDate} a ${report.endDate}`
+        ? `Período: ${report.startDate} al ${report.endDate}`
         : 'Período: Histórico consolidado';
 
     doc
-      .fontSize(10)
-      .fillColor('#444444')
-      .text(periodText)
+      .fontSize(9)
+      .fillColor('#475569')
       .text(
-        `Generado: ${new Date().toLocaleDateString('es-NI')} ${new Date().toLocaleTimeString('es-NI')}`,
+        `${periodText}  |  Generado: ${new Date().toLocaleDateString('es-NI')} ${new Date().toLocaleTimeString('es-NI')}`,
+        40,
+        74,
       );
 
-    doc.moveDown(1);
+    doc.moveTo(40, 92).lineTo(555, 92).strokeColor(subtleBorder).stroke();
 
     if (companyId) {
       const company = report.companies.find((c) => c.customerId === companyId);
+      doc.y = 106;
+
       doc
         .fontSize(13)
         .fillColor(primaryColor)
         .text(`Detalle de Consumo: ${company?.customerName || 'Empresa'}`);
-      doc.moveDown(0.5);
+      doc
+        .fontSize(9)
+        .fillColor('#64748B')
+        .text(
+          `RUC: ${company?.customerTaxId || 'Sin RUC'}  |  Convenio: ${company?.convenioName || company?.convenioCode || 'Sin convenio formal'}`,
+        );
 
-      doc.rect(40, doc.y, 515, 20).fill(primaryColor);
-      const headerY = doc.y + 5;
-      doc.fontSize(9).fillColor('#FFFFFF');
-      doc.text('Producto', 45, headerY);
-      doc.text('Cantidad', 280, headerY);
-      doc.text('Venta Neta (C$)', 360, headerY);
-      doc.text('Descuento (C$)', 460, headerY);
+      doc.moveDown(0.8);
 
-      doc.y = headerY + 18;
-      let currentY = doc.y;
+      // Table Header
+      const headerY = doc.y;
+      doc.rect(40, headerY, 515, 22).fill(primaryColor);
+      doc.fontSize(8).fillColor('#FFFFFF');
+      doc.text('Producto', 48, headerY + 7);
+      doc.text('Cantidad (uds)', 260, headerY + 7);
+      doc.text('Venta Neta (C$)', 360, headerY + 7);
+      doc.text('Descuento (C$)', 460, headerY + 7);
+
+      let currentY = headerY + 28;
       for (const p of company?.topProducts ?? []) {
-        doc.fillColor('#222222').fontSize(9);
-        doc.text(p.productName, 45, currentY);
-        doc.text(`${p.quantity} uds`, 280, currentY);
+        doc.fillColor('#1E293B').fontSize(8);
+        doc.text(p.productName, 48, currentY);
+        doc.text(`${p.quantity} uds`, 260, currentY);
         doc.text(`C$ ${p.netSalesNio.toFixed(2)}`, 360, currentY);
         doc.text(`C$ ${p.discountNio.toFixed(2)}`, 460, currentY);
+
+        doc
+          .moveTo(40, currentY + 12)
+          .lineTo(555, currentY + 12)
+          .strokeColor('#F1F5F9')
+          .stroke();
+
         currentY += 18;
       }
     } else {
-      doc.rect(40, doc.y, 515, 45).fill('#F8FAFC');
-      const kpiY = doc.y - 38;
+      // KPI Cards Container
+      doc.rect(40, 104, 515, 52).fill('#F8FAFC');
+      doc.rect(40, 104, 515, 52).strokeColor(subtleBorder).stroke();
+
+      const kpiY = 112;
       doc
-        .fontSize(9)
-        .fillColor('#666666')
-        .text('Venta Neta Total', 50, kpiY)
-        .text('Descuentos Cedidos', 180, kpiY)
-        .text('Tickets B2B', 320, kpiY)
-        .text('Ticket Promedio', 420, kpiY);
+        .fontSize(8)
+        .fillColor('#64748B')
+        .text('FACTURACIÓN NETA', 52, kpiY)
+        .text('DESCUENTOS CEDIDOS', 175, kpiY)
+        .text('TICKETS', 315, kpiY)
+        .text('TICKET PROMEDIO', 415, kpiY);
 
       doc
-        .fontSize(11)
+        .fontSize(12)
         .fillColor(primaryColor)
         .text(
           `C$ ${report.kpis.totalCorporateNetSalesNio.toFixed(2)}`,
-          50,
-          kpiY + 15,
+          52,
+          kpiY + 14,
         )
         .fillColor('#E11D48')
         .text(
           `-C$ ${report.kpis.totalCorporateDiscountNio.toFixed(2)}`,
-          180,
-          kpiY + 15,
+          175,
+          kpiY + 14,
         )
         .fillColor(primaryColor)
-        .text(`${report.kpis.totalCorporateTickets}`, 320, kpiY + 15)
+        .text(`${report.kpis.totalCorporateTickets}`, 315, kpiY + 14)
         .text(
           `C$ ${report.kpis.overallAverageTicketNio.toFixed(2)}`,
-          420,
-          kpiY + 15,
+          415,
+          kpiY + 14,
         );
 
-      doc.y = kpiY + 45;
-      doc.moveDown(1);
+      doc.y = 175;
+      doc
+        .fontSize(11)
+        .fillColor(primaryColor)
+        .text('Ranking de Empresas por Facturación');
+      doc.moveDown(0.4);
 
-      doc.fontSize(12).fillColor(primaryColor).text('Ranking por Empresa');
-      doc.moveDown(0.5);
-
-      doc.rect(40, doc.y, 515, 20).fill(primaryColor);
-      const thY = doc.y + 5;
+      // Table Header
+      const thY = doc.y;
+      doc.rect(40, thY, 515, 20).fill(primaryColor);
       doc.fillColor('#FFFFFF').fontSize(8);
-      doc.text('Empresa', 45, thY);
-      doc.text('Convenio', 180, thY);
-      doc.text('Tickets', 310, thY);
-      doc.text('Venta Neta (C$)', 370, thY);
-      doc.text('Descuento (C$)', 460, thY);
+      doc.text('Empresa', 48, thY + 6);
+      doc.text('Convenio', 180, thY + 6);
+      doc.text('Tickets', 300, thY + 6);
+      doc.text('Venta Neta (C$)', 370, thY + 6);
+      doc.text('Descuento (C$)', 465, thY + 6);
 
-      let rowY = thY + 18;
+      let rowY = thY + 25;
       for (const c of report.companies) {
-        doc.fillColor('#222222').fontSize(8);
-        doc.text(c.customerName.slice(0, 24), 45, rowY);
+        doc.fillColor('#1E293B').fontSize(8);
+        doc.text(c.customerName.slice(0, 24), 48, rowY);
         doc.text(
           (c.convenioName || c.convenioCode || 'Sin convenio').slice(0, 22),
           180,
           rowY,
         );
-        doc.text(`${c.ticketCount}`, 310, rowY);
+        doc.text(`${c.ticketCount}`, 300, rowY);
         doc.text(`C$ ${c.netSalesNio.toFixed(2)}`, 370, rowY);
-        doc.text(`C$ ${c.discountNio.toFixed(2)}`, 460, rowY);
-        rowY += 16;
-        if (rowY > 750) {
+        doc.text(`C$ ${c.discountNio.toFixed(2)}`, 465, rowY);
+
+        doc
+          .moveTo(40, rowY + 12)
+          .lineTo(555, rowY + 12)
+          .strokeColor('#F1F5F9')
+          .stroke();
+
+        rowY += 17;
+        if (rowY > 740) {
           doc.addPage();
           rowY = 50;
         }
       }
     }
+
+    doc
+      .fontSize(8)
+      .fillColor('#94A3B8')
+      .text('NHILOS POS · Conectamos los hilos de tu negocio.', 40, 780, {
+        align: 'center',
+        width: 515,
+      });
 
     doc.end();
     return buildPdfBuffer(doc);
