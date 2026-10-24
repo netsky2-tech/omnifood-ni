@@ -852,10 +852,16 @@ export class SalesReportsService {
         const buckets = new Map<string, CustomerBucket>();
 
         const globalProducts = new Map<string, CustomerProductAccumulator>();
-        const globalDayCounts = new Array(7).fill(0);
-        const globalDayNetSales = new Array(7).fill(0);
-        const globalHourCounts = new Array(24).fill(0);
-        const globalHourNetSales = new Array(24).fill(0);
+        const globalDayCounts: number[] = [0, 0, 0, 0, 0, 0, 0];
+        const globalDayNetSales: number[] = [0, 0, 0, 0, 0, 0, 0];
+        const globalHourCounts: number[] = Array.from(
+          { length: 24 },
+          (): number => 0,
+        );
+        const globalHourNetSales: number[] = Array.from(
+          { length: 24 },
+          (): number => 0,
+        );
 
         const createEmptyBucket = (
           id: string,
@@ -872,15 +878,18 @@ export class SalesReportsService {
           discountNio: 0,
           netSalesNio: 0,
           products: new Map<string, CustomerProductAccumulator>(),
-          dayCounts: new Array(7).fill(0),
-          dayNetSales: new Array(7).fill(0),
-          hourCounts: new Array(24).fill(0),
-          hourNetSales: new Array(24).fill(0),
+          dayCounts: [0, 0, 0, 0, 0, 0, 0],
+          dayNetSales: [0, 0, 0, 0, 0, 0, 0],
+          hourCounts: Array.from({ length: 24 }, (): number => 0),
+          hourNetSales: Array.from({ length: 24 }, (): number => 0),
         });
 
         // Pre-populate any customer of type 'EMPRESA' or with an active convenio
         for (const cust of customers) {
-          if (cust.customer_type === 'EMPRESA' || convenioByCustomerId.has(cust.id)) {
+          if (
+            cust.customer_type === 'EMPRESA' ||
+            convenioByCustomerId.has(cust.id)
+          ) {
             buckets.set(
               cust.id,
               createEmptyBucket(
@@ -895,13 +904,17 @@ export class SalesReportsService {
 
         for (const inv of invoices) {
           const cId = inv.customerId?.trim();
-          if (!cId || cId === 'CONSUMIDOR FINAL' || cId === 'ANONYMOUS') continue;
+          if (!cId || cId === 'CONSUMIDOR FINAL' || cId === 'ANONYMOUS')
+            continue;
 
           let bucket = buckets.get(cId);
           if (!bucket) {
             const cust = customerMap.get(cId);
             // Only aggregate if the customer is an EMPRESA or has a linked convenio
-            if (cust?.customer_type === 'EMPRESA' || convenioByCustomerId.has(cId)) {
+            if (
+              cust?.customer_type === 'EMPRESA' ||
+              convenioByCustomerId.has(cId)
+            ) {
               bucket = createEmptyBucket(
                 cId,
                 cust?.name || inv.customerName || 'Empresa sin nombre',
@@ -939,8 +952,13 @@ export class SalesReportsService {
           if (inv.items && inv.items.length > 0) {
             for (const item of inv.items) {
               let itemPromoDiscount = 0;
-              if (item.discountOrigin && typeof item.discountOrigin === 'object') {
-                const promoVal = (item.discountOrigin as Record<string, unknown>).promotion;
+              if (
+                item.discountOrigin &&
+                typeof item.discountOrigin === 'object'
+              ) {
+                const promoVal = (
+                  item.discountOrigin as Record<string, unknown>
+                ).promotion;
                 if (typeof promoVal === 'number' && promoVal > 0) {
                   itemPromoDiscount = promoVal;
                 }
@@ -950,7 +968,8 @@ export class SalesReportsService {
               }
               invPromoDiscount += itemPromoDiscount;
 
-              const pKey = item.productId || item.productName || 'unknown-product';
+              const pKey =
+                item.productId || item.productName || 'unknown-product';
               const itemQty = Number(item.quantity || 0);
               const itemNet = Number(item.total || 0);
 

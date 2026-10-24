@@ -382,4 +382,3 @@ export interface CorporateMetricsReportDto {
   overallDayDistribution: CorporateDayDistributionDto[];
   overallPeakHours: CorporatePeakHourDto[];
 }
-

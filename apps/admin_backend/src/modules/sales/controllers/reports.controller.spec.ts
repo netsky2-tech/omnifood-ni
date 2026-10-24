@@ -702,7 +702,9 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
   it('allows MANAGER on corporate-metrics endpoint and returns report', async () => {
     const jwtService = app.get(JwtService);
     const response = await request(getHttpServer())
-      .get('/sales/reports/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31')
+      .get(
+        '/sales/reports/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31',
+      )
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
       .expect(200);
 
@@ -712,7 +714,10 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
     expect(body.kpis.totalCorporateNetSalesNio).toBe(900);
     expect(mockSalesReportsService.getCorporateMetrics).toHaveBeenCalledWith(
       'tenant-1',
-      expect.objectContaining({ startDate: '2026-08-01', endDate: '2026-08-31' }),
+      expect.objectContaining({
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+      }),
     );
   });
 

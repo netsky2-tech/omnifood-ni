@@ -1328,12 +1328,12 @@ describe('SalesReportsService', () => {
       const croissant = result.products.find((p) => p.productId === 'prod-2');
       expect(americano).toBeDefined();
       expect(croissant).toBeDefined();
-      expect(americano!.netRevenueNio).toBe(450);
-      expect(americano!.totalRevenue).toBe(510);
-      expect(americano!.netRevenueNio).not.toBe(americano!.totalRevenue);
-      expect(croissant!.netRevenueNio).toBe(350);
-      expect(croissant!.totalRevenue).toBe(410);
-      expect(croissant!.netRevenueNio).not.toBe(croissant!.totalRevenue);
+      expect(americano.netRevenueNio).toBe(450);
+      expect(americano.totalRevenue).toBe(510);
+      expect(americano.netRevenueNio).not.toBe(americano.totalRevenue);
+      expect(croissant.netRevenueNio).toBe(350);
+      expect(croissant.totalRevenue).toBe(410);
+      expect(croissant.netRevenueNio).not.toBe(croissant.totalRevenue);
 
       // Untruncated period: the listed rows reconcile EXACTLY with the
       // period Net Sales denominator (largest-remainder allocation), and
@@ -1830,7 +1830,9 @@ describe('SalesReportsService', () => {
 
       // Time pattern for this company
       expect(companySummary.timePattern.daysOfWeek).toHaveLength(7);
-      expect(companySummary.timePattern.peakHours.length).toBeGreaterThanOrEqual(1);
+      expect(
+        companySummary.timePattern.peakHours.length,
+      ).toBeGreaterThanOrEqual(1);
 
       expect(result.kpis.totalCorporateNetSalesNio).toBe(800.0);
       expect(result.kpis.totalCorporateDiscountNio).toBe(100.0);

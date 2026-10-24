@@ -658,13 +658,17 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
 
     it('GET /sales/reports/corporate-metrics aggregates B2B purchases, convenios and returns KPIs', async () => {
       const res = await request(app.getHttpServer())
-        .get('/sales/reports/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31')
+        .get(
+          '/sales/reports/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31',
+        )
         .set('Authorization', `Bearer ${getAuthToken(UserRole.MANAGER)}`)
         .expect(200);
 
       const body = res.body as CorporateMetricsReportDto;
       expect(body.companies.length).toBeGreaterThanOrEqual(1);
-      const retailCompany = body.companies.find((c) => c.customerId === 'J0310000123456');
+      const retailCompany = body.companies.find(
+        (c) => c.customerId === 'J0310000123456',
+      );
       expect(retailCompany).toBeDefined();
       expect(retailCompany?.customerName).toBe('Corporación Retail S.A.');
       expect(retailCompany?.convenioCode).toBe('CONV-RET');
