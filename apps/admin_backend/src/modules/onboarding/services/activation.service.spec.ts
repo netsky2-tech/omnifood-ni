@@ -559,6 +559,177 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
       expect(followUpRepo.save).not.toHaveBeenCalled();
     });
 
+    describe('Issue #957 — contract V2 (invoice-free activation)', () => {
+      const v2Codes = [
+        ActivationCheckCode.TERMINAL_LINKED,
+        ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+        ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+        ActivationCheckCode.PRINTER_AVAILABLE,
+        ActivationCheckCode.NON_FISCAL_TEST_PRINT,
+        ActivationCheckCode.SQLITE_DURABILITY,
+        ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN,
+        ActivationCheckCode.OUTBOX_DURABLE,
+        ActivationCheckCode.POST_RECONNECT_SYNC,
+      ] as const;
+
+      const buildV2Checks = (proposedSequence = 8) =>
+        v2Codes.map((checkCode) => ({
+          id: `chk-${checkCode}`,
+          tenantId,
+          activationAttemptId: attemptId,
+          checkCode,
+          required: true,
+          status: ActivationCheckStatus.PASS,
+          evidenceRef: null,
+          detailsSanitizedJson:
+            checkCode === ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN
+              ? { proposedSequence }
+              : null,
+        }));
+
+      const buildV2Attempt = () => ({
+        id: attemptId,
+        tenantId,
+        onboardingSessionId: 'sess-1',
+        candidateTerminalId: 'pos-term-01',
+        contractVersion: 2,
+        verificationTicketId: null,
+        status: ActivationAttemptStatus.IN_PROGRESS,
+        completedAt: null,
+        warningsCount: 0,
+      });
+
+      const buildSession = () => ({
+        id: 'sess-1',
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
+        activatedAt: null,
+      });
+
+      const mockWatermark = (highest: number | null, throws = false) => {
+        transactionalManager.query.mockImplementation((sql: string) => {
+          if (typeof sql === 'string' && sql.includes('FROM invoices')) {
+            if (throws) return Promise.reject(new Error('invoices unreadable'));
+            return Promise.resolve([{ maxSeq: highest === null ? null : String(highest) }]);
+          }
+          return Promise.resolve(undefined);
+        });
+      };
+
+      it('PASSes on invoice-free evidence and never looks up a verification invoice', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+        sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+        checkRepo.find.mockResolvedValueOnce(buildV2Checks(8));
+        mockWatermark(7);
+
+        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+
+        expect(result.status).toBe(ActivationAttemptStatus.PASS);
+        expect(invoiceRepo.findOne).not.toHaveBeenCalled();
+      });
+
+      it('fails with FISCAL_SEQUENCE_RECOVERY_REQUIRED when the proposal collides with the cloud watermark', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+        sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+        checkRepo.find.mockResolvedValueOnce(buildV2Checks(8));
+        // The cloud already issued 8: the terminal's claimed next folio is taken.
+        mockWatermark(8);
+
+        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+
+        expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+        expect(result.failureCode).toBe('FISCAL_SEQUENCE_RECOVERY_REQUIRED');
+      });
+
+      it('fails closed when the cloud watermark cannot be read', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+        sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+        checkRepo.find.mockResolvedValueOnce(buildV2Checks(8));
+        mockWatermark(0, true);
+
+        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+
+        expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+        expect(result.failureCode).toBe('FISCAL_SEQUENCE_RECOVERY_REQUIRED');
+      });
+
+      it('fails with VERIFICATION_SEQUENCE_DRY_RUN_INVALID when the evidence carries no usable proposal', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+        sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+        const checks = buildV2Checks(0);
+        checkRepo.find.mockResolvedValueOnce(checks);
+        mockWatermark(3);
+
+        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+
+        expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+        expect(result.failureCode).toBe('VERIFICATION_SEQUENCE_DRY_RUN_INVALID');
+      });
+
+      it('names the contract drift when a V2 attempt only carries legacy V1 evidence', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+        sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+        checkRepo.find.mockResolvedValueOnce(allChecksPass);
+
+        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+
+        expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+        expect(result.failureCode).toBe('ACTIVATION_CONTRACT_MISMATCH');
+      });
+
+      it('a V1 attempt finalizes on its invoice even when the dry-run watermark is behind', async () => {
+        const attempt = {
+          id: attemptId,
+          tenantId,
+          onboardingSessionId: 'sess-1',
+          contractVersion: 1,
+          verificationTicketId: 'verification-invoice-1',
+          status: ActivationAttemptStatus.IN_PROGRESS,
+          completedAt: null,
+          warningsCount: 0,
+        };
+        attemptRepo.findOne.mockResolvedValueOnce(attempt);
+        sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+        checkRepo.find.mockResolvedValueOnce(allChecksPass);
+        mockWatermark(99);
+
+        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+
+        expect(result.status).toBe(ActivationAttemptStatus.PASS);
+      });
+
+      it('syncVerificationSale rejects a V2 attempt before touching the invoice pipeline', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+
+        await expect(
+          service.syncVerificationSale(
+            attemptId,
+            { documentType: 'SALE', flowType: 'sales', invoiceId: 'inv-1', invoice: { id: 'inv-1' }, sourceDeviceId: 'pos-term-01', terminalId: 'pos-term-01' } as any,
+            { tenantId, terminalId: 'pos-term-01' },
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('claimFirstSuccessfulSale rejects a V2 attempt', async () => {
+        attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+
+        await expect(
+          service.claimFirstSuccessfulSale(
+            attemptId,
+            {
+              ticketId: 'inv-1',
+              declarativeTenantId: tenantId,
+              declarativeTerminalId: 'pos-term-01',
+              activationAttemptId: attemptId,
+              deviceOccurredAt: '2026-10-23T12:00:00.000Z',
+              clockConfidence: 'ANCHORED',
+            } as any,
+            { tenantId, terminalId: 'pos-term-01' },
+          ),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
+
     it('finalizes attempt with PASS_WITH_WARNING and creates ActivationFollowUp when only POST_RECONNECT_SYNC has WARNING', async () => {
       const checksWithWarning = allChecksPass.map((c) =>
         c.checkCode === ActivationCheckCode.POST_RECONNECT_SYNC

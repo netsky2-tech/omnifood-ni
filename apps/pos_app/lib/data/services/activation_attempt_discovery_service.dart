@@ -248,6 +248,7 @@ class ActivationAttemptDiscoveryService {
       requiredFiscalRevision: snapshot.requiredFiscalRevision,
       requiredFiscalFingerprint: snapshot.requiredFiscalFingerprint.trim(),
       verificationProductId: snapshot.verificationProductId.trim(),
+      contractVersion: snapshot.contractVersion,
       serverTimeAnchorAt: serverAnchorIso,
       anchorMonotonicTicks: anchorTicks,
       bootSessionId: _clock.bootSessionId,

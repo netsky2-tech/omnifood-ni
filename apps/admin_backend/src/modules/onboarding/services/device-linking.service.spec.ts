@@ -462,6 +462,7 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
     verificationProductId: 'product-1',
     verificationProductRevision: 1,
     verificationProductFingerprint: 'product-fingerprint',
+    contractVersion: 1,
     verificationTicketId: null,
     posBuild: null,
     warningsCount: 0,
@@ -673,9 +674,8 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
       buildListDataSource(find, attemptFindFailLatest),
     );
 
-    const resultFailLatest = await serviceFailLatest.listLinkingCodes(
-      'tenant-1',
-    );
+    const resultFailLatest =
+      await serviceFailLatest.listLinkingCodes('tenant-1');
 
     expect(resultFailLatest[0]?.lastAttemptStatus).toBe(
       ActivationAttemptStatus.FAIL,

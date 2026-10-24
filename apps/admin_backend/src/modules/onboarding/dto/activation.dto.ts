@@ -173,6 +173,7 @@ export interface ActivationDiagnosticsDto {
     status: string;
     candidateTerminalId: string;
     trustedTerminalId?: string | null;
+    contractVersion?: number;
     verificationTicketId?: string | null;
     requiredFiscalRevision: number;
     requiredFiscalFingerprint: string;

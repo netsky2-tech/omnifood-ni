@@ -14,6 +14,7 @@ import '../../domain/services/config/printer_config_service.dart';
 import '../../domain/services/printer/printer_resolver.dart';
 import '../database/app_database.dart';
 import '../mappers/sales_mapper.dart';
+import '../models/activation/activation_attempt_local_entity.dart';
 import '../models/activation/activation_check_result_local_entity.dart';
 import '../models/activation/activation_outbox_envelope_entity.dart';
 import '../models/activation/first_successful_sale_claim_entity.dart';
@@ -139,6 +140,20 @@ class ActivationControlledSaleRunner {
     final trimmedTenantId = params.tenantId.trim();
     final trimmedAttemptId = params.attemptId.trim();
     final trimmedCashierId = params.cashierUserId.trim();
+
+    // Issue #957 — contract V2: activation never emits a fiscal document.
+    // The attempt is stamped by the backend when it is created; a V2 attempt
+    // proves the next folio with a dry run instead of a real sale.
+    final contractProbe =
+        await _database.activationAttemptLocalDao.getAttemptById(trimmedAttemptId);
+    if (contractProbe != null && contractProbe.contractVersion >= 2) {
+      return _executeVerificationSequenceDryRun(
+        params: params,
+        attempt: contractProbe,
+        now: now,
+        nowIso: nowIso,
+      );
+    }
 
     // D-2/D-16: activation is the APPROVED provisioning gate for the pilot
     // fiscal series. The boot never writes (D-1); the series is provisioned
@@ -817,6 +832,215 @@ class ActivationControlledSaleRunner {
       checks: checks,
       outboxEnvelopes: outboxEnvelopes,
       errors: errors,
+    );
+  }
+
+  /// Issue #957 — contract V2 sequence dry run.
+  ///
+  /// Proves the terminal can determine the NEXT folio it would print and that
+  /// this folio is still free in the cloud, WITHOUT writing an invoice, taking
+  /// a DGI number or printing a fiscal document. The only local write is the
+  /// cursor seed at the approved activation gate (D-2/D-16): a cursor is not a
+  /// consumed folio — a folio is taken only when an invoice row exists.
+  ///
+  /// The backend re-verifies the proposal against the live watermark at
+  /// finalization, so a stale local reading cannot pass.
+  Future<ControlledSaleResult> _executeVerificationSequenceDryRun({
+    required ControlledSaleParams params,
+    required ActivationAttemptLocalEntity attempt,
+    required DateTime now,
+    required String nowIso,
+  }) async {
+    final trimmedTenantId = params.tenantId.trim();
+    final trimmedAttemptId = params.attemptId.trim();
+
+    if (attempt.tenantId.trim() != trimmedTenantId) {
+      return ControlledSaleResult(
+        isSuccess: false,
+        attemptStatus: attempt.localStatus,
+        errors: [
+          "TENANT_MISMATCH: Attempt tenant '${attempt.tenantId}' does not match requested '$trimmedTenantId'",
+        ],
+      );
+    }
+
+    if (attempt.localStatus != 'RUNNING' &&
+        attempt.localStatus != 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE') {
+      return ControlledSaleResult(
+        isSuccess: false,
+        attemptStatus: attempt.localStatus,
+        errors: [
+          "ATTEMPT_NOT_IN_RUNNING: estado actual '${attempt.localStatus}' — la verificación de secuencia solo puede ejecutarse cuando el intento está en estado 'RUNNING'",
+        ],
+      );
+    }
+
+    // Cloud watermark delivered by priming. A fresh terminal that never primed
+    // has no value: it cannot claim a folio is free without the cloud reading,
+    // so it fails closed instead of assuming 0.
+    final cloudHighestEntity = await _database.localConfigDao
+        .getConfigByKey('dgi_cloud_highest_sequence');
+    final cloudHighestRaw = cloudHighestEntity?.value.trim() ?? '';
+    final cloudHighest = int.tryParse(cloudHighestRaw);
+
+    final rangeStartEntity =
+        await _database.localConfigDao.getConfigByKey('dgi_range_start');
+    final rangeStart = int.tryParse(rangeStartEntity?.value.trim() ?? '') ?? 1;
+
+    final cursorEntity =
+        await _database.localConfigDao.getConfigByKey('dgi_current_number');
+    var cursorValue = int.tryParse(cursorEntity?.value.trim() ?? '');
+    bool cursorProvisioned = false;
+
+    if (cursorValue == null || cursorValue < 1) {
+      // D-6: seed above whatever the cloud already issued, and never below the
+      // configured consecutivo inicial.
+      final seedBase = cloudHighest == null ? rangeStart : cloudHighest + 1;
+      final seed = seedBase > rangeStart ? seedBase : rangeStart;
+      await DgiNumberingServiceImpl(
+        _database.localConfigDao,
+        _database.invoiceDao,
+      ).initializeRange(prefix: '', start: seed);
+      cursorValue = seed;
+      cursorProvisioned = true;
+    } else if (cloudHighest != null && cursorValue <= cloudHighest) {
+      // AC-3 (#526 unit B5): never self-heal a cursor that lags the cloud. The
+      // honest answer is to stop and name the recovery state.
+      return const ControlledSaleResult(
+        isSuccess: false,
+        attemptStatus: 'FISCAL_SEQUENCE_RECOVERY_REQUIRED',
+        errors: [
+          'FISCAL_SEQUENCE_RECOVERY_REQUIRED: el consecutivo local está por '
+              'detrás del último folio emitido en la nube. No venda: llame a '
+              'soporte para reconciliar la secuencia fiscal.',
+        ],
+      );
+    }
+
+    // The folio the terminal would print next. getNextNumber is read-only and
+    // fails closed when the series is unconfigured.
+    final proposedFolio = await DgiNumberingServiceImpl(
+      _database.localConfigDao,
+      _database.invoiceDao,
+    ).getNextNumber();
+    final trailing = RegExp(r'(\d+)$').firstMatch(proposedFolio);
+    final proposedSequence =
+        trailing == null ? null : int.tryParse(trailing.group(1)!);
+
+    if (proposedSequence == null || proposedSequence < 1) {
+      return ControlledSaleResult(
+        isSuccess: false,
+        attemptStatus: attempt.localStatus,
+        errors: [
+          'VERIFICATION_SEQUENCE_DRY_RUN_INVALID: el folio propuesto '
+              "'$proposedFolio' no expone un consecutivo numérico verificable",
+        ],
+      );
+    }
+
+    if (cloudHighest != null && proposedSequence <= cloudHighest) {
+      return const ControlledSaleResult(
+        isSuccess: false,
+        attemptStatus: 'FISCAL_SEQUENCE_RECOVERY_REQUIRED',
+        errors: [
+          'FISCAL_SEQUENCE_RECOVERY_REQUIRED: el próximo folio ya fue emitido '
+              'en la nube. No venda: llame a soporte para reconciliar la '
+              'secuencia fiscal.',
+        ],
+      );
+    }
+
+    final prefixEntity =
+        await _database.localConfigDao.getConfigByKey('dgi_prefix');
+    final prefix = prefixEntity?.value.trim() ?? '';
+
+    final dryRunCheck = ActivationCheckResultLocalEntity(
+      id: const Uuid().v4(),
+      tenantId: trimmedTenantId,
+      activationAttemptId: trimmedAttemptId,
+      checkCode: 'VERIFICATION_SEQUENCE_DRY_RUN',
+      status: 'PASS',
+      evidenceType: 'FISCAL_SEQUENCE_DRY_RUN_PROOF',
+      evidenceRef: 'DRY_RUN_SEQUENCE_VERIFIED',
+      occurredAt: nowIso,
+      recordedAt: nowIso,
+      detailsSanitizedJson: jsonEncode({
+        'proposedSequence': proposedSequence,
+        'proposedFolio': proposedFolio,
+        'prefix': prefix,
+        'localCursorBeforeRun': cursorValue,
+        'cursorProvisioned': cursorProvisioned,
+        'cloudHighestSequence': cloudHighest,
+      }),
+    );
+
+    final checks = <String, ActivationCheckResultLocalEntity>{
+      'VERIFICATION_SEQUENCE_DRY_RUN': dryRunCheck,
+    };
+    await _database.activationCheckResultLocalDao.insertChecks(
+      checks.values.toList(),
+    );
+
+    // Stage the evidence in the outbox exactly like V1 staged its checks, so
+    // OUTBOX_DURABLE still proves durable offline staging.
+    final outboxEnvelopes = <ActivationOutboxEnvelopeEntity>[];
+    final payload = {
+      'checkCode': 'VERIFICATION_SEQUENCE_DRY_RUN',
+      'status': 'PASS',
+      'evidenceRef': 'DRY_RUN_SEQUENCE_VERIFIED',
+      'occurredAt': nowIso,
+      'details': jsonDecode(dryRunCheck.detailsSanitizedJson!) as Map<String, dynamic>,
+    };
+    final payloadJson = jsonEncode(payload);
+    final envelope = ActivationOutboxEnvelopeEntity(
+      id: const Uuid().v4(),
+      tenantId: trimmedTenantId,
+      activationAttemptId: trimmedAttemptId,
+      eventType: 'ACTIVATION_CHECK',
+      idempotencyKey:
+          'activation:check:$trimmedTenantId:$trimmedAttemptId:VERIFICATION_SEQUENCE_DRY_RUN',
+      payloadJson: payloadJson,
+      payloadHash: sha256.convert(utf8.encode(payloadJson)).toString(),
+      syncStatus: 'PENDING',
+      createdAt: nowIso,
+    );
+    final existingEnvelope = await _database.activationOutboxDao
+        .getEnvelopeByIdempotencyKey(trimmedTenantId, envelope.idempotencyKey);
+    if (existingEnvelope == null) {
+      await _database.activationOutboxDao.insertEnvelope(envelope);
+      outboxEnvelopes.add(envelope);
+    }
+
+    final outboxCheck = ActivationCheckResultLocalEntity(
+      id: const Uuid().v4(),
+      tenantId: trimmedTenantId,
+      activationAttemptId: trimmedAttemptId,
+      checkCode: 'OUTBOX_DURABLE',
+      status: 'PASS',
+      evidenceType: 'OUTBOX_CONSOLIDATION_PROOF',
+      evidenceRef: 'OUTBOX_CONSOLIDATED',
+      occurredAt: nowIso,
+      recordedAt: nowIso,
+      detailsSanitizedJson: jsonEncode({
+        'envelopesCount': outboxEnvelopes.length,
+        'invoiceSyncStatus': null,
+        'sequenceDryRunOnly': true,
+      }),
+    );
+    checks['OUTBOX_DURABLE'] = outboxCheck;
+    await _database.activationCheckResultLocalDao.insertOrReplace(outboxCheck);
+
+    final updatedAttempt = attempt.copyWith(
+      localStatus: 'LOCAL_ACTIVATION_EVIDENCE_COMPLETE',
+      updatedAt: nowIso,
+    );
+    await _database.activationAttemptLocalDao.updateAttempt(updatedAttempt);
+
+    return ControlledSaleResult(
+      isSuccess: true,
+      attemptStatus: updatedAttempt.localStatus,
+      checks: checks,
+      outboxEnvelopes: outboxEnvelopes,
     );
   }
 }

@@ -676,10 +676,10 @@ void main() {
       expect(
         find.text(
           'La serie fiscal no está configurada. La activación aprovisionará '
-          'una serie inicial y esta venta emitirá el número 1. Si la '
-          'autorización DGI del cliente comienza en otro número, configure '
-          'primero la serie fiscal en Configuración del Negocio; de lo '
-          'contrario, la primera venta comercial no será el número '
+          'una serie inicial y el próximo folio disponible será el número 1. '
+          'Si la autorización DGI del cliente comienza en otro número, '
+          'configure primero la serie fiscal en Configuración del Negocio; de '
+          'lo contrario, la primera venta comercial no será el número '
           'autorizado inicial.',
         ),
         findsOneWidget,
@@ -989,12 +989,14 @@ void main() {
         unconfiguredWarning.data,
         contains('continuando desde el máximo ya emitido en la nube (10)'),
       );
-      // The single emitted-number claim of this state: the provisioned
-      // series starts right after the cloud maximum.
+      // The single number claim of this state: the provisioned series
+      // starts right after the cloud maximum, and no sale is claimed because
+      // V2 verification never emits an invoice.
       expect(
         unconfiguredWarning.data,
-        contains('esta venta emitirá el número 11'),
+        contains('el próximo folio disponible será el número 11'),
       );
+      expect(unconfiguredWarning.data, isNot(contains('esta venta emitirá')));
       expect(
         unconfiguredWarning.data,
         contains('no usará el número inicial autorizado del cliente'),

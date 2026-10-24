@@ -252,7 +252,9 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
     await admin.getRepository(Tenant).save({
       id: tenantId,
       name: `Activation RLS Proof Tenant ${label} ${tenantId}`,
-      slug: normalizeTenantSlug(`Activation RLS Proof Tenant ${label} ${tenantId}`),
+      slug: normalizeTenantSlug(
+        `Activation RLS Proof Tenant ${label} ${tenantId}`,
+      ),
       ruc: 'J0310000004321',
       is_active: true,
     });
@@ -402,6 +404,12 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
       '',
     );
     bAttemptId = bAttempt.id;
+    // This suite guards the LEGACY (V1, invoice-evidenced) flow under FORCE
+    // RLS; those attempts stay finalizable in flight after issue #957.
+    await admin.query(
+      `UPDATE onboarding_activation_attempts SET contract_version = 1 WHERE id = $1`,
+      [bAttemptId],
+    );
     for (const code of V1_REQUIRED_ACTIVATION_CHECKS) {
       await activationService.ingestCheck(
         bAttempt.id,
@@ -588,6 +596,10 @@ describe('ActivationService under migrated FORCE RLS with a table non-owner runt
       actorAId,
     );
     aAttemptId = attempt.id;
+    await admin.query(
+      `UPDATE onboarding_activation_attempts SET contract_version = 1 WHERE id = $1`,
+      [aAttemptId],
+    );
 
     expect(attempt).toMatchObject({
       tenantId: tenantAId,

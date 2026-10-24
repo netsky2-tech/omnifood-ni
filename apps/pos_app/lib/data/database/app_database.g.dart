@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 75,
+      version: 76,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -312,7 +312,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `fiscal_config_local` (`tenant_id` TEXT NOT NULL, `revision` INTEGER NOT NULL, `fingerprint` TEXT NOT NULL, `payload` TEXT NOT NULL, `applied_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `activation_attempts_local` (`attempt_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `candidate_terminal_id` TEXT NOT NULL, `local_status` TEXT NOT NULL, `required_fiscal_revision` INTEGER NOT NULL, `required_fiscal_fingerprint` TEXT NOT NULL, `verification_product_id` TEXT NOT NULL, `verification_ticket_id` TEXT, `server_time_anchor_at` TEXT, `anchor_monotonic_ticks` INTEGER, `boot_session_id` TEXT, `assigned_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`attempt_id`))');
+            'CREATE TABLE IF NOT EXISTS `activation_attempts_local` (`attempt_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `candidate_terminal_id` TEXT NOT NULL, `local_status` TEXT NOT NULL, `required_fiscal_revision` INTEGER NOT NULL, `required_fiscal_fingerprint` TEXT NOT NULL, `verification_product_id` TEXT NOT NULL, `contract_version` INTEGER NOT NULL, `verification_ticket_id` TEXT, `server_time_anchor_at` TEXT, `anchor_monotonic_ticks` INTEGER, `boot_session_id` TEXT, `assigned_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`attempt_id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `activation_checks_local` (`id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `activation_attempt_id` TEXT NOT NULL, `check_code` TEXT NOT NULL, `required` INTEGER NOT NULL, `status` TEXT NOT NULL, `evidence_type` TEXT, `evidence_ref` TEXT, `occurred_at` TEXT, `recorded_at` TEXT NOT NULL, `details_sanitized_json` TEXT, PRIMARY KEY (`id`))');
         await database.execute(
@@ -7187,6 +7187,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
                   'required_fiscal_revision': item.requiredFiscalRevision,
                   'required_fiscal_fingerprint': item.requiredFiscalFingerprint,
                   'verification_product_id': item.verificationProductId,
+                  'contract_version': item.contractVersion,
                   'verification_ticket_id': item.verificationTicketId,
                   'server_time_anchor_at': item.serverTimeAnchorAt,
                   'anchor_monotonic_ticks': item.anchorMonotonicTicks,
@@ -7206,6 +7207,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
                   'required_fiscal_revision': item.requiredFiscalRevision,
                   'required_fiscal_fingerprint': item.requiredFiscalFingerprint,
                   'verification_product_id': item.verificationProductId,
+                  'contract_version': item.contractVersion,
                   'verification_ticket_id': item.verificationTicketId,
                   'server_time_anchor_at': item.serverTimeAnchorAt,
                   'anchor_monotonic_ticks': item.anchorMonotonicTicks,
@@ -7239,6 +7241,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
             requiredFiscalFingerprint:
                 row['required_fiscal_fingerprint'] as String,
             verificationProductId: row['verification_product_id'] as String,
+            contractVersion: row['contract_version'] as int,
             verificationTicketId: row['verification_ticket_id'] as String?,
             serverTimeAnchorAt: row['server_time_anchor_at'] as String?,
             anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?,
@@ -7253,7 +7256,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
       String tenantId) async {
     return _queryAdapter.query(
         'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 ORDER BY assigned_at DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, contractVersion: row['contract_version'] as int, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
         arguments: [tenantId]);
   }
 
@@ -7262,7 +7265,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
       String tenantId) async {
     return _queryAdapter.query(
         'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 AND local_status NOT IN (\'EVIDENCE_ACKED\', \'FAIL\') ORDER BY assigned_at DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, contractVersion: row['contract_version'] as int, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
         arguments: [tenantId]);
   }
 
@@ -7271,7 +7274,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
       String tenantId) async {
     return _queryAdapter.query(
         'SELECT * FROM activation_attempts_local WHERE tenant_id = ?1 AND local_status IN (\'ACTIVATED\', \'ACTIVATED_WITH_WARNING\') ORDER BY assigned_at DESC LIMIT 1',
-        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
+        mapper: (Map<String, Object?> row) => ActivationAttemptLocalEntity(attemptId: row['attempt_id'] as String, tenantId: row['tenant_id'] as String, candidateTerminalId: row['candidate_terminal_id'] as String, localStatus: row['local_status'] as String, requiredFiscalRevision: row['required_fiscal_revision'] as int, requiredFiscalFingerprint: row['required_fiscal_fingerprint'] as String, verificationProductId: row['verification_product_id'] as String, contractVersion: row['contract_version'] as int, verificationTicketId: row['verification_ticket_id'] as String?, serverTimeAnchorAt: row['server_time_anchor_at'] as String?, anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?, bootSessionId: row['boot_session_id'] as String?, assignedAt: row['assigned_at'] as String, updatedAt: row['updated_at'] as String),
         arguments: [tenantId]);
   }
 
@@ -7294,6 +7297,7 @@ class _$ActivationAttemptLocalDao extends ActivationAttemptLocalDao {
             requiredFiscalFingerprint:
                 row['required_fiscal_fingerprint'] as String,
             verificationProductId: row['verification_product_id'] as String,
+            contractVersion: row['contract_version'] as int,
             verificationTicketId: row['verification_ticket_id'] as String?,
             serverTimeAnchorAt: row['server_time_anchor_at'] as String?,
             anchorMonotonicTicks: row['anchor_monotonic_ticks'] as int?,

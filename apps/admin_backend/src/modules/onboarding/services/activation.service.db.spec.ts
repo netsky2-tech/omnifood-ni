@@ -276,6 +276,10 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         { candidateTerminalId: 'term-pos-01' },
         'c0000000-0000-4000-8000-00000000c1a0',
       );
+      // This suite pins the LEGACY invoice-based contract: those attempts are
+      // still finalizable in flight after #957 shipped, so the V1 evidence
+      // path must keep working end to end.
+      await attemptRepo.update({ id: attempt.id }, { contractVersion: 1 });
 
       expect(attempt).toBeDefined();
       expect(attempt.id).toBeDefined();
@@ -528,6 +532,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         { candidateTerminalId: 'term-warn-01' },
         'c0000000-0000-4000-8000-00000000c1a0',
       );
+      await dataSource
+        .getRepository(ActivationAttempt)
+        .update({ id: attemptFail.id }, { contractVersion: 1 });
 
       const devicePrincipal = {
         tenantId,
@@ -570,6 +577,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
       );
       expect(attemptWarn.id).not.toBe(attemptFail.id);
       expect(attemptWarn.status).toBe(ActivationAttemptStatus.CREATED);
+      await dataSource
+        .getRepository(ActivationAttempt)
+        .update({ id: attemptWarn.id }, { contractVersion: 1 });
 
       // --- Scenario 2: PASS_WITH_WARNING execution ---
       // Ingest 9 checks as PASS
@@ -765,6 +775,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         'e0000000-0000-4000-8000-00000000000e',
       );
       expect(attempt.verificationProductId).toBe(product.id);
+      await dataSource
+        .getRepository(ActivationAttempt)
+        .update({ id: attempt.id }, { contractVersion: 1 });
 
       const startLogs = await changeLogRepo.find({
         where: {
@@ -953,6 +966,197 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         ActivationFollowUpStatus.CLOSED,
       );
       expect(diagnostics.auditTrail?.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it('Issue #957: finalizes a V2 attempt on invoice-free evidence and rejects a folio that collides with the cloud watermark', async () => {
+    await withIsolatedSchema('onb_act_v2', async ({ dataSource }) => {
+      const tenantRepo = dataSource.getRepository(Tenant);
+      const paramRepo = dataSource.getRepository(SystemParametersConfig);
+      const revRepo = dataSource.getRepository(FiscalConfigRevision);
+      const prodRepo = dataSource.getRepository(Product);
+      const sessionRepo = dataSource.getRepository(OnboardingSession);
+      const attemptRepo = dataSource.getRepository(ActivationAttempt);
+      const checkRepo = dataSource.getRepository(ActivationCheckResult);
+      const followUpRepo = dataSource.getRepository(ActivationFollowUp);
+      const invoiceRepo = dataSource.getRepository(Invoice);
+
+      const tenantId = randomUUID();
+      const userId = 'c0000000-0000-4000-8000-00000000c1a0';
+      await tenantRepo.save({
+        id: tenantId,
+        name: 'Fonda La Prueba',
+        slug: normalizeTenantSlug('Fonda La Prueba'),
+        ruc: 'J0310000005678',
+        is_active: true,
+      });
+
+      await paramRepo.save([
+        {
+          tenant_id: tenantId,
+          paramKey: 'FISCAL_REGIME',
+          paramValue: 'REGIMEN_GENERAL',
+          isActive: true,
+        },
+        {
+          tenant_id: tenantId,
+          paramKey: 'TAX_RATE_IVA',
+          paramValue: 0.15,
+          isActive: true,
+        },
+      ]);
+
+      const product = await prodRepo.save({
+        tenant_id: tenantId,
+        name: 'Quesillo',
+        sellPrice: 40,
+        uom: 'UN',
+        product_type: ProductType.SIMPLE,
+        is_active: true,
+        stock: 0,
+        averageCost: 0,
+      });
+
+      const session = await sessionRepo.save({
+        tenantId,
+        lifecycleState: OnboardingLifecycleState.SALE_READY,
+        saleReadyFirstAt: new Date(),
+        measurementEligible: true,
+        legacyBaseline: false,
+        optimisticVersion: 1,
+      });
+
+      const fiscalService = new FiscalConfigVersionService(
+        revRepo,
+        tenantRepo,
+        dataSource,
+      );
+      const dummyReadiness = {
+        evaluate: jest.fn().mockResolvedValue({ saleReady: true }),
+      } as unknown as OnboardingReadinessEvaluator;
+      const dummyReconciler = {
+        reconcile: jest.fn().mockResolvedValue(session),
+      } as unknown as OnboardingStateReconciler;
+      const dummySessionService = {
+        ensureOnboardingStarted: jest.fn().mockResolvedValue(session),
+      } as unknown as OnboardingSessionService;
+      const catalogService = new OnboardingCatalogService(
+        dataSource,
+        dummySessionService,
+        dummyReadiness,
+        dummyReconciler,
+      );
+      const changeLogService = new ChangeLogService(
+        dataSource.getRepository(ChangeLog),
+        dataSource,
+      );
+      const activationService = new ActivationService(
+        attemptRepo,
+        checkRepo,
+        followUpRepo,
+        sessionRepo,
+        fiscalService,
+        catalogService,
+        dummyReadiness,
+        dataSource,
+        changeLogService,
+      );
+
+      // A real fiscal invoice already in the cloud sets the watermark at 7.
+      await invoiceRepo.save({
+        id: randomUUID(),
+        tenant_id: tenantId,
+        number: '001-001-01-00000007',
+        created_at: new Date(),
+        userId,
+        subtotal: 1,
+        totalTax: 0,
+        total: 1,
+        paymentStatus: 'paid',
+      });
+      const invoiceCountBefore = await invoiceRepo.count({ where: { tenant_id: tenantId } });
+
+      const attempt = await activationService.startActivation(
+        tenantId,
+        { candidateTerminalId: 'term-v2-01' },
+        userId,
+      );
+      expect(attempt.contractVersion).toBe(2);
+      expect(attempt.verificationProductId).toBe(product.id);
+
+      const v2Codes = [
+        ActivationCheckCode.TERMINAL_LINKED,
+        ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+        ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+        ActivationCheckCode.PRINTER_AVAILABLE,
+        ActivationCheckCode.NON_FISCAL_TEST_PRINT,
+        ActivationCheckCode.SQLITE_DURABILITY,
+        ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN,
+        ActivationCheckCode.OUTBOX_DURABLE,
+        ActivationCheckCode.POST_RECONNECT_SYNC,
+      ];
+      for (const code of v2Codes) {
+        await activationService.ingestCheck(
+          attempt.id,
+          {
+            checkCode: code,
+            status: ActivationCheckStatus.PASS,
+            evidenceType: 'REAL_SQLITE_VERIFIED',
+            detailsSanitizedJson:
+              code === ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN
+                ? { proposedSequence: 8, proposedFolio: '001-001-01-00000008' }
+                : undefined,
+          },
+          { tenantId, terminalId: 'term-v2-01' },
+        );
+      }
+
+      const finalized = await activationService.finalizeActivation(
+        tenantId,
+        attempt.id,
+        userId,
+      );
+      expect(finalized.status).toBe(ActivationAttemptStatus.PASS);
+      expect(finalized.contractVersion).toBe(2);
+      // The dry run never writes an invoice and never advances the sequence.
+      expect(await invoiceRepo.count({ where: { tenant_id: tenantId } })).toBe(
+        invoiceCountBefore,
+      );
+
+      // Second attempt: proposing the folio the cloud already used must fail.
+      const staleAttempt = await activationService.startActivation(
+        tenantId,
+        { candidateTerminalId: 'term-v2-02' },
+        userId,
+      );
+      for (const code of v2Codes) {
+        await activationService.ingestCheck(
+          staleAttempt.id,
+          {
+            checkCode: code,
+            status: ActivationCheckStatus.PASS,
+            evidenceType: 'REAL_SQLITE_VERIFIED',
+            detailsSanitizedJson:
+              code === ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN
+                ? { proposedSequence: 7, proposedFolio: '001-001-01-00000007' }
+                : undefined,
+          },
+          { tenantId, terminalId: 'term-v2-02' },
+        );
+      }
+
+      const finalizedStale = await activationService.finalizeActivation(
+        tenantId,
+        staleAttempt.id,
+        userId,
+      );
+      expect(finalizedStale.status).toBe(ActivationAttemptStatus.FAIL);
+      expect(finalizedStale.failureCode).toBe(
+        'FISCAL_SEQUENCE_RECOVERY_REQUIRED',
+      );
+      expect(await invoiceRepo.count({ where: { tenant_id: tenantId } })).toBe(
+        invoiceCountBefore,
+      );
     });
   });
 });

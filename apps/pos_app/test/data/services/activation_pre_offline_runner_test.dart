@@ -357,8 +357,13 @@ void main() {
       expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
       expect(summary.checks['SQLITE_DURABILITY']!.status, equals('PASS'));
       expect(printerAdapter.printHistory, hasLength(1));
-      expect(printerAdapter.lastPrintedText, contains('ONB1.10'));
-      expect(printerAdapter.lastPrintedText, contains(attemptId));
+      // Issue #957: the test page is explicitly non-fiscal — no DGI number,
+      // no attempt id leaking onto paper, no fiscal header.
+      expect(printerAdapter.lastPrintedText, contains('NO ES FACTURA'));
+      expect(
+        printerAdapter.lastPrintedText,
+        contains('SIN VALIDEZ FISCAL'),
+      );
 
       // Verify Floor SQLite persistence: all 6 checks saved
       final persistedChecks = await database.activationCheckResultLocalDao.getChecksForAttempt(
@@ -397,6 +402,36 @@ void main() {
 
       final attemptInDb = await database.activationAttemptLocalDao.getAttemptById(attemptId);
       expect(attemptInDb!.localStatus, equals('ASSIGNED')); // Did not advance to RUNNING
+    });
+
+    test('Issue #957: a contract V2 attempt reports NON_FISCAL_TEST_PRINT and never TEST_PRINT', () async {
+      final attempt = await database.activationAttemptLocalDao
+          .getAttemptById(attemptId);
+      await database.activationAttemptLocalDao.updateAttempt(
+        attempt!.copyWith(contractVersion: 2),
+      );
+
+      final summary = await runner.runPreOfflineChecks(
+        const PreOfflineRunnerParams(
+          attemptId: attemptId,
+          tenantId: tenantId,
+          authorizedUserId: authorizedUserId,
+          authorizedUserPin: validPin,
+        ),
+      );
+
+      expect(summary.isReadyForOffline, isTrue);
+      expect(summary.checks.containsKey('NON_FISCAL_TEST_PRINT'), isTrue);
+      expect(summary.checks.containsKey('TEST_PRINT'), isFalse);
+      expect(summary.checks['NON_FISCAL_TEST_PRINT']!.status, equals('PASS'));
+      expect(
+        summary.checks['NON_FISCAL_TEST_PRINT']!.checkCode,
+        equals('NON_FISCAL_TEST_PRINT'),
+      );
+      expect(
+        printerAdapter.lastPrintedText,
+        isNot(contains('FACTURA DE VENTA')),
+      );
     });
 
     test('fails REQUIRED_CONFIG_LOCAL check when fiscal fingerprint mismatches', () async {
@@ -493,19 +528,25 @@ void main() {
             ),
           );
 
-      test('AC-FP-05/06: effective 80mm + CUOTA_FIJA + projected RUC reach the printer',
+      test('AC-FP-05/06: effective 80mm reaches the printer and the page stays non-fiscal',
           () async {
         final summary = await runPreOffline();
 
         expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
         expect(printerAdapter.lastPaperWidthMm, equals(80));
         expect(printerAdapter.lastTaxRegime, equals(TaxRegime.cuotaFija));
-        expect(printerAdapter.lastRuc, equals('J0310000000001'));
-        expect(printerAdapter.lastPrintedText, contains('RUC: J0310000000001'));
+        // Issue #957: the RUC still gates the check as configuration proof,
+        // but it is NEVER printed on the test page.
+        expect(printerAdapter.lastRuc, isNull);
         expect(
           printerAdapter.lastPrintedText,
-          contains('COMPROBANTE DE VENTA'),
+          isNot(contains('RUC: J0310000000001')),
         );
+        expect(
+          printerAdapter.lastPrintedText,
+          isNot(contains('COMPROBANTE DE VENTA')),
+        );
+        expect(printerAdapter.lastPrintedText, contains('NO ES FACTURA'));
       });
 
       test('AC-FP-08: evidence records the effective fixture and never the raw RUC',

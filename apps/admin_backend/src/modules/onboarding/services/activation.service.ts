@@ -21,8 +21,11 @@ import {
   Repository,
 } from 'typeorm';
 import {
+  ACTIVATION_CONTRACT_V1,
+  ACTIVATION_CONTRACT_V2,
   ActivationAttempt,
   ActivationAttemptStatus,
+  CURRENT_ACTIVATION_CONTRACT_VERSION,
 } from '../entities/activation-attempt.entity';
 import {
   ActivationCheckCode,
@@ -58,6 +61,7 @@ import { DeviceSyncCredentialResponseDto } from '../dto/device-sync-credential-r
 import { ConfirmDeviceSyncCredentialDto } from '../dto/confirm-device-sync-credential.dto';
 import { DeviceSyncCredentialService } from '../../identity/services/device-sync-credential.service';
 import { TenantTopologyRevisionService } from '../../fulfillment/services/tenant-topology-revision.service';
+import { readHighestInvoiceSequence } from './fiscal-sequence-watermark';
 
 export const V1_REQUIRED_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
   ActivationCheckCode.TERMINAL_LINKED,
@@ -71,6 +75,49 @@ export const V1_REQUIRED_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
   ActivationCheckCode.OUTBOX_DURABLE,
   ActivationCheckCode.POST_RECONNECT_SYNC,
 ] as const;
+
+/**
+ * Contract V2 (issue #957): the terminal never emits a fiscal document during
+ * activation, so the V1 sale-evidence checks are replaced:
+ *   - TEST_PRINT            → NON_FISCAL_TEST_PRINT (no fiscal header/folio)
+ *   - OFFLINE_SALE_PAID     → VERIFICATION_SEQUENCE_DRY_RUN (proves the next
+ *                             folio without consuming it)
+ *   - SALE_RECEIPT_PATH     → dropped (there is no sale to receipt)
+ * OUTBOX_DURABLE and POST_RECONNECT_SYNC are kept: the terminal still proves
+ * it can stage evidence offline and hand it to the cloud.
+ */
+export const V2_REQUIRED_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
+  ActivationCheckCode.TERMINAL_LINKED,
+  ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+  ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+  ActivationCheckCode.PRINTER_AVAILABLE,
+  ActivationCheckCode.NON_FISCAL_TEST_PRINT,
+  ActivationCheckCode.SQLITE_DURABILITY,
+  ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN,
+  ActivationCheckCode.OUTBOX_DURABLE,
+  ActivationCheckCode.POST_RECONNECT_SYNC,
+] as const;
+
+/** Checks that only exist in the legacy invoice-based contract. */
+const V1_ONLY_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
+  ActivationCheckCode.TEST_PRINT,
+  ActivationCheckCode.OFFLINE_SALE_PAID,
+  ActivationCheckCode.SALE_RECEIPT_PATH,
+] as const;
+
+export function requiredActivationChecks(
+  contractVersion: number | null | undefined,
+): readonly ActivationCheckCode[] {
+  return (contractVersion ?? ACTIVATION_CONTRACT_V1) >= ACTIVATION_CONTRACT_V2
+    ? V2_REQUIRED_ACTIVATION_CHECKS
+    : V1_REQUIRED_ACTIVATION_CHECKS;
+}
+
+export function isActivationContractV2(
+  contractVersion: number | null | undefined,
+): boolean {
+  return (contractVersion ?? ACTIVATION_CONTRACT_V1) >= ACTIVATION_CONTRACT_V2;
+}
 
 @Injectable()
 export class ActivationService {
@@ -152,6 +199,14 @@ export class ActivationService {
     if (attempt.candidateTerminalId.trim() !== terminalId) {
       throw new ForbiddenException('TERMINAL_MISMATCH');
     }
+    if (isActivationContractV2(attempt.contractVersion)) {
+      // Contract V2 activation never issues a fiscal document: accepting a
+      // verification sale here would silently reintroduce the folio burn the
+      // contract exists to remove.
+      throw new BadRequestException(
+        'ACTIVATION_CONTRACT_V2_HAS_NO_VERIFICATION_SALE: activation under contract V2 must not emit a verification invoice',
+      );
+    }
 
     if (!this.invoicesService) {
       throw new BadRequestException('VERIFICATION_SALE_SYNC_UNAVAILABLE');
@@ -190,6 +245,14 @@ export class ActivationService {
       }
       if (attempt.candidateTerminalId.trim() !== terminalId) {
         throw new ForbiddenException('TERMINAL_MISMATCH');
+      }
+      if (isActivationContractV2(attempt.contractVersion)) {
+        // The first commercial sale claims TTFSS on its own
+        // (onboarding-customer-sale.observer); activation V2 has no
+        // verification ticket to bind.
+        throw new BadRequestException(
+          'ACTIVATION_CONTRACT_V2_HAS_NO_VERIFICATION_SALE: contract V2 attempts cannot claim a verification sale',
+        );
       }
       if (attempt.verificationTicketId) {
         return { claimed: false, ticketId: attempt.verificationTicketId };
@@ -301,7 +364,8 @@ export class ActivationService {
         ];
         if (
           !acceptableStates.includes(session.lifecycleState) &&
-          session.lifecycleState !== OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
+          session.lifecycleState !==
+            OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
         ) {
           throw new BadRequestException(
             `CANNOT_START_ACTIVATION_NOT_SALE_READY: Onboarding session is in '${session.lifecycleState}' state, but must be 'SALE_READY'`,
@@ -376,6 +440,7 @@ export class ActivationService {
             verificationCandidate.verificationProductRevision ?? 1,
           verificationProductFingerprint:
             verificationCandidate.verificationProductFingerprint,
+          contractVersion: CURRENT_ACTIVATION_CONTRACT_VERSION,
           posBuild: dto.posBuild?.trim() || null,
           warningsCount: 0,
           idempotencyKey: trimmedIdempotencyKey || null,
@@ -562,6 +627,11 @@ export class ActivationService {
           attemptMutated = true;
         }
         if (dto.verificationTicketId && !attempt.verificationTicketId) {
+          if (isActivationContractV2(attempt.contractVersion)) {
+            throw new BadRequestException(
+              'ACTIVATION_CONTRACT_V2_REJECTS_VERIFICATION_TICKET: a contract V2 attempt must not bind a verification invoice',
+            );
+          }
           attempt.verificationTicketId = dto.verificationTicketId.trim();
           attemptMutated = true;
         }
@@ -655,14 +725,25 @@ export class ActivationService {
         const recordedChecks = await cRepo.find({
           where: { tenantId: trimmedTenant, activationAttemptId: attempt.id },
         });
-        const verificationInvoice = attempt.verificationTicketId
-          ? await manager.getRepository(Invoice).findOne({
-              where: {
-                id: attempt.verificationTicketId,
-                tenant_id: trimmedTenant,
-              },
-            })
-          : null;
+
+        // Issue #957: the evidence contract is stamped on the attempt, never
+        // inferred from whichever checks happened to arrive. A V1 attempt (in
+        // flight at deploy time) still finalizes on its invoice evidence; a V2
+        // attempt can only finalize on invoice-free evidence.
+        const contractVersion =
+          attempt.contractVersion ?? ACTIVATION_CONTRACT_V1;
+        const contractV2 = isActivationContractV2(contractVersion);
+        const requiredChecks = requiredActivationChecks(contractVersion);
+
+        const verificationInvoice =
+          !contractV2 && attempt.verificationTicketId
+            ? await manager.getRepository(Invoice).findOne({
+                where: {
+                  id: attempt.verificationTicketId,
+                  tenant_id: trimmedTenant,
+                },
+              })
+            : null;
         const hasPersistedVerificationSale = Boolean(
           verificationInvoice &&
           !verificationInvoice.isCanceled &&
@@ -679,7 +760,7 @@ export class ActivationService {
         let firstFailedCode: string | null = null;
         let warningCheck: ActivationCheckResult | null = null;
 
-        for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
+        for (const requiredCode of requiredChecks) {
           const check = checkMap.get(requiredCode);
           if (!check) {
             hasMissingChecks = true;
@@ -711,18 +792,49 @@ export class ActivationService {
           }
         }
 
+        // Contract drift: a V2 attempt carrying legacy-only evidence means the
+        // device is running a build that predates the invoice-free contract.
+        // Naming it explicitly beats a bare MISSING_REQUIRED_CHECKS, because
+        // the fix is "update the POS", not "the terminal is broken".
+        const hasLegacyOnlyEvidence = V1_ONLY_ACTIVATION_CHECKS.some((code) =>
+          checkMap.has(code),
+        );
+        const hasAnyV2Evidence =
+          checkMap.has(ActivationCheckCode.NON_FISCAL_TEST_PRINT) ||
+          checkMap.has(ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN);
+        const contractMismatch =
+          contractV2 && hasLegacyOnlyEvidence && !hasAnyV2Evidence;
+
+        // V2 fiscal-safety gate: the dry-run proposal is re-verified against
+        // the LIVE cloud watermark at finalization time, so an attempt cannot
+        // pass on a stale local reading even if the check itself was PASS when
+        // it was recorded.
+        const dryRunFailureCode = contractV2
+          ? await this.evaluateVerificationSequenceDryRun(
+              manager,
+              trimmedTenant,
+              checkMap.get(ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN),
+            )
+          : null;
+
         const now = new Date();
         let followUpCreated: ActivationFollowUp | null = null;
 
-        if (!hasPersistedVerificationSale) {
+        if (!contractV2 && !hasPersistedVerificationSale) {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = 'VERIFICATION_SALE_EVIDENCE_MISSING';
+        } else if (contractMismatch) {
+          attempt.status = ActivationAttemptStatus.FAIL;
+          attempt.failureCode = 'ACTIVATION_CONTRACT_MISMATCH';
         } else if (hasMissingChecks) {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = 'MISSING_REQUIRED_CHECKS';
         } else if (firstFailedCode) {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = firstFailedCode;
+        } else if (dryRunFailureCode) {
+          attempt.status = ActivationAttemptStatus.FAIL;
+          attempt.failureCode = dryRunFailureCode;
         } else if (warningCheck) {
           // PASS_WITH_WARNING: all local required checks = PASS and the only
           // WARNING is on a whitelisted check (POST_RECONNECT_SYNC transient
@@ -818,6 +930,56 @@ export class ActivationService {
     return result.savedAttempt;
   }
 
+  /**
+   * Issue #957 — contract V2 fiscal-safety gate.
+   *
+   * The terminal proves it knows the next folio it WOULD consume. The only
+   * authority on whether that folio is already taken is the cloud, so the
+   * proposal is compared here against the live watermark at finalization time
+   * (the same value the priming tripwire uses). Nothing is written: a dry run
+   * must never advance the sequence.
+   *
+   * Returns a failure code, or null when the proposal is safe.
+   */
+  private async evaluateVerificationSequenceDryRun(
+    manager: EntityManager,
+    tenantId: string,
+    check: ActivationCheckResult | undefined,
+  ): Promise<string | null> {
+    // A missing or non-PASS check is already reported by the generic matrix.
+    if (!check || check.status !== ActivationCheckStatus.PASS) {
+      return null;
+    }
+
+    const details = check.detailsSanitizedJson;
+    const rawProposal = details?.['proposedSequence'];
+    const proposedSequence =
+      typeof rawProposal === 'number'
+        ? rawProposal
+        : typeof rawProposal === 'string' && rawProposal.trim() !== ''
+          ? Number(rawProposal)
+          : Number.NaN;
+
+    if (!Number.isInteger(proposedSequence) || proposedSequence <= 0) {
+      return 'VERIFICATION_SEQUENCE_DRY_RUN_INVALID';
+    }
+
+    let highestSequenceNumber: number;
+    try {
+      highestSequenceNumber = await readHighestInvoiceSequence(manager, tenantId);
+    } catch {
+      // Fail closed: an unverifiable proposal is the named recovery state,
+      // never a green light.
+      return 'FISCAL_SEQUENCE_RECOVERY_REQUIRED';
+    }
+
+    if (highestSequenceNumber > 0 && proposedSequence <= highestSequenceNumber) {
+      return 'FISCAL_SEQUENCE_RECOVERY_REQUIRED';
+    }
+
+    return null;
+  }
+
   async getAttempt(
     tenantId: string,
     attemptId: string,
@@ -886,7 +1048,8 @@ export class ActivationService {
       });
       if (
         session &&
-        session.lifecycleState === OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
+        session.lifecycleState ===
+          OnboardingLifecycleState.ACTIVATION_IN_PROGRESS
       ) {
         session.lifecycleState = OnboardingLifecycleState.SALE_READY;
         session.lastActivityAt = new Date();
@@ -1295,7 +1458,10 @@ export class ActivationService {
         const checksMatrix: ActivationCheckDiagnosticItem[] = [];
         const missingChecks: ActivationCheckCode[] = [];
 
-        for (const requiredCode of V1_REQUIRED_ACTIVATION_CHECKS) {
+        const requiredChecks = requiredActivationChecks(
+          attempt.contractVersion,
+        );
+        for (const requiredCode of requiredChecks) {
           const recorded = checkMap.get(requiredCode);
           if (recorded) {
             checksMatrix.push({
@@ -1348,6 +1514,7 @@ export class ActivationService {
             status: attempt.status,
             candidateTerminalId: attempt.candidateTerminalId,
             trustedTerminalId: attempt.trustedTerminalId,
+            contractVersion: attempt.contractVersion,
             verificationTicketId: attempt.verificationTicketId,
             requiredFiscalRevision: attempt.requiredFiscalRevision,
             requiredFiscalFingerprint: attempt.requiredFiscalFingerprint,

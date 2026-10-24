@@ -7,6 +7,26 @@ import {
   Index,
 } from 'typeorm';
 
+/**
+ * Activation evidence contract version.
+ *
+ * V1 (legacy): the terminal proves itself by issuing a REAL DGI invoice
+ * (`OFFLINE_SALE_PAID` + `SALE_RECEIPT_PATH` + a persisted PAID verification
+ * ticket). That consumed a folio from the tenant's series for a test.
+ *
+ * V2 (issue #957): the terminal proves itself WITHOUT any fiscal document —
+ * a non-fiscal test page (`NON_FISCAL_TEST_PRINT`) and a sequence dry-run
+ * (`VERIFICATION_SEQUENCE_DRY_RUN`) that verifies the next folio against the
+ * cloud watermark without consuming it.
+ *
+ * The version is stamped when the attempt is created and never changes: an
+ * attempt already RUNNING under V1 keeps its legacy evidence set, while every
+ * new attempt is created as V2.
+ */
+export const ACTIVATION_CONTRACT_V1 = 1;
+export const ACTIVATION_CONTRACT_V2 = 2;
+export const CURRENT_ACTIVATION_CONTRACT_VERSION = ACTIVATION_CONTRACT_V2;
+
 export enum ActivationAttemptStatus {
   CREATED = 'CREATED',
   IN_PROGRESS = 'IN_PROGRESS',
@@ -96,6 +116,13 @@ export class ActivationAttempt {
     length: 64,
   })
   verificationProductFingerprint!: string;
+
+  @Column({
+    name: 'contract_version',
+    type: 'int',
+    default: CURRENT_ACTIVATION_CONTRACT_VERSION,
+  })
+  contractVersion!: number;
 
   @Column({
     name: 'verification_ticket_id',

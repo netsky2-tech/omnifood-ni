@@ -136,6 +136,18 @@ class ActivationSessionService {
       );
     }
     final attempt = discovery.attempt!;
+
+    // Issue #957: contract V2 activation never sells anything, so the pinned
+    // verification product is not part of its evidence. Gate on it only for
+    // legacy (V1) attempts, where the controlled sale needs the product.
+    if (attempt.contractVersion >= 2) {
+      _attempt = attempt;
+      return ActivationSessionPreparationResult(
+        isSuccess: true,
+        attempt: attempt,
+      );
+    }
+
     final productId = attempt.verificationProductId.trim();
 
     // Local catalog lookup only — the sync engine owns catalog retrieval.
@@ -220,6 +232,7 @@ class ActivationSessionService {
             result.attemptStatus == 'ACTIVATED_WITH_WARNING')) {
       // #77: Automatically clean up (void) the verification sale so the
       // terminal does not leave a test sale active in the fiscal ledger.
+      // Contract V2 (#957) never issued one; the runner no-ops for it anyway.
       if (_cleanupRunner != null) {
         try {
           await _cleanupRunner.voidVerificationSale(

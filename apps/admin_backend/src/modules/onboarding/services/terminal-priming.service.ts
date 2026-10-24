@@ -10,6 +10,7 @@ import type { InboundSyncResponseDto } from '../../sales/dto/inbound-sync.dto';
 import type { FiscalConfigSnapshot } from '../dto/fiscal-config-version.dto';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { FiscalSequenceRecoveryRequiredException } from '../exceptions/fiscal-sequence-recovery-required.exception';
+import { readHighestInvoiceSequence } from './fiscal-sequence-watermark';
 
 /**
  * Delta types requested from the inbound-sync service for priming.
@@ -131,16 +132,13 @@ export class TerminalPrimingService {
         // MAX instead of poisoning it.
         let highestSequenceNumber = 0;
         try {
-          const rows: Array<{ maxSeq?: string | number | null }> =
-            await manager.query(
-              `SELECT MAX(CAST(NULLIF(substring(invoice_number from '([0-9]+)$'), '') AS bigint)) AS "maxSeq"
-             FROM invoices
-             WHERE tenant_id = $1`,
-              [trimmedTenantId],
-            );
-          highestSequenceNumber = rows?.[0]?.maxSeq
-            ? Number(rows[0].maxSeq)
-            : 0;
+          // D-6 watermark: shared with the activation finalizer so the
+          // priming tripwire and the activation dry-run verification can never
+          // disagree about which sequence the cloud has already issued.
+          highestSequenceNumber = await readHighestInvoiceSequence(
+            manager,
+            trimmedTenantId,
+          );
         } catch {
           // The two failure modes are split by whether the device proposed a
           // sequence:

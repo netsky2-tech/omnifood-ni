@@ -494,6 +494,9 @@ class ReceiptLayoutFormatter {
   /// byte-for-byte (T5: smaller font for extras on printers that accept a
   /// per-call text size, e.g. iPOS/Nyx).
   List<ReceiptTextRun> formatReceiptDocumentTextRuns(ReceiptDocument doc) {
+    if (!doc.isFiscalDocument) {
+      return _formatNonFiscalTestPageTextRuns(doc);
+    }
     final buffer = _ReceiptRunBuffer();
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
@@ -991,7 +994,129 @@ class ReceiptLayoutFormatter {
   // ==========================================
 
   /// Formats a complete [ReceiptDocument] into ESC/POS bytecode.
+  /// Issue #957: hardware test page. Deliberately emits NO fiscal element —
+  /// no regime header, no document number, no issuer RUC, no authorization
+  /// code, no customer block and no amounts — so the paper cannot be read as
+  /// a DGI comprobante. The "NO ES FACTURA" banner is the point of the page.
+  List<ReceiptTextRun> _formatNonFiscalTestPageTextRuns(ReceiptDocument doc) {
+    final buffer = _ReceiptRunBuffer();
+    final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+
+    buffer.writeln(center(doc.businessName));
+    if (doc.legalName != null && doc.legalName!.isNotEmpty) {
+      buffer.writeln(center(doc.legalName!));
+    }
+    if (doc.address != null && doc.address!.isNotEmpty) {
+      for (final line in wrap(doc.address!)) {
+        buffer.writeln(center(line));
+      }
+    }
+    if (doc.phone != null && doc.phone!.isNotEmpty) {
+      buffer.writeln(center('Tel: ${doc.phone!}'));
+    }
+    buffer.writeln(doubleDivider());
+    for (final line in centerLines('*** NO ES FACTURA ***')) {
+      buffer.writeln(line);
+    }
+    buffer.writeln(center('PRUEBA DE IMPRESION'));
+    for (final line in centerLines('SIN VALIDEZ FISCAL')) {
+      buffer.writeln(line);
+    }
+    buffer.writeln(doubleDivider());
+    for (final l in formatKeyValue('Fecha:', dateFormat.format(doc.date))) {
+      buffer.writeln(l);
+    }
+    if (doc.cajaLabel != null && doc.cajaLabel!.isNotEmpty) {
+      for (final l in formatKeyValue('Caja:', doc.cajaLabel!)) {
+        buffer.writeln(l);
+      }
+    }
+    if (doc.cashierName != null && doc.cashierName!.isNotEmpty) {
+      for (final l in formatKeyValue('Atendido por:', doc.cashierName!)) {
+        buffer.writeln(l);
+      }
+    }
+    buffer.writeln(divider());
+    for (final line in wrap('Caracteres: ÁÉÍÓÚ áéíóú Ññ ¿? ¡! 0123456789')) {
+      buffer.writeln(line);
+    }
+    buffer.writeln(doubleDivider());
+    for (final line in wrap(doc.footerMessage ?? 'Fin de la prueba de impresion')) {
+      buffer.writeln(center(line));
+    }
+    buffer.write('\n');
+    return buffer.build();
+  }
+
+  /// Issue #957: ESC/POS twin of [_formatNonFiscalTestPageTextRuns]. Same
+  /// lines in the same order; the banner is double-width and bold so it
+  /// dominates the paper.
+  List<int> _formatNonFiscalTestPageEscPos(ReceiptDocument doc) {
+    final builder = EscPosBuilder();
+    final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+
+    builder
+        .align(EscPosAlign.center)
+        .bold(true)
+        .fontSize(EscPosFontSize.doubleWidth)
+        .textLine(marginLine(doc.businessName))
+        .fontSize(EscPosFontSize.normal)
+        .bold(false);
+
+    if (doc.legalName != null && doc.legalName!.isNotEmpty) {
+      marginTextLine(builder, doc.legalName!);
+    }
+    if (doc.address != null && doc.address!.isNotEmpty) {
+      for (final line in wrap(doc.address!)) {
+        marginTextLine(builder, line);
+      }
+    }
+    if (doc.phone != null && doc.phone!.isNotEmpty) {
+      marginTextLine(builder, 'Tel: ${doc.phone!}');
+    }
+
+    marginTextLine(builder, doubleDivider());
+    builder
+        .bold(true)
+        .fontSize(EscPosFontSize.doubleWidth)
+        .textLine(marginLine('*** NO ES FACTURA ***'))
+        .fontSize(EscPosFontSize.normal)
+        .textLine(marginLine('PRUEBA DE IMPRESION'))
+        .textLine(marginLine('SIN VALIDEZ FISCAL'))
+        .bold(false)
+        .align(EscPosAlign.left);
+
+    marginTextLine(builder, doubleDivider());
+    for (final l in formatKeyValue('Fecha:', dateFormat.format(doc.date))) {
+      marginTextLine(builder, l);
+    }
+    if (doc.cajaLabel != null && doc.cajaLabel!.isNotEmpty) {
+      for (final l in formatKeyValue('Caja:', doc.cajaLabel!)) {
+        marginTextLine(builder, l);
+      }
+    }
+    if (doc.cashierName != null && doc.cashierName!.isNotEmpty) {
+      for (final l in formatKeyValue('Atendido por:', doc.cashierName!)) {
+        marginTextLine(builder, l);
+      }
+    }
+    marginTextLine(builder, divider());
+    for (final line in wrap('Caracteres: ÁÉÍÓÚ áéíóú Ññ ¿? ¡! 0123456789')) {
+      marginTextLine(builder, line);
+    }
+    marginTextLine(builder, doubleDivider()).align(EscPosAlign.center);
+    for (final line in wrap(doc.footerMessage ?? 'Fin de la prueba de impresion')) {
+      marginTextLine(builder, line);
+    }
+    builder.feedLines(3).cut();
+
+    return builder.toBytes();
+  }
+
   List<int> formatReceiptDocumentEscPos(ReceiptDocument doc) {
+    if (!doc.isFiscalDocument) {
+      return _formatNonFiscalTestPageEscPos(doc);
+    }
     final builder = EscPosBuilder();
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 

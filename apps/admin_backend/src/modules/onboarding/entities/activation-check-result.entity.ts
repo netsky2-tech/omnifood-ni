@@ -19,6 +19,11 @@ export enum ActivationCheckCode {
   SALE_RECEIPT_PATH = 'SALE_RECEIPT_PATH',
   OUTBOX_DURABLE = 'OUTBOX_DURABLE',
   POST_RECONNECT_SYNC = 'POST_RECONNECT_SYNC',
+  // Contract V2 (issue #957): activation never emits a fiscal document. The
+  // non-fiscal test page proves the printer path, and the sequence dry-run
+  // proves the folio the terminal WOULD consume without consuming it.
+  NON_FISCAL_TEST_PRINT = 'NON_FISCAL_TEST_PRINT',
+  VERIFICATION_SEQUENCE_DRY_RUN = 'VERIFICATION_SEQUENCE_DRY_RUN',
 }
 
 export enum ActivationCheckStatus {

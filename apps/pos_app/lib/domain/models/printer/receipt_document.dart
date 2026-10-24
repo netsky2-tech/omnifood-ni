@@ -298,6 +298,13 @@ class ReceiptDocument {
   /// because it is not persisted on the invoice.
   final PostPaidFeedback? loyaltyFeedback;
 
+  /// Issue #957: false only for the activation test page. A non-fiscal
+  /// document is NOT a DGI comprobante: the renderer omits the regime header,
+  /// the document number, the issuer RUC, the authorization code, the customer
+  /// block and every amount, and leads with an explicit "NO ES FACTURA"
+  /// banner. Defaults to true so every existing sale path stays byte-identical.
+  final bool isFiscalDocument;
+
   const ReceiptDocument({
     required this.businessName,
     this.legalName,
@@ -340,6 +347,7 @@ class ReceiptDocument {
     this.tipAmountUsd = 0.0,
     this.tipPercentage,
     this.loyaltyFeedback,
+    this.isFiscalDocument = true,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
@@ -403,10 +411,52 @@ class ReceiptDocument {
         tipAmountUsd: tipAmountUsd,
         tipPercentage: tipPercentage,
         loyaltyFeedback: loyaltyFeedback,
+        isFiscalDocument: isFiscalDocument,
       );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
   double get changeGiven => payments.fold(0.0, (sum, p) => sum + p.changeGiven);
+
+  /// Issue #957: a hardware test page, NOT a fiscal document.
+  ///
+  /// It carries no issuer RUC, no document number, no fiscal authorization, no
+  /// regime header, no customer and no amounts, so the paper cannot be read as
+  /// a DGI comprobante. The formatter always adds the "NO ES FACTURA" banner.
+  /// [taxRegime] is required only because the model is shared with fiscal
+  /// documents; the non-fiscal renderer never prints it.
+  factory ReceiptDocument.nonFiscalTestPage({
+    required String businessName,
+    required TaxRegime taxRegime,
+    required DateTime date,
+    String? legalName,
+    String? address,
+    String? phone,
+    String? cajaLabel,
+    String? cashierName,
+    List<int>? logoRasterBytes,
+    String? footerMessage,
+  }) {
+    return ReceiptDocument(
+      businessName: businessName,
+      legalName: legalName,
+      taxRegime: taxRegime,
+      address: address,
+      phone: phone,
+      cajaLabel: cajaLabel,
+      documentTitle: 'PRUEBA DE IMPRESION',
+      documentNumber: '',
+      date: date,
+      cashierName: cashierName,
+      lines: const <ReceiptLine>[],
+      subtotal: 0,
+      totalTax: 0,
+      total: 0,
+      totalUsd: 0,
+      logoRasterBytes: logoRasterBytes,
+      footerMessage: footerMessage ?? 'Fin de la prueba de impresion',
+      isFiscalDocument: false,
+    );
+  }
 
   /// Builds a [ReceiptDocument] from an [Invoice] and related items and payments.
   factory ReceiptDocument.fromInvoice(
