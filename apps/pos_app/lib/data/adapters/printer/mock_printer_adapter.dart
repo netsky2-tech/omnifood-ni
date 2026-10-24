@@ -147,6 +147,8 @@ class MockPrinterAdapter implements PrinterPort {
     final bytes = formatter.formatReceiptDocumentEscPos(document);
     lastPrintedText = text;
     lastPrintedBytes = bytes;
+    lastPaperWidthMm = paperWidthMm;
+    lastTaxRegime = document.taxRegime;
     final result = PrinterResult.success(text: text, bytes: bytes);
     printHistory.add(result);
     return result;
