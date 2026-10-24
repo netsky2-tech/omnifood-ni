@@ -10,6 +10,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
 import { LoyaltyLedgerService } from '../../loyalty/services/loyalty-ledger.service';
+import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
+import { CustomerLoyaltyAccountProjection } from '../../loyalty/entities/customer-loyalty-account-projection.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
@@ -53,9 +55,7 @@ import {
   parseCreditNoteSeries,
 } from '../../onboarding/services/fiscal-config-version.service';
 import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
-import {
-  SequenceGapPolicyService,
-} from '../sync-health/sequence-gap-policy.service';
+import { SequenceGapPolicyService } from '../sync-health/sequence-gap-policy.service';
 
 const SCALE_4 = 4;
 const CREDIT_NOTE_NO_STOCK_POLICIES = new Set([
@@ -397,7 +397,11 @@ export class InvoicesService {
       } as unknown as SyncInvoiceDto;
 
       this.assertCreditNoteReasonAndAuthorization(assertTarget);
-      await this.assertCreditNoteAuthorizingActor(tenantId, assertTarget, manager);
+      await this.assertCreditNoteAuthorizingActor(
+        tenantId,
+        assertTarget,
+        manager,
+      );
       await this.assertCreditNoteOriginInvoiceIsRegularSale(
         tenantId,
         assertTarget,
@@ -420,7 +424,9 @@ export class InvoicesService {
       const originItems = await this.itemRepoFor(manager).find({
         where: { invoiceId: dto.originInvoiceId, tenant_id: tenantId },
       });
-      const originItemsById = new Map(originItems.map((item) => [item.id, item]));
+      const originItemsById = new Map(
+        originItems.map((item) => [item.id, item]),
+      );
 
       // Number allocation: fail-closed against the configured series, inside
       // this same transaction (see allocateCreditNoteNumber for the race
@@ -441,7 +447,8 @@ export class InvoicesService {
         }
         const originQuantity = Math.abs(Number(originItem.quantity));
         const refundQuantity = Math.abs(Number(requested.quantity));
-        const ratio = originQuantity === 0 ? 0 : refundQuantity / originQuantity;
+        const ratio =
+          originQuantity === 0 ? 0 : refundQuantity / originQuantity;
         const total = round4(-Number(originItem.total) * ratio);
         const taxAmount = round4(-Number(originItem.taxAmount) * ratio);
         return {
@@ -504,7 +511,9 @@ export class InvoicesService {
         if (items.length) {
           await manager
             .getRepository(InvoiceItem)
-            .insert(items.map((item) => ({ ...item, invoiceId: creditNoteId })));
+            .insert(
+              items.map((item) => ({ ...item, invoiceId: creditNoteId })),
+            );
         }
 
         return {
@@ -1014,13 +1023,60 @@ export class InvoicesService {
           'LOYALTY_LEDGER event payload tenant does not match the authenticated tenant',
         );
       }
+
+      let programId = event.transaction.loyaltyProgramId;
+      const txTypeUpper = event.transaction.transactionType
+        ?.trim()
+        .toUpperCase();
+
+      // Resolve loyaltyProgramId when missing (same resolution pattern as LoyaltySyncIngestionService)
+      if (!programId?.trim()) {
+        const activePrograms = await manager
+          .getRepository(LoyaltyProgram)
+          .find({
+            where: { tenant_id: tenantId, status: 'ACTIVE' as never },
+            select: { id: true },
+          });
+
+        if (activePrograms.length === 1) {
+          programId = activePrograms[0].id;
+        } else if (activePrograms.length > 1) {
+          const projectionRows = await manager
+            .getRepository(CustomerLoyaltyAccountProjection)
+            .find({
+              where: {
+                tenant_id: tenantId,
+                customer_id: event.transaction.customerId,
+              },
+              select: { loyalty_program_id: true },
+            });
+          const customerPrograms = [
+            ...new Set(projectionRows.map((r) => r.loyalty_program_id)),
+          ];
+          if (customerPrograms.length === 1) {
+            programId = customerPrograms[0];
+          }
+        }
+      }
+
+      // Check constraint ck_loyalty_tx_type_semantics requires loyalty_program_id when transaction_type = 'earn'.
+      // If there is no active loyalty program for this tenant (e.g. corporate B2B clients or no programs created),
+      // an earn transaction cannot be attributed to any program. We safely skip the ledger insert so the sync
+      // batch is not rejected and does not block the terminal outbox queue.
+      if (!programId?.trim() && txTypeUpper === 'EARN') {
+        this.logger.log(
+          `[SYNC-BATCH] Skipping unattributable EARN event for customer ${event.transaction.customerId}: no active loyalty program in tenant`,
+        );
+        continue;
+      }
+
       await this.loyaltyLedgerService.appendTransactionInManager(
         {
           tenantId,
           customerId: event.transaction.customerId,
-          loyaltyProgramId: event.transaction.loyaltyProgramId ?? undefined,
+          loyaltyProgramId: programId ?? undefined,
           ticketId: event.transaction.ticketId ?? undefined,
-          transactionType: event.transaction.transactionType,
+          transactionType: txTypeUpper ?? event.transaction.transactionType,
           units: event.transaction.units,
           origin: event.transaction.origin,
           idempotencyKey: event.idempotency_key,
@@ -1028,7 +1084,9 @@ export class InvoicesService {
           actorUserId: event.transaction.actorUserId ?? undefined,
           branchId: event.transaction.branchId ?? undefined,
           terminalId:
-            event.transaction.terminalId ?? record.terminalId ?? record.sourceDeviceId,
+            event.transaction.terminalId ??
+            record.terminalId ??
+            record.sourceDeviceId,
           programVersion: event.transaction.programVersion ?? undefined,
           rewardVersion: event.transaction.rewardVersion ?? undefined,
           commercialSnapshot: event.transaction.commercialSnapshot ?? undefined,
