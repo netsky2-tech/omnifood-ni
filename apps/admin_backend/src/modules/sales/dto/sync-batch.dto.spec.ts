@@ -496,6 +496,28 @@ describe('SyncBatchEnvelopeDto', () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
+  it('accepts lowercase ledger transactionType by normalizing to uppercase', () => {
+    const lowercaseType = {
+      ...loyaltyRecord,
+      events: [
+        {
+          ...loyaltyRecord.events[0],
+          transaction: {
+            ...loyaltyRecord.events[0].transaction,
+            transactionType: 'earn',
+          },
+        },
+      ],
+    };
+    const { errors, dto } = validate([lowercaseType]);
+    expect(errors).toHaveLength(0);
+    const event = dto.records[0].events?.[0];
+    expect(
+      (event as { transaction: { transactionType: string } }).transaction
+        .transactionType,
+    ).toBe('EARN');
+  });
+
   it('whitelists the ledger event shape under the production pipe policy (forbidNonWhitelisted)', () => {
     const validateStrict = (records: unknown[]) =>
       validateSync(plainToInstance(SyncBatchEnvelopeDto, { records }), {

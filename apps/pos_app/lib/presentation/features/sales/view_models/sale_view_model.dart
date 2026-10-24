@@ -2336,8 +2336,15 @@ class SaleViewModel extends ChangeNotifier {
           }
         }
 
-        // 2. Process accumulation on the final net subtotal
-        final pointsEarned = _loyaltyService.calculatePointsEarned(subtotal);
+        // 2. Process accumulation on the final net subtotal.
+        // Corporate clients (EMPRESA) receive commercial agreement discounts
+        // (convenios), not consumer loyalty points. Only personal retail
+        // customers accumulate points.
+        final isCorporateCustomer =
+            _selectedCustomer?.customerType == 'EMPRESA';
+        final pointsEarned = isCorporateCustomer
+            ? 0.0
+            : _loyaltyService.calculatePointsEarned(subtotal);
         if (pointsEarned > 0) {
           final currentBalance = _selectedCustomer!.pointsBalance;
           final earnTx = _loyaltyService.createEarnTransaction(

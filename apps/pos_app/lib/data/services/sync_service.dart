@@ -30,6 +30,7 @@ import '../models/security_profile_entity.dart';
 import '../models/local_config_entity.dart';
 import '../models/customer/customer_entity.dart';
 import '../models/customer/customer_point_transaction_entity.dart';
+import '../../domain/models/sales/customer_point_transaction.dart';
 import '../models/loyalty/loyalty_program_entity.dart';
 import '../models/loyalty/loyalty_reward_entity.dart';
 import '../models/sales/promotion_entity.dart';
@@ -1325,7 +1326,9 @@ class SyncService {
             // ignore: use_null_aware_elements
             if (tx.loyaltyProgramId != null)
               'loyaltyProgramId': tx.loyaltyProgramId,
-            'transactionType': tx.transactionType ?? tx.type,
+            'transactionType':
+                canonicalLoyaltyLedgerType(tx.transactionType ?? tx.type) ??
+                    'EARN',
             'units': tx.units ?? tx.points.round(),
             'origin': tx.origin ?? 'POS',
             'occurredAt': DateTime.fromMillisecondsSinceEpoch(

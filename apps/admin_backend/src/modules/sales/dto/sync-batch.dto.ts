@@ -12,7 +12,7 @@ import {
   ValidationOptions,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { SyncInvoiceDto } from './sync-invoice.dto';
 
 const SYNC_DOCUMENT_TYPE = {
@@ -327,6 +327,9 @@ export class SyncLoyaltyLedgerTransactionDto {
   @IsString()
   ticketId?: string | null;
 
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
+  )
   @IsString()
   @IsIn(LOYALTY_TRANSACTION_TYPES)
   transactionType: string;
