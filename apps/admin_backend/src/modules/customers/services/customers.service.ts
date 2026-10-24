@@ -9,9 +9,7 @@ import {
   LoyaltyTransactionOrigin,
 } from '../entities/customer-point-transaction.entity';
 import { CustomerLoyaltyAccountProjection } from '../../loyalty/entities/customer-loyalty-account-projection.entity';
-import {
-  recomputeCustomerPointsBalance,
-} from '../../loyalty/services/loyalty-ledger.service';
+import { recomputeCustomerPointsBalance } from '../../loyalty/services/loyalty-ledger.service';
 import { CreateCustomerDto } from '../dto/create-customer.dto';
 import { UpdateCustomerDto } from '../dto/update-customer.dto';
 import { CustomerQueryDto } from '../dto/customer-query.dto';
@@ -41,13 +39,26 @@ export class CustomersService {
         const qb = manager
           .getRepository(Customer)
           .createQueryBuilder('c')
-          .where('c.tenant_id = :tenantId', { tenantId })
-          .andWhere('c.is_active = true');
+          .where('c.tenant_id = :tenantId', { tenantId });
+
+        if (query.status === 'inactive') {
+          qb.andWhere('c.is_active = false');
+        } else if (query.status === 'all') {
+          // Do not filter by is_active (return both active and inactive)
+        } else {
+          qb.andWhere('c.is_active = true');
+        }
+
+        if (query.customer_type) {
+          qb.andWhere('c.customer_type = :customerType', {
+            customerType: query.customer_type,
+          });
+        }
 
         if (query.search && query.search.trim().length > 0) {
           const s = `%${query.search.trim().toLowerCase()}%`;
           qb.andWhere(
-            '(LOWER(c.name) LIKE :s OR LOWER(c.tax_id) LIKE :s OR LOWER(c.phone) LIKE :s)',
+            '(LOWER(c.name) LIKE :s OR LOWER(c.tax_id) LIKE :s OR LOWER(c.phone) LIKE :s OR LOWER(c.email) LIKE :s)',
             { s },
           );
         }

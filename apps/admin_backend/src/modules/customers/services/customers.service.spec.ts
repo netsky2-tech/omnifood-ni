@@ -167,6 +167,34 @@ describe('CustomersService', () => {
     expect(result.data[0].name).toBe('Distribuidora San José');
   });
 
+  it('should filter customers by status (inactive and all)', async () => {
+    const qb = mgrCustomerRepo.createQueryBuilder();
+    await service.findAll('tenant-1', { status: 'inactive' });
+    expect(qb.andWhere).toHaveBeenCalledWith('c.is_active = false');
+
+    qb.andWhere.mockClear();
+    await service.findAll('tenant-1', { status: 'all' });
+    expect(qb.andWhere).not.toHaveBeenCalledWith('c.is_active = true');
+    expect(qb.andWhere).not.toHaveBeenCalledWith('c.is_active = false');
+  });
+
+  it('should filter customers by customer_type', async () => {
+    const qb = mgrCustomerRepo.createQueryBuilder();
+    await service.findAll('tenant-1', { customer_type: 'EMPRESA' });
+    expect(qb.andWhere).toHaveBeenCalledWith('c.customer_type = :customerType', {
+      customerType: 'EMPRESA',
+    });
+  });
+
+  it('should search across name, tax_id, phone and email in combined search', async () => {
+    const qb = mgrCustomerRepo.createQueryBuilder();
+    await service.findAll('tenant-1', { search: 'sanjose' });
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      '(LOWER(c.name) LIKE :s OR LOWER(c.tax_id) LIKE :s OR LOWER(c.phone) LIKE :s OR LOWER(c.email) LIKE :s)',
+      { s: '%sanjose%' },
+    );
+  });
+
   it('should find customer by id and tenant', async () => {
     mgrCustomerRepo.findOne.mockResolvedValue(mockCustomer());
     const customer = await service.findOne('tenant-1', 'cust-uuid-1');
@@ -194,12 +222,16 @@ describe('CustomersService', () => {
     expect(created.is_active).toBe(true);
   });
 
-  it('should update customer details', async () => {
+  it('should update customer details including customer_type and is_active', async () => {
     mgrCustomerRepo.findOne.mockResolvedValue(mockCustomer());
     const updated = await service.update('tenant-1', 'cust-uuid-1', {
       phone: '8777-6655',
+      customer_type: 'EMPRESA',
+      is_active: true,
     });
     expect(updated.phone).toBe('8777-6655');
+    expect(updated.customer_type).toBe('EMPRESA');
+    expect(updated.is_active).toBe(true);
   });
 
   it('should soft delete customer by setting is_active to false', async () => {
@@ -235,7 +267,10 @@ describe('CustomersService', () => {
       reason: 'Bono de fidelidad por aniversario',
     });
 
-    expect(sumQb.select).toHaveBeenCalledWith('COALESCE(SUM(tx.points), 0)', 'total');
+    expect(sumQb.select).toHaveBeenCalledWith(
+      'COALESCE(SUM(tx.points), 0)',
+      'total',
+    );
     expect(sumQb.where).toHaveBeenCalledWith('tx.tenant_id = :tenantId', {
       tenantId: 'tenant-1',
     });

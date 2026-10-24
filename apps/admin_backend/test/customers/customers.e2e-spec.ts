@@ -31,13 +31,23 @@ describe('Customers Module (E2E / Integration)', () => {
       let searchStr = '';
       let limitVal = 20;
       let offsetVal = 0;
+      let statusFilter: 'all' | 'active' | 'inactive' = 'all';
+      let typeFilter: string | undefined = undefined;
 
       const qb = {
         where: jest.fn((clause: string, params: { tenantId: string }) => {
           currentTenant = params.tenantId;
           return qb;
         }),
-        andWhere: jest.fn((clause: string, params?: { s: string }) => {
+        andWhere: jest.fn((clause: string, params?: { s?: string; customerType?: string }) => {
+          if (clause === 'c.is_active = false') {
+            statusFilter = 'inactive';
+          } else if (clause === 'c.is_active = true') {
+            statusFilter = 'active';
+          }
+          if (params?.customerType) {
+            typeFilter = params.customerType;
+          }
           if (params?.s) {
             searchStr = params.s.replace(/%/g, '').toLowerCase();
           }
@@ -53,15 +63,22 @@ describe('Customers Module (E2E / Integration)', () => {
           return qb;
         }),
         getManyAndCount: jest.fn(() => {
-          let filtered = dbCustomers.filter(
-            (c) => c.tenant_id === currentTenant && c.is_active,
-          );
+          let filtered = dbCustomers.filter((c) => c.tenant_id === currentTenant);
+          if (statusFilter === 'active') {
+            filtered = filtered.filter((c) => c.is_active);
+          } else if (statusFilter === 'inactive') {
+            filtered = filtered.filter((c) => !c.is_active);
+          }
+          if (typeFilter) {
+            filtered = filtered.filter((c) => c.customer_type === typeFilter);
+          }
           if (searchStr) {
             filtered = filtered.filter(
               (c) =>
                 c.name.toLowerCase().includes(searchStr) ||
                 (c.tax_id?.toLowerCase().includes(searchStr) ?? false) ||
-                (c.phone?.toLowerCase().includes(searchStr) ?? false),
+                (c.phone?.toLowerCase().includes(searchStr) ?? false) ||
+                (c.email?.toLowerCase().includes(searchStr) ?? false),
             );
           }
           const total = filtered.length;
@@ -273,7 +290,7 @@ describe('Customers Module (E2E / Integration)', () => {
       ).toBe(false);
     });
 
-    it('búsqueda predictiva con query param ?search=', async () => {
+    it('búsqueda predictiva con query param ?search= incluyendo email', async () => {
       dbCustomers.push(
         {
           id: 'c-1',
@@ -281,6 +298,8 @@ describe('Customers Module (E2E / Integration)', () => {
           name: 'Supermercado La Colonia',
           tax_id: 'J0310000000999',
           phone: '2277-0000',
+          email: 'compras@lacolonia.com.ni',
+          customer_type: 'EMPRESA',
           points_balance: 0,
           is_active: true,
           created_at: new Date(),
@@ -292,6 +311,8 @@ describe('Customers Module (E2E / Integration)', () => {
           name: 'Farmacia Saba',
           tax_id: 'J0310000000888',
           phone: '2288-0000',
+          email: 'contacto@saba.com.ni',
+          customer_type: 'EMPRESA',
           points_balance: 0,
           is_active: true,
           created_at: new Date(),
@@ -301,24 +322,76 @@ describe('Customers Module (E2E / Integration)', () => {
 
       const token = createToken('tenant-A');
       const res = await request(app.getHttpServer())
-        .get('/customers?search=Colonia')
+        .get('/customers?search=lacolonia.com.ni')
         .set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
       expect(res.body.total).toBe(1);
       expect(res.body.data[0].name).toBe('Supermercado La Colonia');
     });
+
+    it('filtra clientes por customer_type y por status (all / inactive)', async () => {
+      dbCustomers.push(
+        {
+          id: 'c-empresa-activa',
+          tenant_id: 'tenant-A',
+          name: 'Empresa Activa',
+          customer_type: 'EMPRESA',
+          is_active: true,
+        } as Customer,
+        {
+          id: 'c-persona-activa',
+          tenant_id: 'tenant-A',
+          name: 'Persona Activa',
+          customer_type: 'PERSONA',
+          is_active: true,
+        } as Customer,
+        {
+          id: 'c-empresa-inactiva',
+          tenant_id: 'tenant-A',
+          name: 'Empresa Inactiva',
+          customer_type: 'EMPRESA',
+          is_active: false,
+        } as Customer,
+      );
+
+      const token = createToken('tenant-A');
+
+      // Filter by customer_type EMPRESA (defaults to active)
+      const resType = await request(app.getHttpServer())
+        .get('/customers?customer_type=EMPRESA')
+        .set('Authorization', `Bearer ${token}`);
+      expect(resType.status).toBe(200);
+      expect(resType.body.total).toBe(1);
+      expect(resType.body.data[0].name).toBe('Empresa Activa');
+
+      // Filter by status=inactive
+      const resInactive = await request(app.getHttpServer())
+        .get('/customers?status=inactive')
+        .set('Authorization', `Bearer ${token}`);
+      expect(resInactive.status).toBe(200);
+      expect(resInactive.body.total).toBe(1);
+      expect(resInactive.body.data[0].name).toBe('Empresa Inactiva');
+
+      // Filter by status=all
+      const resAll = await request(app.getHttpServer())
+        .get('/customers?status=all')
+        .set('Authorization', `Bearer ${token}`);
+      expect(resAll.status).toBe(200);
+      expect(resAll.body.total).toBe(3);
+    });
   });
 
   describe('PATCH & DELETE /customers/:id', () => {
-    it('actualiza datos de cliente', async () => {
+    it('actualiza datos de cliente incluyendo customer_type y reactivación', async () => {
       const customer = {
         id: 'c-edit',
         tenant_id: 'tenant-A',
         name: 'Nombre Original',
         phone: '8000-0000',
+        customer_type: 'PERSONA',
         points_balance: 0,
-        is_active: true,
+        is_active: false,
         created_at: new Date(),
         updated_at: new Date(),
       } as Customer;
@@ -328,11 +401,18 @@ describe('Customers Module (E2E / Integration)', () => {
       const res = await request(app.getHttpServer())
         .patch('/customers/c-edit')
         .set('Authorization', `Bearer ${token}`)
-        .send({ name: 'Nombre Modificado', phone: '8999-9999' });
+        .send({
+          name: 'Empresa Modificada',
+          phone: '8999-9999',
+          customer_type: 'EMPRESA',
+          is_active: true,
+        });
 
       expect(res.status).toBe(200);
-      expect(res.body.name).toBe('Nombre Modificado');
+      expect(res.body.name).toBe('Empresa Modificada');
       expect(res.body.phone).toBe('8999-9999');
+      expect(res.body.customer_type).toBe('EMPRESA');
+      expect(res.body.is_active).toBe(true);
     });
 
     it('elimina lógicamente el cliente (soft-delete is_active = false)', async () => {

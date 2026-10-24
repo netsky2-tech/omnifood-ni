@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsEmail, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsEmail, IsBoolean, IsIn } from 'class-validator';
 
 export class UpdateCustomerDto {
   @IsOptional()
@@ -24,4 +24,8 @@ export class UpdateCustomerDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  @IsOptional()
+  @IsIn(['PERSONA', 'EMPRESA'])
+  customer_type?: 'PERSONA' | 'EMPRESA';
 }

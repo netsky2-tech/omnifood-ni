@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Search, Eye, Edit, Trash2 } from 'lucide-react';
+import { useSafeSearchParams } from '@/lib/safe-search-params';
 import { usePromotions, useTogglePromotion, useDeletePromotion } from '@/hooks/use-promotions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,12 +76,36 @@ export function PromotionsList() {
   const formatCategoryTarget = (id: string) =>
     categoryNameById.get(id) ?? `…${id.slice(-8)}`;
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSafeSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
   const [viewingPromotion, setViewingPromotion] = useState<Promotion | null>(null);
+
+  useEffect(() => {
+    const isNewConvenio = searchParams.get('new') === 'convenio';
+    const customerId = searchParams.get('customerId');
+    if (isNewConvenio && customerId) {
+      setEditingPromotion({
+        type: PromotionType.CONVENIO,
+        target_customer_id: customerId,
+        restriction_type: 'customer',
+        name: `Convenio ${searchParams.get('customerName') ?? ''}`.trim(),
+        priority: 10,
+        is_stackable: true,
+        discount_value: 10,
+        is_active: true,
+      } as Promotion);
+      setIsFormOpen(true);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('new');
+      nextParams.delete('customerId');
+      nextParams.delete('customerName');
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const filteredPromotions = promotions?.filter((p) => {
     const matchesSearch =

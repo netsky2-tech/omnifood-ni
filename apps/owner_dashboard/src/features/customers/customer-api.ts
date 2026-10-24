@@ -11,32 +11,44 @@ export interface CustomerItem {
   tax_id?: string | null;
   phone?: string | null;
   email?: string | null;
+  address?: string | null;
+  customer_type?: 'PERSONA' | 'EMPRESA' | null;
   is_active: boolean;
+  points_balance?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface FetchCustomersParams {
+  limit: number;
+  offset: number;
+  search?: string;
+  status?: 'all' | 'active' | 'inactive';
+  customer_type?: 'PERSONA' | 'EMPRESA';
 }
 
 /**
  * `GET /customers` query contract (CustomerQueryDto).
  *
- * ONLY `search`, `limit` and `offset` are accepted: the backend's global
- * ValidationPipe runs with `forbidNonWhitelisted: true`, so an extra query
- * parameter (a `page`/`pageSize` pair, the shape the products endpoint uses)
- * is rejected with a 400 and the whole search fails. The customer selector
- * then renders its error state instead of its results.
+ * Supported params: `limit`, `offset`, `search`, `status`, `customer_type`.
  */
-export async function fetchPaginatedCustomers({
-  limit,
-  offset,
-  search,
-}: {
-  limit: number;
-  offset: number;
-  search?: string;
-}, { signal }: { signal: AbortSignal }): Promise<PaginatedCustomersResponse> {
+export async function fetchPaginatedCustomers(
+  {
+    limit,
+    offset,
+    search,
+    status,
+    customer_type,
+  }: FetchCustomersParams,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<PaginatedCustomersResponse> {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
-  if (search) params.set('search', search);
+  if (search && search.trim()) params.set('search', search.trim());
+  if (status && status !== 'active') params.set('status', status);
+  if (customer_type) params.set('customer_type', customer_type);
 
   return apiFetch<PaginatedCustomersResponse>(
     `/customers?${params.toString()}`,
@@ -46,7 +58,48 @@ export async function fetchPaginatedCustomers({
 
 export async function fetchCustomer(
   id: string,
-  { signal }: { signal: AbortSignal },
+  { signal }: { signal?: AbortSignal } = {},
 ): Promise<CustomerItem> {
   return apiFetch<CustomerItem>(`/customers/${id}`, { signal });
+}
+
+export interface CreateCustomerInput {
+  name: string;
+  tax_id?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  customer_type?: 'PERSONA' | 'EMPRESA';
+}
+
+export interface UpdateCustomerInput {
+  name?: string;
+  tax_id?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  customer_type?: 'PERSONA' | 'EMPRESA';
+  is_active?: boolean;
+}
+
+export async function createCustomer(
+  dto: CreateCustomerInput,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<CustomerItem> {
+  return apiFetch<CustomerItem>('/customers', { method: 'POST', body: dto, signal });
+}
+
+export async function updateCustomer(
+  id: string,
+  dto: UpdateCustomerInput,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<CustomerItem> {
+  return apiFetch<CustomerItem>(`/customers/${id}`, { method: 'PATCH', body: dto, signal });
+}
+
+export async function deactivateCustomer(
+  id: string,
+  { signal }: { signal?: AbortSignal } = {},
+): Promise<void> {
+  return apiFetch<void>(`/customers/${id}`, { method: 'DELETE', signal });
 }
