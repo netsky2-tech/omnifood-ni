@@ -56,6 +56,10 @@ export function CorporateMetricsTab() {
   const endDate = searchParams.get('endDate') || getTodayISO();
 
   const [expandedCompanyId, setExpandedCompanyId] = useState<string | null>(null);
+  // Export is a long-running operation (§36): the button must acknowledge the
+  // start and block a second click. One key per action target, so exporting a
+  // company never disables the ranking export and vice versa.
+  const [pendingExport, setPendingExport] = useState<string | null>(null);
 
   const updateDates = (newStart: string, newEnd: string) => {
     setSearchParams(
@@ -81,6 +85,9 @@ export function CorporateMetricsTab() {
 
   const handleExportRanking = async (format: 'xlsx' | 'pdf') => {
     if (!data || data.companies.length === 0) return;
+    const exportKey = `ranking:${format}`;
+    if (pendingExport !== null) return;
+    setPendingExport(exportKey);
     try {
       await downloadCorporateMetricsFile({
         startDate: startDate || undefined,
@@ -93,12 +100,17 @@ export function CorporateMetricsTab() {
         title: `Reporte de Convenios (${format.toUpperCase()})`,
         description: `Se descargó el reporte de convenios en formato ${format.toUpperCase()}.`,
       });
-    } catch {
+    } catch (exportError) {
       toast({
         variant: 'destructive',
         title: 'Error al exportar',
-        description: `No se pudo generar el archivo ${format.toUpperCase()} de convenios.`,
+        description:
+          exportError instanceof Error && exportError.message
+            ? exportError.message
+            : `No se pudo generar el archivo ${format.toUpperCase()} de convenios.`,
       });
+    } finally {
+      setPendingExport(null);
     }
   };
 
@@ -107,6 +119,9 @@ export function CorporateMetricsTab() {
     format: 'xlsx' | 'pdf',
   ) => {
     if (!company.topProducts || company.topProducts.length === 0) return;
+    const exportKey = `company:${company.customerId}:${format}`;
+    if (pendingExport !== null) return;
+    setPendingExport(exportKey);
     try {
       await downloadCorporateMetricsFile({
         startDate: startDate || undefined,
@@ -121,12 +136,17 @@ export function CorporateMetricsTab() {
         title: `Detalle de consumo (${format.toUpperCase()})`,
         description: `Se descargó el reporte de productos para ${company.customerName}.`,
       });
-    } catch {
+    } catch (exportError) {
       toast({
         variant: 'destructive',
         title: 'Error al exportar',
-        description: 'No se pudo generar el detalle de consumo.',
+        description:
+          exportError instanceof Error && exportError.message
+            ? exportError.message
+            : 'No se pudo generar el detalle de consumo.',
       });
+    } finally {
+      setPendingExport(null);
     }
   };
 
@@ -420,31 +440,33 @@ export function CorporateMetricsTab() {
                   Rendimiento por Empresa y Convenio
                 </h2>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground hidden lg:inline mr-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mr-2 hidden text-xs text-muted-foreground lg:inline">
                   Haga clic en una empresa para ver sus productos y horarios
                 </span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleExportRanking('xlsx')}
-                  disabled={!data || data.companies.length === 0}
-                  className="h-8 gap-1.5 text-xs font-medium border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  disabled={!data || data.companies.length === 0 || pendingExport !== null}
+                  loading={pendingExport === 'ranking:xlsx'}
+                  className="h-8 gap-1.5 text-xs font-medium"
                   aria-label="Exportar a Excel"
                 >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  <span>Excel</span>
+                  <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Exportar a Excel</span>
                 </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => handleExportRanking('pdf')}
-                  disabled={!data || data.companies.length === 0}
-                  className="h-8 gap-1.5 text-xs font-medium border-rose-300 text-rose-800 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950"
+                  disabled={!data || data.companies.length === 0 || pendingExport !== null}
+                  loading={pendingExport === 'ranking:pdf'}
+                  className="h-8 gap-1.5 text-xs font-medium"
                   aria-label="Exportar a PDF"
                 >
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>PDF</span>
+                  <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Exportar a PDF</span>
                 </Button>
               </div>
             </div>
@@ -492,6 +514,7 @@ export function CorporateMetricsTab() {
                           isExpanded={isExpanded}
                           onToggle={() => toggleExpand(company.customerId)}
                           onExportDetail={handleExportCompanyDetail}
+                          pendingExport={pendingExport}
                         />
                       );
                     })}
@@ -511,6 +534,7 @@ function CompanyRowWithDetail({
   isExpanded,
   onToggle,
   onExportDetail,
+  pendingExport,
 }: {
   company: CorporateCustomerSummary;
   isExpanded: boolean;
@@ -519,6 +543,8 @@ function CompanyRowWithDetail({
     company: CorporateCustomerSummary,
     format: 'xlsx' | 'pdf',
   ) => void;
+  /** Key of the export currently running, shared with the page-level buttons. */
+  pendingExport: string | null;
 }) {
   return (
     <>
@@ -607,10 +633,12 @@ function CompanyRowWithDetail({
                           e.stopPropagation();
                           onExportDetail(company, 'xlsx');
                         }}
-                        className="h-6 gap-1 text-[11px] px-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300"
+                        disabled={pendingExport !== null}
+                        loading={pendingExport === `company:${company.customerId}:xlsx`}
+                        className="h-7 gap-1 text-[11px] px-2"
                         aria-label={`Exportar Excel de ${company.customerName}`}
                       >
-                        <FileSpreadsheet className="h-3 w-3" />
+                        <FileSpreadsheet className="h-3 w-3" aria-hidden="true" />
                         <span>Excel</span>
                       </Button>
                       <Button
@@ -620,10 +648,12 @@ function CompanyRowWithDetail({
                           e.stopPropagation();
                           onExportDetail(company, 'pdf');
                         }}
-                        className="h-6 gap-1 text-[11px] px-2 border-rose-300 text-rose-800 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300"
+                        disabled={pendingExport !== null}
+                        loading={pendingExport === `company:${company.customerId}:pdf`}
+                        className="h-7 gap-1 text-[11px] px-2"
                         aria-label={`Exportar PDF de ${company.customerName}`}
                       >
-                        <FileText className="h-3 w-3" />
+                        <FileText className="h-3 w-3" aria-hidden="true" />
                         <span>PDF</span>
                       </Button>
                     </>

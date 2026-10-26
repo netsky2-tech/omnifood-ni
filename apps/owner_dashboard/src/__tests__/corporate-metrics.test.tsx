@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -262,5 +262,84 @@ describe('CorporateMetricsTab (Backoffice Standard)', () => {
     expect(retryBtn).toBeInTheDocument();
     retryBtn.click();
     expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  it('acknowledges the export start and blocks a second download while it runs', async () => {
+    vi.spyOn(metricsApiModule, 'useCorporateMetrics').mockReturnValue({
+      data: {
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+        generatedAt: '2026-08-31T23:59:59Z',
+        kpis: {
+          totalCorporateGrossSalesNio: 100,
+          totalCorporateDiscountNio: 10,
+          totalCorporateNetSalesNio: 90,
+          totalCorporateTickets: 1,
+          overallAverageTicketNio: 90,
+          overallEffectiveDiscountRate: 10,
+          activeCompaniesCount: 1,
+        },
+        companies: [
+          {
+            customerId: 'cust-1',
+            customerName: 'Empresa Uno',
+            customerTaxId: 'J0310000001234',
+            customerType: 'EMPRESA',
+            convenioCode: 'CONV-1',
+            convenioName: 'Convenio Uno',
+            ticketCount: 1,
+            grossSalesNio: 100,
+            discountNio: 10,
+            netSalesNio: 90,
+            effectiveDiscountRate: 10,
+            averageTicketNio: 90,
+            topProducts: [],
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+
+    let finishDownload: () => void = () => undefined;
+    const downloadSpy = vi
+      .spyOn(metricsApiModule, 'downloadCorporateMetricsFile')
+      .mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            finishDownload = resolve;
+          }),
+      );
+
+    render(
+      <TestWrapper>
+        <CorporateMetricsTab />
+      </TestWrapper>,
+    );
+
+    const excelButton = screen.getByRole('button', {
+      name: /exportar a excel/i,
+    });
+    fireEvent.click(excelButton);
+
+    await waitFor(() => expect(downloadSpy).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole('button', { name: /exportar a excel/i }),
+    ).toBeDisabled();
+    // The pending state is shared: no second export can start in parallel.
+    expect(
+      screen.getByRole('button', { name: /exportar a pdf/i }),
+    ).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /exportar a pdf/i }));
+    expect(downloadSpy).toHaveBeenCalledTimes(1);
+
+    finishDownload();
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: /exportar a pdf/i }),
+      ).not.toBeDisabled(),
+    );
   });
 });

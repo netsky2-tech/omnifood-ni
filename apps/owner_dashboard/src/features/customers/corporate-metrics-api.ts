@@ -98,6 +98,24 @@ export async function downloadCorporateMetricsFile(params: {
   const blob = await api.getBlob(
     `/sales/reports/export/corporate-metrics${query}`,
   );
+
+  // A JSON body here means the request never produced a file: the endpoint
+  // answered with an error payload (or, historically, a JSON-serialized
+  // Buffer). Saving that as .xlsx/.pdf hands the user a corrupt download that
+  // only fails later, in their spreadsheet or PDF reader. Fail now, with the
+  // server's message.
+  if (blob.type.includes('application/json')) {
+    const payload = (await blob.text()).slice(0, 500);
+    let detail = '';
+    try {
+      const parsed = JSON.parse(payload) as { message?: unknown };
+      if (typeof parsed.message === 'string') detail = parsed.message;
+    } catch {
+      // Not JSON after all: fall through to the generic message.
+    }
+    throw new Error(detail || 'El servidor no devolvió un archivo válido.');
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const fileSuffix = `${params.startDate ?? 'inicio'}_${params.endDate ?? 'fin'}`;
@@ -112,7 +130,9 @@ export async function downloadCorporateMetricsFile(params: {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  // Revoking in the same tick cancels the download in some browsers; the
+  // anchor is already detached, so a deferred revoke is safe.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function useCorporateMetrics(startDate?: string, endDate?: string) {
