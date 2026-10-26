@@ -136,6 +136,13 @@ describe('pooled reads vs tenant-bound RLS gate (Real PostgreSQL DB, migration-b
           throw new Error('not exercised in the pooled-reads gate');
         },
       } as never,
+      // SalesReportsService backs the corporate-metrics export added in the
+      // reports work; these pooled-read gates never reach it either.
+      {
+        getCorporateMetrics: async () => {
+          throw new Error('not exercised in the pooled-reads gate');
+        },
+      } as never,
     );
     // The InboundSync paths under test (types='users') never touch the
     // pooled product/catalog/insumo/recipe repositories, and WU2 made the
