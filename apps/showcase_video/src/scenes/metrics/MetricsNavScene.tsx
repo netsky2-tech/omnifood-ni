@@ -21,6 +21,7 @@ export const MetricsNavScene: React.FC = () => {
     <MetricsWindow
       rootRef={sceneRoot}
       activeTab={tabActive}
+      animateEnter={true}
       overlay={
         <>
         <CursorPath

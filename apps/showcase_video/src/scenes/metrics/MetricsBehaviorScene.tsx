@@ -44,7 +44,7 @@ export const MetricsBehaviorScene: React.FC = () => {
       }
     >
       <DateRangeBar pressedFrom={0} />
-      <KpiGrid highlight={1} />
+      <KpiGrid highlight={1} animate={false} />
       <BehaviorCards showAnnotation />
     </MetricsWindow>
   );

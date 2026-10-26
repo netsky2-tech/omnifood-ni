@@ -75,13 +75,26 @@ export const MetricsWindow: React.FC<{
   overlay?: React.ReactNode;
   /** Marco de la escena: referencia para medir elementos en coordenadas reales. */
   rootRef?: React.RefObject<HTMLDivElement | null>;
-}> = ({ children, scrollY = 0, activeTab = 'metrics', overlay, rootRef }) => {
+  /** Si true, la ventana hace fade-in y zoom de entrada. False para continuidad entre escenas. */
+  animateEnter?: boolean;
+}> = ({
+  children,
+  scrollY = 0,
+  activeTab = 'metrics',
+  overlay,
+  rootRef,
+  animateEnter = false,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const enter = spring({ frame, fps, config: { damping: 18, mass: 0.9 } });
-  const scale = interpolate(enter, [0, 1], [0.95, 1]);
-  const opacity = interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' });
+  const enter = animateEnter
+    ? spring({ frame, fps, config: { damping: 18, mass: 0.9 } })
+    : 1;
+  const scale = animateEnter ? interpolate(enter, [0, 1], [0.95, 1]) : 1;
+  const opacity = animateEnter
+    ? interpolate(frame, [0, 15], [0, 1], { extrapolateRight: 'clamp' })
+    : 1;
 
   return (
     <div
@@ -333,23 +346,30 @@ const KPI_CARDS: {
   },
 ];
 
-export const KpiGrid: React.FC<{ highlight: number }> = ({ highlight }) => {
+export const KpiGrid: React.FC<{ highlight: number; animate?: boolean }> = ({
+  highlight,
+  animate = true,
+}) => {
   const frame = useCurrentFrame();
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {KPI_CARDS.map((card, index) => {
         const start = index * 6;
-        const enter = spring({
-          frame: frame - start,
-          fps: 30,
-          config: { damping: 16, mass: 0.8 },
-        });
-        const countProgress = interpolate(frame, [start + 4, start + 34], [0, 1], {
-          easing: Easing.out(Easing.cubic),
-          extrapolateLeft: 'clamp',
-          extrapolateRight: 'clamp',
-        });
+        const enter = animate
+          ? spring({
+              frame: frame - start,
+              fps: 30,
+              config: { damping: 16, mass: 0.8 },
+            })
+          : 1;
+        const countProgress = animate
+          ? interpolate(frame, [start + 4, start + 34], [0, 1], {
+              easing: Easing.out(Easing.cubic),
+              extrapolateLeft: 'clamp',
+              extrapolateRight: 'clamp',
+            })
+          : 1;
 
         const counted = card.target * countProgress;
         const value = card.money
@@ -361,8 +381,10 @@ export const KpiGrid: React.FC<{ highlight: number }> = ({ highlight }) => {
             key={card.label}
             className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-xs"
             style={{
-              opacity: interpolate(enter, [0, 1], [0, 1]),
-              transform: `translateY(${interpolate(enter, [0, 1], [10, 0])}px)`,
+              opacity: animate ? interpolate(enter, [0, 1], [0, 1]) : 1,
+              transform: animate
+                ? `translateY(${interpolate(enter, [0, 1], [10, 0])}px)`
+                : 'none',
             }}
           >
             <p className="truncate text-xs font-semibold uppercase tracking-wider text-slate-500">

@@ -20,7 +20,8 @@ export const MetricsRankingScene: React.FC = () => {
     config: { damping: 20, mass: 0.9 },
     durationInFrames: 38,
   });
-  const scrollY = interpolate(scrollSpring, [0, 1], [0, 634]);
+  // Continuidad de cámara: arranca exactamente en 170 (donde terminó la escena 4) y desciende a 634
+  const scrollY = interpolate(scrollSpring, [0, 1], [170, 634]);
   const targets = useCursorTargets(['ranking-row-bac', 'detail-pdf'], sceneRoot, scrollY);
 
   const expanded = frame >= 86;
@@ -60,7 +61,7 @@ export const MetricsRankingScene: React.FC = () => {
       }
     >
       <DateRangeBar pressedFrom={0} />
-      <KpiGrid highlight={1} />
+      <KpiGrid highlight={1} animate={false} />
       <BehaviorCards animate={false} showAnnotation={false} />
       <RankingCard expanded={expanded} detailExport={detailExport} />
     </MetricsWindow>
