@@ -2270,6 +2270,14 @@ describe('SalesExportService', () => {
       );
       expect(result.buffer).toBeInstanceOf(Buffer);
       expect(result.buffer.length).toBeGreaterThan(0);
+      // A real OOXML package starts with the ZIP local-file header (PK\x03\x04)
+      // and must load back through ExcelJS: that is what "the file opens" means.
+      expect(result.buffer!.subarray(0, 4).toString('hex')).toBe('504b0304');
+      const reloaded = new ExcelJS.Workbook();
+      await expect(
+        reloaded.xlsx.load(result.buffer as unknown as ArrayBuffer),
+      ).resolves.toBeTruthy();
+      expect(reloaded.worksheets.length).toBeGreaterThan(0);
       expect(mockSalesReportsService.getCorporateMetrics).toHaveBeenCalledWith(
         tenantId,
         {
@@ -2293,6 +2301,9 @@ describe('SalesExportService', () => {
       );
       expect(result.buffer).toBeInstanceOf(Buffer);
       expect(result.buffer.length).toBeGreaterThan(0);
+      // A reader rejects anything without the PDF header or a proper trailer.
+      expect(result.buffer!.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+      expect(result.buffer!.toString('latin1').trimEnd()).toMatch(/%%EOF$/);
     });
 
     it('generates company-specific consumption detail when companyId is provided', async () => {
@@ -2308,6 +2319,7 @@ describe('SalesExportService', () => {
       );
       expect(result.buffer).toBeInstanceOf(Buffer);
       expect(result.buffer.length).toBeGreaterThan(0);
+      expect(result.buffer!.subarray(0, 4).toString('hex')).toBe('504b0304');
     });
   });
 });

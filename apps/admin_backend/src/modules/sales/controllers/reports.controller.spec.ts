@@ -45,6 +45,32 @@ import {
 } from '../security/report-throttle.config';
 
 describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
+  /**
+   * Reads the raw body as bytes. Supertest only parses bodies as text for the
+   * binary content types used by the export endpoints, which is exactly how a
+   * JSON-wrapped Buffer used to slip through: headers looked right while the
+   * payload was `{"type":"Buffer","data":[...]}`.
+   */
+  const binaryParser = (
+    res: NodeJS.EventEmitter,
+    callback: (err: Error | null, body: Buffer) => void,
+  ): void => {
+    const chunks: Buffer[] = [];
+    res.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    res.on('end', () => callback(null, Buffer.concat(chunks)));
+  };
+
+  /** Asserts the download body is the raw file and never a JSON envelope. */
+  const expectRawFile = (
+    response: { body: unknown },
+    expected: string,
+  ): void => {
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    const body = response.body as Buffer;
+    expect(body.toString('utf8')).toBe(expected);
+    expect(body.toString('utf8')).not.toContain('"type":"Buffer"');
+  };
+
   const jwtEnvironment = {
     NODE_ENV: 'test',
     JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
@@ -732,18 +758,51 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
 
   it('allows MANAGER to export corporate-metrics in xlsx format', async () => {
     const jwtService = app.get(JwtService);
-    await request(getHttpServer())
+    const response = await request(getHttpServer())
       .get(
         '/sales/reports/export/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31&format=xlsx',
       )
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .buffer(true)
+      .parse(binaryParser)
       .expect(200)
       .expect('Content-Type', /spreadsheetml\.sheet/);
+
+    expect(response.headers['content-disposition']).toContain(
+      'attachment; filename="reporte_convenios.xlsx"',
+    );
+    expectRawFile(response, 'mock-xlsx-data');
 
     expect(mockSalesExportService.exportCorporateMetrics).toHaveBeenCalledWith(
       'tenant-1',
       expect.objectContaining({ format: 'xlsx' }),
     );
+  });
+
+  it('returns the corporate-metrics PDF as raw bytes, not a JSON envelope', async () => {
+    const jwtService = app.get(JwtService);
+    mockSalesExportService.exportCorporateMetrics.mockResolvedValueOnce({
+      format: 'pdf',
+      filename: 'reporte_convenios_2026-08-01_2026-08-31.pdf',
+      contentType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.7 mock'),
+      data: {},
+    });
+
+    const response = await request(getHttpServer())
+      .get(
+        '/sales/reports/export/corporate-metrics?startDate=2026-08-01&endDate=2026-08-31&format=pdf',
+      )
+      .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200)
+      .expect('Content-Type', /application\/pdf/);
+
+    expect(response.headers['content-disposition']).toContain(
+      'attachment; filename="reporte_convenios_2026-08-01_2026-08-31.pdf"',
+    );
+    expectRawFile(response, '%PDF-1.7 mock');
   });
 
   it('returns 403 for CASHIER on corporate-metrics endpoint', async () => {
@@ -829,21 +888,27 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
     const responseXlsx = await request(getHttpServer())
       .get('/sales/reports/export/sales-book?format=xlsx')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .buffer(true)
+      .parse(binaryParser)
       .expect(200);
 
     expect(responseXlsx.headers['content-type']).toContain(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(responseXlsx.headers['content-disposition']).toContain('.xlsx');
+    expectRawFile(responseXlsx, 'mock-xlsx-data');
 
     // PDF
     const responsePdf = await request(getHttpServer())
       .get('/sales/reports/export/sales-book?format=pdf')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .buffer(true)
+      .parse(binaryParser)
       .expect(200);
 
     expect(responsePdf.headers['content-type']).toContain('application/pdf');
     expect(responsePdf.headers['content-disposition']).toContain('.pdf');
+    expectRawFile(responsePdf, 'mock-pdf-data');
   });
 
   it('allows MANAGER on export/z-reports endpoint in JSON, CSV, XLSX, PDF formats', async () => {
@@ -870,21 +935,27 @@ describe('ReportsController RBAC & Analytics & Fiscal & Export', () => {
     const responseXlsx = await request(getHttpServer())
       .get('/sales/reports/export/z-reports?format=xlsx')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .buffer(true)
+      .parse(binaryParser)
       .expect(200);
 
     expect(responseXlsx.headers['content-type']).toContain(
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(responseXlsx.headers['content-disposition']).toContain('.xlsx');
+    expectRawFile(responseXlsx, 'mock-xlsx-z-data');
 
     // PDF
     const responsePdf = await request(getHttpServer())
       .get('/sales/reports/export/z-reports?format=pdf')
       .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+      .buffer(true)
+      .parse(binaryParser)
       .expect(200);
 
     expect(responsePdf.headers['content-type']).toContain('application/pdf');
     expect(responsePdf.headers['content-disposition']).toContain('.pdf');
+    expectRawFile(responsePdf, 'mock-pdf-z-data');
   });
 
   // T5 (S5): the 429 must be observable through the full HTTP stack — a

@@ -2,12 +2,11 @@ import {
   Controller,
   Get,
   Query,
-  Res,
+  StreamableFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { Response } from 'express';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
@@ -46,6 +45,7 @@ import {
 } from '../dto/fiscal-reports.dto';
 import {
   ExportCorporateMetricsQueryDto,
+  ExportResult,
   ExportSalesBookQueryDto,
   ExportZReportsQueryDto,
   SalesBookExportDto,
@@ -56,6 +56,25 @@ import {
   REPORT_THROTTLE_TTL_MS,
   TENANT_REPORT_THROTTLER_NAME,
 } from '../security/report-throttle.config';
+
+/**
+ * Wraps a non-JSON export in a StreamableFile.
+ *
+ * Returning the raw Buffer is NOT equivalent: Nest's Express adapter checks
+ * `isObject(body)` and anything that is an object — Buffers included — goes
+ * through `res.json(body)`. The download then arrives as
+ * `{"type":"Buffer","data":[80,75,3,4,...]}` with the xlsx/pdf content type,
+ * so Excel and every PDF reader reject it as a corrupt file. StreamableFile is
+ * the supported way to push bytes and still carry type/disposition headers.
+ */
+function toAttachment(result: ExportResult<unknown>): StreamableFile {
+  const body = result.buffer ?? Buffer.from(result.content ?? '', 'utf8');
+  return new StreamableFile(body, {
+    type: result.contentType,
+    disposition: `attachment; filename="${result.filename}"`,
+    length: body.length,
+  });
+}
 
 @Controller('sales/reports')
 @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
@@ -193,24 +212,15 @@ export class ReportsController {
   async exportSalesBook(
     @GetTenantId() tenantId: string,
     @Query() query: ExportSalesBookQueryDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<SalesBookExportDto | string | Buffer> {
+  ): Promise<SalesBookExportDto | StreamableFile> {
     const result = await this.salesExportService.exportSalesBook(
       tenantId,
       query,
     );
-    if (result.format !== 'json') {
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${result.filename}"`,
-      );
-      if (result.buffer) {
-        return result.buffer;
-      }
-      return result.content ?? '';
+    if (result.format === 'json') {
+      return result.data;
     }
-    return result.data;
+    return toAttachment(result);
   }
 
   @Get('export/z-reports')
@@ -225,24 +235,15 @@ export class ReportsController {
   async exportZReports(
     @GetTenantId() tenantId: string,
     @Query() query: ExportZReportsQueryDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<ZReportsExportDto | string | Buffer> {
+  ): Promise<ZReportsExportDto | StreamableFile> {
     const result = await this.salesExportService.exportZReports(
       tenantId,
       query,
     );
-    if (result.format !== 'json') {
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${result.filename}"`,
-      );
-      if (result.buffer) {
-        return result.buffer;
-      }
-      return result.content ?? '';
+    if (result.format === 'json') {
+      return result.data;
     }
-    return result.data;
+    return toAttachment(result);
   }
 
   @Get('export/corporate-metrics')
@@ -257,24 +258,15 @@ export class ReportsController {
   async exportCorporateMetrics(
     @GetTenantId() tenantId: string,
     @Query() query: ExportCorporateMetricsQueryDto,
-    @Res({ passthrough: true }) res: Response,
-  ): Promise<CorporateMetricsReportDto | string | Buffer> {
+  ): Promise<CorporateMetricsReportDto | StreamableFile> {
     const result = await this.salesExportService.exportCorporateMetrics(
       tenantId,
       query,
     );
-    if (result.format !== 'json') {
-      res.setHeader('Content-Type', result.contentType);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${result.filename}"`,
-      );
-      if (result.buffer) {
-        return result.buffer;
-      }
-      return result.content ?? '';
+    if (result.format === 'json') {
+      return result.data;
     }
-    return result.data;
+    return toAttachment(result);
   }
 
   /**
