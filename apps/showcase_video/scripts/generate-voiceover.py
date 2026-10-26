@@ -32,6 +32,31 @@ SCENES = [
         "filename": "scene_5_outro.mp3",
         "text": "NHILOS POS. Conectamos los hilos de tu negocio.",
     },
+    # --- Parte 2: Métricas de Convenios (MetricsShowcase) ---
+    {
+        "filename": "metrics_1_intro.mp3",
+        "text": "NHILOS POS. Métricas de convenios: del descuento a la decisión.",
+    },
+    {
+        "filename": "metrics_2_nav.mp3",
+        "text": "Cada venta con un cliente corporativo ya quedó registrada. En Clientes, la pestaña Métricas convierte esas ventas en información.",
+    },
+    {
+        "filename": "metrics_3_kpis.mp3",
+        "text": "De un solo vistazo: facturación neta, descuentos otorgados y su tasa efectiva, tickets y ticket promedio del período.",
+    },
+    {
+        "filename": "metrics_4_behavior.mp3",
+        "text": "Descubre qué productos consumen, y en qué días y horas llegan, para ajustar tu operación y tus turnos.",
+    },
+    {
+        "filename": "metrics_5_ranking.mp3",
+        "text": "El ranking compara a cada empresa, y el detalle muestra su consumo real. Exporta el reporte en Excel o PDF para compartirlo.",
+    },
+    {
+        "filename": "metrics_6_outro.mp3",
+        "text": "NHILOS POS. Conectamos los hilos de tu negocio.",
+    },
 ]
 
 async def generate_all():

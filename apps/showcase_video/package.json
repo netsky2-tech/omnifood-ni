@@ -7,6 +7,7 @@
     "start": "remotion preview src/index.ts",
     "preview": "remotion preview src/index.ts",
     "build": "remotion render src/index.ts ShowcaseMaster out/showcase-master.mp4",
+    "build:metrics": "remotion render src/index.ts MetricsShowcase out/nhilos_pos_metricas_convenios.mp4",
     "build:reel": "remotion render src/index.ts SocialReel out/social-reel.mp4",
     "build:square": "remotion render src/index.ts SocialSquare out/social-square.mp4",
     "generate:voiceover": "python3 scripts/generate-voiceover.py",

@@ -150,6 +150,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ activePath }
             <span>Auditoría</span>
           </div>
           <div
+            data-cursor="sidebar-clientes"
             className={`flex items-center gap-2.5 px-3 py-1.5 rounded-md transition ${
               activePath === '/customers'
                 ? 'bg-white/15 text-white font-semibold shadow-xs'

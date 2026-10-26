@@ -35,7 +35,7 @@ export const Cursor: React.FC<CursorProps> = ({
       >
         <path
           d="M5.5 3.5L18.5 13.5H11.5L8.5 20.5L5.5 3.5Z"
-          fill="#001F33"
+          fill="#FF00FF"
           stroke="#FFFFFF"
           strokeWidth="1.5"
           strokeLinejoin="round"

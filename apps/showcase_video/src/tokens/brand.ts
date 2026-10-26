@@ -31,6 +31,14 @@ export const COMPOSITION_PRESETS = {
     fps: VIDEO_FPS,
     durationInFrames: 1125, // 37.5 segundos (165 + 240 + 300 + 270 + 150)
   },
+  metricsShowcase: {
+    id: 'MetricsShowcase',
+    width: 1920,
+    height: 1080,
+    fps: VIDEO_FPS,
+    // 46.5 s: 190 + 285 + 255 + 220 + 290 + 155
+    durationInFrames: 1395,
+  },
   socialReel: {
     id: 'SocialReel',
     width: 1080,
