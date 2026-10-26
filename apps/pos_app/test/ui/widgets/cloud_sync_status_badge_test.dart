@@ -257,5 +257,29 @@ void main() {
       expect(find.text('Sales; Movimientos de stock'), findsOneWidget);
       expect(find.text('Registros de auditoría'), findsNothing);
     });
+
+    testWidgets('dialog does not overflow at a narrow handheld width',
+        (tester) async {
+      // NHILOS POS §42 / §46: the dialog must fit a 320 dp terminal. The
+      // audit label is the longest row and used to paint past the right
+      // edge (RenderFlex overflowed by 5.2 px).
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      connectivityService.setOnlineStateForTest(true);
+      salesRepo.unsynced = [
+        {'id': 'sale-1', 'documentType': 'INVOICE'},
+      ];
+
+      await tester.pumpWidget(buildTestWidget());
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('cloud_sync_status_badge_button')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Estado de la Nube'), findsOneWidget);
+      expect(find.text('Registros de auditoría pendientes:'), findsOneWidget);
+    });
   });
 }
