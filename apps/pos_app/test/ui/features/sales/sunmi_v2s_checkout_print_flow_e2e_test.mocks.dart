@@ -2834,6 +2834,26 @@ class MockPrinterConfigService extends _i1.Mock
       ) as _i56.Future<void>);
 
   @override
+  _i56.Future<String?> getCajaLabel() => (super.noSuchMethod(
+        Invocation.method(
+          #getCajaLabel,
+          [],
+        ),
+        returnValue: _i56.Future<String?>.value(),
+        returnValueForMissingStub: _i56.Future<String?>.value(),
+      ) as _i56.Future<String?>);
+
+  @override
+  _i56.Future<void> saveCajaLabel(String? label) => (super.noSuchMethod(
+        Invocation.method(
+          #saveCajaLabel,
+          [label],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
   _i56.Future<_i58.PrinterConfig> getPrinterConfig() => (super.noSuchMethod(
         Invocation.method(
           #getPrinterConfig,

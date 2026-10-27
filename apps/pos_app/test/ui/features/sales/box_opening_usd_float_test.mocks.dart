@@ -794,6 +794,16 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i17.Future<void>);
 
   @override
+  _i17.Future<void> refreshTerminalCajaLabel() => (super.noSuchMethod(
+        Invocation.method(
+          #refreshTerminalCajaLabel,
+          [],
+        ),
+        returnValue: _i17.Future<void>.value(),
+        returnValueForMissingStub: _i17.Future<void>.value(),
+      ) as _i17.Future<void>);
+
+  @override
   void setCompanyTaxRegime(_i18.TaxRegime? regime) => super.noSuchMethod(
         Invocation.method(
           #setCompanyTaxRegime,

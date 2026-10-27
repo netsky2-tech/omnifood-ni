@@ -2492,6 +2492,23 @@ class MockCustomerDao extends _i1.Mock implements _i41.CustomerDao {
       ) as _i56.Future<List<_i85.CustomerEntity>>);
 
   @override
+  _i56.Future<List<_i85.CustomerEntity>> getCustomersPage(
+    int? limit,
+    int? offset,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCustomersPage,
+          [
+            limit,
+            offset,
+          ],
+        ),
+        returnValue: _i56.Future<List<_i85.CustomerEntity>>.value(
+            <_i85.CustomerEntity>[]),
+      ) as _i56.Future<List<_i85.CustomerEntity>>);
+
+  @override
   _i56.Future<_i85.CustomerEntity?> getCustomerById(String? id) =>
       (super.noSuchMethod(
         Invocation.method(
