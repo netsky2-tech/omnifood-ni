@@ -837,7 +837,7 @@ export class InboundSyncService {
       id: b.id,
       insumoId: b.insumo_id,
       batchNumber: b.batch_number,
-      receivedDate: b.received_date ? b.received_date.toISOString() : null,
+      receivedDate: b.received_date || null,
       expirationDate: b.expiration_date,
       remainingStock: Number(b.remaining_stock),
       cost: Number(b.cost),

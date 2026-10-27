@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
+import { Batch } from '../../inventory/entities/batch.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
@@ -87,6 +88,7 @@ describe('InboundSyncService', () => {
   let categoryAttachmentQb: MockQueryBuilder<CategoryModifierGroup>;
   let productAttachmentQb: MockQueryBuilder<ProductModifierGroup>;
   let creditNoteQb: MockQueryBuilder<Invoice>;
+  let batchQb: MockQueryBuilder<Batch>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
   let mockCatalogRepo: { createQueryBuilder: jest.Mock };
@@ -108,6 +110,7 @@ describe('InboundSyncService', () => {
   let mockCategoryAttachmentRepo: { createQueryBuilder: jest.Mock };
   let mockProductAttachmentRepo: { createQueryBuilder: jest.Mock };
   let mockInvoiceRepo: { createQueryBuilder: jest.Mock };
+  let mockBatchRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
     productQb = createMockQueryBuilder<Product>([]);
@@ -129,6 +132,7 @@ describe('InboundSyncService', () => {
     categoryAttachmentQb = createMockQueryBuilder<CategoryModifierGroup>([]);
     productAttachmentQb = createMockQueryBuilder<ProductModifierGroup>([]);
     creditNoteQb = createMockQueryBuilder<Invoice>([]);
+    batchQb = createMockQueryBuilder<Batch>([]);
 
     mockProductRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productQb),
@@ -181,6 +185,9 @@ describe('InboundSyncService', () => {
     };
     mockInvoiceRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(creditNoteQb),
+    };
+    mockBatchRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(batchQb),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -275,6 +282,7 @@ describe('InboundSyncService', () => {
         if (entity === CategoryModifierGroup) return mockCategoryAttachmentRepo;
         if (entity === ProductModifierGroup) return mockProductAttachmentRepo;
         if (entity === Invoice) return mockInvoiceRepo;
+        if (entity === Batch) return mockBatchRepo;
         if (entity === ForensicAlert)
           return {
             createQueryBuilder: jest
