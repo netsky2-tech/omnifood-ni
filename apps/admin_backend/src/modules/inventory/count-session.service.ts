@@ -228,7 +228,8 @@ export class CountSessionService {
         // "no se crea algo sin lote" rule, enforced where the fact enters
         // the books.
         const batchId = approvedEntry.batchId ?? null;
-        if (!batchId) {
+        const batchNumber = approvedEntry.batchNumber?.trim() ?? null;
+        if (!batchId && !batchNumber) {
           const hasLots = await manager
             .getRepository(Batch)
             .exists({ where: { tenant_id: tenantId, insumo_id: line.insumoId } });
@@ -243,13 +244,25 @@ export class CountSessionService {
           }
         } else {
           const batchRepo = manager.getRepository(Batch);
-          const batch = await batchRepo.findOne({
-            where: { id: batchId, tenant_id: tenantId, insumo_id: line.insumoId },
-          });
+          let batch: Batch | null = null;
+          if (batchId) {
+            batch = await batchRepo.findOne({
+              where: { id: batchId, tenant_id: tenantId, insumo_id: line.insumoId },
+            });
+          }
+          if (!batch && batchNumber) {
+            batch = await batchRepo.findOne({
+              where: {
+                batch_number: batchNumber,
+                tenant_id: tenantId,
+                insumo_id: line.insumoId,
+              },
+            });
+          }
           if (!batch) {
             throw new BadRequestException(
               `El conteo de '${line.insumoName}' apunta a un lote que no ` +
-                `existe o no es de ese insumo: ${batchId}`,
+                `existe o no es de ese insumo: ${batchNumber || batchId}`,
             );
           }
           batch.remaining_stock = round4(

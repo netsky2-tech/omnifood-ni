@@ -40,46 +40,34 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Conteos físicos',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Esta pantalla congela el baseline local, preserva reconteos y publica ajustes compensatorios sólo cuando la sesión se aprueba.',
-                        ),
-                        if (viewModel.statusMessage != null) ...[
-                          const SizedBox(height: 8),
-                          Text(viewModel.statusMessage!),
-                        ],
-                        if (viewModel.errorMessage != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            viewModel.errorMessage!,
-                            style: TextStyle(color: Theme.of(context).colorScheme.error),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Conteos de inventario',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: viewModel.availableInsumos.isEmpty || viewModel.isLoading
-                              ? null
-                              : () => viewModel.startSession(
-                                    warehouseId: 'wh-local',
-                                    warehouseName: 'Bodega Central',
-                                  ),
-                          icon: const Icon(Icons.fact_check_outlined),
-                          label: const Text('ABRIR SESIÓN DE CONTEO'),
-                        ),
-                      ],
                     ),
-                  ),
+                    ElevatedButton.icon(
+                      onPressed: viewModel.availableInsumos.isEmpty || viewModel.isLoading
+                          ? null
+                          : () => viewModel.startSession(
+                                warehouseId: 'wh-local',
+                                warehouseName: 'Bodega Central',
+                              ),
+                      icon: const Icon(Icons.add_task),
+                      label: const Text('NUEVA SESIÓN'),
+                    ),
+                  ],
                 ),
+                if (viewModel.errorMessage != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    viewModel.errorMessage!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 if (viewModel.sessions.isEmpty)
                   const Expanded(child: _EmptyPhysicalCountState())
@@ -160,6 +148,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
   ) async {
     final countedController = TextEditingController();
     final notesController = TextEditingController();
+    final batchNumberController = TextEditingController();
     var disputed = false;
     String? validationMessage;
     final session = viewModel.selectedSession!;
@@ -239,15 +228,16 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                         },
                       )
                     else
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        child: Text(
-                          'Insumo gestionado por lotes sin lotes activos registrados.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                      TextField(
+                        key: const Key('count_entry_batch_text'),
+                        controller: batchNumberController,
+                        decoration: InputDecoration(
+                          labelText: (variance != null && variance > 0)
+                              ? 'Lote del sobrante *'
+                              : 'Lote de la observación (opcional)',
+                          hintText: 'Ej. LOT-R28-C-003',
                         ),
+                        onChanged: (_) => setState(() {}),
                       ),
                   ],
                   const SizedBox(height: 12),
@@ -295,10 +285,14 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                             return;
                           }
 
+                          final manualBatch = batchNumberController.text.trim();
+                          final effectiveBatchNum = selectedBatch?.batchNumber ?? manualBatch;
+
                           if (line.isBatchManaged &&
                               variance != null &&
                               variance > 0 &&
-                              selectedBatch == null) {
+                              selectedBatch == null &&
+                              manualBatch.isEmpty) {
                             setState(() {
                               validationMessage =
                                   'Debe seleccionar en qué lote se encuentra el sobrante para continuar.';
@@ -313,7 +307,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                             notes: notesController.text,
                             disputed: disputed,
                             batchId: selectedBatch?.id,
-                            batchNumber: selectedBatch?.batchNumber,
+                            batchNumber: effectiveBatchNum.isEmpty ? null : effectiveBatchNum,
                           );
 
                           if (dialogContext.mounted) {
@@ -430,7 +424,7 @@ class _EmptyPhysicalCountState extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Abrí una sesión para congelar el baseline local y llevar la aprobación completa.',
+            'Abra una sesión para iniciar el conteo físico y registrar ajustes de inventario.',
             textAlign: TextAlign.center,
           ),
         ],

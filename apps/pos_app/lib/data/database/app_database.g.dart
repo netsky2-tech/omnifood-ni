@@ -3112,6 +3112,14 @@ class _$BatchDao extends BatchDao {
   final UpdateAdapter<BatchEntity> _batchEntityUpdateAdapter;
 
   @override
+  Future<List<BatchEntity>> findBatchesByInsumoId(String insumoId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM batches WHERE insumo_id = ?1 ORDER BY expiration_date ASC',
+        mapper: (Map<String, Object?> row) => BatchEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, batchNumber: row['batch_number'] as String, receivedDate: row['received_date'] as String?, expirationDate: row['expiration_date'] as String, remainingStock: row['remaining_stock'] as double, cost: row['cost'] as double, isSynced: (row['is_synced'] as int) != 0),
+        arguments: [insumoId]);
+  }
+
+  @override
   Future<List<BatchEntity>> findActiveBatchesByInsumoId(String insumoId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM batches WHERE insumo_id = ?1 AND remaining_stock > 0 ORDER BY expiration_date ASC',

@@ -129,6 +129,16 @@ export interface InboundSyncCatalogValueDto {
   source?: string;
 }
 
+export interface InboundSyncBatchDto {
+  id: string;
+  insumoId: string;
+  batchNumber: string;
+  receivedDate: string | null;
+  expirationDate: string;
+  remainingStock: number;
+  cost: number;
+}
+
 export interface InboundSyncInsumoDto {
   id: string;
   tenantId: string;
@@ -462,6 +472,7 @@ export interface InboundSyncDeltasDto {
    * service always populates it (empty when not requested).
    */
   creditNotes?: InboundSyncCreditNoteDto[];
+  batches?: InboundSyncBatchDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
 

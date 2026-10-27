@@ -574,7 +574,7 @@ class InventoryRepositoryImpl
 
   @override
   Future<List<Batch>> getBatchesByInsumoId(String insumoId) async {
-    final entities = await batchDao.findActiveBatchesByInsumoId(insumoId);
+    final entities = await batchDao.findBatchesByInsumoId(insumoId);
     return entities
         .map(
           (e) => Batch(

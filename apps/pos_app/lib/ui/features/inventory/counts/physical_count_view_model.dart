@@ -67,8 +67,6 @@ class PhysicalCountViewModel extends ChangeNotifier {
         ..clear()
         ..addAll(sessions);
       _selectedSessionId ??= _sessions.isEmpty ? null : _sessions.first.id;
-      _statusMessage ??=
-          'Modo local: cada sesión congela su baseline en SQLite y sincroniza el documento con la nube después.';
     } catch (error) {
       _errorMessage = 'No se pudo cargar el workspace local de conteos: $error';
     } finally {
@@ -228,8 +226,11 @@ class PhysicalCountViewModel extends ChangeNotifier {
                 line.approvedEntryIndex! < line.entries.length
             ? line.entries[line.approvedEntryIndex!]
             : null;
-        if (approvedEntry?.batchId == null ||
-            approvedEntry!.batchId!.trim().isEmpty) {
+        final hasLot = (approvedEntry?.batchId != null &&
+                approvedEntry!.batchId!.trim().isNotEmpty) ||
+            (approvedEntry?.batchNumber != null &&
+                approvedEntry!.batchNumber!.trim().isNotEmpty);
+        if (!hasLot) {
           errors.add(
             'El insumo "${line.insumoName}" tiene un sobrante de '
             '${variance.toStringAsFixed(2)} ${line.uom} pero no se ha '

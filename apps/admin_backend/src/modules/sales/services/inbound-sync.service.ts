@@ -46,6 +46,7 @@ import {
   InboundSyncProductDto,
   InboundSyncCatalogValueDto,
   InboundSyncInsumoDto,
+  InboundSyncBatchDto,
   InboundSyncRecipeDto,
   InboundSyncRecipeVersionDto,
   InboundSyncUserDto,
@@ -241,6 +242,9 @@ export class InboundSyncService {
         requestedTypes.has('creditnotes') || requestedTypes.has('credit_notes')
           ? await this.fetchCreditNoteDeltas(tenantId, sinceDate, entityManager)
           : [],
+      batches: requestedTypes.has('batches')
+        ? await this.fetchBatchDeltas(tenantId, sinceDate, entityManager)
+        : [],
       fiscalConfig,
     };
 
@@ -534,6 +538,7 @@ export class InboundSyncService {
         'alerts',
         'creditnotes',
         'credit_notes',
+        'batches',
         'fiscal',
         'fiscal_config',
         'fiscalconfig',
@@ -803,6 +808,39 @@ export class InboundSyncService {
       tenantId: i.tenant_id,
       createdAt: i.created_at,
       updatedAt: i.updated_at,
+    }));
+  }
+
+  private async fetchBatchDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncBatchDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound batch sync requires a tenant-bound transaction manager',
+      );
+    }
+    const batchRepository = entityManager.getRepository(Batch);
+    const qb = batchRepository
+      .createQueryBuilder('batch')
+      .where('batch.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      qb.andWhere('batch.updated_at > :sinceDate', { sinceDate });
+    }
+
+    qb.orderBy('batch.expiration_date', 'ASC').addOrderBy('batch.created_at', 'ASC');
+
+    const items = await qb.getMany();
+    return items.map((b) => ({
+      id: b.id,
+      insumoId: b.insumo_id,
+      batchNumber: b.batch_number,
+      receivedDate: b.received_date ? b.received_date.toISOString() : null,
+      expirationDate: b.expiration_date,
+      remainingStock: Number(b.remaining_stock),
+      cost: Number(b.cost),
     }));
   }
 

@@ -65,8 +65,8 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Conteos físicos'), findsOneWidget);
-    expect(find.text('ABRIR SESIÓN DE CONTEO'), findsOneWidget);
+    expect(find.text('Conteos de inventario'), findsOneWidget);
+    expect(find.text('NUEVA SESIÓN'), findsOneWidget);
     expect(find.text('Todavía no hay sesiones de conteo en esta terminal.'), findsOneWidget);
   });
 
@@ -248,5 +248,80 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No se pueden aplicar los ajustes'), findsNothing);
+  });
+
+  testWidgets('lot-managed line without cached batches accepts manual lot number input', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const beef = Insumo(
+      id: 'beef',
+      name: 'Carne de Res',
+      consumptionUom: 'KG',
+      stock: 20,
+      averageCost: 150,
+      isBatchManaged: true,
+    );
+
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const [beef]);
+    when(() => repository.getBatchesByInsumoId('beef')).thenAnswer((_) async => []);
+
+    storedSessions = [
+      CountSessionDocument(
+        id: 'count-beef',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10, 30),
+        status: CountSessionStatus.open,
+        createdAt: DateTime(2026, 6, 2, 10),
+        updatedAt: DateTime(2026, 6, 2, 10),
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-beef',
+            insumoId: 'beef',
+            insumoName: 'Carne de Res',
+            uom: 'KG',
+            theoreticalQuantity: 20,
+            isBatchManaged: true,
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Registrar conteo'));
+    await tester.pumpAndSettle();
+
+    // Verify text field for manual lot input is present
+    expect(find.byKey(const Key('count_entry_batch_text')), findsOneWidget);
+
+    // Enter surplus quantity 25
+    final countField = find.widgetWithText(TextField, 'Cantidad contada');
+    await tester.enterText(countField, '25');
+    await tester.pumpAndSettle();
+
+    // Attempt to save without entering lot -> validation error
+    await tester.tap(find.text('Guardar conteo'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Debe seleccionar en qué lote se encuentra el sobrante para continuar.'),
+      findsOneWidget,
+    );
+
+    // Enter manual lot number
+    final batchField = find.byKey(const Key('count_entry_batch_text'));
+    await tester.enterText(batchField, 'LOT-R28-C-003');
+    await tester.pumpAndSettle();
+
+    // Save conteo
+    await tester.tap(find.text('Guardar conteo'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Guardar conteo'), findsNothing);
+    expect(storedSessions.first.lines.single.entries.single.batchNumber, equals('LOT-R28-C-003'));
   });
 }

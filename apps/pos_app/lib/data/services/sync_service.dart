@@ -24,6 +24,7 @@ import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
 import '../models/inventory/authority_projection_entities.dart';
 import '../models/inventory/insumo_entity.dart';
+import '../models/inventory/batch_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
@@ -4090,6 +4091,32 @@ class SyncService {
             name: 'SyncService',
             error: e,
             stackTrace: st,
+          );
+        }
+
+        // 3c. Batches (A-01: lot traceability synchronization)
+        final rawBatches = rawDeltas['batches'] as List<dynamic>? ?? const [];
+        for (final b in rawBatches) {
+          if (b is! Map) continue;
+          final map = Map<String, dynamic>.from(b);
+          final id = (map['id'] as String?)?.trim() ?? '';
+          final insumoId = (map['insumoId'] as String?)?.trim() ?? '';
+          final batchNumber = (map['batchNumber'] as String?)?.trim() ?? '';
+          final expirationDate = (map['expirationDate'] as String?)?.trim() ?? '';
+          if (id.isEmpty || insumoId.isEmpty || batchNumber.isEmpty || expirationDate.isEmpty) {
+            continue;
+          }
+          await _database!.batchDao.insertBatch(
+            BatchEntity(
+              id: id,
+              insumoId: insumoId,
+              batchNumber: batchNumber,
+              receivedDate: map['receivedDate'] as String?,
+              expirationDate: expirationDate,
+              remainingStock: asDouble(map['remainingStock']) ?? 0.0,
+              cost: asDouble(map['cost']) ?? 0.0,
+              isSynced: true,
+            ),
           );
         }
 
