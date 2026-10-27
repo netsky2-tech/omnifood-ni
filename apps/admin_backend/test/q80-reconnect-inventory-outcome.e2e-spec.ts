@@ -18,6 +18,9 @@ import { InventorySyncReceipt } from '../src/modules/inventory/entities/inventor
 import { InventorySyncOutbox } from '../src/modules/inventory/entities/inventory-sync-outbox.entity';
 
 import { Insumo } from '../src/modules/inventory/entities/insumo.entity';
+import { Batch } from '../src/modules/inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../src/modules/inventory/entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from '../src/modules/inventory/entities/inventory-divergence.entity';
 import { Product } from '../src/modules/inventory/entities/product.entity';
 import { CatalogValue } from '../src/modules/catalog/entities/catalog-value.entity';
 import { Recipe } from '../src/modules/inventory/entities/recipe.entity';
@@ -79,6 +82,9 @@ const ALL_ENTITIES = [
   InventorySyncOutbox,
 
   Insumo,
+  Batch,
+  BatchOutflowTrace,
+  InventoryDivergence,
   Product,
   CatalogValue,
   Recipe,

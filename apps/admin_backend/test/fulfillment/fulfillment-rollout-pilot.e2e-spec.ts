@@ -174,6 +174,7 @@ describe('FulfillmentRolloutPilot (e2e - Real PostgreSQL, Zero Mocks)', () => {
         min_stock numeric(14,4),
         max_stock numeric(14,4),
         negative_stock_policy varchar NOT NULL DEFAULT 'RESTRICT',
+        iva_rate_pct numeric(5,4),
         is_active boolean DEFAULT true,
         created_at timestamptz DEFAULT now(),
         updated_at timestamptz DEFAULT now()

@@ -8,6 +8,7 @@ import * as request from 'supertest';
 import { DataSource, QueryRunner } from 'typeorm';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
+import { ForensicAlertService } from '../../src/modules/inventory/forensic-alert.service';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
@@ -250,6 +251,10 @@ async function withIsolatedSchema(
       controllers: [InventoryMovementController],
       providers: [
         CountSessionService,
+        {
+          provide: ForensicAlertService,
+          useValue: { create: jest.fn().mockResolvedValue(undefined) },
+        },
         { provide: DataSource, useValue: dataSource },
         {
           provide: FxRateResolverService,

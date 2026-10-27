@@ -798,6 +798,8 @@ describe('Inventory purchase routes (integration)', () => {
         currency: validPurchasePayload.currency,
         bcnRate: validPurchasePayload.bcnRate,
         bcnRateSource: 'Document-provided BCN rate',
+        entryQuantityConsumption: 2,
+        invoiceUnitCostNio: 365,
         unitCostNio: 365,
         previousCppNio: 50,
         projectedCppNio: 102.5,

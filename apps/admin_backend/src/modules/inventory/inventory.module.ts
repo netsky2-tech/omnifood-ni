@@ -69,6 +69,7 @@ import { InventoryReportsController } from './controllers/inventory-reports.cont
 import { UomCatalogController } from './controllers/uom-catalog.controller';
 import { CatalogValue } from '../catalog/entities/catalog-value.entity';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { InventoryDivergenceService } from './services/inventory-divergence.service';
 import { InventoryDivergenceController } from './controllers/inventory-divergence.controller';
 
@@ -76,6 +77,7 @@ import { InventoryDivergenceController } from './controllers/inventory-divergenc
   imports: [
     IdentityModule,
     AuditModule,
+    NotificationsModule,
     DeviceSyncModule,
     // R19 T3: the printable count list consumes the RESOLVED company
     // identity from where the tenant data lives (S4); the renderer itself
