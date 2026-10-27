@@ -134,7 +134,7 @@ void main() {
   });
 
   test(
-    'migration73_74 drops the insumo FK so SUB_RECIPE components can be stored, '
+    'migration76_77 drops the insumo FK so SUB_RECIPE components can be stored, '
     'preserving rows, the unique index and the immutability triggers',
     () async {
       final db = await openDatabase(
@@ -182,7 +182,7 @@ void main() {
         'reference_version_id': null,
       });
 
-      await migration73_74.migrate(db);
+      await migration76_77.migrate(db);
 
       // The composite FK on insumo_id is gone: a SUB_RECIPE component names a
       // PRODUCT id, which never has an authority_insumos row (R21 / S18).
@@ -276,11 +276,11 @@ void main() {
   );
 
   test(
-    'migration74_75 adds negative_stock_policy to authority_insumos and insumos with RESTRICT default',
+    'migration77_78 adds negative_stock_policy to authority_insumos and insumos with RESTRICT default',
     () async {
       final db = await openDatabase(
         inMemoryDatabasePath,
-        version: 74,
+        version: 77,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE authority_insumos (
@@ -324,8 +324,8 @@ void main() {
         },
       );
 
-      // Run migration 74 -> 75
-      await migration74_75.migrate(db);
+      // Run migration 77 -> 78
+      await migration77_78.migrate(db);
 
       // Verify authority_insumos has negative_stock_policy with default 'RESTRICT'
       final authorityColumns = await db.rawQuery('PRAGMA table_info(authority_insumos)');
