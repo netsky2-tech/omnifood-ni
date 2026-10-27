@@ -13,8 +13,8 @@
 
 | Unit | Goal | Commit |
 |------|------|--------|
-| 1 | La nube: el conteo declara el lote, el sobrante entra por él y sin lote no se postea | (pendiente) |
-| 2 | La terminal: el conteo deja elegir el lote y lo declara | (pendiente) |
+| 1 | La nube: el conteo declara el lote, el sobrante entra por él y sin lote no se postea | `e0e4e744` |
+| 2 | La terminal: el conteo deja elegir el lote y lo declara | `af740e29` |
 
 ---
 
