@@ -640,6 +640,19 @@ Temas que el owner pide investigar **antes** de abrir tarea de implementación �
     - **Visible**: la pestaña «Conciliación» del backoffice (qué no cuadró y dónde nació) y el aviso del cajero (cuántas ventas quedaron con diferencias por conciliar, con la frase que evita el pánico).
   - **El orden del despliegue importa (y el contrato lo dice solo)**: la nube va **antes** que la terminal. Con la nube vieja, el terminal nuevo recibe `400 property effectStatus should not exist` — y con el vocabulario nuevoReason, `effectSkipReason must be one of…`. Los campos nuevos sólo se envían cuando existen, pero una nube que no los conoce los rechaza (fail-closed, que es lo correcto).
   - **El guard de lotes bloqueó la venta** (no es del wire): la receta pide 150 ml de leche y el lote del ensayo tiene 50 ⇒ la nube rechaza el movimiento con `LOYALTY_IDEMPOTENCY_CONFLICT` (el issue #938 ya levantado). Se reconcilió el dato del ensayo (la entrega que faltaba) y las tres ventas pendientes entraron.
+  - **L70 — A-01 Y FD-01/FD-03 VERIFICADOS EN RIG S23 (el sobrante entra por su lote y la nube no bloquea):**
+    - **A-01 cerrado en ambas unidades**:
+      - *Unidad 1 (nube)*: `batchId` / `batch_number` en `CountLineEntryDocumentDto`, entidad `CountSessionEntry` y migración `1810090000000-AddCountSessionEntryLot` (`e0e4e744`).
+      - *Unidad 2 (terminal)*: `CountLineEntryDocument` y `CountSessionLineDocument` crecen `isBatchManaged`; columna `count_lines.is_batch_managed` con migración `migration81_82` a DB v82 (`af740e29`).
+      - *Sincronización asistida y Nhilos Experience Standard*: el delta `/v1/sync/inbound/deltas` incluye la colección oficial de `batches` del tenant; `BatchDao` consulta todos los lotes del insumo (`findBatchesByInsumoId`, incluso con saldo 0 para capturar sobrantes físicos); la interfaz de conteos se limpió de jerga técnica (*baseline*, *SQLite*) y el diálogo ofrece un selector asistido que permite elegir el lote con un solo toque (`8069d5fb`).
+    - **Verificación en hardware real S23 (`R5CWB2LQJDJ`) sobre la réplica local (puerto 5433)**:
+      - *Prueba 1 — Venta con divergencia de lotes (FD-01 / A-03)*: demanda de 150 ml de leche con 50 ml en los lotes. El terminal permitió la venta sin bloqueo (factura #81), la nube aplicó el movimiento con resultado `ACCEPTED / APPLIED_WITH_DIVERGENCE` y registró la diferencia de 100 ml en `inventory_divergences` (estado `OPEN`, causa `LOT_COVERAGE_INSUFFICIENT`, importe C$ 4.00). La paridad local agregado/lotes quedó preservada.
+      - *Prueba 2 — Conteo físico con lote (A-01)*: se registró un sobrante físico de 10 ml en `R23 Leche entera`, asignando el lote `LOT-R28-C-003`. El posteo se aplicó exitosamente, generando el asiento de kardex #160 (`ADJUSTMENT` +10 ml). El saldo del lote subió a 10.0000 ml y el stock agregado a 10.0000 ml.
+      - *Paridad absoluta*: `GET /api/inventory/divergences/parity` retornó `{"total": 0, "items": []}`. El sobrante entró por su lote y la paridad quedó en 0 descuadres.
+    - **Hallazgos de entorno y protocolo superados**:
+      - *Precedencia de `api_base_url` tras `pm clear`*: el wipe local era necesario para desvincular el tenant de producción; la vinculación inicial contra la réplica se realizó mediante código de vinculación (`device_linking_codes`).
+      - *`CRITICAL_SEQUENCE_PAYLOAD_MISMATCH`*: el `pm clear` reinició la secuencia local a 1, chocando con las secuencias de ensayos pasados de `S23-REHEARSAL` en la réplica; se purgaron los recibos obsoletos de prueba.
+      - *Invariante de balance de kardex (`enforce_inventory_kardex_running_balance`)*: la edición directa de stock sin asiento previo violaba el invariante de balance continuo; se regularizó con un movimiento compensatorio `ADJUSTMENT`.
 
 ## Matriz de rig vigente (R28 — sustituye a la V1–V7 de L47)
 
