@@ -1,10 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import 'package:pos_app/data/daos/inventory/insumo_dao.dart';
 import 'package:pos_app/data/daos/inventory/recipe_dao.dart';
 import 'package:pos_app/data/daos/local_config_dao.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/inventory/authority_projection_entities.dart';
+import 'package:pos_app/data/models/inventory/insumo_entity.dart';
 import 'package:pos_app/data/models/inventory/product_entity.dart';
 import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
@@ -102,10 +104,16 @@ class FakeLocalConfigDao extends Fake implements LocalConfigDao {
   }
 }
 
+class FakeInsumoDao extends Fake implements InsumoDao {
+  @override
+  Future<InsumoEntity?> findInsumoById(String id) async => null;
+}
+
 class FakeAppDatabase extends Fake implements AppDatabase {
   final FakeProductDao _productDao = FakeProductDao();
   final FakeAuthorityProjectionDao _authorityDao = FakeAuthorityProjectionDao();
   final FakeLocalConfigDao _localConfigDao = FakeLocalConfigDao();
+  final FakeInsumoDao _insumoDao = FakeInsumoDao();
 
   @override
   ProductDao get productDao => _productDao;
@@ -115,6 +123,9 @@ class FakeAppDatabase extends Fake implements AppDatabase {
 
   @override
   LocalConfigDao get localConfigDao => _localConfigDao;
+
+  @override
+  InsumoDao get insumoDao => _insumoDao;
 }
 
 void main() {
