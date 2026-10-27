@@ -14,6 +14,8 @@ class CountSessionStatus {
 class CountLineEntryDocument {
   const CountLineEntryDocument({
     required this.countedQuantity,
+    this.batchId,
+    this.batchNumber,
     this.countedAt,
     this.notes,
     this.actorLabel,
@@ -21,6 +23,8 @@ class CountLineEntryDocument {
   });
 
   final double countedQuantity;
+  final String? batchId;
+  final String? batchNumber;
   final DateTime? countedAt;
   final String? notes;
   final String? actorLabel;
@@ -28,6 +32,8 @@ class CountLineEntryDocument {
 
   Map<String, Object?> toJson() => {
         'countedQuantity': countedQuantity,
+        if (batchId != null) 'batchId': batchId,
+        if (batchNumber != null) 'batchNumber': batchNumber,
         'countedAt': countedAt?.toIso8601String(),
         'notes': notes,
         'actorLabel': actorLabel,
@@ -37,6 +43,8 @@ class CountLineEntryDocument {
   factory CountLineEntryDocument.fromJson(Map<String, dynamic> json) {
     return CountLineEntryDocument(
       countedQuantity: (json['countedQuantity'] as num).toDouble(),
+      batchId: json['batchId'] as String?,
+      batchNumber: json['batchNumber'] as String?,
       countedAt: json['countedAt'] == null
           ? null
           : DateTime.parse(json['countedAt'] as String),
@@ -56,6 +64,7 @@ class CountSessionLineDocument {
     required this.theoreticalQuantity,
     this.approvedEntryIndex,
     this.entries = const <CountLineEntryDocument>[],
+    this.isBatchManaged = false,
   });
 
   final String id;
@@ -65,6 +74,7 @@ class CountSessionLineDocument {
   final double theoreticalQuantity;
   final int? approvedEntryIndex;
   final List<CountLineEntryDocument> entries;
+  final bool isBatchManaged;
 
   double? get approvedCountedQuantity {
     if (approvedEntryIndex == null) {
@@ -89,6 +99,7 @@ class CountSessionLineDocument {
   CountSessionLineDocument copyWith({
     int? approvedEntryIndex,
     List<CountLineEntryDocument>? entries,
+    bool? isBatchManaged,
   }) {
     return CountSessionLineDocument(
       id: id,
@@ -98,6 +109,7 @@ class CountSessionLineDocument {
       theoreticalQuantity: theoreticalQuantity,
       approvedEntryIndex: approvedEntryIndex ?? this.approvedEntryIndex,
       entries: entries ?? this.entries,
+      isBatchManaged: isBatchManaged ?? this.isBatchManaged,
     );
   }
 
@@ -108,6 +120,7 @@ class CountSessionLineDocument {
         'uom': uom,
         'theoreticalQuantity': theoreticalQuantity,
         'approvedEntryIndex': approvedEntryIndex,
+        'isBatchManaged': isBatchManaged,
         'entries': entries.map((entry) => entry.toJson()).toList(growable: false),
       };
 
@@ -119,6 +132,7 @@ class CountSessionLineDocument {
       uom: json['uom'] as String,
       theoreticalQuantity: (json['theoreticalQuantity'] as num).toDouble(),
       approvedEntryIndex: json['approvedEntryIndex'] as int?,
+      isBatchManaged: (json['isBatchManaged'] as bool?) ?? false,
       entries: (json['entries'] as List<dynamic>? ?? const <dynamic>[])
           .map(
             (entry) => CountLineEntryDocument.fromJson(

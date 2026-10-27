@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:pos_app/domain/models/inventory/batch.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/localization/label_map.dart';
@@ -162,6 +164,12 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
     String? validationMessage;
     final session = viewModel.selectedSession!;
     final line = session.lines.firstWhere((item) => item.id == lineId);
+    final availableBatches = line.isBatchManaged
+        ? await viewModel.getBatchesForInsumo(line.insumoId)
+        : <Batch>[];
+    Batch? selectedBatch;
+
+    if (!context.mounted) return;
 
     await showDialog<void>(
       context: context,
@@ -180,6 +188,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _ReadOnlyMetricField(
                     label: 'Cantidad teórica / esperada',
@@ -197,6 +206,50 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                     label: 'Variación',
                     value: variance == null ? '' : variance.toStringAsFixed(2),
                   ),
+                  if (line.isBatchManaged) ...[
+                    const SizedBox(height: 12),
+                    if (availableBatches.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        key: const Key('count_entry_batch_select'),
+                        value: selectedBatch?.id,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: (variance != null && variance > 0)
+                              ? 'Lote del sobrante *'
+                              : 'Lote de la observación (opcional)',
+                        ),
+                        hint: const Text('Seleccionar lote'),
+                        items: availableBatches.map((b) {
+                          final expStr = DateFormat('yyyy-MM-dd')
+                              .format(b.expirationDate.toLocal());
+                          return DropdownMenuItem<String>(
+                            value: b.id,
+                            child: Text(
+                              '${b.batchNumber} (Vence: $expStr) — ${b.remainingStock.toStringAsFixed(2)} ${line.uom}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          setState(() {
+                            selectedBatch = val == null
+                                ? null
+                                : availableBatches.firstWhere((b) => b.id == val);
+                          });
+                        },
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          'Insumo gestionado por lotes sin lotes activos registrados.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 12),
                   SwitchListTile(
                     value: disputed,
@@ -237,7 +290,18 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                           final parsedCount = double.tryParse(countedController.text.trim());
                           if (parsedCount == null) {
                             setState(() {
-                              validationMessage = 'Ingresá una cantidad válida para continuar.';
+                              validationMessage = 'Ingrese una cantidad válida para continuar.';
+                            });
+                            return;
+                          }
+
+                          if (line.isBatchManaged &&
+                              variance != null &&
+                              variance > 0 &&
+                              selectedBatch == null) {
+                            setState(() {
+                              validationMessage =
+                                  'Debe seleccionar en qué lote se encuentra el sobrante para continuar.';
                             });
                             return;
                           }
@@ -248,6 +312,8 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                             countedQuantity: parsedCount,
                             notes: notesController.text,
                             disputed: disputed,
+                            batchId: selectedBatch?.id,
+                            batchNumber: selectedBatch?.batchNumber,
                           );
 
                           if (dialogContext.mounted) {
@@ -270,6 +336,38 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
   ) async {
     final session = viewModel.selectedSession;
     if (session == null) {
+      return;
+    }
+
+    final validationErrors =
+        viewModel.validateSessionBeforePosting(session.id);
+    if (validationErrors.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('No se pueden aplicar los ajustes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Los siguientes insumos gestionados por lotes tienen un sobrante sin lote asignado:',
+              ),
+              const SizedBox(height: 12),
+              ...validationErrors.map((err) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('• $err', style: const TextStyle(fontSize: 13)),
+                  )),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('ENTENDIDO'),
+            ),
+          ],
+        ),
+      );
       return;
     }
 

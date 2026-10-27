@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/domain/models/inventory/batch.dart';
 import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
@@ -105,5 +106,147 @@ void main() {
     expect(find.text('Estado: posted'), findsNothing);
     expect(find.textContaining('Variación aprobada: -2.00 L'), findsOneWidget);
     expect(find.textContaining('Referencias de ajuste: 1'), findsOneWidget);
+  });
+
+  testWidgets('lot-managed line shows POR LOTES badge and requires lot on surplus count', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const beef = Insumo(
+      id: 'beef',
+      name: 'Carne de Res',
+      consumptionUom: 'KG',
+      stock: 20,
+      averageCost: 150,
+      isBatchManaged: true,
+    );
+    final batch = Batch(
+      id: 'batch-01',
+      insumoId: 'beef',
+      batchNumber: 'LOT-BEEF-001',
+      expirationDate: DateTime(2026, 7, 1),
+      remainingStock: 20,
+      cost: 150,
+    );
+
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const [beef]);
+    when(() => repository.getBatchesByInsumoId('beef')).thenAnswer((_) async => [batch]);
+
+    storedSessions = [
+      CountSessionDocument(
+        id: 'count-beef',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10, 30),
+        status: CountSessionStatus.open,
+        createdAt: DateTime(2026, 6, 2, 10),
+        updatedAt: DateTime(2026, 6, 2, 10),
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-beef',
+            insumoId: 'beef',
+            insumoName: 'Carne de Res',
+            uom: 'KG',
+            theoreticalQuantity: 20,
+            isBatchManaged: true,
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Verify badge POR LOTES is visible
+    expect(find.text('POR LOTES'), findsOneWidget);
+
+    // Tap "Registrar conteo"
+    await tester.tap(find.text('Registrar conteo'));
+    await tester.pumpAndSettle();
+
+    // Dialog opens with lot selector
+    expect(find.byKey(const Key('count_entry_batch_select')), findsOneWidget);
+
+    // Enter surplus quantity 25 (> theoretical 20)
+    final countField = find.widgetWithText(TextField, 'Cantidad contada');
+    await tester.enterText(countField, '25');
+    await tester.pumpAndSettle();
+
+    // Attempt to save without selecting lot -> validation error
+    await tester.tap(find.text('Guardar conteo'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Debe seleccionar en qué lote se encuentra el sobrante para continuar.'),
+      findsOneWidget,
+    );
+
+    // Now select the lot from dropdown
+    await tester.tap(find.byKey(const Key('count_entry_batch_select')));
+    await tester.pumpAndSettle();
+
+    // Select the batch item
+    await tester.tap(find.textContaining('LOT-BEEF-001').last);
+    await tester.pumpAndSettle();
+
+    // Save conteo
+    await tester.tap(find.text('Guardar conteo'));
+    await tester.pumpAndSettle();
+
+    // Dialog closes and count is recorded with the lot
+    expect(find.text('Guardar conteo'), findsNothing);
+    expect(storedSessions.first.lines.single.entries.single.batchId, equals('batch-01'));
+    expect(storedSessions.first.lines.single.entries.single.batchNumber, equals('LOT-BEEF-001'));
+  });
+
+  testWidgets('showPostingDialog warns when an approved surplus line lacks a declared lot', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    storedSessions = [
+      CountSessionDocument(
+        id: 'count-surplus',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10, 30),
+        status: CountSessionStatus.approved,
+        createdAt: DateTime(2026, 6, 2, 10),
+        updatedAt: DateTime(2026, 6, 2, 11),
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-beef',
+            insumoId: 'beef',
+            insumoName: 'Carne de Res',
+            uom: 'KG',
+            theoreticalQuantity: 20,
+            approvedEntryIndex: 0,
+            isBatchManaged: true,
+            entries: [
+              CountLineEntryDocument(countedQuantity: 25), // surplus without batchId
+            ],
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Tap "Aplicar ajustes"
+    await tester.tap(find.text('Aplicar ajustes'));
+    await tester.pumpAndSettle();
+
+    // Warning dialog appears
+    expect(find.text('No se pueden aplicar los ajustes'), findsOneWidget);
+    expect(find.textContaining('sobrante sin lote asignado'), findsOneWidget);
+    expect(find.text('ENTENDIDO'), findsOneWidget);
+
+    // Dismiss dialog
+    await tester.tap(find.text('ENTENDIDO'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No se pueden aplicar los ajustes'), findsNothing);
   });
 }

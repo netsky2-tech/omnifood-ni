@@ -32,6 +32,10 @@ mixin _$Insumo {
   String? get warehouseId => throw _privateConstructorUsedError;
   @JsonKey(name: 'is_perishable')
   bool get isPerishable => throw _privateConstructorUsedError;
+  @JsonKey(name: 'is_batch_managed')
+  bool get isBatchManaged => throw _privateConstructorUsedError;
+  @JsonKey(name: 'lot_available_stock')
+  double? get lotAvailableStock => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -53,7 +57,9 @@ abstract class $InsumoCopyWith<$Res> {
       double? stockMin,
       double? stockMax,
       @JsonKey(name: 'warehouse_id') String? warehouseId,
-      @JsonKey(name: 'is_perishable') bool isPerishable});
+      @JsonKey(name: 'is_perishable') bool isPerishable,
+      @JsonKey(name: 'is_batch_managed') bool isBatchManaged,
+      @JsonKey(name: 'lot_available_stock') double? lotAvailableStock});
 }
 
 /// @nodoc
@@ -79,6 +85,8 @@ class _$InsumoCopyWithImpl<$Res, $Val extends Insumo>
     Object? stockMax = freezed,
     Object? warehouseId = freezed,
     Object? isPerishable = null,
+    Object? isBatchManaged = null,
+    Object? lotAvailableStock = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -121,6 +129,14 @@ class _$InsumoCopyWithImpl<$Res, $Val extends Insumo>
           ? _value.isPerishable
           : isPerishable // ignore: cast_nullable_to_non_nullable
               as bool,
+      isBatchManaged: null == isBatchManaged
+          ? _value.isBatchManaged
+          : isBatchManaged // ignore: cast_nullable_to_non_nullable
+              as bool,
+      lotAvailableStock: freezed == lotAvailableStock
+          ? _value.lotAvailableStock
+          : lotAvailableStock // ignore: cast_nullable_to_non_nullable
+              as double?,
     ) as $Val);
   }
 }
@@ -142,7 +158,9 @@ abstract class _$$InsumoImplCopyWith<$Res> implements $InsumoCopyWith<$Res> {
       double? stockMin,
       double? stockMax,
       @JsonKey(name: 'warehouse_id') String? warehouseId,
-      @JsonKey(name: 'is_perishable') bool isPerishable});
+      @JsonKey(name: 'is_perishable') bool isPerishable,
+      @JsonKey(name: 'is_batch_managed') bool isBatchManaged,
+      @JsonKey(name: 'lot_available_stock') double? lotAvailableStock});
 }
 
 /// @nodoc
@@ -166,6 +184,8 @@ class __$$InsumoImplCopyWithImpl<$Res>
     Object? stockMax = freezed,
     Object? warehouseId = freezed,
     Object? isPerishable = null,
+    Object? isBatchManaged = null,
+    Object? lotAvailableStock = freezed,
   }) {
     return _then(_$InsumoImpl(
       id: null == id
@@ -208,6 +228,14 @@ class __$$InsumoImplCopyWithImpl<$Res>
           ? _value.isPerishable
           : isPerishable // ignore: cast_nullable_to_non_nullable
               as bool,
+      isBatchManaged: null == isBatchManaged
+          ? _value.isBatchManaged
+          : isBatchManaged // ignore: cast_nullable_to_non_nullable
+              as bool,
+      lotAvailableStock: freezed == lotAvailableStock
+          ? _value.lotAvailableStock
+          : lotAvailableStock // ignore: cast_nullable_to_non_nullable
+              as double?,
     ));
   }
 }
@@ -225,7 +253,9 @@ class _$InsumoImpl implements _Insumo {
       this.stockMin,
       this.stockMax,
       @JsonKey(name: 'warehouse_id') this.warehouseId,
-      @JsonKey(name: 'is_perishable') this.isPerishable = false});
+      @JsonKey(name: 'is_perishable') this.isPerishable = false,
+      @JsonKey(name: 'is_batch_managed') this.isBatchManaged = false,
+      @JsonKey(name: 'lot_available_stock') this.lotAvailableStock});
 
   factory _$InsumoImpl.fromJson(Map<String, dynamic> json) =>
       _$$InsumoImplFromJson(json);
@@ -252,10 +282,16 @@ class _$InsumoImpl implements _Insumo {
   @override
   @JsonKey(name: 'is_perishable')
   final bool isPerishable;
+  @override
+  @JsonKey(name: 'is_batch_managed')
+  final bool isBatchManaged;
+  @override
+  @JsonKey(name: 'lot_available_stock')
+  final double? lotAvailableStock;
 
   @override
   String toString() {
-    return 'Insumo(id: $id, name: $name, consumptionUom: $consumptionUom, stock: $stock, averageCost: $averageCost, parLevel: $parLevel, stockMin: $stockMin, stockMax: $stockMax, warehouseId: $warehouseId, isPerishable: $isPerishable)';
+    return 'Insumo(id: $id, name: $name, consumptionUom: $consumptionUom, stock: $stock, averageCost: $averageCost, parLevel: $parLevel, stockMin: $stockMin, stockMax: $stockMax, warehouseId: $warehouseId, isPerishable: $isPerishable, isBatchManaged: $isBatchManaged, lotAvailableStock: $lotAvailableStock)';
   }
 
   @override
@@ -279,13 +315,29 @@ class _$InsumoImpl implements _Insumo {
             (identical(other.warehouseId, warehouseId) ||
                 other.warehouseId == warehouseId) &&
             (identical(other.isPerishable, isPerishable) ||
-                other.isPerishable == isPerishable));
+                other.isPerishable == isPerishable) &&
+            (identical(other.isBatchManaged, isBatchManaged) ||
+                other.isBatchManaged == isBatchManaged) &&
+            (identical(other.lotAvailableStock, lotAvailableStock) ||
+                other.lotAvailableStock == lotAvailableStock));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, id, name, consumptionUom, stock,
-      averageCost, parLevel, stockMin, stockMax, warehouseId, isPerishable);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      name,
+      consumptionUom,
+      stock,
+      averageCost,
+      parLevel,
+      stockMin,
+      stockMax,
+      warehouseId,
+      isPerishable,
+      isBatchManaged,
+      lotAvailableStock);
 
   @JsonKey(ignore: true)
   @override
@@ -312,7 +364,10 @@ abstract class _Insumo implements Insumo {
       final double? stockMin,
       final double? stockMax,
       @JsonKey(name: 'warehouse_id') final String? warehouseId,
-      @JsonKey(name: 'is_perishable') final bool isPerishable}) = _$InsumoImpl;
+      @JsonKey(name: 'is_perishable') final bool isPerishable,
+      @JsonKey(name: 'is_batch_managed') final bool isBatchManaged,
+      @JsonKey(name: 'lot_available_stock')
+      final double? lotAvailableStock}) = _$InsumoImpl;
 
   factory _Insumo.fromJson(Map<String, dynamic> json) = _$InsumoImpl.fromJson;
 
@@ -338,6 +393,12 @@ abstract class _Insumo implements Insumo {
   @override
   @JsonKey(name: 'is_perishable')
   bool get isPerishable;
+  @override
+  @JsonKey(name: 'is_batch_managed')
+  bool get isBatchManaged;
+  @override
+  @JsonKey(name: 'lot_available_stock')
+  double? get lotAvailableStock;
   @override
   @JsonKey(ignore: true)
   _$$InsumoImplCopyWith<_$InsumoImpl> get copyWith =>

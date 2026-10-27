@@ -2,6 +2,7 @@ import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:pos_app/domain/models/inventory/batch.dart';
 import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
@@ -97,6 +98,7 @@ class PhysicalCountViewModel extends ChangeNotifier {
               insumoName: insumo.name,
               uom: insumo.consumptionUom,
               theoreticalQuantity: insumo.stock,
+              isBatchManaged: insumo.isBatchManaged,
             ),
           )
           .toList(growable: false),
@@ -112,6 +114,10 @@ class PhysicalCountViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<List<Batch>> getBatchesForInsumo(String insumoId) {
+    return _repository.getBatchesByInsumoId(insumoId);
+  }
+
   double calculateVariance({
     required double theoreticalQuantity,
     required double countedQuantity,
@@ -124,6 +130,8 @@ class PhysicalCountViewModel extends ChangeNotifier {
     required double countedQuantity,
     String notes = '',
     bool disputed = false,
+    String? batchId,
+    String? batchNumber,
   }) async {
     if (countedQuantity < 0) {
       throw ArgumentError('Counted quantity must be zero or positive');
@@ -139,6 +147,8 @@ class PhysicalCountViewModel extends ChangeNotifier {
         ..add(
           CountLineEntryDocument(
             countedQuantity: countedQuantity,
+            batchId: batchId,
+            batchNumber: batchNumber,
             countedAt: _clock(),
             notes: notes.trim().isEmpty ? null : notes.trim(),
             actorLabel: 'Operador local',
@@ -197,8 +207,47 @@ class PhysicalCountViewModel extends ChangeNotifier {
     await loadInitialData();
   }
 
+  List<String> validateSessionBeforePosting(String sessionId) {
+    final session = _requireSession(sessionId);
+    final errors = <String>[];
+    for (final line in session.lines) {
+      final approvedCount = line.approvedCountedQuantity;
+      if (approvedCount == null) {
+        continue;
+      }
+
+      final variance = calculateVariance(
+        theoreticalQuantity: line.theoreticalQuantity,
+        countedQuantity: approvedCount,
+      );
+
+      // CS-03: un sobrante sin lote declarado en un insumo por lotes no se postea
+      if (variance > 0 && line.isBatchManaged) {
+        final approvedEntry = line.approvedEntryIndex != null &&
+                line.approvedEntryIndex! >= 0 &&
+                line.approvedEntryIndex! < line.entries.length
+            ? line.entries[line.approvedEntryIndex!]
+            : null;
+        if (approvedEntry?.batchId == null ||
+            approvedEntry!.batchId!.trim().isEmpty) {
+          errors.add(
+            'El insumo "${line.insumoName}" tiene un sobrante de '
+            '${variance.toStringAsFixed(2)} ${line.uom} pero no se ha '
+            'indicado en qué lote se encuentra.',
+          );
+        }
+      }
+    }
+    return errors;
+  }
+
   Future<void> postSession(String sessionId) async {
     final session = _requireSession(sessionId);
+    final validationErrors = validateSessionBeforePosting(sessionId);
+    if (validationErrors.isNotEmpty) {
+      throw StateError(validationErrors.first);
+    }
+
     final movementReferences = <String>[];
 
     for (final line in session.lines) {

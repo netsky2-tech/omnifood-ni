@@ -55,7 +55,32 @@ class CountSessionDetailView extends StatelessWidget {
         ...session.lines.map(
           (line) => Card(
             child: ListTile(
-              title: Text(line.insumoName),
+              title: Row(
+                children: [
+                  Expanded(child: Text(line.insumoName)),
+                  if (line.isBatchManaged)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'POR LOTES',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -69,6 +94,15 @@ class CountSessionDetailView extends StatelessWidget {
                     style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
                   ),
                   Text('Entradas: ${line.entries.length}'),
+                  if (line.entries.isNotEmpty &&
+                      line.approvedEntryIndex != null &&
+                      line.approvedEntryIndex! >= 0 &&
+                      line.approvedEntryIndex! < line.entries.length &&
+                      line.entries[line.approvedEntryIndex!].batchNumber != null)
+                    Text(
+                      'Lote: ${line.entries[line.approvedEntryIndex!].batchNumber}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
                 ],
               ),
               trailing: TextButton(

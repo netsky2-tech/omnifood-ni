@@ -365,6 +365,7 @@ class InventoryRepositoryImpl
                 uom: line.uom,
                 theoreticalQuantity: line.theoreticalQuantity,
                 approvedEntryIndex: line.approvedEntryIndex,
+                isBatchManaged: line.isBatchManaged,
                 entriesJson: jsonEncode(
                   line.entries
                       .map((entry) => entry.toJson())
@@ -946,6 +947,7 @@ class InventoryRepositoryImpl
               uom: line.uom,
               theoreticalQuantity: line.theoreticalQuantity,
               approvedEntryIndex: line.approvedEntryIndex,
+              isBatchManaged: line.isBatchManaged,
               entries: (jsonDecode(line.entriesJson) as List<dynamic>)
                   .map(
                     (entry) => CountLineEntryDocument.fromJson(

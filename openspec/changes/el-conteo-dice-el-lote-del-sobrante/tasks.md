@@ -35,10 +35,11 @@
 
 ## Unidad 2 — La terminal
 
-- [ ] 2.1 La sesión de conteo local: la entrada declara el lote (migración 80→81).
-- [ ] 2.2 La pantalla de conteo: cuando el insumo tiene lotes, el operador **elige** el
+- [x] 2.1 La sesión de conteo local: la entrada declara el lote (migración 81→82,
+      `count_lines.is_batch_managed`).
+- [x] 2.2 La pantalla de conteo: cuando el insumo tiene lotes, el operador **elige** el
       lote que está contando (y ve los lotes con su saldo y su vencimiento).
-- [ ] 2.3 El conteo sin lote declarado en un insumo por lotes: la interfaz lo avisa
+- [x] 2.3 El conteo sin lote declarado en un insumo por lotes: la interfaz lo avisa
       antes de postear (la nube lo rechaza igual).
-- [ ] 2.4 El payload del conteo lleva el lote (el mismo `batchId`/`batchNumber`).
-- [ ] 2.5 Pruebas: la entrada guarda el lote; la pantalla ofrece los lotes del insumo.
+- [x] 2.4 El payload del conteo lleva el lote (el mismo `batchId`/`batchNumber`).
+- [x] 2.5 Pruebas: la entrada guarda el lote; la pantalla ofrece los lotes del insumo.

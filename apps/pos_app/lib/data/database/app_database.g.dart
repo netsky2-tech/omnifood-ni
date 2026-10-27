@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 83,
+      version: 84,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -240,7 +240,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `count_session_documents` (`id` TEXT NOT NULL, `warehouse_id` TEXT NOT NULL, `warehouse_name` TEXT NOT NULL, `cutoff_at` TEXT NOT NULL, `status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, `notes` TEXT, `posted_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `count_lines` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `insumo_name` TEXT NOT NULL, `uom` TEXT NOT NULL, `theoretical_quantity` REAL NOT NULL, `approved_entry_index` INTEGER, `entries_json` TEXT NOT NULL, FOREIGN KEY (`session_id`) REFERENCES `count_session_documents` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `count_lines` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `insumo_name` TEXT NOT NULL, `uom` TEXT NOT NULL, `theoretical_quantity` REAL NOT NULL, `approved_entry_index` INTEGER, `entries_json` TEXT NOT NULL, `is_batch_managed` INTEGER NOT NULL, FOREIGN KEY (`session_id`) REFERENCES `count_session_documents` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1796,7 +1796,8 @@ class _$CountLineDao extends CountLineDao {
                   'uom': item.uom,
                   'theoretical_quantity': item.theoreticalQuantity,
                   'approved_entry_index': item.approvedEntryIndex,
-                  'entries_json': item.entriesJson
+                  'entries_json': item.entriesJson,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1819,7 +1820,8 @@ class _$CountLineDao extends CountLineDao {
             uom: row['uom'] as String,
             theoreticalQuantity: row['theoretical_quantity'] as double,
             entriesJson: row['entries_json'] as String,
-            approvedEntryIndex: row['approved_entry_index'] as int?),
+            approvedEntryIndex: row['approved_entry_index'] as int?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [sessionId]);
   }
 

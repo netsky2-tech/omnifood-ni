@@ -682,4 +682,71 @@ void main() {
 
     await db.close();
   });
+
+  Future<dynamic> openLegacyCountLinesDatabase() async {
+    final path = '${dbPath}_count_lines';
+    await databaseFactory.deleteDatabase(path);
+    final db = await databaseFactory.openDatabase(
+      path,
+      options: OpenDatabaseOptions(
+        version: 83,
+        onCreate: (database, version) async {
+          await database.execute('''
+            CREATE TABLE count_lines (
+              id TEXT NOT NULL PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              insumo_id TEXT NOT NULL,
+              insumo_name TEXT NOT NULL,
+              uom TEXT NOT NULL,
+              theoretical_quantity REAL NOT NULL,
+              approved_entry_index INTEGER,
+              entries_json TEXT NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    return db;
+  }
+
+  test('migration83_84 adds is_batch_managed to count_lines', () async {
+    final db = await openLegacyCountLinesDatabase();
+
+    await migration83_84.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(count_lines)');
+    final byName = {for (final c in columns) c['name']: c};
+
+    expect(byName['is_batch_managed'], isNotNull);
+    expect(byName['is_batch_managed']['notnull'], 1);
+    expect(byName['is_batch_managed']['dflt_value'], '0');
+
+    await db.close();
+    await databaseFactory.deleteDatabase('${dbPath}_count_lines');
+  });
+
+  test('migration83_84 is safe to re-run (idempotent)', () async {
+    final db = await openLegacyCountLinesDatabase();
+
+    await migration83_84.migrate(db);
+    await migration83_84.migrate(db);
+
+    final columns = await db.rawQuery('PRAGMA table_info(count_lines)');
+    final matches =
+        columns.where((c) => c['name'] == 'is_batch_managed').toList();
+    expect(matches, hasLength(1), reason: 'is_batch_managed duplicada');
+
+    await db.close();
+    await databaseFactory.deleteDatabase('${dbPath}_count_lines');
+  });
+
+  test(
+      'migration83_84 completes without throwing when count_lines does not exist',
+      () async {
+    final db = await openV60Database();
+
+    await expectLater(migration83_84.migrate(db), completes);
+
+    await db.close();
+  });
 }

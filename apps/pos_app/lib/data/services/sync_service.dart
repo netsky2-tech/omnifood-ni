@@ -2488,6 +2488,9 @@ class SyncService {
                   .map(
                     (entry) => {
                       'countedQuantity': entry.countedQuantity,
+                      if (entry.batchId != null) 'batchId': entry.batchId,
+                      if (entry.batchNumber != null)
+                        'batchNumber': entry.batchNumber,
                       'countedAt': entry.countedAt?.toIso8601String(),
                       'notes': entry.notes,
                       'actorLabel': entry.actorLabel,

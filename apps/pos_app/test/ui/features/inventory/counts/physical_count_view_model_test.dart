@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/domain/models/inventory/batch.dart';
 import 'package:pos_app/domain/models/inventory/count_session_document.dart';
 import 'package:pos_app/domain/models/inventory/insumo.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
@@ -25,6 +26,15 @@ void main() {
     stock: 10,
     averageCost: 42,
     parLevel: 3,
+  );
+
+  const beef = Insumo(
+    id: 'beef',
+    name: 'Carne de Res',
+    consumptionUom: 'KG',
+    stock: 20,
+    averageCost: 150,
+    isBatchManaged: true,
   );
 
   setUpAll(() {
@@ -162,5 +172,175 @@ void main() {
       () => viewModel.postSession(sessionId),
       throwsArgumentError,
     );
+  });
+
+  test('recordCount preserves lot identification in the entry (A-01)', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[beef]);
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 25,
+      batchId: 'batch-beef-01',
+      batchNumber: 'LOT-BEEF-2026',
+      notes: 'Sobrante en estante 3',
+    );
+
+    final line = viewModel.selectedSession!.lines.single;
+    expect(line.isBatchManaged, isTrue);
+    expect(line.entries.single.batchId, equals('batch-beef-01'));
+    expect(line.entries.single.batchNumber, equals('LOT-BEEF-2026'));
+    expect(line.variance, equals(5.0));
+  });
+
+  test('getBatchesForInsumo delegates to repository getBatchesByInsumoId', () async {
+    final now = DateTime(2026, 6, 2);
+    final batch = Batch(
+      id: 'batch-1',
+      insumoId: 'beef',
+      batchNumber: 'LOTE-01',
+      expirationDate: now.add(const Duration(days: 30)),
+      remainingStock: 20,
+      cost: 150,
+    );
+    when(() => repository.getBatchesByInsumoId('beef'))
+        .thenAnswer((_) async => [batch]);
+
+    final result = await viewModel.getBatchesForInsumo('beef');
+    expect(result, hasLength(1));
+    expect(result.first.batchNumber, equals('LOTE-01'));
+    verify(() => repository.getBatchesByInsumoId('beef')).called(1);
+  });
+
+  test('CS-03: postSession rejects positive variance on a lot-managed insumo without lot', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[beef]);
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+
+    // Count 25 kg when theoretical was 20 kg (positive variance +5 kg) without declaring lot
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 25,
+    );
+    await viewModel.requestApproval(sessionId);
+    await viewModel.approveSession(sessionId);
+
+    final errors = viewModel.validateSessionBeforePosting(sessionId);
+    expect(errors, isNotEmpty);
+    expect(errors.first, contains('Carne de Res'));
+    expect(errors.first, contains('sobrante'));
+
+    expect(
+      () => viewModel.postSession(sessionId),
+      throwsA(isA<StateError>().having(
+        (e) => e.message,
+        'message',
+        contains('Carne de Res'),
+      )),
+    );
+  });
+
+  test('CS-02: postSession accepts positive variance on a lot-managed insumo when lot is declared', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[beef]);
+    when(
+      () => movementEngine.recordAdjustment(
+        'beef',
+        5,
+        any(),
+        movementId: any(named: 'movementId'),
+      ),
+    ).thenAnswer((_) async {});
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 25,
+      batchId: 'batch-beef-01',
+      batchNumber: 'LOT-BEEF-2026',
+    );
+    await viewModel.requestApproval(sessionId);
+    await viewModel.approveSession(sessionId);
+
+    final errors = viewModel.validateSessionBeforePosting(sessionId);
+    expect(errors, isEmpty);
+
+    await viewModel.postSession(sessionId);
+
+    verify(
+      () => movementEngine.recordAdjustment(
+        'beef',
+        5,
+        any(),
+        movementId: any(named: 'movementId'),
+      ),
+    ).called(1);
+    expect(viewModel.selectedSession!.status, CountSessionStatus.posted);
+  });
+
+  test('CS-03: postSession allows positive variance on a non-lot-managed insumo without lot', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
+    when(
+      () => movementEngine.recordAdjustment(
+        'milk',
+        2,
+        any(),
+        movementId: any(named: 'movementId'),
+      ),
+    ).thenAnswer((_) async {});
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+    final lineId = viewModel.sessions.single.lines.single.id;
+
+    // Positive variance on milk (not lot managed)
+    await viewModel.recordCount(
+      sessionId: sessionId,
+      lineId: lineId,
+      countedQuantity: 12,
+    );
+    await viewModel.requestApproval(sessionId);
+    await viewModel.approveSession(sessionId);
+
+    final errors = viewModel.validateSessionBeforePosting(sessionId);
+    expect(errors, isEmpty);
+
+    await viewModel.postSession(sessionId);
+
+    verify(
+      () => movementEngine.recordAdjustment(
+        'milk',
+        2,
+        any(),
+        movementId: any(named: 'movementId'),
+      ),
+    ).called(1);
+    expect(viewModel.selectedSession!.status, CountSessionStatus.posted);
   });
 }

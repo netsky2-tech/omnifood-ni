@@ -113,7 +113,7 @@ import 'package:pos_app/data/models/human_authorization/ohac_delivery_entities.d
 part 'app_database.g.dart'; // generated code
 
 @Database(
-  version: 83,
+  version: 84,
   entities: [
     UserEntity,
     SecurityProfileEntity,

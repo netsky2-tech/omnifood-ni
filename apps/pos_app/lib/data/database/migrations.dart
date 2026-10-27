@@ -3655,6 +3655,24 @@ final migration82_83 = Migration(82, 83, (database) async {
   }
 });
 
+/// A-01: count lines declare whether their insumo is managed by lots, so
+/// the terminal knows when an observation needs a lot without having to
+/// re-fetch the insumo.
+final migration83_84 = Migration(83, 84, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(count_lines)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('is_batch_managed')) {
+    await database.execute(
+      'ALTER TABLE count_lines ADD COLUMN is_batch_managed INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+});
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3729,6 +3747,7 @@ final allMigrations = [
   migration80_81,
   migration81_82,
   migration82_83,
+  migration83_84,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open
