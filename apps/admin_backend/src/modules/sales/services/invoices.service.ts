@@ -1037,6 +1037,9 @@ export class InvoicesService {
         const effectiveOutcome = effectiveReason
           ? 'APPLIED_WITH_DIVERGENCE'
           : 'APPLIED';
+        const inventoryOutcome = effectiveReason
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : null;
 
         await manager.save(
           this.receiptRepository.create({
@@ -1048,7 +1051,7 @@ export class InvoicesService {
             payload_hash: calculateSyncPayloadHash(record),
             result_status: SYNC_RESULT_STATUS.ACCEPTED,
             result_code: effectiveOutcome,
-            inventoryOutcome: effectiveOutcome,
+            inventoryOutcome,
             inventoryOutcomeReason:
               effectiveReason as unknown as Record<string, any> | null,
           }),
@@ -1572,6 +1575,9 @@ export class InvoicesService {
           : v1Outcome
             ? v1Outcome.reason
             : null;
+        const inventoryOutcome = divergenceReason
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : (v1Outcome ? v1Outcome.outcome : null);
 
         await manager.save(
           this.receiptRepository.create({
@@ -1584,7 +1590,7 @@ export class InvoicesService {
             result_status: SYNC_RESULT_STATUS.ACCEPTED,
             result_code: effectiveOutcome,
             inventoryPolicyVersion: v1Outcome ? v1Outcome.policyVersion : null,
-            inventoryOutcome: effectiveOutcome,
+            inventoryOutcome,
             inventoryOutcomeReason:
               effectiveReason as unknown as Record<string, any> | null,
             acknowledgedCorrelationIds: v1Outcome
