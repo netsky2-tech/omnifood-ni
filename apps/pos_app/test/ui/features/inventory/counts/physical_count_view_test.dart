@@ -324,4 +324,83 @@ void main() {
     expect(find.text('Guardar conteo'), findsNothing);
     expect(storedSessions.first.lines.single.entries.single.batchNumber, equals('LOT-R28-C-003'));
   });
+
+  testWidgets('supports search, filter chips, theoretical suggestion and +/- steppers in Nhilos count modal', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    storedSessions = [
+      CountSessionDocument(
+        id: 'count-multi',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10, 30),
+        status: CountSessionStatus.open,
+        createdAt: DateTime(2026, 6, 2, 10),
+        updatedAt: DateTime(2026, 6, 2, 10),
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-milk',
+            insumoId: 'milk',
+            insumoName: 'Leche Entera',
+            uom: 'L',
+            theoreticalQuantity: 10,
+          ),
+          CountSessionLineDocument(
+            id: 'line-coffee',
+            insumoId: 'coffee',
+            insumoName: 'Café en Grano',
+            uom: 'g',
+            theoreticalQuantity: 500,
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Verify no redundant double card for single session: Bodega Central appears once
+    expect(find.text('Bodega Central'), findsOneWidget);
+
+    // Search filters lines
+    await tester.enterText(find.byKey(const Key('count_lines_search_input')), 'Café');
+    await tester.pumpAndSettle();
+    expect(find.text('Café en Grano'), findsOneWidget);
+    expect(find.text('Leche Entera'), findsNothing);
+
+    // Clear search restores all lines
+    await tester.tap(find.byKey(const Key('count_lines_search_clear')));
+    await tester.pumpAndSettle();
+    expect(find.text('Leche Entera'), findsOneWidget);
+
+    // Open count modal for Leche Entera
+    await tester.tap(find.text('Registrar conteo').first);
+    await tester.pumpAndSettle();
+
+    // Tap "Usar teórico" suggestion button -> fills 10 and shows 0.00 variance
+    await tester.tap(find.byKey(const Key('count_entry_suggest_theoretical')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Sin diferencia (Cuadra exacto)'), findsOneWidget);
+
+    // Tap "+" stepper -> becomes 11 (+1.00 surplus)
+    await tester.tap(find.byKey(const Key('count_entry_step_plus')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Sobrante físico (+1.00 L)'), findsOneWidget);
+
+    // Tap "-" stepper twice -> becomes 9 (-1.00 shortage)
+    await tester.tap(find.byKey(const Key('count_entry_step_minus')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('count_entry_step_minus')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Faltante físico (-1.00 L)'), findsOneWidget);
+
+    // Save count and verify toast notification appears
+    await tester.tap(find.text('Guardar conteo'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Conteo registrado para Leche Entera'), findsOneWidget);
+    expect(storedSessions.first.lines.first.entries.single.countedQuantity, equals(9));
+  });
 }
