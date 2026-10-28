@@ -102,7 +102,7 @@ function AdjustDialog({
             onChange={(e) => setSelectedProgramId(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
           >
-            <option value="">Balance general / Legacy</option>
+            <option value="">Balance general (Histórico)</option>
             {programs.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -153,6 +153,24 @@ function AdjustDialog({
   );
 }
 
+const TRANSACTION_TYPE_MAP: Record<
+  string,
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" | "success" }
+> = {
+  earn: { label: 'Acumulación', variant: 'success' },
+  EARN: { label: 'Acumulación', variant: 'success' },
+  redeem: { label: 'Canje', variant: 'secondary' },
+  REDEEM: { label: 'Canje', variant: 'secondary' },
+  adjust: { label: 'Ajuste manual', variant: 'outline' },
+  ADJUST: { label: 'Ajuste manual', variant: 'outline' },
+  reversal: { label: 'Reversión', variant: 'destructive' },
+  REVERSAL: { label: 'Reversión', variant: 'destructive' },
+  refund_revoke: { label: 'Revocación', variant: 'destructive' },
+  REFUND_REVOKE: { label: 'Revocación', variant: 'destructive' },
+  expire: { label: 'Expiración', variant: 'destructive' },
+  EXPIRE: { label: 'Expiración', variant: 'destructive' },
+};
+
 function TransactionRow({
   tx,
   programName,
@@ -190,7 +208,14 @@ function TransactionRow({
         </div>
       </td>
       <td className="py-2 px-3 text-sm tabular-nums">{tx.balance_after}</td>
-      <td className="py-2 px-3 text-sm">{tx.type}</td>
+      <td className="py-2 px-3 text-sm">
+        <Badge
+          variant={TRANSACTION_TYPE_MAP[tx.type]?.variant ?? 'outline'}
+          className="text-xs font-normal"
+        >
+          {TRANSACTION_TYPE_MAP[tx.type]?.label ?? tx.type}
+        </Badge>
+      </td>
       <td className="py-2 px-3 text-sm">{programName ?? tx.loyalty_program_id ?? '—'}</td>
       <td className="py-2 px-3 text-sm text-muted-foreground max-w-[200px] truncate">
         {tx.reason ?? '—'}
@@ -317,7 +342,7 @@ export function CustomerLoyaltyProfile() {
                       <div className="flex items-center gap-2 mb-1">
                         <Star className="h-4 w-4 text-primary" />
                         <span className="text-sm font-medium">
-                          {programMap.get(account.loyalty_program_id) ?? 'Programa'}
+                          {programMap.get(account.loyalty_program_id) ?? 'Programa general'}
                         </span>
                       </div>
                       <p className="text-2xl font-bold tabular-nums">{account.balance_units}</p>

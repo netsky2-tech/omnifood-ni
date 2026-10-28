@@ -634,7 +634,7 @@ function RewardForm({
       {/* Dynamic structured fields according to reward type */}
       <div className="p-3 bg-muted/40 rounded-md border border-border/60">
         <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-          Beneficio ({rewardType})
+          Beneficio: {rewardType === 'DISCOUNT_AMOUNT' ? 'Descuento en dinero (C$)' : 'Producto gratis'}
         </p>
         {rewardType === 'DISCOUNT_AMOUNT' ? (
           <div>
@@ -884,15 +884,16 @@ export function LoyaltyPage() {
                 </div>
 
                 {canManage && (
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-border/40">
                     {(program.status === 'DRAFT' || program.status === 'INACTIVE') && (
                       <Button
                         size="sm"
                         variant="outline"
+                        className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
                         onClick={(e) => { e.stopPropagation(); handleToggleProgram(program); }}
                         disabled={activateProgram.isPending}
                       >
-                        <ToggleRight className="h-3 w-3 mr-1" />
+                        <ToggleRight className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
                         Activar
                       </Button>
                     )}
@@ -900,10 +901,11 @@ export function LoyaltyPage() {
                       <Button
                         size="sm"
                         variant="outline"
+                        className="text-amber-700 border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
                         onClick={(e) => { e.stopPropagation(); setConfirmDeactivateProgram(program); }}
                         disabled={deactivateProgram.isPending}
                       >
-                        <ToggleLeft className="h-3 w-3 mr-1" />
+                        <ToggleLeft className="h-3.5 w-3.5 mr-1.5 text-amber-600 dark:text-amber-400" />
                         Desactivar
                       </Button>
                     )}
@@ -912,7 +914,8 @@ export function LoyaltyPage() {
                       variant="ghost"
                       onClick={(e) => { e.stopPropagation(); setEditingProgram(program); }}
                     >
-                      <Edit className="h-3 w-3" />
+                      <Edit className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                      Editar
                     </Button>
                   </div>
                 )}
@@ -936,21 +939,41 @@ export function LoyaltyPage() {
                     {rewards && rewards.length > 0 ? (
                       <div className="space-y-2">
                         {rewards.map((reward) => (
-                          <div key={reward.id} className="flex items-center justify-between p-2 bg-muted rounded text-sm">
-                            <div className="flex items-center gap-2">
-                              <Tag className="h-3 w-3" />
-                              <span>{reward.name}</span>
-                              <Badge variant={reward.status === 'ACTIVE' ? 'success' : 'outline'} className="text-xs">
+                          <div
+                            key={reward.id}
+                            className="flex items-center justify-between p-2.5 bg-muted/60 rounded-lg text-sm border border-border/40 gap-3"
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <span
+                                className="font-medium text-foreground truncate max-w-[200px] sm:max-w-[300px]"
+                                title={reward.name}
+                              >
+                                {reward.name}
+                              </span>
+                              <Badge
+                                variant={reward.status === 'ACTIVE' ? 'success' : 'outline'}
+                                className="text-xs shrink-0"
+                              >
                                 {reward.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                               </Badge>
+                              <span className="text-xs text-muted-foreground truncate hidden md:inline">
+                                ({reward.reward_type === 'FREE_PRODUCT' ? 'Producto gratis' : 'Descuento en dinero'} · {reward.cost_units} {reward.cost_units === 1 ? 'unidad' : 'unidades'})
+                              </span>
                             </div>
-                            <div className="flex gap-1 items-center">
+
+                            <div className="flex items-center gap-1.5 shrink-0">
                               {canManage && (
                                 <>
                                   <Button
                                     size="sm"
-                                    variant="ghost"
-                                    className="h-6 px-1"
+                                    variant="outline"
+                                    className={
+                                      reward.status === 'ACTIVE'
+                                        ? "h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
+                                        : "h-7 px-2 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
+                                    }
+                                    title={reward.status === 'ACTIVE' ? 'Desactivar recompensa' : 'Activar recompensa'}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (reward.status === 'ACTIVE') {
@@ -961,30 +984,38 @@ export function LoyaltyPage() {
                                     }}
                                   >
                                     {reward.status === 'ACTIVE' ? (
-                                      <ToggleLeft className="h-3 w-3" />
+                                      <>
+                                        <ToggleLeft className="h-3.5 w-3.5 mr-1 text-amber-600 dark:text-amber-400" />
+                                        <span>Desactivar</span>
+                                      </>
                                     ) : (
-                                      <ToggleRight className="h-3 w-3" />
+                                      <>
+                                        <ToggleRight className="h-3.5 w-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+                                        <span>Activar</span>
+                                      </>
                                     )}
                                   </Button>
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-6 px-1"
+                                    className="h-7 px-2 text-xs"
+                                    title="Editar recompensa"
                                     onClick={(e) => { e.stopPropagation(); setEditingReward(reward); }}
                                   >
-                                    <Edit className="h-3 w-3" />
+                                    <Edit className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                                    <span>Editar</span>
                                   </Button>
                                 </>
                               )}
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                className="h-6 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                 title="Ver métricas económicas"
                                 onClick={(e) => { e.stopPropagation(); setProfitAwareReward(reward); }}
                               >
-                                <TrendingUp className="h-3 w-3 mr-1" />
-                                Métricas
+                                <TrendingUp className="h-3.5 w-3.5 mr-1 text-primary" />
+                                <span>Métricas</span>
                               </Button>
                             </div>
                           </div>
