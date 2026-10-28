@@ -875,12 +875,17 @@ export function LoyaltyPage() {
                   <p><span className="font-medium text-foreground">Regla:</span> {formatEarningRuleSummary(program)}</p>
                   <p>Tipo: {LOYALTY_PROGRAM_TYPES.find((t) => t.id === program.program_type)?.label ?? "Desconocido"}</p>
                   <p>Versión: {program.config_version}</p>
-                  {program.starts_at && (
-                    <p className="text-xs">
-                      Vigencia: {new Date(program.starts_at).toLocaleDateString('es-NI')}
-                      {program.ends_at ? ` al ${new Date(program.ends_at).toLocaleDateString('es-NI')}` : ''}
-                    </p>
-                  )}
+                  <p className="text-xs">
+                    Vigencia:{' '}
+                    {program.starts_at || program.ends_at ? (
+                      <>
+                        {program.starts_at ? new Date(program.starts_at).toLocaleDateString('es-NI') : 'Inicio'}
+                        {program.ends_at ? ` al ${new Date(program.ends_at).toLocaleDateString('es-NI')}` : ' en adelante'}
+                      </>
+                    ) : (
+                      <span className="font-medium text-foreground">Permanente (Indefinida)</span>
+                    )}
+                  </p>
                 </div>
 
                 {canManage && (
@@ -888,30 +893,29 @@ export function LoyaltyPage() {
                     {(program.status === 'DRAFT' || program.status === 'INACTIVE') && (
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
+                        className="bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 shadow-xs"
                         onClick={(e) => { e.stopPropagation(); handleToggleProgram(program); }}
                         disabled={activateProgram.isPending}
                       >
-                        <ToggleRight className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+                        <ToggleRight className="h-3.5 w-3.5 mr-1.5" />
                         Activar
                       </Button>
                     )}
                     {program.status === 'ACTIVE' && (
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="text-amber-700 border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
+                        variant="destructive"
+                        className="shadow-xs"
                         onClick={(e) => { e.stopPropagation(); setConfirmDeactivateProgram(program); }}
                         disabled={deactivateProgram.isPending}
                       >
-                        <ToggleLeft className="h-3.5 w-3.5 mr-1.5 text-amber-600 dark:text-amber-400" />
+                        <ToggleLeft className="h-3.5 w-3.5 mr-1.5" />
                         Desactivar
                       </Button>
                     )}
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="outline"
                       onClick={(e) => { e.stopPropagation(); setEditingProgram(program); }}
                     >
                       <Edit className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
@@ -937,16 +941,17 @@ export function LoyaltyPage() {
                       )}
                     </div>
                     {rewards && rewards.length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {rewards.map((reward) => (
                           <div
                             key={reward.id}
-                            className="flex items-center justify-between p-2.5 bg-muted/60 rounded-lg text-sm border border-border/40 gap-3"
+                            className="p-3 bg-muted/60 rounded-lg text-sm border border-border/50 space-y-2"
                           >
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            {/* Header row: Icon, Name and Badge */}
+                            <div className="flex items-start justify-between gap-2">
+                              <Tag className="h-4 w-4 shrink-0 text-primary mt-0.5" />
                               <span
-                                className="font-medium text-foreground truncate max-w-[200px] sm:max-w-[300px]"
+                                className="font-semibold text-foreground break-words flex-1 min-w-0"
                                 title={reward.name}
                               >
                                 {reward.name}
@@ -957,62 +962,83 @@ export function LoyaltyPage() {
                               >
                                 {reward.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                               </Badge>
-                              <span className="text-xs text-muted-foreground truncate hidden md:inline">
-                                ({reward.reward_type === 'FREE_PRODUCT' ? 'Producto gratis' : 'Descuento en dinero'} · {reward.cost_units} {reward.cost_units === 1 ? 'unidad' : 'unidades'})
+                            </div>
+
+                            {/* Description if present */}
+                            {reward.description && (
+                              <p className="text-xs text-muted-foreground leading-relaxed break-words pl-6">
+                                {reward.description}
+                              </p>
+                            )}
+
+                            {/* Benefit summary */}
+                            <div className="text-xs text-muted-foreground flex items-center justify-between pt-1 border-t border-border/30 pl-6">
+                              <span>
+                                {reward.reward_type === 'FREE_PRODUCT' ? 'Producto gratis' : 'Descuento en dinero'}
+                              </span>
+                              <span className="font-medium text-foreground">
+                                Costo: {reward.cost_units} {reward.cost_units === 1 ? 'unidad' : 'unidades'}
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {canManage && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className={
-                                      reward.status === 'ACTIVE'
-                                        ? "h-7 px-2 text-xs text-amber-700 border-amber-300 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-950/40"
-                                        : "h-7 px-2 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 hover:text-emerald-800 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950/40"
-                                    }
-                                    title={reward.status === 'ACTIVE' ? 'Desactivar recompensa' : 'Activar recompensa'}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (reward.status === 'ACTIVE') {
-                                        setConfirmDeactivateReward(reward);
-                                      } else {
-                                        handleToggleReward(reward);
-                                      }
-                                    }}
-                                  >
+                            {/* Action buttons with semantic background colors */}
+                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/40">
+                              <div className="flex items-center gap-1.5">
+                                {canManage && (
+                                  <>
                                     {reward.status === 'ACTIVE' ? (
-                                      <>
-                                        <ToggleLeft className="h-3.5 w-3.5 mr-1 text-amber-600 dark:text-amber-400" />
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        className="h-7 px-2.5 text-xs shadow-xs"
+                                        title="Desactivar recompensa"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setConfirmDeactivateReward(reward);
+                                        }}
+                                      >
+                                        <ToggleLeft className="h-3.5 w-3.5 mr-1" />
                                         <span>Desactivar</span>
-                                      </>
+                                      </Button>
                                     ) : (
-                                      <>
-                                        <ToggleRight className="h-3.5 w-3.5 mr-1 text-emerald-600 dark:text-emerald-400" />
+                                      <Button
+                                        size="sm"
+                                        className="h-7 px-2.5 text-xs bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800 shadow-xs"
+                                        title="Activar recompensa"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleReward(reward);
+                                        }}
+                                      >
+                                        <ToggleRight className="h-3.5 w-3.5 mr-1" />
                                         <span>Activar</span>
-                                      </>
+                                      </Button>
                                     )}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 px-2 text-xs"
-                                    title="Editar recompensa"
-                                    onClick={(e) => { e.stopPropagation(); setEditingReward(reward); }}
-                                  >
-                                    <Edit className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
-                                    <span>Editar</span>
-                                  </Button>
-                                </>
-                              )}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs"
+                                      title="Editar recompensa"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingReward(reward);
+                                      }}
+                                    >
+                                      <Edit className="h-3.5 w-3.5 mr-1 text-muted-foreground" />
+                                      <span>Editar</span>
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
                                 title="Ver métricas económicas"
-                                onClick={(e) => { e.stopPropagation(); setProfitAwareReward(reward); }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setProfitAwareReward(reward);
+                                }}
                               >
                                 <TrendingUp className="h-3.5 w-3.5 mr-1 text-primary" />
                                 <span>Métricas</span>
