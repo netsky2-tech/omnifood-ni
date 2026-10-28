@@ -340,8 +340,8 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
         TENANT_CONTEXT_SET_CONFIG_SQL,
         [tenantId],
       );
-      const queryOrder =
-        (mockManager.query as jest.Mock).mock.invocationCallOrder[0];
+      const queryOrder = (mockManager.query as jest.Mock).mock
+        .invocationCallOrder[0];
       const firstProtected = Math.min(
         ...(mockManager.findOne as jest.Mock).mock.invocationCallOrder,
         ...(mockManager.find as jest.Mock).mock.invocationCallOrder,
@@ -364,9 +364,9 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
     });
 
     it('fails fast with TenantContextRequiredError on a blank tenant and issues no set_config SQL (Unit 0b-3)', async () => {
-      await expect(
-        service.applyTemplate('   ', 'CAFETERIA'),
-      ).rejects.toThrow(TenantContextRequiredError);
+      await expect(service.applyTemplate('   ', 'CAFETERIA')).rejects.toThrow(
+        TenantContextRequiredError,
+      );
 
       // The transaction itself must never be opened for a blank tenant.
       expect(dataSource.transaction).not.toHaveBeenCalled();
@@ -840,8 +840,9 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
 
       it('rejects the apply with 400 naming every unpriced template item and creates zero products (RED)', async () => {
         const fixture = healthyTemplate();
-        (fixture.templateProducts[1] as { suggested_price?: number }).
-          suggested_price = 0;
+        (
+          fixture.templateProducts[1] as { suggested_price?: number }
+        ).suggested_price = 0;
         templateRepo.findOne.mockResolvedValue(fixture);
         mockManager.find.mockResolvedValue([]);
 
@@ -881,15 +882,13 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
       it('names every unpriced item, not just the first (triangulation)', async () => {
         const fixture = healthyTemplate();
         fixture.templateProducts[0].suggested_price = -5;
-        fixture.templateProducts[1].suggested_price = undefined as never;
+        fixture.templateProducts[1].suggested_price = undefined;
         templateRepo.findOne.mockResolvedValueOnce(fixture);
         mockManager.find.mockResolvedValue([]);
 
         await expect(
           service.applyTemplate(tenantId, 'RETAIL_MINIMARKET'),
-        ).rejects.toThrow(
-          /Gaseosa Coca Cola 500ml.*Agua Embotellada 600ml/s,
-        );
+        ).rejects.toThrow(/Gaseosa Coca Cola 500ml.*Agua Embotellada 600ml/s);
       });
     });
 
@@ -1204,9 +1203,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
               .replace(/[\u0300-\u036f]/g, '')
               .replace(/[^a-zA-Z0-9]/g, '');
 
-          const buildLabelTemplate = (
-            category: string,
-          ): IndustryTemplate => ({
+          const buildLabelTemplate = (category: string): IndustryTemplate => ({
             ...mockTemplates[2],
             templateProducts: [
               {
@@ -1236,9 +1233,7 @@ describe('IndustryTemplateService (Unit & Triangulation)', () => {
           ])(
             'maps %s to the tenant catalog code %s (via map or normalized name)',
             async (label: string, expectedCode: string) => {
-              templateRepo.findOne.mockResolvedValue(
-                buildLabelTemplate(label),
-              );
+              templateRepo.findOne.mockResolvedValue(buildLabelTemplate(label));
 
               await service.applyTemplate(tenantId, 'RETAIL_MINIMARKET');
 

@@ -1,5 +1,8 @@
 import { ValidationPipe, ArgumentMetadata } from '@nestjs/common';
-import { CreateLoyaltyProgramDto, UpdateLoyaltyProgramDto } from './loyalty-program.dto';
+import {
+  CreateLoyaltyProgramDto,
+  UpdateLoyaltyProgramDto,
+} from './loyalty-program.dto';
 
 describe('LoyaltyProgramDto (Production ValidationPipe Boundary)', () => {
   const pipe = new ValidationPipe({
@@ -81,7 +84,10 @@ describe('LoyaltyProgramDto (Production ValidationPipe Boundary)', () => {
           unitsPerPurchasedUnit: 1,
         },
       };
-      const transformedProduct = await pipe.transform(productPayload, metadataCreate);
+      const transformedProduct = await pipe.transform(
+        productPayload,
+        metadataCreate,
+      );
       expect(transformedProduct.program_type).toBe('PRODUCT_STAMPS');
 
       const visitPayload = {
@@ -92,7 +98,10 @@ describe('LoyaltyProgramDto (Production ValidationPipe Boundary)', () => {
           minimumSpendNio: 50,
         },
       };
-      const transformedVisit = await pipe.transform(visitPayload, metadataCreate);
+      const transformedVisit = await pipe.transform(
+        visitPayload,
+        metadataCreate,
+      );
       expect(transformedVisit.program_type).toBe('VISIT_STAMPS');
     });
 

@@ -23,12 +23,11 @@ export async function readHighestInvoiceSequence(
   manager: EntityManager,
   tenantId: string,
 ): Promise<number> {
-  const rows: Array<{ maxSeq?: string | number | null }> =
-    await manager.query(
-      `SELECT MAX(CAST(NULLIF(substring(invoice_number from '([0-9]+)$'), '') AS bigint)) AS "maxSeq"
+  const rows: Array<{ maxSeq?: string | number | null }> = await manager.query(
+    `SELECT MAX(CAST(NULLIF(substring(invoice_number from '([0-9]+)$'), '') AS bigint)) AS "maxSeq"
          FROM invoices
          WHERE tenant_id = $1`,
-      [tenantId],
-    );
+    [tenantId],
+  );
   return rows?.[0]?.maxSeq ? Number(rows[0].maxSeq) : 0;
 }

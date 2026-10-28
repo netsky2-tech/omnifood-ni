@@ -181,9 +181,12 @@ describe('CustomersService', () => {
   it('should filter customers by customer_type', async () => {
     const qb = mgrCustomerRepo.createQueryBuilder();
     await service.findAll('tenant-1', { customer_type: 'EMPRESA' });
-    expect(qb.andWhere).toHaveBeenCalledWith('c.customer_type = :customerType', {
-      customerType: 'EMPRESA',
-    });
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'c.customer_type = :customerType',
+      {
+        customerType: 'EMPRESA',
+      },
+    );
   });
 
   it('should search across name, tax_id, phone and email in combined search', async () => {

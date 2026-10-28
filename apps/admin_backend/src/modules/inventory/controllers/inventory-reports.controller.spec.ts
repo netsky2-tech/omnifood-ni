@@ -283,9 +283,7 @@ describe('InventoryReportsController', () => {
       notAboveReference: [],
       withoutReference: [],
     };
-    valuationService.applyLowerOfCostWritedown.mockResolvedValue(
-      writedown as never,
-    );
+    valuationService.applyLowerOfCostWritedown.mockResolvedValue(writedown);
 
     const returned = await controller.applyValuationWritedown('tenant-1', {
       asOfDate: '2026-10-31',
@@ -325,10 +323,9 @@ describe('InventoryReportsController', () => {
 
     const result = await controller.getTheoreticalCost('tenant-1', 'prod-1');
 
-    expect(theoreticalCostService.getProductTheoreticalCost).toHaveBeenCalledWith(
-      'tenant-1',
-      'prod-1',
-    );
+    expect(
+      theoreticalCostService.getProductTheoreticalCost,
+    ).toHaveBeenCalledWith('tenant-1', 'prod-1');
     expect(result).toBe(margin);
   });
 });

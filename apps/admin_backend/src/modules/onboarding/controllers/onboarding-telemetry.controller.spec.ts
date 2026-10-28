@@ -75,7 +75,11 @@ describe('OnboardingTelemetryController (Unit)', () => {
       },
     } as any;
 
-    await controller.getEvents(req, 'tenant-xyz', OnboardingTelemetryEventName.BOH_READINESS_CHANGED);
+    await controller.getEvents(
+      req,
+      'tenant-xyz',
+      OnboardingTelemetryEventName.BOH_READINESS_CHANGED,
+    );
 
     expect(service.getEventsByTenant).toHaveBeenCalledWith(
       'tenant-xyz',

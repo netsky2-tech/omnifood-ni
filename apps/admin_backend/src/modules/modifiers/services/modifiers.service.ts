@@ -228,17 +228,13 @@ export class ModifiersService {
         // ownership of the referenced insumos) BEFORE the write, inside the
         // same transaction that persists it, so a half-configured effect can
         // never reach the resolution.
-        const effect = await this.assertEffectIsUsable(
-          manager,
-          tenantId,
-          {
-            effect: dto.inventory_effect ?? MODIFIER_INVENTORY_EFFECT.NONE,
-            effect_insumo_id: dto.effect_insumo_id ?? null,
-            effect_target_insumo_id: dto.effect_target_insumo_id ?? null,
-            effect_quantity: dto.effect_quantity ?? null,
-            effect_factor: dto.effect_factor ?? null,
-          },
-        );
+        const effect = await this.assertEffectIsUsable(manager, tenantId, {
+          effect: dto.inventory_effect ?? MODIFIER_INVENTORY_EFFECT.NONE,
+          effect_insumo_id: dto.effect_insumo_id ?? null,
+          effect_target_insumo_id: dto.effect_target_insumo_id ?? null,
+          effect_quantity: dto.effect_quantity ?? null,
+          effect_factor: dto.effect_factor ?? null,
+        });
         const option = manager.getRepository(ModifierOption).create({
           name,
           price_delta: dto.price_delta ?? 0,
@@ -683,11 +679,7 @@ export class ModifiersService {
     // soft-deleted group, so inactive/all listings load them all.
     const options =
       status === 'active'
-        ? await this.findActiveOptionsOfGroups(
-            manager,
-            tenantId,
-            groupIdsList,
-          )
+        ? await this.findActiveOptionsOfGroups(manager, tenantId, groupIdsList)
         : await manager.getRepository(ModifierOption).find({
             where: { tenant_id: tenantId, group_id: In(groupIdsList) },
             order: { sort_order: 'ASC', name: 'ASC' },
@@ -811,9 +803,7 @@ export class ModifiersService {
     }
     const stored = this.readEffect(option);
     return {
-      effect:
-        dto.inventory_effect ??
-        (stored.inventory_effect as ModifierInventoryEffect),
+      effect: dto.inventory_effect ?? stored.inventory_effect,
       effect_insumo_id:
         dto.effect_insumo_id !== undefined
           ? dto.effect_insumo_id

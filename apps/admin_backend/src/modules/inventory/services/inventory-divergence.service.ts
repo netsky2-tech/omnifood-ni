@@ -126,26 +126,34 @@ export class InventoryDivergenceService {
    */
   async list(
     tenantId: string,
-    options: { status?: InventoryDivergenceStatus; limit?: number; offset?: number } = {},
+    options: {
+      status?: InventoryDivergenceStatus;
+      limit?: number;
+      offset?: number;
+    } = {},
   ): Promise<{ total: number; items: InventoryDivergence[] }> {
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
     const offset = Math.max(options.offset ?? 0, 0);
 
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const repository = manager.getRepository(InventoryDivergence);
-      const where = options.status
-        ? { tenant_id: tenantId, status: options.status }
-        : { tenant_id: tenantId };
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const repository = manager.getRepository(InventoryDivergence);
+        const where = options.status
+          ? { tenant_id: tenantId, status: options.status }
+          : { tenant_id: tenantId };
 
-      const [items, total] = await repository.findAndCount({
-        where,
-        order: { created_at: 'DESC' },
-        take: limit,
-        skip: offset,
-      });
+        const [items, total] = await repository.findAndCount({
+          where,
+          order: { created_at: 'DESC' },
+          take: limit,
+          skip: offset,
+        });
 
-      return { total, items };
-    });
+        return { total, items };
+      },
+    );
   }
 
   /**
@@ -168,7 +176,7 @@ export class InventoryDivergenceService {
     }
 
     for (const divergence of open) {
-      divergence.status = 'RECONCILED' as InventoryDivergenceStatus;
+      divergence.status = 'RECONCILED';
       divergence.reconciled_at = new Date();
       divergence.reconciliation_ref = reconciliationRef;
       divergence.resolution_note = note ?? null;
@@ -188,12 +196,20 @@ export class InventoryDivergenceService {
    * An insumo with NO lots is never a gap: its aggregate IS the only truth
    * (that is the rule `drawBatchOutflow` already follows).
    */
-  async findParityGaps(
-    tenantId: string,
-  ): Promise<ParityGapRow[]> {
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const rows = await manager.query(
-        `
+  async findParityGaps(tenantId: string): Promise<ParityGapRow[]> {
+    return runInTenantTransaction<ParityGapRow[]>(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const rows = await manager.query<
+          Array<{
+            insumo_id: string;
+            insumo_name: string;
+            declared_stock: string | number;
+            lot_stock: string | number;
+          }>
+        >(
+          `
         SELECT
           i.id            AS insumo_id,
           i.name          AS insumo_name,
@@ -207,18 +223,19 @@ export class InventoryDivergenceService {
         ORDER BY ABS(i.stock - SUM(b.remaining_stock)) DESC
         LIMIT 200
         `,
-        [tenantId],
-      );
+          [tenantId],
+        );
 
-      return rows.map((row: Record<string, string | number>) => ({
-        insumoId: String(row.insumo_id),
-        insumoName: String(row.insumo_name),
-        declaredStock: Number(row.declared_stock),
-        lotStock: Number(row.lot_stock),
-        gap: Number(
-          (Number(row.declared_stock) - Number(row.lot_stock)).toFixed(4),
-        ),
-      }));
-    });
+        return rows.map((row) => ({
+          insumoId: String(row.insumo_id),
+          insumoName: String(row.insumo_name),
+          declaredStock: Number(row.declared_stock),
+          lotStock: Number(row.lot_stock),
+          gap: Number(
+            (Number(row.declared_stock) - Number(row.lot_stock)).toFixed(4),
+          ),
+        }));
+      },
+    );
   }
 }

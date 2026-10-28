@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import { BomExplosionService, hasSubRecipeComponent } from './bom-explosion.service';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from './bom-explosion.service';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 
 describe('BomExplosionService', () => {
@@ -192,9 +195,8 @@ describe('BomExplosionService', () => {
       const subComponents = [
         { insumo_id: 'ins-carne', ingredient_type: 'INSUMO', quantity: 0.5 },
       ] as RecipeDetail[];
-      const resolveSubRecipeComponents = jest.fn(
-        async (productId: string) =>
-          productId === 'prod-salsa' ? subComponents : [],
+      const resolveSubRecipeComponents = jest.fn(async (productId: string) =>
+        productId === 'prod-salsa' ? subComponents : [],
       );
 
       const totals = await service.explodeWithSubRecipes({

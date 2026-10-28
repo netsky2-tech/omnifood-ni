@@ -750,19 +750,49 @@ describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', (
 
   const makeManager = (): EntityManager => {
     const products: Record<string, any> = {
-      'prod-parent': { id: 'prod-parent', tenant_id: tenant, product_type: 'COMPOUND' },
-      'prod-sub': { id: 'prod-sub', tenant_id: tenant, product_type: 'COMPOUND' },
+      'prod-parent': {
+        id: 'prod-parent',
+        tenant_id: tenant,
+        product_type: 'COMPOUND',
+      },
+      'prod-sub': {
+        id: 'prod-sub',
+        tenant_id: tenant,
+        product_type: 'COMPOUND',
+      },
     };
     const versions: Record<string, any> = {
-      'prod-parent': { id: 'rv-parent', product_id: 'prod-parent', tenant_id: tenant, publication_state: RecipePublicationState.PUBLISHED, version_number: 1 },
-      'prod-sub': { id: 'rv-sub', product_id: 'prod-sub', tenant_id: tenant, publication_state: RecipePublicationState.PUBLISHED, version_number: 1 },
+      'prod-parent': {
+        id: 'rv-parent',
+        product_id: 'prod-parent',
+        tenant_id: tenant,
+        publication_state: RecipePublicationState.PUBLISHED,
+        version_number: 1,
+      },
+      'prod-sub': {
+        id: 'rv-sub',
+        product_id: 'prod-sub',
+        tenant_id: tenant,
+        publication_state: RecipePublicationState.PUBLISHED,
+        version_number: 1,
+      },
     };
     const detailsByVersion: Record<string, any[]> = {
       'rv-parent': [
-        { id: 'rd-sub', insumo_id: 'prod-sub', quantity: 2, ingredient_type: 'SUB_RECIPE' },
+        {
+          id: 'rd-sub',
+          insumo_id: 'prod-sub',
+          quantity: 2,
+          ingredient_type: 'SUB_RECIPE',
+        },
       ],
       'rv-sub': [
-        { id: 'rd-leaf', insumo_id: 'ins-leaf', quantity: 3, ingredient_type: 'INSUMO' },
+        {
+          id: 'rd-leaf',
+          insumo_id: 'ins-leaf',
+          quantity: 3,
+          ingredient_type: 'INSUMO',
+        },
       ],
     };
 
@@ -770,13 +800,17 @@ describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', (
       getRepository: (entity: any) => {
         if (entity === Product) {
           return {
-            findOne: jest.fn(async ({ where }: any) => products[where.id] ?? null),
+            findOne: jest.fn(
+              async ({ where }: any) => products[where.id] ?? null,
+            ),
           };
         }
         if (entity === Insumo) {
           return {
             findOne: jest.fn(async ({ where }: any) =>
-              where.id === 'ins-leaf' ? { id: 'ins-leaf', tenant_id: tenant } : null,
+              where.id === 'ins-leaf'
+                ? { id: 'ins-leaf', tenant_id: tenant }
+                : null,
             ),
           };
         }
@@ -792,7 +826,9 @@ describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', (
                 andWhere: jest.fn(() => qb),
                 orderBy: jest.fn(() => qb),
                 addOrderBy: jest.fn(() => qb),
-                getOne: jest.fn(async () => versions[requestedProductId] ?? null),
+                getOne: jest.fn(
+                  async () => versions[requestedProductId] ?? null,
+                ),
               };
               return qb;
             }),
@@ -800,8 +836,9 @@ describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', (
         }
         if (entity === RecipeDetail) {
           return {
-            find: jest.fn(async ({ where }: any) =>
-              detailsByVersion[where.recipe_version_id] ?? [],
+            find: jest.fn(
+              async ({ where }: any) =>
+                detailsByVersion[where.recipe_version_id] ?? [],
             ),
           };
         }
@@ -843,7 +880,9 @@ describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', (
     );
 
     expect(result?.outcome).toBe('APPLIED');
-    const bindings = (result?.bindingsToApply ?? []).map((entry) => entry.binding);
+    const bindings = (result?.bindingsToApply ?? []).map(
+      (entry) => entry.binding,
+    );
     expect(bindings).toHaveLength(1);
     // parent SUB_RECIPE(2) -> sub-recipe leaf(3) => 6 per sale unit.
     expect(bindings[0]).toMatchObject({

@@ -111,10 +111,7 @@ async function createRefreshHarness(withJti = false): Promise<RefreshHarness> {
       jwt,
       dataSource,
       jwtConfig,
-      new AuthAuditService(
-        dataSource.getRepository(AuditLog),
-        dataSource,
-      ),
+      new AuthAuditService(dataSource.getRepository(AuditLog), dataSource),
     );
   };
   try {

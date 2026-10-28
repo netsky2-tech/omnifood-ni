@@ -26,7 +26,9 @@ describe('ReleasesService', () => {
 
   beforeEach(() => {
     mockR2Storage = {
-      getPresignedDownloadUrl: jest.fn().mockReturnValue('https://r2.signed/download.apk'),
+      getPresignedDownloadUrl: jest
+        .fn()
+        .mockReturnValue('https://r2.signed/download.apk'),
     };
   });
 
@@ -40,7 +42,9 @@ describe('ReleasesService', () => {
     mockRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(qb),
       create: jest.fn().mockImplementation((dto) => dto as AppRelease),
-      save: jest.fn().mockImplementation(async (entity) => entity as AppRelease),
+      save: jest
+        .fn()
+        .mockImplementation(async (entity) => entity as AppRelease),
     };
     service = new ReleasesService(
       mockRepo as unknown as Repository<AppRelease>,
@@ -68,11 +72,18 @@ describe('ReleasesService', () => {
     expect(result?.notes).toBe('OTA update test');
     expect(result?.publishedAt).toBe('2026-10-02T18:00:00.000Z');
 
-    expect(qb.where).toHaveBeenCalledWith('r.channel = :channel', { channel: 'pilot' });
-    expect(qb.andWhere).toHaveBeenCalledWith('r.abi = :abi', { abi: 'arm64-v8a' });
-    expect(qb.andWhere).toHaveBeenCalledWith('r.version_code > :currentVersionCode', {
-      currentVersionCode: 2001,
+    expect(qb.where).toHaveBeenCalledWith('r.channel = :channel', {
+      channel: 'pilot',
     });
+    expect(qb.andWhere).toHaveBeenCalledWith('r.abi = :abi', {
+      abi: 'arm64-v8a',
+    });
+    expect(qb.andWhere).toHaveBeenCalledWith(
+      'r.version_code > :currentVersionCode',
+      {
+        currentVersionCode: 2001,
+      },
+    );
     expect(mockR2Storage.getPresignedDownloadUrl).toHaveBeenCalledWith(
       'releases/pilot/app-arm64-2002.apk',
     );

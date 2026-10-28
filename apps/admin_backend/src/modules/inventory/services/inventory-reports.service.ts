@@ -205,8 +205,7 @@ export class InventoryReportsService {
     // evening). Without a bound the window stays "today, local".
     const bounds = resolveReportingBounds(fromDate, toDate);
     const todayKey = currentLocalDateKey();
-    const from =
-      bounds.startInclusiveUtc ?? localDayStartUtc(todayKey);
+    const from = bounds.startInclusiveUtc ?? localDayStartUtc(todayKey);
     const to =
       bounds.endInclusiveUtc ??
       new Date(localDayEndExclusiveUtc(todayKey).getTime() - 1);

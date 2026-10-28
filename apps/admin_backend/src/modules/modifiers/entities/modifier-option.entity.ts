@@ -77,7 +77,12 @@ export class ModifierOption {
   // an option that declares no effect keeps today's behaviour EXACTLY, which
   // is what keeps a tenant that never configured an effect (and SOHO)
   // untouched.
-  @Column({ type: 'varchar', length: 16, name: 'inventory_effect', default: 'NONE' })
+  @Column({
+    type: 'varchar',
+    length: 16,
+    name: 'inventory_effect',
+    default: 'NONE',
+  })
   inventory_effect: string;
 
   /**

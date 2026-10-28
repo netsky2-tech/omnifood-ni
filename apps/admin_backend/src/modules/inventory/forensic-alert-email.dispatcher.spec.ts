@@ -1,5 +1,4 @@
 import { ConfigService } from '@nestjs/config';
-import { EMAIL_PORT } from '../../integrations/notifications/ports/email.port';
 import type { EmailPort } from '../../integrations/notifications/ports/email.port';
 import {
   ALERT_EMAIL_RECIPIENTS_ENV,
@@ -20,10 +19,7 @@ describe('ForensicAlertEmailDispatcher (R7)', () => {
   const emailProvider: EmailPort = { send };
 
   const buildDispatcher = (env: Record<string, string> = {}) =>
-    new ForensicAlertEmailDispatcher(
-      emailProvider,
-      new ConfigService(env),
-    );
+    new ForensicAlertEmailDispatcher(emailProvider, new ConfigService(env));
 
   const alert: ForensicAlertInput = {
     tenantId: 'tenant-A',
@@ -59,9 +55,6 @@ describe('ForensicAlertEmailDispatcher (R7)', () => {
     }).dispatchToAdmins(alert);
 
     expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls.map(([to]) => to)).toEqual([
-      'a@x.ni',
-      'b@x.ni',
-    ]);
+    expect(send.mock.calls.map(([to]) => to)).toEqual(['a@x.ni', 'b@x.ni']);
   });
 });

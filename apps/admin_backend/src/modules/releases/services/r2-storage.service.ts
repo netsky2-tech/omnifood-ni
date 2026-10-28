@@ -18,8 +18,11 @@ export class R2StorageService {
   constructor(configService: ConfigService) {
     const accountId = configService.get<string>('R2_ACCOUNT_ID')?.trim();
     const accessKeyId = configService.get<string>('R2_ACCESS_KEY_ID')?.trim();
-    const secretAccessKey = configService.get<string>('R2_SECRET_ACCESS_KEY')?.trim();
-    const bucketName = configService.get<string>('R2_BUCKET_NAME')?.trim() || 'nhilos-pos';
+    const secretAccessKey = configService
+      .get<string>('R2_SECRET_ACCESS_KEY')
+      ?.trim();
+    const bucketName =
+      configService.get<string>('R2_BUCKET_NAME')?.trim() || 'nhilos-pos';
     let endpoint = configService.get<string>('R2_ENDPOINT')?.trim();
 
     if (!endpoint && accountId) {
@@ -106,7 +109,10 @@ export class R2StorageService {
       'AWS4-HMAC-SHA256',
       amzDate,
       credentialScope,
-      crypto.createHash('sha256').update(canonicalRequest, 'utf8').digest('hex'),
+      crypto
+        .createHash('sha256')
+        .update(canonicalRequest, 'utf8')
+        .digest('hex'),
     ].join('\n');
 
     const hmac = (secret: Buffer | string, data: string) =>

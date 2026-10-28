@@ -55,8 +55,8 @@ describe('TheoreticalCostService (R8)', () => {
       throw new Error('Unexpected repository');
     }),
   };
-  const transaction = jest.fn(
-    async (work: (m: unknown) => unknown) => work(manager),
+  const transaction = jest.fn(async (work: (m: unknown) => unknown) =>
+    work(manager),
   );
   const dataSource = { transaction } as unknown as DataSource;
   const recipeService = {
@@ -85,8 +85,8 @@ describe('TheoreticalCostService (R8)', () => {
     movementRows.length = 0;
     lineRows.length = 0;
     query.mockResolvedValue(undefined);
-    transaction.mockImplementation(
-      async (work: (m: unknown) => unknown) => work(manager),
+    transaction.mockImplementation(async (work: (m: unknown) => unknown) =>
+      work(manager),
     );
   });
 
@@ -146,10 +146,11 @@ describe('TheoreticalCostService (R8)', () => {
   });
 
   it('rolls a SUB_RECIPE component up through its own recipe', async () => {
-    productFindOne.mockImplementation(async ({ where }: { where: { id: string } }) =>
-      where.id === 'prod-parent'
-        ? { id: 'prod-parent', name: 'Plato', sellPrice: 50 }
-        : { id: 'prod-sub', name: 'Salsa', sellPrice: 0 },
+    productFindOne.mockImplementation(
+      async ({ where }: { where: { id: string } }) =>
+        where.id === 'prod-parent'
+          ? { id: 'prod-parent', name: 'Plato', sellPrice: 50 }
+          : { id: 'prod-sub', name: 'Salsa', sellPrice: 0 },
     );
     recipeService.findActiveVersion.mockImplementation(
       async (_tenant: string, productId: string) =>
@@ -157,37 +158,38 @@ describe('TheoreticalCostService (R8)', () => {
           ? { id: 'rv-parent', yield_quantity: 1 }
           : { id: 'rv-sub', yield_quantity: 1 },
     );
-    recipeService.getSnapshot.mockImplementation(
-      async (versionId: string) =>
-        versionId === 'rv-parent'
-          ? {
-              components: [
-                {
-                  insumo_id: 'prod-sub',
-                  ingredient_name: 'Salsa',
-                  ingredient_type: 'SUB_RECIPE',
-                  gross_quantity: 2,
-                  technical_shrink_pct: 0,
-                },
-              ],
-            }
-          : {
-              components: [
-                {
-                  insumo_id: 'ins-leaf',
-                  ingredient_name: 'Tomate',
-                  ingredient_type: 'INSUMO',
-                  gross_quantity: 4,
-                  technical_shrink_pct: 0,
-                },
-              ],
-            },
+    recipeService.getSnapshot.mockImplementation(async (versionId: string) =>
+      versionId === 'rv-parent'
+        ? {
+            components: [
+              {
+                insumo_id: 'prod-sub',
+                ingredient_name: 'Salsa',
+                ingredient_type: 'SUB_RECIPE',
+                gross_quantity: 2,
+                technical_shrink_pct: 0,
+              },
+            ],
+          }
+        : {
+            components: [
+              {
+                insumo_id: 'ins-leaf',
+                ingredient_name: 'Tomate',
+                ingredient_type: 'INSUMO',
+                gross_quantity: 4,
+                technical_shrink_pct: 0,
+              },
+            ],
+          },
     );
     insumoFindOne.mockResolvedValue({ id: 'ins-leaf', averageCost: 5 });
     // Sub-recipe unit cost 20; the parent consumes 2 of it.
     costCalculator.calculateRecipeTheoreticalCost.mockImplementation(
       (input: { components: Array<{ ingredientType: string }> }) =>
-        calculatorResult(input.components[0].ingredientType === 'SUB_RECIPE' ? 40 : 20),
+        calculatorResult(
+          input.components[0].ingredientType === 'SUB_RECIPE' ? 40 : 20,
+        ),
     );
 
     await service.getProductTheoreticalCost('tenant-1', 'prod-parent');
@@ -241,12 +243,14 @@ describe('TheoreticalCostService (R8)', () => {
       { id: 'prod-bad', name: 'Bad', product_type: ProductType.COMPOUND },
     ]);
     productFind.mockResolvedValueOnce([]);
-    productFindOne.mockImplementation(async ({ where }: { where: { id: string } }) => {
-      if (where.id === 'prod-bad') {
-        return { id: 'prod-bad', name: 'Bad', sellPrice: 10 };
-      }
-      return { id: 'prod-ok', name: 'Ok', sellPrice: 10 };
-    });
+    productFindOne.mockImplementation(
+      async ({ where }: { where: { id: string } }) => {
+        if (where.id === 'prod-bad') {
+          return { id: 'prod-bad', name: 'Bad', sellPrice: 10 };
+        }
+        return { id: 'prod-ok', name: 'Ok', sellPrice: 10 };
+      },
+    );
     recipeService.findActiveVersion.mockImplementation(
       async (_tenant: string, productId: string) =>
         productId === 'prod-bad' ? null : { id: 'rv-ok', yield_quantity: 1 },
@@ -270,15 +274,25 @@ describe('TheoreticalCostService (R8)', () => {
   // a machine code plus calm Spanish copy, and the raw technical message only
   // reaches the log.
   describe('skip reasons are operator copy, never a wire error (S13)', () => {
-    const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+    const UUID_PATTERN =
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
     // Loosely typed on purpose: the assertion of a missing `reasonCode` must
     // fail as a BEHAVIOURAL red, not as a compile error the fix would hide.
     const marginsFor = async (
       tenantId: string,
       productId: string,
-    ): Promise<{ dishes: unknown[]; skipped: Array<Record<string, string>> }> => {
-      productFind.mockResolvedValueOnce([{ id: productId, name: 'Pan de Lote', product_type: ProductType.COMPOUND }]);
+    ): Promise<{
+      dishes: unknown[];
+      skipped: Array<Record<string, string>>;
+    }> => {
+      productFind.mockResolvedValueOnce([
+        {
+          id: productId,
+          name: 'Pan de Lote',
+          product_type: ProductType.COMPOUND,
+        },
+      ]);
       productFind.mockResolvedValueOnce([]);
       return (await service.listDishMargins(tenantId)) as unknown as {
         dishes: unknown[];
@@ -290,7 +304,10 @@ describe('TheoreticalCostService (R8)', () => {
       productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote' });
       recipeService.findActiveVersion.mockResolvedValue(null);
 
-      const { skipped } = await marginsFor('21beade5-dfc6-44df-b680-1065b42fc68b', 'prod-a');
+      const { skipped } = await marginsFor(
+        '21beade5-dfc6-44df-b680-1065b42fc68b',
+        'prod-a',
+      );
 
       expect(skipped[0]).toMatchObject({
         productId: 'prod-a',
@@ -299,14 +316,21 @@ describe('TheoreticalCostService (R8)', () => {
       });
       expect(skipped[0].reason).toContain('receta publicada');
       expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
-      expect(skipped[0].reason).not.toMatch(/does not have|not found|Product [0-9a-f]/i);
+      expect(skipped[0].reason).not.toMatch(
+        /does not have|not found|Product [0-9a-f]/i,
+      );
     });
 
     it('a sub-recipe without its own recipe names the sub-recipe, not its UUID', async () => {
-      productFindOne.mockImplementation(async ({ where }: { where: { id: string } }) =>
-        where.id === 'prod-a'
-          ? { id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 }
-          : { id: '21beade5-dfc6-44df-b680-1065b42fc68b', name: 'Salsa Madre', sellPrice: 0 },
+      productFindOne.mockImplementation(
+        async ({ where }: { where: { id: string } }) =>
+          where.id === 'prod-a'
+            ? { id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 }
+            : {
+                id: '21beade5-dfc6-44df-b680-1065b42fc68b',
+                name: 'Salsa Madre',
+                sellPrice: 0,
+              },
       );
       recipeService.findActiveVersion.mockImplementation(
         async (_tenant: string, productId: string) =>
@@ -326,14 +350,23 @@ describe('TheoreticalCostService (R8)', () => {
 
       const { skipped } = await marginsFor('tenant-1', 'prod-a');
 
-      expect(skipped[0]).toMatchObject({ reasonCode: 'SUB_RECIPE_NO_ACTIVE_RECIPE' });
+      expect(skipped[0]).toMatchObject({
+        reasonCode: 'SUB_RECIPE_NO_ACTIVE_RECIPE',
+      });
       expect(skipped[0].reason).toContain('Salsa Madre');
       expect(skipped[0].reason).not.toMatch(UUID_PATTERN);
     });
 
     it('a component whose insumo no longer exists names the ingredient, not its UUID', async () => {
-      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 });
-      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-a', yield_quantity: 1 });
+      productFindOne.mockResolvedValue({
+        id: 'prod-a',
+        name: 'Pan de Lote',
+        sellPrice: 10,
+      });
+      recipeService.findActiveVersion.mockResolvedValue({
+        id: 'rv-a',
+        yield_quantity: 1,
+      });
       recipeService.getSnapshot.mockResolvedValue({
         components: [
           {
@@ -356,10 +389,21 @@ describe('TheoreticalCostService (R8)', () => {
     });
 
     it('an unexpected failure keeps the raw message in the log, not in the copy', async () => {
-      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 });
-      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-a', yield_quantity: 1 });
-      recipeService.getSnapshot.mockRejectedValue(new Error('connection reset by peer'));
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      productFindOne.mockResolvedValue({
+        id: 'prod-a',
+        name: 'Pan de Lote',
+        sellPrice: 10,
+      });
+      recipeService.findActiveVersion.mockResolvedValue({
+        id: 'rv-a',
+        yield_quantity: 1,
+      });
+      recipeService.getSnapshot.mockRejectedValue(
+        new Error('connection reset by peer'),
+      );
 
       const { skipped } = await marginsFor('tenant-1', 'prod-a');
 
@@ -373,8 +417,15 @@ describe('TheoreticalCostService (R8)', () => {
     });
 
     it('a circular sub-recipe reference gets its own code', async () => {
-      productFindOne.mockResolvedValue({ id: 'prod-a', name: 'Pan de Lote', sellPrice: 10 });
-      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-a', yield_quantity: 1 });
+      productFindOne.mockResolvedValue({
+        id: 'prod-a',
+        name: 'Pan de Lote',
+        sellPrice: 10,
+      });
+      recipeService.findActiveVersion.mockResolvedValue({
+        id: 'rv-a',
+        yield_quantity: 1,
+      });
       recipeService.getSnapshot.mockResolvedValue({
         components: [
           {

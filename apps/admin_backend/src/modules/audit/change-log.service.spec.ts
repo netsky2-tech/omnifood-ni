@@ -9,13 +9,7 @@ import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transa
 /** Minimal chainable QueryBuilder mock recording the built predicate shape. */
 const makeQueryBuilder = (rows: ChangeLog[]) => {
   const qb: Record<string, unknown> = {};
-  for (const method of [
-    'where',
-    'andWhere',
-    'orderBy',
-    'addOrderBy',
-    'take',
-  ]) {
+  for (const method of ['where', 'andWhere', 'orderBy', 'addOrderBy', 'take']) {
     qb[method] = jest.fn(() => qb);
   }
   const getMany = jest.fn().mockResolvedValue(rows);
@@ -333,12 +327,18 @@ describe('ChangeLogService', () => {
       expect(qb.where).toHaveBeenCalledWith('c.tenant_id = :tenantId', {
         tenantId: 'tenant-1',
       });
-      expect(qb.andWhere).toHaveBeenCalledWith('c.created_at >= :startInclusiveUtc', {
-        startInclusiveUtc: new Date('2026-08-01T06:00:00.000Z'),
-      });
-      expect(qb.andWhere).toHaveBeenCalledWith('c.created_at < :endExclusiveUtc', {
-        endExclusiveUtc: new Date('2026-09-01T06:00:00.000Z'),
-      });
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'c.created_at >= :startInclusiveUtc',
+        {
+          startInclusiveUtc: new Date('2026-08-01T06:00:00.000Z'),
+        },
+      );
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'c.created_at < :endExclusiveUtc',
+        {
+          endExclusiveUtc: new Date('2026-09-01T06:00:00.000Z'),
+        },
+      );
       expect(qb.andWhere).toHaveBeenCalledWith('c.severity = :severity', {
         severity: 'CRITICAL',
       });

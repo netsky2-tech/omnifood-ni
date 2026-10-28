@@ -43,9 +43,7 @@ export interface UomCatalogEntryResponse {
 export class UomCatalogController {
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER)
-  async list(
-    @GetTenantId() _tenantId?: string,
-  ): Promise<UomCatalogEntryResponse[]> {
+  list(@GetTenantId() _tenantId?: string): UomCatalogEntryResponse[] {
     return UOM_CATALOG.map((entry) => ({
       code: entry.code,
       name: entry.name,

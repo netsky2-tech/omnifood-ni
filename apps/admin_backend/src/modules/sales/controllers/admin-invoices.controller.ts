@@ -91,9 +91,7 @@ export class AdminInvoicesController {
   @RequirePermissions(AppPermission.SALES_ISSUE_CREDIT_NOTE)
   async listCreditNotes(@Req() request: AdminRequest) {
     const tenantId = this.requireTenantId(request.user);
-    return serializeAdminInvoices(
-      await this.invoicesService.findAll(tenantId),
-    );
+    return serializeAdminInvoices(await this.invoicesService.findAll(tenantId));
   }
 
   /**
@@ -108,8 +106,6 @@ export class AdminInvoicesController {
   @RequirePermissions(AppPermission.SALES_ISSUE_CREDIT_NOTE)
   async listInvoices(@Req() request: AdminRequest) {
     const tenantId = this.requireTenantId(request.user);
-    return serializeAdminInvoices(
-      await this.invoicesService.findAll(tenantId),
-    );
+    return serializeAdminInvoices(await this.invoicesService.findAll(tenantId));
   }
 }

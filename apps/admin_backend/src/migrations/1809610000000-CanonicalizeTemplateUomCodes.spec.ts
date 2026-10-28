@@ -31,7 +31,9 @@ describe('CanonicalizeTemplateUomCodes1809610000000 (Unit)', () => {
     await migration.up(queryRunner);
 
     const sql = queries.join('\n');
-    expect(sql).toMatch(/UPDATE\s+template_products[\s\S]*SET\s+uom\s*=\s*'unidad'[\s\S]*WHERE[\s\S]*uom\s*=\s*'UN'/i);
+    expect(sql).toMatch(
+      /UPDATE\s+template_products[\s\S]*SET\s+uom\s*=\s*'unidad'[\s\S]*WHERE[\s\S]*uom\s*=\s*'UN'/i,
+    );
   });
 
   it('canonicalizes template_insumos purchase_uom and consumption_uom on up', async () => {
@@ -98,8 +100,14 @@ describe('CanonicalizeTemplateUomCodes1809610000000 (Unit)', () => {
     await migration.down(queryRunner);
 
     const sql = queries.join('\n');
-    expect(sql).toMatch(/UPDATE\s+template_products[\s\S]*SET\s+uom\s*=\s*'UN'[\s\S]*WHERE[\s\S]*uom\s*=\s*'unidad'/i);
-    expect(sql).toMatch(/purchase_uom\s*=\s*'KG'[\s\S]*WHERE[\s\S]*purchase_uom\s*=\s*'kg'/i);
-    expect(sql).toMatch(/consumption_uom\s*=\s*'ML'[\s\S]*WHERE[\s\S]*consumption_uom\s*=\s*'ml'/i);
+    expect(sql).toMatch(
+      /UPDATE\s+template_products[\s\S]*SET\s+uom\s*=\s*'UN'[\s\S]*WHERE[\s\S]*uom\s*=\s*'unidad'/i,
+    );
+    expect(sql).toMatch(
+      /purchase_uom\s*=\s*'KG'[\s\S]*WHERE[\s\S]*purchase_uom\s*=\s*'kg'/i,
+    );
+    expect(sql).toMatch(
+      /consumption_uom\s*=\s*'ML'[\s\S]*WHERE[\s\S]*consumption_uom\s*=\s*'ml'/i,
+    );
   });
 });

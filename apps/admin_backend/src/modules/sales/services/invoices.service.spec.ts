@@ -127,8 +127,8 @@ describe('InvoicesService', () => {
     };
     txManager = {
       query: jest.fn<Promise<unknown>, unknown[]>().mockResolvedValue([]),
-      save: jest.fn<Promise<unknown>, unknown[]>(
-        async (...args: unknown[]) => (args.length >= 2 ? args[1] : args[0]),
+      save: jest.fn<Promise<unknown>, unknown[]>(async (...args: unknown[]) =>
+        args.length >= 2 ? args[1] : args[0],
       ),
       // By default, return the injected (standalone) repositories so the
       // existing syncBatch tests that assert on `invoiceRepo.upsert` keep
@@ -291,12 +291,8 @@ describe('InvoicesService', () => {
             nextSourceSequence: () => string | null,
           ) => Promise<void>;
         }
-      ).appendV1Movement(
-        'tenant-1',
-        record,
-        builtBinding,
-        manager,
-        () => String((record as { sourceSequence?: number }).sourceSequence ?? 0),
+      ).appendV1Movement('tenant-1', record, builtBinding, manager, () =>
+        String((record as { sourceSequence?: number }).sourceSequence ?? 0),
       );
 
     beforeEach(() => {
@@ -360,7 +356,8 @@ describe('InvoicesService', () => {
       );
 
       const saved = txManager.save.mock.calls.map(
-        ([entity]: [unknown, ...unknown[]]) => entity as Record<string, unknown>,
+        ([entity]: [unknown, ...unknown[]]) =>
+          entity as Record<string, unknown>,
       );
       const movement = saved.find(
         (entity) => entity?.type === MovementType.SALE,
@@ -510,15 +507,15 @@ describe('InvoicesService', () => {
       >;
       const blank = calls.find(([payload]) => payload.id === 'inv-snap-blank');
       expect(blank).toBeDefined();
-      expect(blank![0].customerName).toBeNull();
-      expect(blank![0].customerTaxId).toBeNull();
+      expect(blank[0].customerName).toBeNull();
+      expect(blank[0].customerTaxId).toBeNull();
 
       const padded = calls.find(
         ([payload]) => payload.id === 'inv-snap-padded',
       );
       expect(padded).toBeDefined();
-      expect(padded![0].customerName).toBe('Juan Perez');
-      expect(padded![0].customerTaxId).toBe('J0310000001234');
+      expect(padded[0].customerName).toBe('Juan Perez');
+      expect(padded[0].customerTaxId).toBe('J0310000001234');
     });
 
     it('persists the fx-rate fiscal snapshot as sent, not the column defaults (D-6)', async () => {

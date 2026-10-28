@@ -22,7 +22,14 @@ import { Insumo } from './entities/insumo.entity';
  */
 export type InsumoResponse = Omit<
   Insumo,
-  'conversionFactor' | 'stock' | 'existenciaActual' | 'averageCost' | 'parLevel' | 'minStock' | 'maxStock' | 'ivaRatePct'
+  | 'conversionFactor'
+  | 'stock'
+  | 'existenciaActual'
+  | 'averageCost'
+  | 'parLevel'
+  | 'minStock'
+  | 'maxStock'
+  | 'ivaRatePct'
 > & {
   conversionFactor: number;
   stock: number;

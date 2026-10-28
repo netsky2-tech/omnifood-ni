@@ -109,7 +109,7 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
       async (spread) => {
         const dto = await transformBody({
           ...validBody(),
-          commercialFxSpread: spread as number,
+          commercialFxSpread: spread,
         });
         expect(dto.commercialFxSpread).toBe(spread);
       },
@@ -234,13 +234,19 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
       ['DGI-style reference', 'DGI-SFC-2024-00123'],
       ['resolution-style reference with slash', 'RES-SFC-145/2025'],
     ])('accepts a %s', async (_label, code) => {
-      const dto = await transformBody({ ...validBody(), dgiAuthorizationCode: code });
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationCode: code,
+      });
       expect(dto.dgiAuthorizationCode).toBe(code);
     });
 
     it('accepts a 50-character code at the length ceiling', async () => {
       const code = 'A'.repeat(50);
-      const dto = await transformBody({ ...validBody(), dgiAuthorizationCode: code });
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationCode: code,
+      });
       expect(dto.dgiAuthorizationCode).toBe(code);
     });
 
@@ -259,7 +265,10 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
     });
 
     it('accepts an empty string so the clear path is reachable from HTTP', async () => {
-      const dto = await transformBody({ ...validBody(), dgiAuthorizationCode: '' });
+      const dto = await transformBody({
+        ...validBody(),
+        dgiAuthorizationCode: '',
+      });
       expect(dto.dgiAuthorizationCode).toBe('');
     });
 
@@ -339,37 +348,43 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
       expect(dto.maxDiscountPercent).toBeNull();
     });
 
-    it.each([-0.01, -500])('rejects a negative maxDiscountAmount %s', async (amount) => {
-      const error: BadRequestException = await transformBody({
-        ...validBody(),
-        maxDiscountAmount: amount,
-      }).catch((e) => e);
+    it.each([-0.01, -500])(
+      'rejects a negative maxDiscountAmount %s',
+      async (amount) => {
+        const error: BadRequestException = await transformBody({
+          ...validBody(),
+          maxDiscountAmount: amount,
+        }).catch((e) => e);
 
-      expect(error).toBeInstanceOf(BadRequestException);
-      const response = error.getResponse() as { message: string | string[] };
-      const messages = Array.isArray(response.message)
-        ? response.message
-        : [response.message];
-      expect(messages).toContain(
-        'maxDiscountAmount must be greater than or equal to 0',
-      );
-    });
+        expect(error).toBeInstanceOf(BadRequestException);
+        const response = error.getResponse() as { message: string | string[] };
+        const messages = Array.isArray(response.message)
+          ? response.message
+          : [response.message];
+        expect(messages).toContain(
+          'maxDiscountAmount must be greater than or equal to 0',
+        );
+      },
+    );
 
-    it.each([-1, 0, 100.01, 1000])('rejects a maxDiscountPercent of %s', async (percent) => {
-      const error: BadRequestException = await transformBody({
-        ...validBody(),
-        maxDiscountPercent: percent,
-      }).catch((e) => e);
+    it.each([-1, 0, 100.01, 1000])(
+      'rejects a maxDiscountPercent of %s',
+      async (percent) => {
+        const error: BadRequestException = await transformBody({
+          ...validBody(),
+          maxDiscountPercent: percent,
+        }).catch((e) => e);
 
-      expect(error).toBeInstanceOf(BadRequestException);
-      const response = error.getResponse() as { message: string | string[] };
-      const messages = Array.isArray(response.message)
-        ? response.message
-        : [response.message];
-      expect(messages).toContain(
-        'maxDiscountPercent must be greater than 0 and less than or equal to 100',
-      );
-    });
+        expect(error).toBeInstanceOf(BadRequestException);
+        const response = error.getResponse() as { message: string | string[] };
+        const messages = Array.isArray(response.message)
+          ? response.message
+          : [response.message];
+        expect(messages).toContain(
+          'maxDiscountPercent must be greater than 0 and less than or equal to 100',
+        );
+      },
+    );
 
     it.each([
       ['maxDiscountAmount', 'not-a-number'],
@@ -393,18 +408,15 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
     });
 
     it.each([
-      [
-        'dgiAuthorizationIssuedAt',
-        { dgiAuthorizationIssuedAt: '15/01/2025' },
-      ],
+      ['dgiAuthorizationIssuedAt', { dgiAuthorizationIssuedAt: '15/01/2025' }],
       [
         'dgiAuthorizationExpiresAt',
         { dgiAuthorizationExpiresAt: 'not-a-date' },
       ],
     ])('rejects a non-ISO-8601 %s', async (_field, extra) => {
-      await expect(
-        transformBody({ ...validBody(), ...extra }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(transformBody({ ...validBody(), ...extra })).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('rejects an expiresAt earlier than issuedAt', async () => {

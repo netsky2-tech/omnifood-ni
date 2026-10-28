@@ -32,13 +32,26 @@ export class ForensicAlertEmailDispatcher implements ForensicAlertDispatcher {
 
   async dispatchToAdmins(input: ForensicAlertInput): Promise<void> {
     const subject = `[OmniFood NI] Alerta forense ${input.severity}: ${input.alertType}`;
+    const meta = input.metadata ?? {};
+    const valuation =
+      typeof meta.valuationNio === 'number' ||
+      typeof meta.valuationNio === 'string'
+        ? String(meta.valuationNio)
+        : 'n/d';
+    const docRef =
+      typeof meta.originDocumentRef === 'string'
+        ? meta.originDocumentRef
+        : 'n/d';
+    const insumo =
+      typeof meta.insumoName === 'string' ? meta.insumoName : 'n/d';
+
     const body = [
       input.message,
       `Tipo: ${input.alertType}`,
       `Severidad: ${input.severity}`,
-      `Valor: C$${String(input.metadata?.valuationNio ?? 'n/d')}`,
-      `Documento: ${String(input.metadata?.originDocumentRef ?? 'n/d')}`,
-      `Insumo: ${String(input.metadata?.insumoName ?? 'n/d')}`,
+      `Valor: C$${valuation}`,
+      `Documento: ${docRef}`,
+      `Insumo: ${insumo}`,
       `Tenant: ${input.tenantId}`,
     ].join('\n');
 

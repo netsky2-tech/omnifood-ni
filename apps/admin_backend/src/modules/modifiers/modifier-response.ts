@@ -106,13 +106,11 @@ export function serializeEffectiveGroups(
 ): EffectiveModifierGroupResponse[] {
   return groups.map((group) => ({
     ...group,
-    options: group.options.map(
-      (option): EffectiveModifierOptionResponse => ({
-        ...option,
-        price_delta: toFiniteNumber(option.price_delta),
-        effect_quantity: toNullableNumber(option.effect_quantity),
-        effect_factor: toNullableNumber(option.effect_factor),
-      }),
-    ),
+    options: group.options.map((option): EffectiveModifierOptionResponse => ({
+      ...option,
+      price_delta: toFiniteNumber(option.price_delta),
+      effect_quantity: toNullableNumber(option.effect_quantity),
+      effect_factor: toNullableNumber(option.effect_factor),
+    })),
   }));
 }

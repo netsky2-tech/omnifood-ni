@@ -259,7 +259,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
           isActive: true,
           createdBy: userId,
           createdAt: new Date(),
-        } as SystemParametersConfig,
+        },
       ]);
 
       const result = await service.getFiscalSetup(tenantId);
@@ -307,7 +307,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
           regime: FiscalRegime.CUOTA_FIJA,
           businessName: 'Café Central',
           ruc: 'J0310000055555',
-          commercialFxSpread: spread as number,
+          commercialFxSpread: spread,
           pricesIncludeTax: true,
           operationMode: TenantOperationMode.FOODPARK_QSR,
           checkoutFxMode: CheckoutFxMode.COMMERCIAL,
@@ -315,9 +315,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
 
         await expect(
           service.configureFiscalSetup(tenantId, dto),
-        ).rejects.toThrow(
-          'commercialFxSpread must be between 10 and 100',
-        );
+        ).rejects.toThrow('commercialFxSpread must be between 10 and 100');
       },
     );
 
@@ -713,9 +711,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
             );
           const all = [...rows, ...savedRows];
           const candidates = criteria?.where?.paramKey
-            ? all.filter(
-                (row) => row.paramKey === criteria.where!.paramKey,
-              )
+            ? all.filter((row) => row.paramKey === criteria.where.paramKey)
             : all;
           const governing = new Map<string, SystemParametersConfig>();
           for (const row of candidates) {
@@ -809,7 +805,9 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     it('clears a blank code with a superseding null tombstone — never a stored empty string (D-16 spirit)', async () => {
-      configureActiveRows([dgiParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-001', 1)]);
+      configureActiveRows([
+        dgiParamRow('DGI_AUTHORIZATION_CODE', 'DGI-OLD-001', 1),
+      ]);
 
       const dto: FiscalSetupDto = {
         regime: FiscalRegime.CUOTA_FIJA,
@@ -1018,9 +1016,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
             (row as { paramKey?: string }).paramKey === paramKey,
         );
 
-    const baseDto = (
-      extra: Partial<FiscalSetupDto> = {},
-    ): FiscalSetupDto => ({
+    const baseDto = (extra: Partial<FiscalSetupDto> = {}): FiscalSetupDto => ({
       regime: FiscalRegime.CUOTA_FIJA,
       businessName: 'Cafetín Las Palmeras',
       ruc: 'J0310000055555',
@@ -1073,9 +1069,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     it('clears a persisted cap with a superseding null tombstone on explicit null (append-only)', async () => {
-      configureActiveRows([
-        capParamRow('MAX_DISCOUNT_AMOUNT', 500, 1),
-      ]);
+      configureActiveRows([capParamRow('MAX_DISCOUNT_AMOUNT', 500, 1)]);
 
       const result = await service.configureFiscalSetup(
         tenantId,
@@ -1100,9 +1094,7 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
     });
 
     it('clears a persisted percent cap with a superseding null tombstone on explicit null (numeric twin)', async () => {
-      configureActiveRows([
-        capParamRow('MAX_DISCOUNT_PERCENT', 10, 1),
-      ]);
+      configureActiveRows([capParamRow('MAX_DISCOUNT_PERCENT', 10, 1)]);
 
       const result = await service.configureFiscalSetup(
         tenantId,

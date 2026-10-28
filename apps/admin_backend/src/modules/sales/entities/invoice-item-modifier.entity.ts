@@ -52,7 +52,12 @@ export class InvoiceItemModifier {
   groupId: string | null;
 
   /** NONE / ADD / REMOVE / SWAP / SCALE. NULL for a price-only line. */
-  @Column({ name: 'inventory_effect', type: 'varchar', length: 16, nullable: true })
+  @Column({
+    name: 'inventory_effect',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
   inventoryEffect: string | null;
 
   /** The insumo the effect acts ON: added (ADD) or substituted in (SWAP). */
@@ -92,7 +97,12 @@ export class InvoiceItemModifier {
   // ME-04 (and a price-only line) keeps its exact shape.
 
   /** APPLIED (the stock moved) or PENDING (the sale went through, the effect did not). */
-  @Column({ name: 'effect_status', type: 'varchar', length: 16, nullable: true })
+  @Column({
+    name: 'effect_status',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
   effectStatus: string | null;
 
   /** Why the effect did not apply (INCOMPLETE, UNIT_MISMATCH, …). */

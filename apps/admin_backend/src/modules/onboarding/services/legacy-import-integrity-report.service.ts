@@ -198,10 +198,7 @@ export class LegacyImportIntegrityReportService {
                   ? Number(row.parsed_costo_insumo)
                   : null;
 
-              if (
-                productStock > 0 ||
-                (directCost !== null && directCost > 0)
-              ) {
+              if (productStock > 0 || (directCost !== null && directCost > 0)) {
                 observedWrites.push({
                   productId: matchedProduct.id,
                   productName: matchedProduct.name,

@@ -376,9 +376,7 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     // BLOCKERS, not warnings (owner decision): they must gate saleReady.
     expect(snapshot.saleReady).toBe(false);
     expect(snapshot.blockers).toContain('FISCAL_FX_RATE_NOT_CONFIGURED');
-    expect(snapshot.blockers).toContain(
-      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
-    );
+    expect(snapshot.blockers).toContain('FISCAL_OPERATION_MODE_NOT_CONFIGURED');
     // The pre-existing fiscal minimum stays intact — these are new, additive
     // blockers, not a warning-only downgrade of the existing signal.
     expect(snapshot.blockers).not.toContain('FISCAL_CONFIGURATION_INCOMPLETE');
@@ -505,9 +503,7 @@ describe('OnboardingReadinessEvaluator (Unit)', () => {
     const snapshot = await evaluator.evaluate('tenant-missing-mode');
 
     expect(snapshot.saleReady).toBe(false);
-    expect(snapshot.blockers).toContain(
-      'FISCAL_OPERATION_MODE_NOT_CONFIGURED',
-    );
+    expect(snapshot.blockers).toContain('FISCAL_OPERATION_MODE_NOT_CONFIGURED');
     expect(snapshot.blockers).not.toContain('FISCAL_FX_RATE_NOT_CONFIGURED');
     expect(snapshot.warnings).not.toContain(
       'FISCAL_OPERATION_MODE_NOT_CONFIGURED',

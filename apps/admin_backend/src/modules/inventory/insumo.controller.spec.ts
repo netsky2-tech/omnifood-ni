@@ -8,7 +8,10 @@ describe('InsumoController', () => {
     find: jest.fn(),
     findOne: jest.fn(),
     create: jest.fn((val: unknown) => val),
-    save: jest.fn(async (val: unknown) => ({ id: 'new-id', ...(val as object) })),
+    save: jest.fn(async (val: unknown) => ({
+      id: 'new-id',
+      ...(val as object),
+    })),
   };
   const manager = {
     query: jest.fn(),

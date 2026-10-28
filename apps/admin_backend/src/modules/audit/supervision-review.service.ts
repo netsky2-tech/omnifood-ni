@@ -77,52 +77,54 @@ export class SupervisionReviewService {
     // reads "3 cierres, 1 descuento") while the ROWS are page-capped. One
     // unbounded read would drag the whole period into memory; a capped read
     // alone could not report an honest total.
-    const { rows, counts } = await runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      async (bound) => {
-        const applyScope = (qb: SelectQueryBuilder<AuditLog>) => {
-          qb.where('audit.tenant_id = :tenantId', { tenantId });
-          qb.andWhere('audit.action IN (:...actions)', {
-            actions: SUPERVISION_REVIEW_ACTIONS,
+    const { rows, counts } = await runInTenantTransaction<{
+      rows: AuditLog[];
+      counts: Array<{ action: string; count: string | number }>;
+    }>(this.dataSource, tenantId, async (bound) => {
+      const applyScope = (qb: SelectQueryBuilder<AuditLog>) => {
+        qb.where('audit.tenant_id = :tenantId', { tenantId });
+        qb.andWhere('audit.action IN (:...actions)', {
+          actions: SUPERVISION_REVIEW_ACTIONS,
+        });
+        if (startInclusiveUtc) {
+          qb.andWhere('audit.timestamp >= :startInclusiveUtc', {
+            startInclusiveUtc,
           });
-          if (startInclusiveUtc) {
-            qb.andWhere('audit.timestamp >= :startInclusiveUtc', {
-              startInclusiveUtc,
-            });
-          }
-          if (endExclusiveUtc) {
-            qb.andWhere('audit.timestamp < :endExclusiveUtc', {
-              endExclusiveUtc,
-            });
-          }
-          return qb;
-        };
+        }
+        if (endExclusiveUtc) {
+          qb.andWhere('audit.timestamp < :endExclusiveUtc', {
+            endExclusiveUtc,
+          });
+        }
+        return qb;
+      };
 
-        const countQb = applyScope(
-          bound.getRepository(AuditLog).createQueryBuilder('audit'),
-        );
-        countQb
-          .select('audit.action', 'action')
-          .addSelect('COUNT(*)', 'count')
-          .groupBy('audit.action');
-        const counts = await countQb.getRawMany();
+      const countQb = applyScope(
+        bound.getRepository(AuditLog).createQueryBuilder('audit'),
+      );
+      countQb
+        .select('audit.action', 'action')
+        .addSelect('COUNT(*)', 'count')
+        .groupBy('audit.action');
+      const counts = await countQb.getRawMany<{
+        action: string;
+        count: string | number;
+      }>();
 
-        const pageQb = applyScope(
-          bound.getRepository(AuditLog).createQueryBuilder('audit'),
-        );
-        // The actor: who was at the till.
-        pageQb
-          .leftJoinAndSelect('audit.user', 'actor')
-          .orderBy('audit.timestamp', 'DESC')
-          .addOrderBy('audit.id', 'DESC')
-          // One probe row beyond the cap so `truncated` is provable.
-          .take(limit + 1);
-        const rows = await pageQb.getMany();
+      const pageQb = applyScope(
+        bound.getRepository(AuditLog).createQueryBuilder('audit'),
+      );
+      // The actor: who was at the till.
+      pageQb
+        .leftJoinAndSelect('audit.user', 'actor')
+        .orderBy('audit.timestamp', 'DESC')
+        .addOrderBy('audit.id', 'DESC')
+        // One probe row beyond the cap so `truncated` is provable.
+        .take(limit + 1);
+      const rows = await pageQb.getMany();
 
-        return { rows, counts };
-      },
-    );
+      return { rows, counts };
+    });
 
     const total = counts.reduce((sum, row) => sum + Number(row.count ?? 0), 0);
     const truncated = total > limit;
@@ -166,7 +168,7 @@ export class SupervisionReviewService {
         occurredAt: row.timestamp.toISOString(),
         actorEmail: row.user?.email ?? null,
         authorizerEmail: authorizerId
-          ? authorizerEmails.get(authorizerId) ?? null
+          ? (authorizerEmails.get(authorizerId) ?? null)
           : null,
         hadSupervisor: !isSelfAuthorizedAction(row.action),
         method: row.metodo_autorizacion ?? null,

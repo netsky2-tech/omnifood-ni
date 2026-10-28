@@ -37,7 +37,9 @@ describe('ReleasesController', () => {
   });
 
   it('returns release manifest when an update is available', async () => {
-    (mockReleasesService.getLatestRelease as jest.Mock).mockResolvedValue(sampleManifest);
+    (mockReleasesService.getLatestRelease as jest.Mock).mockResolvedValue(
+      sampleManifest,
+    );
 
     const result = await controller.getLatestRelease(
       { channel: 'pilot', abi: 'arm64-v8a', currentVersionCode: 2001 },

@@ -118,7 +118,9 @@ describe('AuthAuditService', () => {
     expect(row.tenant_id).toBe('tenant-1');
     expect(JSON.stringify(row.metadata)).toContain('wrong_password');
     expect(JSON.stringify(row.metadata)).toContain('owner@example.com');
-    expect(JSON.stringify(row.metadata)).not.toContain('super-secret-passphrase');
+    expect(JSON.stringify(row.metadata)).not.toContain(
+      'super-secret-passphrase',
+    );
   });
 
   it('falls back to the logger (no DB row) when no tenant anchor exists', async () => {
@@ -161,7 +163,7 @@ describe('AuthAuditService', () => {
     // runInTenantTransaction was invoked (mocked) with the tenant id.
     const { runInTenantTransaction } = jest.requireMock(
       '../../../core/database/tenant-transaction',
-    ) as { runInTenantTransaction: jest.Mock };
+    );
     expect(runInTenantTransaction).toHaveBeenCalled();
     const calls = runInTenantTransaction.mock.calls as unknown[][];
     expect(calls.length).toBeGreaterThan(0);
@@ -177,7 +179,7 @@ describe('AuthAuditService', () => {
     expect(saved).toHaveLength(1);
     const { runInTenantTransaction } = jest.requireMock(
       '../../../core/database/tenant-transaction',
-    ) as { runInTenantTransaction: jest.Mock };
+    );
     expect(runInTenantTransaction).not.toHaveBeenCalled();
   });
 

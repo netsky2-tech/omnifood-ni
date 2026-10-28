@@ -1,10 +1,7 @@
 import type { EntityManager } from 'typeorm';
 import { Batch } from './entities/batch.entity';
 import { BatchOutflowTrace } from './entities/batch-outflow-trace.entity';
-import {
-  drawBatchOutflow,
-  drawBatchOutflowPartial,
-} from './batch-allocation';
+import { drawBatchOutflow, drawBatchOutflowPartial } from './batch-allocation';
 
 /**
  * FD-01 (openspec/changes/fiscal-no-se-congela-por-inventario): the PARTIAL
@@ -109,9 +106,7 @@ describe('batch-allocation partial draw (FD-01)', () => {
         quantity: 100,
         operationDay: '2026-10-15',
       }),
-    ).resolves.toEqual(
-      expect.objectContaining({ covered: 10, uncovered: 90 }),
-    );
+    ).resolves.toEqual(expect.objectContaining({ covered: 10, uncovered: 90 }));
   });
 
   it('reports no lots for an insumo without lots (the aggregate is the truth)', async () => {

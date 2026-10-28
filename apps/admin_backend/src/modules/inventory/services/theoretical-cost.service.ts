@@ -70,7 +70,7 @@ type DishMarginSkipError = SkipNotFound | SkipBadRequest;
 
 const isSkipError = (error: unknown): error is DishMarginSkipError =>
   (error instanceof SkipNotFound || error instanceof SkipBadRequest) &&
-  typeof (error as DishMarginSkipError).code === 'string';
+  typeof error.code === 'string';
 
 export interface DishMargin {
   productId: string;
@@ -196,8 +196,7 @@ export class TheoreticalCostService {
       try {
         dishes.push(await this.getProductTheoreticalCost(tenantId, product.id));
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         if (isSkipError(error)) {
           skipped.push({
             productId: product.id,
@@ -216,7 +215,8 @@ export class TheoreticalCostService {
           productId: product.id,
           productName: product.name,
           reasonCode: 'UNEXPECTED',
-          reason: 'No se pudo calcular el costo de este plato. Revise su receta.',
+          reason:
+            'No se pudo calcular el costo de este plato. Revise su receta.',
         });
       }
     }
@@ -251,7 +251,9 @@ export class TheoreticalCostService {
       totalTheoreticalCostNio += actual.unitsSold * dish.unitTheoreticalCostNio;
     }
 
-    const extrasImpactNio = round4(totalActualCostNio - totalTheoreticalCostNio);
+    const extrasImpactNio = round4(
+      totalActualCostNio - totalTheoreticalCostNio,
+    );
 
     return {
       dishes,
@@ -289,90 +291,97 @@ export class TheoreticalCostService {
     tenantId: string,
     period?: { from?: string; to?: string },
   ): Promise<Map<string, { costNio: number; unitsSold: number }>> {
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const qb = manager
-        .getRepository(InventoryMovement)
-        .createQueryBuilder('mov')
-        .where('mov.tenant_id = :tenantId', { tenantId })
-        .andWhere('mov.type = :type', { type: MovementType.SALE });
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const qb = manager
+          .getRepository(InventoryMovement)
+          .createQueryBuilder('mov')
+          .where('mov.tenant_id = :tenantId', { tenantId })
+          .andWhere('mov.type = :type', { type: MovementType.SALE });
 
-      if (period?.from) {
-        qb.andWhere('mov.timestamp >= :from', { from: new Date(period.from) });
-      }
-      if (period?.to) {
-        const to = period.to.trim();
-        qb.andWhere('mov.timestamp <= :to', {
-          to:
-            to.length === 10
-              ? new Date(`${to}T23:59:59.999Z`)
-              : new Date(to),
-        });
-      }
+        if (period?.from) {
+          qb.andWhere('mov.timestamp >= :from', {
+            from: new Date(period.from),
+          });
+        }
+        if (period?.to) {
+          const to = period.to.trim();
+          qb.andWhere('mov.timestamp <= :to', {
+            to:
+              to.length === 10 ? new Date(`${to}T23:59:59.999Z`) : new Date(to),
+          });
+        }
 
-      // The cost of what left the stock, per product. The movement carries
-      // the line it came from, and the line carries the product.
-      const costRows: Array<{
-        product_id: string;
-        total_cost: string | number;
-      }> = await qb
-        .innerJoin(
-          InvoiceItem,
-          'item',
-          'item.id = mov.originInvoiceItemId AND item.tenant_id = :tenantId',
-          { tenantId },
-        )
-        .select('item.product_id', 'product_id')
-        .addSelect('SUM(mov.totalCostNio)', 'total_cost')
-        .groupBy('item.product_id')
-        .getRawMany();
+        // The cost of what left the stock, per product. The movement carries
+        // the line it came from, and the line carries the product.
+        const costRows: Array<{
+          product_id: string;
+          total_cost: string | number;
+        }> = await qb
+          .innerJoin(
+            InvoiceItem,
+            'item',
+            'item.id = mov.originInvoiceItemId AND item.tenant_id = :tenantId',
+            { tenantId },
+          )
+          .select('item.product_id', 'product_id')
+          .addSelect('SUM(mov.totalCostNio)', 'total_cost')
+          .groupBy('item.product_id')
+          .getRawMany();
 
-      // The units sold, counted ONCE per line. The join above repeats a
-      // line once per movement (one per insumo), so the quantity can NOT
-      // come from it: it is summed over the DISTINCT lines.
-      const lineRows: Array<{
-        product_id: string;
-        units: string | number;
-      }> = await manager
-        .getRepository(InvoiceItem)
-        .createQueryBuilder('item')
-        .where('item.tenant_id = :tenantId', { tenantId })
-        .andWhere(
-          'item.id IN (SELECT origin_invoice_item_id FROM inventory_kardex WHERE tenant_id = :tenantId AND type = :type' +
-            (period?.from ? ' AND timestamp >= :from' : '') +
-            (period?.to ? ' AND timestamp <= :to' : '') +
-            ')',
-          {
-            tenantId,
-            type: MovementType.SALE,
-            ...(period?.from ? { from: new Date(period.from) } : {}),
-            ...(period?.to
-              ? {
-                  to:
-                    period.to.trim().length === 10
-                      ? new Date(`${period.to.trim()}T23:59:59.999Z`)
-                      : new Date(period.to),
-                }
-              : {}),
-          },
-        )
-        .select('item.product_id', 'product_id')
-        .addSelect('SUM(item.quantity)', 'units')
-        .groupBy('item.product_id')
-        .getRawMany();
+        // The units sold, counted ONCE per line. The join above repeats a
+        // line once per movement (one per insumo), so the quantity can NOT
+        // come from it: it is summed over the DISTINCT lines.
+        const lineRows: Array<{
+          product_id: string;
+          units: string | number;
+        }> = await manager
+          .getRepository(InvoiceItem)
+          .createQueryBuilder('item')
+          .where('item.tenant_id = :tenantId', { tenantId })
+          .andWhere(
+            'item.id IN (SELECT origin_invoice_item_id FROM inventory_kardex WHERE tenant_id = :tenantId AND type = :type' +
+              (period?.from ? ' AND timestamp >= :from' : '') +
+              (period?.to ? ' AND timestamp <= :to' : '') +
+              ')',
+            {
+              tenantId,
+              type: MovementType.SALE,
+              ...(period?.from ? { from: new Date(period.from) } : {}),
+              ...(period?.to
+                ? {
+                    to:
+                      period.to.trim().length === 10
+                        ? new Date(`${period.to.trim()}T23:59:59.999Z`)
+                        : new Date(period.to),
+                  }
+                : {}),
+            },
+          )
+          .select('item.product_id', 'product_id')
+          .addSelect('SUM(item.quantity)', 'units')
+          .groupBy('item.product_id')
+          .getRawMany();
 
-      const unitsByProduct = new Map<string, number>(
-        lineRows.map((row) => [row.product_id, Number(row.units ?? 0)]),
-      );
+        const unitsByProduct = new Map<string, number>(
+          lineRows.map((row) => [row.product_id, Number(row.units ?? 0)]),
+        );
 
-      const result = new Map<string, { costNio: number; unitsSold: number }>();
-      for (const row of costRows) {
-        result.set(row.product_id, {
-          costNio: Number(row.total_cost ?? 0),
-          unitsSold: unitsByProduct.get(row.product_id) ?? 0,
-        });
-      }
-      return result;
-    });
+        const result = new Map<
+          string,
+          { costNio: number; unitsSold: number }
+        >();
+        for (const row of costRows) {
+          result.set(row.product_id, {
+            costNio: Number(row.total_cost ?? 0),
+            unitsSold: unitsByProduct.get(row.product_id) ?? 0,
+          });
+        }
+        return result;
+      },
+    );
   }
 
   private async computeProduct(
@@ -508,9 +517,9 @@ export class TheoreticalCostService {
         this.dataSource,
         tenantId,
         (manager) =>
-          manager
-            .getRepository(Insumo)
-            .findOne({ where: { id: component.insumo_id, tenant_id: tenantId } }),
+          manager.getRepository(Insumo).findOne({
+            where: { id: component.insumo_id, tenant_id: tenantId },
+          }),
       );
       if (!insumo) {
         throw new SkipNotFound(

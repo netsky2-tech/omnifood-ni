@@ -348,8 +348,7 @@ export class InvoicesService {
             optionId: modifier.optionId ?? null,
             groupId: modifier.groupId ?? null,
             inventoryEffect:
-              modifier.inventoryEffect &&
-              modifier.inventoryEffect !== 'NONE'
+              modifier.inventoryEffect && modifier.inventoryEffect !== 'NONE'
                 ? modifier.inventoryEffect
                 : null,
             effectInsumoId: modifier.effectInsumoId ?? null,
@@ -359,7 +358,9 @@ export class InvoicesService {
                 ? null
                 : modifier.effectQuantity,
             effectFactor:
-              modifier.effectFactor === undefined ? null : modifier.effectFactor,
+              modifier.effectFactor === undefined
+                ? null
+                : modifier.effectFactor,
             // ME-04: the TRUTH of the effect, as the sale resolved it. A
             // pending effect is a sale that happened WITHOUT the inventory
             // movement it announced: the cloud has to be able to see it to
@@ -1052,8 +1053,10 @@ export class InvoicesService {
             result_status: SYNC_RESULT_STATUS.ACCEPTED,
             result_code: effectiveOutcome,
             inventoryOutcome,
-            inventoryOutcomeReason:
-              effectiveReason as unknown as Record<string, any> | null,
+            inventoryOutcomeReason: effectiveReason as unknown as Record<
+              string,
+              any
+            > | null,
           }),
         );
       });
@@ -1528,8 +1531,10 @@ export class InvoicesService {
             { id: record.invoice.id, tenant_id: tenantId },
             {
               inventoryOutcome: 'APPLIED_WITH_DIVERGENCE',
-              inventoryOutcomeReason:
-                divergenceReason as unknown as Record<string, any>,
+              inventoryOutcomeReason: divergenceReason as unknown as Record<
+                string,
+                any
+              >,
             },
           );
         }
@@ -1577,7 +1582,9 @@ export class InvoicesService {
             : null;
         const inventoryOutcome = divergenceReason
           ? 'APPLIED_WITH_DIVERGENCE'
-          : (v1Outcome ? v1Outcome.outcome : null);
+          : v1Outcome
+            ? v1Outcome.outcome
+            : null;
 
         await manager.save(
           this.receiptRepository.create({
@@ -1591,8 +1598,10 @@ export class InvoicesService {
             result_code: effectiveOutcome,
             inventoryPolicyVersion: v1Outcome ? v1Outcome.policyVersion : null,
             inventoryOutcome,
-            inventoryOutcomeReason:
-              effectiveReason as unknown as Record<string, any> | null,
+            inventoryOutcomeReason: effectiveReason as unknown as Record<
+              string,
+              any
+            > | null,
             acknowledgedCorrelationIds: v1Outcome
               ? v1Outcome.acknowledgedMovementCorrelationIds
               : null,
@@ -1628,8 +1637,7 @@ export class InvoicesService {
           code: effectiveOutcome,
           retryable: false,
           inventoryOutcome: effectiveOutcome,
-          inventoryOutcomeReason:
-            effectiveReason as unknown as Record<string, any> | null,
+          inventoryOutcomeReason: effectiveReason,
           acknowledgedMovementCorrelationIds:
             v1Outcome?.acknowledgedMovementCorrelationIds,
           policyVersion: v1Outcome?.policyVersion,
@@ -2628,7 +2636,7 @@ export class InvoicesService {
    * rule, and it has to be visible.
    */
   private evaluateDeclaredStockShortfall(
-    policy: NegativeStockPolicy | string,
+    policy: NegativeStockPolicy,
     newStock: number,
   ): number {
     if (policy === NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY) {

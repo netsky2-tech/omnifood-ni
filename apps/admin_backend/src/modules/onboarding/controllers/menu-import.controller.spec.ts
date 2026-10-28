@@ -29,7 +29,11 @@ describe('MenuImportController (Unit)', () => {
   };
 
   beforeEach(() => {
-    service = { preview: jest.fn(), commit: jest.fn(), buildTemplate: jest.fn() };
+    service = {
+      preview: jest.fn(),
+      commit: jest.fn(),
+      buildTemplate: jest.fn(),
+    };
     service.preview.mockResolvedValue(summary);
     service.commit.mockResolvedValue(summary);
     controller = new MenuImportController(
@@ -38,12 +42,14 @@ describe('MenuImportController (Unit)', () => {
   });
 
   it('declares human transport guards and the OWNER/MANAGER roles on the controller', () => {
-    expect(
-      Reflect.getMetadata(GUARDS_METADATA, MenuImportController),
-    ).toEqual([AuthGuard, RolesGuard]);
-    expect(
-      Reflect.getMetadata(ROLES_KEY, MenuImportController),
-    ).toEqual([UserRole.OWNER, UserRole.MANAGER]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, MenuImportController)).toEqual([
+      AuthGuard,
+      RolesGuard,
+    ]);
+    expect(Reflect.getMetadata(ROLES_KEY, MenuImportController)).toEqual([
+      UserRole.OWNER,
+      UserRole.MANAGER,
+    ]);
   });
 
   describe('POST preview', () => {

@@ -67,9 +67,7 @@ describe('EnforcePromotionsRls1809300000000', () => {
       const { sql } = await collectSql('up');
 
       const alters = sql.match(/ALTER TABLE "[a-z_]+"/g) ?? [];
-      expect([...new Set(alters)].sort()).toEqual([
-        'ALTER TABLE "promotions"',
-      ]);
+      expect([...new Set(alters)].sort()).toEqual(['ALTER TABLE "promotions"']);
     });
   });
 
@@ -80,13 +78,10 @@ describe('EnforcePromotionsRls1809300000000', () => {
       let createCount = 0;
       for (const command of ['select', 'insert', 'update', 'delete']) {
         const policyName = `promotions_tenant_${command}`;
-        expect(sql).toContain(
-          `CREATE POLICY "${policyName}" ON "promotions"`,
-        );
+        expect(sql).toContain(`CREATE POLICY "${policyName}" ON "promotions"`);
         expect(sql).toContain(`FOR ${command.toUpperCase()}`);
         createCount +=
-          sql.split(`CREATE POLICY "${policyName}" ON "promotions"`).length -
-          1;
+          sql.split(`CREATE POLICY "${policyName}" ON "promotions"`).length - 1;
       }
       // 1 table x 4 commands = exactly 4 policies, no extras.
       expect(createCount).toBe(4);

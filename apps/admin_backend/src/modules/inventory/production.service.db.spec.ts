@@ -412,7 +412,11 @@ describe('ProductionService date contract on the live close (Real PostgreSQL DB,
     // R4: the LIVE receipt insert carries its source document. This is the
     // assertion that would have caught the "two stacked bugs" misreading.
     const receiptMovements = await admin.query<
-      Array<{ movement_type: string; quantity: string; source_document_id: string | null }>
+      Array<{
+        movement_type: string;
+        quantity: string;
+        source_document_id: string | null;
+      }>
     >(
       `SELECT movement_type, quantity, source_document_id
          FROM inventory_kardex

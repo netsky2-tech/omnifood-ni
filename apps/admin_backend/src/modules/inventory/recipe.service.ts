@@ -98,7 +98,8 @@ export interface IngestPosVersionResult {
   replaced: boolean;
 }
 
-interface ResolvedRecipeComponent {  ingredientId: string;
+interface ResolvedRecipeComponent {
+  ingredientId: string;
   ingredientName: string;
   ingredientType: string;
   grossQuantity: number;
@@ -260,7 +261,7 @@ export class RecipeService {
               component.componentUom ??
               (component.ingredientType === 'SUB_RECIPE'
                 ? null
-                : identity?.consumptionUom ?? null),
+                : (identity?.consumptionUom ?? null)),
             reference_version_id: component.referenceVersionId ?? null,
           });
         });
@@ -340,59 +341,63 @@ export class RecipeService {
   async listActiveRecipeSummaries(
     tenantId: string,
   ): Promise<ActiveRecipeSummary[]> {
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const versions = await manager.getRepository(RecipeVersion).find({
-        where: {
-          tenant_id: tenantId,
-          is_active: true,
-          publication_state: RecipePublicationState.PUBLISHED,
-        },
-        order: { product_id: 'ASC' },
-      });
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const versions = await manager.getRepository(RecipeVersion).find({
+          where: {
+            tenant_id: tenantId,
+            is_active: true,
+            publication_state: RecipePublicationState.PUBLISHED,
+          },
+          order: { product_id: 'ASC' },
+        });
 
-      if (versions.length === 0) {
-        return [];
-      }
+        if (versions.length === 0) {
+          return [];
+        }
 
-      const versionIds = versions.map((v) => v.id);
-      const details = await manager.getRepository(RecipeDetail).find({
-        where: { tenant_id: tenantId, recipe_version_id: In(versionIds) },
-        select: { recipe_version_id: true },
-      });
-      const componentCountByVersion = new Map<string, number>();
-      for (const detail of details) {
-        componentCountByVersion.set(
-          detail.recipe_version_id,
-          (componentCountByVersion.get(detail.recipe_version_id) ?? 0) + 1,
-        );
-      }
+        const versionIds = versions.map((v) => v.id);
+        const details = await manager.getRepository(RecipeDetail).find({
+          where: { tenant_id: tenantId, recipe_version_id: In(versionIds) },
+          select: { recipe_version_id: true },
+        });
+        const componentCountByVersion = new Map<string, number>();
+        for (const detail of details) {
+          componentCountByVersion.set(
+            detail.recipe_version_id,
+            (componentCountByVersion.get(detail.recipe_version_id) ?? 0) + 1,
+          );
+        }
 
-      const products = await manager.getRepository(Product).find({
-        where: {
-          tenant_id: tenantId,
-          id: In(versions.map((v) => v.product_id)),
-        },
-        select: { id: true, name: true, uom: true },
-      });
-      const productById = new Map(products.map((p) => [p.id, p]));
+        const products = await manager.getRepository(Product).find({
+          where: {
+            tenant_id: tenantId,
+            id: In(versions.map((v) => v.product_id)),
+          },
+          select: { id: true, name: true, uom: true },
+        });
+        const productById = new Map(products.map((p) => [p.id, p]));
 
-      return versions.map((version) => {
-        const product = productById.get(version.product_id);
-        return {
-          productId: version.product_id,
-          productName:
-            product?.name ?? version.product_name ?? version.product_id,
-          productUom: product?.uom ?? null,
-          recipeVersionId: version.id,
-          versionNumber: version.version_number,
-          componentCount: componentCountByVersion.get(version.id) ?? 0,
-          yieldQuantity: Number(version.yield_quantity ?? 1),
-          technicalShrinkPct: Number(version.technical_shrink_pct ?? 0),
-          versionNote: version.version_note ?? null,
-          effectiveAt: version.fecha_inicio_vigencia ?? null,
-        };
-      });
-    });
+        return versions.map((version) => {
+          const product = productById.get(version.product_id);
+          return {
+            productId: version.product_id,
+            productName:
+              product?.name ?? version.product_name ?? version.product_id,
+            productUom: product?.uom ?? null,
+            recipeVersionId: version.id,
+            versionNumber: version.version_number,
+            componentCount: componentCountByVersion.get(version.id) ?? 0,
+            yieldQuantity: Number(version.yield_quantity ?? 1),
+            technicalShrinkPct: Number(version.technical_shrink_pct ?? 0),
+            versionNote: version.version_note ?? null,
+            effectiveAt: version.fecha_inicio_vigencia ?? null,
+          };
+        });
+      },
+    );
   }
 
   async findActiveVersion(

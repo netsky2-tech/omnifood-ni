@@ -114,9 +114,7 @@ describe('uom-catalog (platform)', () => {
       // and the next write that touches a UOM field re-validates the STORED
       // value. That round trip must not reject the value the catalog asked for.
       expect(() => validateInsumoConversion('lb', 'kg', 0.4536)).not.toThrow();
-      expect(() =>
-        validateInsumoConversion('oz', 'g', 28.3495),
-      ).not.toThrow();
+      expect(() => validateInsumoConversion('oz', 'g', 28.3495)).not.toThrow();
       // A materially different factor is still rejected.
       expect(() => validateInsumoConversion('lb', 'kg', 0.45)).toThrow(
         /el catálogo establece/,
@@ -156,9 +154,7 @@ describe('uom-catalog (platform)', () => {
     const tenantUomCodes = ['arroba', 'cajilla'];
 
     it('resolves a unit the tenant registered in its own UOM catalog', () => {
-      expect(
-        resolveUom('arroba', tenantUomCodes)?.dimension,
-      ).toBe('tenant');
+      expect(resolveUom('arroba', tenantUomCodes)?.dimension).toBe('tenant');
       expect(resolveUom('arroba')?.dimension).toBeUndefined();
     });
 

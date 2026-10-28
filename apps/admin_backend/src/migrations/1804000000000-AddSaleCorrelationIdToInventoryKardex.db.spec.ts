@@ -15,7 +15,9 @@ function readPostgresPort(): number {
   const value = process.env.DB_PORT?.trim() ?? '5432';
   const port = Number(value);
   if (!Number.isInteger(port)) {
-    throw new Error('DB_PORT must be a valid integer for DB-backed migration tests');
+    throw new Error(
+      'DB_PORT must be a valid integer for DB-backed migration tests',
+    );
   }
   return port;
 }
@@ -76,34 +78,46 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
     'creates column and index, rejects duplicate within tenant, allows across tenants and multiple nulls, and guards down migration',
     async () => {
       const foundation = new BohInventoryLedgerFoundation1766000000000();
-      const migration = new AddSaleCorrelationIdToInventoryKardex1804000000000();
+      const migration =
+        new AddSaleCorrelationIdToInventoryKardex1804000000000();
 
-      await withIsolatedSchema('kardex_sale_correlation', async (queryRunner) => {
-        await foundation.up(queryRunner);
-        await migration.up(queryRunner);
+      await withIsolatedSchema(
+        'kardex_sale_correlation',
+        async (queryRunner) => {
+          await foundation.up(queryRunner);
+          await migration.up(queryRunner);
 
-        // 1. Column and index verification
-        const columnCheck: unknown = await queryRunner.query(`
+          // 1. Column and index verification
+          const columnCheck: unknown = await queryRunner.query(`
           SELECT column_name, data_type, is_nullable
           FROM information_schema.columns
           WHERE table_schema = current_schema() AND table_name = 'inventory_kardex' AND column_name = 'sale_correlation_id'
         `);
-        const columns = columnCheck as Array<{ column_name: string; data_type: string; is_nullable: string }>;
-        expect(columns).toHaveLength(1);
-        expect(columns[0].column_name).toBe('sale_correlation_id');
-        expect(columns[0].is_nullable).toBe('YES');
+          const columns = columnCheck as Array<{
+            column_name: string;
+            data_type: string;
+            is_nullable: string;
+          }>;
+          expect(columns).toHaveLength(1);
+          expect(columns[0].column_name).toBe('sale_correlation_id');
+          expect(columns[0].is_nullable).toBe('YES');
 
-        const indexCheck: unknown = await queryRunner.query(`
+          const indexCheck: unknown = await queryRunner.query(`
           SELECT indexname, indexdef
           FROM pg_indexes
           WHERE schemaname = current_schema() AND tablename = 'inventory_kardex' AND indexname = 'uq_inventory_kardex_sale_correlation'
         `);
-        const indexes = indexCheck as Array<{ indexname: string; indexdef: string }>;
-        expect(indexes).toHaveLength(1);
-        expect(indexes[0].indexdef).toContain('WHERE (sale_correlation_id IS NOT NULL)');
+          const indexes = indexCheck as Array<{
+            indexname: string;
+            indexdef: string;
+          }>;
+          expect(indexes).toHaveLength(1);
+          expect(indexes[0].indexdef).toContain(
+            'WHERE (sale_correlation_id IS NOT NULL)',
+          );
 
-        // 2. Insert valid correlated row for tenant-a
-        await queryRunner.query(`
+          // 2. Insert valid correlated row for tenant-a
+          await queryRunner.query(`
           INSERT INTO inventory_kardex (
             tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
             total_cost_nio, stock_before, stock_after, source_document_type,
@@ -114,9 +128,9 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
           )
         `);
 
-        // 3. Duplicate correlation within tenant-a must fail
-        await expect(
-          queryRunner.query(`
+          // 3. Duplicate correlation within tenant-a must fail
+          await expect(
+            queryRunner.query(`
             INSERT INTO inventory_kardex (
               tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
               total_cost_nio, stock_before, stock_after, source_document_type,
@@ -126,10 +140,10 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
               20.0000, 9.0000, 7.0000, 'INVOICE', 'inv-2', 'corr-alpha-001'
             )
           `),
-        ).rejects.toThrow(/duplicate key value violates unique constraint/i);
+          ).rejects.toThrow(/duplicate key value violates unique constraint/i);
 
-        // 4. Same correlation for tenant-b must succeed
-        await queryRunner.query(`
+          // 4. Same correlation for tenant-b must succeed
+          await queryRunner.query(`
           INSERT INTO inventory_kardex (
             tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
             total_cost_nio, stock_before, stock_after, source_document_type,
@@ -140,8 +154,8 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
           )
         `);
 
-        // 5. Multiple null correlation rows in same tenant must succeed
-        await queryRunner.query(`
+          // 5. Multiple null correlation rows in same tenant must succeed
+          await queryRunner.query(`
           INSERT INTO inventory_kardex (
             tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
             total_cost_nio, stock_before, stock_after, source_document_type,
@@ -151,11 +165,12 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
           ('tenant-a', '00000000-0000-0000-0000-000000000001', 'PURCHASE', 3.0000, 10.0000, 30.0000, 5.0000, 8.0000, 'PURCHASE', 'p-2', NULL)
         `);
 
-        // 6. Down migration refuses to remove evidence when correlated rows exist
-        await expect(migration.down(queryRunner)).rejects.toThrow(
-          'down migration forbidden: historical sale correlation evidence exists',
-        );
-      });
+          // 6. Down migration refuses to remove evidence when correlated rows exist
+          await expect(migration.down(queryRunner)).rejects.toThrow(
+            'down migration forbidden: historical sale correlation evidence exists',
+          );
+        },
+      );
     },
     TEST_TIMEOUT_MS,
   );
@@ -164,14 +179,17 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
     'allows clean down migration when no historical correlation evidence exists',
     async () => {
       const foundation = new BohInventoryLedgerFoundation1766000000000();
-      const migration = new AddSaleCorrelationIdToInventoryKardex1804000000000();
+      const migration =
+        new AddSaleCorrelationIdToInventoryKardex1804000000000();
 
-      await withIsolatedSchema('kardex_sale_clean_down', async (queryRunner) => {
-        await foundation.up(queryRunner);
-        await migration.up(queryRunner);
+      await withIsolatedSchema(
+        'kardex_sale_clean_down',
+        async (queryRunner) => {
+          await foundation.up(queryRunner);
+          await migration.up(queryRunner);
 
-        // Insert legacy rows with only null correlation
-        await queryRunner.query(`
+          // Insert legacy rows with only null correlation
+          await queryRunner.query(`
           INSERT INTO inventory_kardex (
             tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
             total_cost_nio, stock_before, stock_after, source_document_type,
@@ -182,23 +200,24 @@ describe('AddSaleCorrelationIdToInventoryKardex1804000000000 (db)', () => {
           )
         `);
 
-        // Clean down migration must succeed because no non-null correlation exists
-        await migration.down(queryRunner);
+          // Clean down migration must succeed because no non-null correlation exists
+          await migration.down(queryRunner);
 
-        const columnCheck: unknown = await queryRunner.query(`
+          const columnCheck: unknown = await queryRunner.query(`
           SELECT column_name
           FROM information_schema.columns
           WHERE table_schema = current_schema() AND table_name = 'inventory_kardex' AND column_name = 'sale_correlation_id'
         `);
-        expect(columnCheck as unknown[]).toHaveLength(0);
+          expect(columnCheck as unknown[]).toHaveLength(0);
 
-        const indexCheck: unknown = await queryRunner.query(`
+          const indexCheck: unknown = await queryRunner.query(`
           SELECT indexname
           FROM pg_indexes
           WHERE schemaname = current_schema() AND tablename = 'inventory_kardex' AND indexname = 'uq_inventory_kardex_sale_correlation'
         `);
-        expect(indexCheck as unknown[]).toHaveLength(0);
-      });
+          expect(indexCheck as unknown[]).toHaveLength(0);
+        },
+      );
     },
     TEST_TIMEOUT_MS,
   );

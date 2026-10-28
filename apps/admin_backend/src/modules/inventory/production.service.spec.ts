@@ -143,7 +143,6 @@ describe('ProductionService', () => {
     service = module.get<ProductionService>(ProductionService);
   });
 
-
   it('replays a completed production close once and freezes immutable batch history', async () => {
     recipeService.getSnapshot.mockResolvedValue({
       recipeVersion: { id: 'v3' },

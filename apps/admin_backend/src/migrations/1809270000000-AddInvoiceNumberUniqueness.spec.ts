@@ -3,7 +3,8 @@ import { AddInvoiceNumberUniqueness1809270000000 } from './1809270000000-AddInvo
 
 const CONSTRAINT_NAME = 'uq_invoices_tenant_invoice_number';
 const CLEANUP_SCRIPT = 'scripts/dev-cleanup-duplicate-invoice-numbers.sql';
-const INCIDENT_PROCEDURE = 'docs/operations/pilot-terminal-incident-procedure.md';
+const INCIDENT_PROCEDURE =
+  'docs/operations/pilot-terminal-incident-procedure.md';
 
 interface DuplicateGroup {
   tenantId: string;
@@ -121,9 +122,9 @@ describe('AddInvoiceNumberUniqueness1809270000000', () => {
       expect(everything(all)).not.toMatch(/\b(DELETE|UPDATE)\b/i);
       // And the guard actually ran: the rejection came from data, not from a
       // skipped check.
-      expect(
-        all.some((statement) => statement.includes('GROUP BY')),
-      ).toBe(true);
+      expect(all.some((statement) => statement.includes('GROUP BY'))).toBe(
+        true,
+      );
     });
 
     it('caps the offender list at 10 entries while reporting the full group count', async () => {
@@ -142,7 +143,9 @@ describe('AddInvoiceNumberUniqueness1809270000000', () => {
         message = error.message;
       });
 
-      expect(message).toContain('12 duplicate (tenant_id, invoice_number) group(s)');
+      expect(message).toContain(
+        '12 duplicate (tenant_id, invoice_number) group(s)',
+      );
       expect(message.match(/tenant_id=/g)).toHaveLength(10);
     });
   });

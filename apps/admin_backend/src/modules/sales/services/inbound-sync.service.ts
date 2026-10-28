@@ -830,7 +830,10 @@ export class InboundSyncService {
       qb.andWhere('batch.updated_at > :sinceDate', { sinceDate });
     }
 
-    qb.orderBy('batch.expiration_date', 'ASC').addOrderBy('batch.created_at', 'ASC');
+    qb.orderBy('batch.expiration_date', 'ASC').addOrderBy(
+      'batch.created_at',
+      'ASC',
+    );
 
     const items = await qb.getMany();
     return items.map((b) => ({
@@ -858,7 +861,7 @@ export class InboundSyncService {
       return new Map();
     }
 
-    const rows = await entityManager.query(
+    const rows: unknown = await entityManager.query(
       `
       SELECT insumo_id, SUM(remaining_stock) AS lot_stock
       FROM batches
@@ -997,7 +1000,8 @@ export class InboundSyncService {
     // R21 / S18: components with ingredient_type === 'SUB_RECIPE' reference
     // a PRODUCT id (the sub-recipe), not an insumo id. Only components of type
     // 'INSUMO' (or untyped legacy rows) are checked against the insumos table.
-    const isSubRecipeComponent = (c: RecipeDetail) => c.ingredient_type === 'SUB_RECIPE';
+    const isSubRecipeComponent = (c: RecipeDetail) =>
+      c.ingredient_type === 'SUB_RECIPE';
     const insumoComponents = components.filter((c) => !isSubRecipeComponent(c));
     const componentInsumoIds = [
       ...new Set(insumoComponents.map((component) => component.insumo_id)),
@@ -1499,7 +1503,8 @@ export class InboundSyncService {
         effectInsumoId: option.effect_insumo_id ?? null,
         effectTargetInsumoId: option.effect_target_insumo_id ?? null,
         effectQuantity:
-          option.effect_quantity === null || option.effect_quantity === undefined
+          option.effect_quantity === null ||
+          option.effect_quantity === undefined
             ? null
             : Number(option.effect_quantity),
         effectFactor:

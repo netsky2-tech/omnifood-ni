@@ -40,7 +40,7 @@ const buildWorkbookBase64 = async (sheets: SheetFixture[]): Promise<string> => {
     }
   }
   const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer as unknown as ArrayBuffer).toString('base64');
+  return Buffer.from(buffer).toString('base64');
 };
 
 const MENU_HEADERS = ['Producto', 'Precio', 'Insumo', 'Cantidad', 'Unidad'];
@@ -119,7 +119,7 @@ describe('MenuImportService (Unit)', () => {
           !(value as { id?: string }).id
         ) {
           idSequence += 1;
-          return { ...(value as object), id: `generated-${idSequence}` };
+          return { ...value, id: `generated-${idSequence}` };
         }
         return value;
       }),
@@ -1011,7 +1011,7 @@ describe('MenuImportService (Unit)', () => {
       for (const name of EXPECTED_TEMPLATE_SHEETS.slice(1)) {
         const sheet = workbook.getWorksheet(name);
         expect(sheet).toBeDefined();
-        const headerRow = sheet!.getRow(1);
+        const headerRow = sheet.getRow(1);
         expect(headerRow.getCell(1).value).toBe('producto');
         expect(headerRow.getCell(2).value).toBe('precio');
         expect(headerRow.getCell(3).value).toBe('insumo');
@@ -1027,7 +1027,7 @@ describe('MenuImportService (Unit)', () => {
       for (const name of EXPECTED_TEMPLATE_SHEETS.slice(1)) {
         const sheet = workbook.getWorksheet(name);
         expect(sheet).toBeDefined();
-        const row = sheet!.getRow(2);
+        const row = sheet.getRow(2);
         expect(row.getCell(1).value).toBe('Cappuccino 8oz');
         expect(row.getCell(2).value).toBe(110);
         expect(row.getCell(3).value).toBe('Café molido');
@@ -1041,7 +1041,7 @@ describe('MenuImportService (Unit)', () => {
       const guide = workbook.getWorksheet('CÓMO LLENARLA');
       expect(guide).toBeDefined();
       const lines: string[] = [];
-      guide!.eachRow((row) => {
+      guide.eachRow((row) => {
         const text = row.getCell(1).value;
         if (typeof text === 'string' && text.trim()) lines.push(text);
       });

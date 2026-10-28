@@ -1077,7 +1077,9 @@ describe('ActivationService — Real PostgreSQL Persistence', () => {
         total: 1,
         paymentStatus: 'paid',
       });
-      const invoiceCountBefore = await invoiceRepo.count({ where: { tenant_id: tenantId } });
+      const invoiceCountBefore = await invoiceRepo.count({
+        where: { tenant_id: tenantId },
+      });
 
       const attempt = await activationService.startActivation(
         tenantId,

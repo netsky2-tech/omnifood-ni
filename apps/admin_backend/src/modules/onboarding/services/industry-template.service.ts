@@ -202,9 +202,8 @@ export class IndustryTemplateService {
     // T10/F3 note: pricesIncludeTax is honoured at invoicing time from the
     // fiscal config; the Product entity carries no such column, so there is
     // nothing to persist on the product row.
-    const fiscalSetup = await this.fiscalSetupService.getFiscalSetup(
-      trimmedTenant,
-    );
+    const fiscalSetup =
+      await this.fiscalSetupService.getFiscalSetup(trimmedTenant);
     const selectedSet = options?.selectedItemIds
       ? new Set(options.selectedItemIds)
       : null;
@@ -281,14 +280,15 @@ export class IndustryTemplateService {
           // this throw keeps the operation strictly all-or-nothing.
           const unpricedProducts = (template.templateProducts ?? []).filter(
             (product) =>
-              isSelected(product.id) &&
-              !(Number(product.suggested_price) > 0),
+              isSelected(product.id) && !(Number(product.suggested_price) > 0),
           );
           if (unpricedProducts.length > 0) {
             throw new BadRequestException(
               `No se puede aplicar la plantilla '${template.name}': los siguientes productos de la plantilla no tienen precio de venta definido: ${unpricedProducts
                 .map((product) => `'${product.name}'`)
-                .join(', ')}. Los productos sin precio de venta no se pueden vender ni permitirían activar el negocio. Asigne un precio de venta mayor que cero a cada producto y vuelva a intentar: esto es un defecto de datos de la plantilla, no un error de su catálogo.`,
+                .join(
+                  ', ',
+                )}. Los productos sin precio de venta no se pueden vender ni permitirían activar el negocio. Asigne un precio de venta mayor que cero a cada producto y vuelva a intentar: esto es un defecto de datos de la plantilla, no un error de su catálogo.`,
             );
           }
           if (options?.sessionId) {
@@ -457,10 +457,7 @@ export class IndustryTemplateService {
           // normalized code OR normalized name. A label with no honest
           // target — or whose target code this tenant does not carry — stays
           // category_code null. Nothing is invented.
-          const salesCategoryByNormalizedKey = new Map<
-            string,
-            CatalogValue
-          >();
+          const salesCategoryByNormalizedKey = new Map<string, CatalogValue>();
           for (const value of await manager.find(CatalogValue, {
             where: {
               tenant_id: trimmedTenant,

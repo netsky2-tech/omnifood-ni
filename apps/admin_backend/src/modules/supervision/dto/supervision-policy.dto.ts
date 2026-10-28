@@ -20,9 +20,7 @@ import { UserRole } from '../../identity/security/user-role.enum';
  * house pattern).
  */
 @ValidatorConstraint({ name: 'HasCompletableCloseBoxGuard', async: false })
-export class HasCompletableCloseBoxGuard
-  implements ValidatorConstraintInterface
-{
+export class HasCompletableCloseBoxGuard implements ValidatorConstraintInterface {
   validate(value: UserRole[], args: ValidationArguments): boolean {
     const related = args.object as {
       selfAuthorizationAllowedCloseBox?: boolean;
@@ -34,7 +32,7 @@ export class HasCompletableCloseBoxGuard
 
   defaultMessage(args: ValidationArguments): string {
     return (
-      args.constraints['message'] as string | undefined ??
+      (args.constraints['message'] as string | undefined) ??
       'La política dejaría una operación obligatoria sin forma de completarla.'
     );
   }

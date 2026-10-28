@@ -141,9 +141,7 @@ export function resolveDeviations(input: {
         }
         // The component's leaf stops being consumed: the whole milk of the
         // recipe is NOT downloaded.
-        leaves = leaves.filter(
-          (leaf) => leaf.rootComponentId !== target!.id,
-        );
+        leaves = leaves.filter((leaf) => leaf.rootComponentId !== target.id);
         outcomes.push({ optionId, effect, applied: true });
         break;
       }
@@ -186,9 +184,7 @@ export function resolveDeviations(input: {
           });
           break;
         }
-        leaves = leaves.filter(
-          (leaf) => leaf.rootComponentId !== target!.id,
-        );
+        leaves = leaves.filter((leaf) => leaf.rootComponentId !== target.id);
         leaves = mergeLeaf(leaves, {
           insumoId: substituteId,
           quantityPerSaleUnit: quantity,
@@ -219,12 +215,10 @@ export function resolveDeviations(input: {
           break;
         }
         leaves = leaves.map((leaf) =>
-          leaf.rootComponentId === target!.id
+          leaf.rootComponentId === target.id
             ? {
                 ...leaf,
-                quantityPerSaleUnit: round4(
-                  leaf.quantityPerSaleUnit * factor,
-                ),
+                quantityPerSaleUnit: round4(leaf.quantityPerSaleUnit * factor),
               }
             : leaf,
         );

@@ -101,12 +101,15 @@ describe('ModifiersService', () => {
     insumoRepo = {
       // Every insumo the tenant has, by default. A spec narrows it to prove
       // the guard rejects an insumo that does not belong to the tenant.
-      find: jest.fn().mockImplementation((args: { where?: { id?: unknown } }) => {
-        const ids = (args?.where?.id as { value?: string[] } | undefined)?.value;
-        return Promise.resolve(
-          (ids ?? []).map((id) => ({ id, name: `Insumo ${id}` })),
-        );
-      }),
+      find: jest
+        .fn()
+        .mockImplementation((args: { where?: { id?: unknown } }) => {
+          const ids = (args?.where?.id as { value?: string[] } | undefined)
+            ?.value;
+          return Promise.resolve(
+            (ids ?? []).map((id) => ({ id, name: `Insumo ${id}` })),
+          );
+        }),
     };
     groupRepo = {
       find: jest.fn().mockResolvedValue([]),
@@ -328,8 +331,10 @@ describe('ModifiersService', () => {
           }),
         }),
       );
-      const optionWhere = optionRepo.find.mock.calls[0][0]
-        .where as Record<string, unknown>;
+      const optionWhere = optionRepo.find.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
       expect(optionWhere).not.toHaveProperty('is_active');
       expect(optionWhere).toEqual(
         expect.objectContaining({ tenant_id: 'tenant-1' }),
@@ -346,10 +351,14 @@ describe('ModifiersService', () => {
       const list = await service.findAll('tenant-1', { status: 'all' });
 
       expect(list).toHaveLength(2);
-      const groupWhere = groupRepo.find.mock.calls[0][0]
-        .where as Record<string, unknown>;
-      const optionWhere = optionRepo.find.mock.calls[0][0]
-        .where as Record<string, unknown>;
+      const groupWhere = groupRepo.find.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
+      const optionWhere = optionRepo.find.mock.calls[0][0].where as Record<
+        string,
+        unknown
+      >;
       expect(groupWhere).not.toHaveProperty('is_active');
       expect(optionWhere).not.toHaveProperty('is_active');
     });
@@ -370,9 +379,7 @@ describe('ModifiersService', () => {
       productAttachmentRepo.find.mockResolvedValue([
         { group_id: 'group-uuid-1' },
       ]);
-      groupRepo.find.mockResolvedValue([
-        mockGroup({ is_active: false }),
-      ]);
+      groupRepo.find.mockResolvedValue([mockGroup({ is_active: false })]);
 
       await service.findAll('tenant-1', {
         status: 'inactive',
@@ -623,7 +630,7 @@ describe('ModifiersService', () => {
       expect(created.effect_factor).toBeNull();
     });
 
-    it('persists a SWAP effect (almond milk replaces the recipe\'s whole milk)', async () => {
+    it("persists a SWAP effect (almond milk replaces the recipe's whole milk)", async () => {
       groupRepo.findOne.mockResolvedValue(mockGroup());
       const created = await service.createOption('tenant-1', 'group-uuid-1', {
         name: 'Almendras',

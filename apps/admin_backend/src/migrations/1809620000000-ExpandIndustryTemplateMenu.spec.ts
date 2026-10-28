@@ -68,9 +68,7 @@ describe('ExpandIndustryTemplateMenu1809620000000 (Unit)', () => {
       /'BAR_RESTAURANTE'[\s\S]*'Gaseosa 500ml'[\s\S]*'Bebidas'[\s\S]*35/,
     );
     // …but no recipe item is attached to it (packaged goods carry no BOM).
-    expect(sql).not.toMatch(
-      /template_recipe_items[\s\S]*'Gaseosa 500ml'/,
-    );
+    expect(sql).not.toMatch(/template_recipe_items[\s\S]*'Gaseosa 500ml'/);
   });
 
   it('only ever writes canonical lowercase uom codes', async () => {
@@ -130,7 +128,11 @@ describe('ExpandIndustryTemplateMenu1809620000000 (Unit)', () => {
     expect(sql).toMatch(
       /DELETE\s+FROM\s+template_recipe_items[\s\S]*template_products/i,
     );
-    expect(sql).toMatch(/DELETE\s+FROM\s+template_products[\s\S]*'Frappé de Café 12oz'/i);
-    expect(sql).toMatch(/DELETE\s+FROM\s+template_insumos[\s\S]*'Hielo en Cubos'/i);
+    expect(sql).toMatch(
+      /DELETE\s+FROM\s+template_products[\s\S]*'Frappé de Café 12oz'/i,
+    );
+    expect(sql).toMatch(
+      /DELETE\s+FROM\s+template_insumos[\s\S]*'Hielo en Cubos'/i,
+    );
   });
 });

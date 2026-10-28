@@ -966,14 +966,20 @@ export class ActivationService {
 
     let highestSequenceNumber: number;
     try {
-      highestSequenceNumber = await readHighestInvoiceSequence(manager, tenantId);
+      highestSequenceNumber = await readHighestInvoiceSequence(
+        manager,
+        tenantId,
+      );
     } catch {
       // Fail closed: an unverifiable proposal is the named recovery state,
       // never a green light.
       return 'FISCAL_SEQUENCE_RECOVERY_REQUIRED';
     }
 
-    if (highestSequenceNumber > 0 && proposedSequence <= highestSequenceNumber) {
+    if (
+      highestSequenceNumber > 0 &&
+      proposedSequence <= highestSequenceNumber
+    ) {
       return 'FISCAL_SEQUENCE_RECOVERY_REQUIRED';
     }
 

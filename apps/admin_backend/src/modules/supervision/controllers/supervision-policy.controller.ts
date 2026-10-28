@@ -1,11 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Put,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Put, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
@@ -28,7 +21,9 @@ import { SupervisionPolicyDto } from '../dto/supervision-policy.dto';
 @Controller('supervision')
 @UseGuards(AuthGuard, RolesGuard, PermissionsGuard)
 export class SupervisionPolicyController {
-  constructor(private readonly supervisionPolicyService: SupervisionPolicyService) {}
+  constructor(
+    private readonly supervisionPolicyService: SupervisionPolicyService,
+  ) {}
 
   @Get('policy')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
@@ -48,10 +43,7 @@ export class SupervisionPolicyController {
     @GetTenantId() tenantId: string | undefined,
     @Body() body: SupervisionPolicyDto,
   ) {
-    return this.supervisionPolicyService.configurePolicy(
-      tenantId ?? '',
-      body,
-    );
+    return this.supervisionPolicyService.configurePolicy(tenantId ?? '', body);
   }
 
   /**

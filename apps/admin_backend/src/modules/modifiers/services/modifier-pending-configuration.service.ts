@@ -7,7 +7,6 @@ import { Product } from '../../inventory/entities/product.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
-import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import {
   resolveDeviations,
   type DeviationInsumo,
@@ -33,9 +32,7 @@ import { InvoiceItemModifier } from '../../sales/entities/invoice-item-modifier.
  * sale.
  */
 export type PendingConfigurationReason =
-  | DeviationSkipReason
-  | 'PRODUCT_WITHOUT_RECIPE'
-  | 'NO_CONFIGURED_QUANTITY';
+  DeviationSkipReason | 'PRODUCT_WITHOUT_RECIPE' | 'NO_CONFIGURED_QUANTITY';
 
 /** One product where the option's effect cannot be applied. */
 export interface PendingModifierProduct {
@@ -159,65 +156,80 @@ export class ModifierPendingConfigurationService {
             ModifierPendingConfigurationService.MAX_PENDING_EFFECTS_LIMIT,
           );
 
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      // The read is EXPLICIT (a projection, not an entity hydration): the
-      // line's truth travels with the sale, and the owner reads the sale it
-      // belongs to. The tenant is reached through the invoice: the modifier
-      // table carries no tenant column of its own (the line hangs off the
-      // item, and the item off the invoice), so the INVOICE's tenant is the
-      // isolation boundary, inside the tenant-bound transaction.
-      const rows = await manager
-        .getRepository(InvoiceItemModifier)
-        .createQueryBuilder('modifier')
-        .innerJoin(InvoiceItem, 'item', 'item.id = modifier.invoice_item_id')
-        .innerJoin(Invoice, 'invoice', 'invoice.id = item.invoice_id')
-        .where('invoice.tenant_id = :tenantId', { tenantId })
-        .andWhere("modifier.effect_status = 'PENDING'")
-        .select([
-          'modifier.id AS modifier_id',
-          'modifier.name AS modifier_name',
-          'modifier.option_id AS option_id',
-          'modifier.effect_skip_reason AS effect_skip_reason',
-          'modifier.quantity AS modifier_quantity',
-          'item.product_id AS product_id',
-          'item.product_name AS product_name',
-          'invoice.id AS invoice_id',
-          'invoice.invoice_number AS invoice_number',
-          'invoice.created_at AS invoice_created_at',
-        ])
-        .orderBy('invoice.created_at', 'DESC')
-        .addOrderBy('modifier.id', 'DESC')
-        // One probe row beyond the cap so `truncated` is provable.
-        .take(limit + 1)
-        .getRawMany();
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        // The read is EXPLICIT (a projection, not an entity hydration): the
+        // line's truth travels with the sale, and the owner reads the sale it
+        // belongs to. The tenant is reached through the invoice: the modifier
+        // table carries no tenant column of its own (the line hangs off the
+        // item, and the item off the invoice), so the INVOICE's tenant is the
+        // isolation boundary, inside the tenant-bound transaction.
+        const rows = await manager
+          .getRepository(InvoiceItemModifier)
+          .createQueryBuilder('modifier')
+          .innerJoin(InvoiceItem, 'item', 'item.id = modifier.invoice_item_id')
+          .innerJoin(Invoice, 'invoice', 'invoice.id = item.invoice_id')
+          .where('invoice.tenant_id = :tenantId', { tenantId })
+          .andWhere("modifier.effect_status = 'PENDING'")
+          .select([
+            'modifier.id AS modifier_id',
+            'modifier.name AS modifier_name',
+            'modifier.option_id AS option_id',
+            'modifier.effect_skip_reason AS effect_skip_reason',
+            'modifier.quantity AS modifier_quantity',
+            'item.product_id AS product_id',
+            'item.product_name AS product_name',
+            'invoice.id AS invoice_id',
+            'invoice.invoice_number AS invoice_number',
+            'invoice.created_at AS invoice_created_at',
+          ])
+          .orderBy('invoice.created_at', 'DESC')
+          .addOrderBy('modifier.id', 'DESC')
+          // One probe row beyond the cap so `truncated` is provable.
+          .take(limit + 1)
+          .getRawMany<{
+            modifier_id: string;
+            modifier_name: string;
+            option_id: string | null;
+            effect_skip_reason: string;
+            modifier_quantity: number | null;
+            product_id: string;
+            product_name: string;
+            invoice_id: string;
+            invoice_number: string | null;
+            invoice_created_at: Date | string;
+          }>();
 
-      // One probe row beyond the cap: `truncated` is provable, and the
-      // page never claims completeness it does not have.
-      const truncated = rows.length > limit;
-      const page = truncated ? rows.slice(0, limit) : rows;
+        // One probe row beyond the cap: `truncated` is provable, and the
+        // page never claims completeness it does not have.
+        const truncated = rows.length > limit;
+        const page = truncated ? rows.slice(0, limit) : rows;
 
-      const lines: PendingModifierEffectLine[] = page.map((row) => {
-        const soldAt = row['invoice_created_at'];
-        return {
-          invoice_id: String(row['invoice_id'] ?? ''),
-          invoice_number: row['invoice_number']
-            ? String(row['invoice_number'])
-            : null,
-          sold_at:
-            soldAt instanceof Date
-              ? soldAt.toISOString()
-              : new Date(String(soldAt ?? 0)).toISOString(),
-          product_id: String(row['product_id'] ?? ''),
-          product_name: String(row['product_name'] ?? row['modifier_name'] ?? ''),
-          option_id: row['option_id'] ? String(row['option_id']) : null,
-          option_name: String(row['modifier_name'] ?? ''),
-          reason: String(row['effect_skip_reason'] ?? 'INCOMPLETE'),
-          quantity: Number(row['modifier_quantity'] ?? 1),
-        };
-      });
+        const lines: PendingModifierEffectLine[] = page.map((row) => {
+          const soldAt = row.invoice_created_at;
+          return {
+            invoice_id: String(row.invoice_id ?? ''),
+            invoice_number: row.invoice_number
+              ? String(row.invoice_number)
+              : null,
+            sold_at:
+              soldAt instanceof Date
+                ? soldAt.toISOString()
+                : new Date(String(soldAt ?? 0)).toISOString(),
+            product_id: String(row.product_id ?? ''),
+            product_name: String(row.product_name ?? row.modifier_name ?? ''),
+            option_id: row.option_id ? String(row.option_id) : null,
+            option_name: String(row.modifier_name ?? ''),
+            reason: String(row.effect_skip_reason ?? 'INCOMPLETE'),
+            quantity: Number(row.modifier_quantity ?? 1),
+          };
+        });
 
-      return { lines, truncated, limit };
-    });
+        return { lines, truncated, limit };
+      },
+    );
   }
 
   private async findPendingIn(
@@ -396,13 +408,15 @@ export class ModifierPendingConfigurationService {
         quantityPerSaleUnit: Number(detail.quantity),
       }));
 
-    const leafQuantities = await this.bomExplosionService.explodeWithSubRecipes({
-      rootProductId: product.id,
-      orderQuantity: 1,
-      rootComponents: details,
-      resolveSubRecipeComponents: (subRecipeProductId) =>
-        this.subRecipeComponents(manager, tenantId, subRecipeProductId),
-    });
+    const leafQuantities = await this.bomExplosionService.explodeWithSubRecipes(
+      {
+        rootProductId: product.id,
+        orderQuantity: 1,
+        rootComponents: details,
+        resolveSubRecipeComponents: (subRecipeProductId) =>
+          this.subRecipeComponents(manager, tenantId, subRecipeProductId),
+      },
+    );
     const leaves: DeviationLeaf[] = [...leafQuantities.entries()].map(
       ([insumoId, quantityPerSaleUnit]) => ({
         insumoId,

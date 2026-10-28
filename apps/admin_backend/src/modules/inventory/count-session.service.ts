@@ -230,9 +230,9 @@ export class CountSessionService {
         const batchId = approvedEntry.batchId ?? null;
         const batchNumber = approvedEntry.batchNumber?.trim() ?? null;
         if (!batchId && !batchNumber) {
-          const hasLots = await manager
-            .getRepository(Batch)
-            .exists({ where: { tenant_id: tenantId, insumo_id: line.insumoId } });
+          const hasLots = await manager.getRepository(Batch).exists({
+            where: { tenant_id: tenantId, insumo_id: line.insumoId },
+          });
           if (hasLots) {
             throw new BadRequestException(
               `El conteo de '${line.insumoName}' encontró más existencia de la ` +
@@ -247,7 +247,11 @@ export class CountSessionService {
           let batch: Batch | null = null;
           if (batchId) {
             batch = await batchRepo.findOne({
-              where: { id: batchId, tenant_id: tenantId, insumo_id: line.insumoId },
+              where: {
+                id: batchId,
+                tenant_id: tenantId,
+                insumo_id: line.insumoId,
+              },
             });
           }
           if (!batch && batchNumber) {

@@ -18,17 +18,27 @@ export class ProductInventoryMappingService {
    * Look up the effective mapping version for a given product at a specific timestamp.
    * Prohibits productId == insumoId inference: mappings must explicitly exist.
    */
-  async findEffective(tenantId: string, productId: string, effectiveAt: Date): Promise<ProductInventoryMappingVersion | null> {
+  async findEffective(
+    tenantId: string,
+    productId: string,
+    effectiveAt: Date,
+  ): Promise<ProductInventoryMappingVersion | null> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     try {
       await bindTenantContext(queryRunner, tenantId);
-      const repository = queryRunner.manager.getRepository(ProductInventoryMappingVersion);
-      const mapping = await repository.createQueryBuilder('mapping')
+      const repository = queryRunner.manager.getRepository(
+        ProductInventoryMappingVersion,
+      );
+      const mapping = await repository
+        .createQueryBuilder('mapping')
         .where('mapping.tenant_id = :tenantId', { tenantId })
         .andWhere('mapping.product_id = :productId', { productId })
         .andWhere('mapping.effective_at <= :effectiveAt', { effectiveAt })
-        .andWhere('(mapping.superseded_at IS NULL OR mapping.superseded_at > :effectiveAt)', { effectiveAt })
+        .andWhere(
+          '(mapping.superseded_at IS NULL OR mapping.superseded_at > :effectiveAt)',
+          { effectiveAt },
+        )
         .orderBy('mapping.effective_at', 'DESC')
         .getOne();
       return mapping;
@@ -42,21 +52,29 @@ export class ProductInventoryMappingService {
    * Uses advisory xact lock to serialize concurrent first-write creation,
    * closes any active version with superseded_at, and retains all history.
    */
-  async supersede(command: SupersedeProductInventoryMapping): Promise<ProductInventoryMappingVersion> {
+  async supersede(
+    command: SupersedeProductInventoryMapping,
+  ): Promise<ProductInventoryMappingVersion> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
     try {
       await bindTenantContext(queryRunner, command.tenantId);
       // Advisory transaction lock prevents concurrent first-mapping races
-      await queryRunner.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [
-        command.tenantId,
-        command.productId,
-      ]);
+      await queryRunner.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+        [command.tenantId, command.productId],
+      );
 
-      const repository = queryRunner.manager.getRepository(ProductInventoryMappingVersion);
+      const repository = queryRunner.manager.getRepository(
+        ProductInventoryMappingVersion,
+      );
       const active = await repository.findOne({
-        where: { tenant_id: command.tenantId, product_id: command.productId, superseded_at: IsNull() },
+        where: {
+          tenant_id: command.tenantId,
+          product_id: command.productId,
+          superseded_at: IsNull(),
+        },
         lock: { mode: 'pessimistic_write' },
       });
 

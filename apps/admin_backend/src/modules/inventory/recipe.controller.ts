@@ -186,9 +186,8 @@ export class RecipeController {
   ): Promise<ActiveRecipeSummaryResponseDto[]> {
     const normalizedTenantId = this.requireTenant(tenantId);
 
-    const summaries = await this.recipeService.listActiveRecipeSummaries(
-      normalizedTenantId,
-    );
+    const summaries =
+      await this.recipeService.listActiveRecipeSummaries(normalizedTenantId);
     if (summaries.length === 0) {
       return [];
     }

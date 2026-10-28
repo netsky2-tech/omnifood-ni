@@ -30,9 +30,7 @@ import type { InventoryDivergenceStatus } from '../entities/inventory-divergence
 @UseInterceptors(TenantInterceptor)
 @UseGuards(AuthGuard, RolesGuard)
 export class InventoryDivergenceController {
-  constructor(
-    private readonly divergenceService: InventoryDivergenceService,
-  ) {}
+  constructor(private readonly divergenceService: InventoryDivergenceService) {}
 
   @Get()
   @Roles(UserRole.OWNER, UserRole.MANAGER)
@@ -88,9 +86,7 @@ export class InventoryDivergenceController {
     return { total: gaps.length, items: gaps };
   }
 
-  private parseStatus(
-    status?: string,
-  ): InventoryDivergenceStatus | undefined {
+  private parseStatus(status?: string): InventoryDivergenceStatus | undefined {
     if (status == null || status.trim() === '') return undefined;
     const normalized = status.trim().toUpperCase();
     if (normalized !== 'OPEN' && normalized !== 'RECONCILED') {

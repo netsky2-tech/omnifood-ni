@@ -22,9 +22,7 @@ import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
  * delete path. Classified `direct:SI` in scripts/schema-rls-coverage-manifest.txt;
  * the entry MUST exist or scripts/verify-schema-build.sh fails.
  */
-export class CreateBatchOutflowTraces1810010000000
-  implements MigrationInterface
-{
+export class CreateBatchOutflowTraces1810010000000 implements MigrationInterface {
   name = 'CreateBatchOutflowTraces1810010000000';
 
   private static readonly TABLE = 'batch_outflow_traces';

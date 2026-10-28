@@ -23,9 +23,7 @@ async function liftForceRowLevelSecurity(
 ): Promise<void> {
   for (const table of RLS_TABLES) {
     if (await isForceRowLevelSecurity(runner, table)) {
-      await runner.query(
-        `ALTER TABLE "${table}" NO FORCE ROW LEVEL SECURITY`,
-      );
+      await runner.query(`ALTER TABLE "${table}" NO FORCE ROW LEVEL SECURITY`);
       lifted.push(table);
     }
   }
@@ -36,9 +34,7 @@ async function restoreForceRowLevelSecurity(
   lifted: string[],
 ): Promise<void> {
   for (const table of lifted) {
-    await runner.query(
-      `ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY`,
-    );
+    await runner.query(`ALTER TABLE "${table}" FORCE ROW LEVEL SECURITY`);
   }
 }
 

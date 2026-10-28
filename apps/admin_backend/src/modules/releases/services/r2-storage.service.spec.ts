@@ -50,9 +50,7 @@ describe('R2StorageService', () => {
     expect(url.hostname).toBe(
       '5ee2be45b9936ad89ebe203c3b050ada.r2.cloudflarestorage.com',
     );
-    expect(url.pathname).toBe(
-      '/nhilos-pos/releases/pilot/app-arm64-2002.apk',
-    );
+    expect(url.pathname).toBe('/nhilos-pos/releases/pilot/app-arm64-2002.apk');
     expect(url.searchParams.get('X-Amz-Algorithm')).toBe('AWS4-HMAC-SHA256');
     expect(url.searchParams.get('X-Amz-Credential')).toContain(
       'test_access_key_123/20261002/auto/s3/aws4_request',

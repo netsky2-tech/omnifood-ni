@@ -16,12 +16,8 @@ export interface ExplodeBomInput {
  * the exact existing behaviour (and its tests); the recursion only runs where
  * it can add ingredients.
  */
-export const hasSubRecipeComponent = (
-  components: RecipeDetail[],
-): boolean =>
-  components.some(
-    (component) => component.ingredient_type === 'SUB_RECIPE',
-  );
+export const hasSubRecipeComponent = (components: RecipeDetail[]): boolean =>
+  components.some((component) => component.ingredient_type === 'SUB_RECIPE');
 
 export interface ExplodeRecursiveBomInput {
   rootProductId: string;

@@ -10,7 +10,10 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { NEGATIVE_STOCK_POLICY, type NegativeStockPolicy } from '../entities/insumo.entity';
+import {
+  NEGATIVE_STOCK_POLICY,
+  type NegativeStockPolicy,
+} from '../entities/insumo.entity';
 
 export class CreateInsumoDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -69,10 +72,7 @@ export class CreateInsumoDto {
   ivaRatePct?: number | null;
 
   @IsOptional()
-  @IsIn([
-    NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY,
-    NEGATIVE_STOCK_POLICY.RESTRICT,
-  ])
+  @IsIn([NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY, NEGATIVE_STOCK_POLICY.RESTRICT])
   negativeStockPolicy?: NegativeStockPolicy;
 
   @IsOptional()
