@@ -84,7 +84,21 @@ describe('TheoreticalCostService (R8)', () => {
     jest.clearAllMocks();
     movementRows.length = 0;
     lineRows.length = 0;
-    query.mockResolvedValue(undefined);
+    query.mockImplementation(async (sql: unknown) => {
+      if (
+        typeof sql === 'string' &&
+        sql.includes('COALESCE(SUM(mov.total_cost_nio)')
+      ) {
+        return movementRows;
+      }
+      if (
+        typeof sql === 'string' &&
+        sql.includes('COALESCE(SUM(item.quantity)')
+      ) {
+        return lineRows;
+      }
+      return [];
+    });
     transaction.mockImplementation(async (work: (m: unknown) => unknown) =>
       work(manager),
     );

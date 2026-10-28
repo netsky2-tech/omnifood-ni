@@ -13,11 +13,7 @@ import {
 import { RecipeService } from '../recipe.service';
 import { Product, ProductType } from '../entities/product.entity';
 import { Insumo } from '../entities/insumo.entity';
-import {
-  InventoryMovement,
-  MovementType,
-} from '../entities/inventory-movement.entity';
-import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
+import { MovementType } from '../entities/inventory-movement.entity';
 import type { RecipeDetail } from '../entities/recipe-detail.entity';
 
 const MAX_SUB_RECIPE_DEPTH = 5;
@@ -291,97 +287,110 @@ export class TheoreticalCostService {
     tenantId: string,
     period?: { from?: string; to?: string },
   ): Promise<Map<string, { costNio: number; unitsSold: number }>> {
-    return runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      async (manager) => {
-        const qb = manager
-          .getRepository(InventoryMovement)
-          .createQueryBuilder('mov')
-          .where('mov.tenant_id = :tenantId', { tenantId })
-          .andWhere('mov.type = :type', { type: MovementType.SALE });
+    try {
+      return await runInTenantTransaction(
+        this.dataSource,
+        tenantId,
+        async (manager) => {
+          let fromDate: Date | null = null;
+          let toDate: Date | null = null;
+          if (period?.from) {
+            fromDate = new Date(period.from);
+          }
+          if (period?.to) {
+            const to = period.to.trim();
+            toDate =
+              to.length === 10 ? new Date(`${to}T23:59:59.999Z`) : new Date(to);
+          }
 
-        if (period?.from) {
-          qb.andWhere('mov.timestamp >= :from', {
-            from: new Date(period.from),
-          });
-        }
-        if (period?.to) {
-          const to = period.to.trim();
-          qb.andWhere('mov.timestamp <= :to', {
-            to:
-              to.length === 10 ? new Date(`${to}T23:59:59.999Z`) : new Date(to),
-          });
-        }
+          const params: unknown[] = [tenantId, MovementType.SALE];
+          let dateConditions = '';
+          if (fromDate) {
+            params.push(fromDate);
+            dateConditions += ` AND mov.occurred_at >= $${params.length}`;
+          }
+          if (toDate) {
+            params.push(toDate);
+            dateConditions += ` AND mov.occurred_at <= $${params.length}`;
+          }
 
-        // The cost of what left the stock, per product. The movement carries
-        // the line it came from, and the line carries the product.
-        const costRows: Array<{
-          product_id: string;
-          total_cost: string | number;
-        }> = await qb
-          .innerJoin(
-            InvoiceItem,
-            'item',
-            'item.id = mov.originInvoiceItemId AND item.tenant_id = :tenantId',
-            { tenantId },
-          )
-          .select('item.product_id', 'product_id')
-          .addSelect('SUM(mov.totalCostNio)', 'total_cost')
-          .groupBy('item.product_id')
-          .getRawMany();
+          // The cost of what left the stock, per product. The movement carries
+          // the line it came from, and the line carries the product.
+          const costRows = await manager.query<
+            Array<{
+              product_id: string;
+              total_cost: string | number;
+            }>
+          >(
+            `
+            SELECT item.product_id, COALESCE(SUM(mov.total_cost_nio), 0) AS total_cost
+            FROM inventory_kardex mov
+            INNER JOIN invoice_items item
+              ON item.id::text = mov.origin_invoice_item_id
+              AND item.tenant_id = $1
+            WHERE mov.tenant_id = $1
+              AND mov.type = $2
+              AND mov.origin_invoice_item_id IS NOT NULL
+              ${dateConditions}
+            GROUP BY item.product_id
+            `,
+            params,
+          );
 
-        // The units sold, counted ONCE per line. The join above repeats a
-        // line once per movement (one per insumo), so the quantity can NOT
-        // come from it: it is summed over the DISTINCT lines.
-        const lineRows: Array<{
-          product_id: string;
-          units: string | number;
-        }> = await manager
-          .getRepository(InvoiceItem)
-          .createQueryBuilder('item')
-          .where('item.tenant_id = :tenantId', { tenantId })
-          .andWhere(
-            'item.id IN (SELECT origin_invoice_item_id FROM inventory_kardex WHERE tenant_id = :tenantId AND type = :type' +
-              (period?.from ? ' AND timestamp >= :from' : '') +
-              (period?.to ? ' AND timestamp <= :to' : '') +
-              ')',
-            {
-              tenantId,
-              type: MovementType.SALE,
-              ...(period?.from ? { from: new Date(period.from) } : {}),
-              ...(period?.to
-                ? {
-                    to:
-                      period.to.trim().length === 10
-                        ? new Date(`${period.to.trim()}T23:59:59.999Z`)
-                        : new Date(period.to),
-                  }
-                : {}),
-            },
-          )
-          .select('item.product_id', 'product_id')
-          .addSelect('SUM(item.quantity)', 'units')
-          .groupBy('item.product_id')
-          .getRawMany();
+          // The units sold, counted ONCE per line. The join above repeats a
+          // line once per movement (one per insumo), so the quantity can NOT
+          // come from it: it is summed over the DISTINCT lines.
+          const lineRows = await manager.query<
+            Array<{
+              product_id: string;
+              units: string | number;
+            }>
+          >(
+            `
+            SELECT item.product_id, COALESCE(SUM(item.quantity), 0) AS units
+            FROM invoice_items item
+            WHERE item.tenant_id = $1
+              AND item.id::text IN (
+                SELECT origin_invoice_item_id
+                FROM inventory_kardex mov
+                WHERE mov.tenant_id = $1
+                  AND mov.type = $2
+                  AND mov.origin_invoice_item_id IS NOT NULL
+                  ${dateConditions}
+              )
+            GROUP BY item.product_id
+            `,
+            params,
+          );
 
-        const unitsByProduct = new Map<string, number>(
-          lineRows.map((row) => [row.product_id, Number(row.units ?? 0)]),
-        );
+          const unitsByProduct = new Map<string, number>(
+            lineRows.map((row) => [
+              String(row.product_id),
+              Number(row.units ?? 0),
+            ]),
+          );
 
-        const result = new Map<
-          string,
-          { costNio: number; unitsSold: number }
-        >();
-        for (const row of costRows) {
-          result.set(row.product_id, {
-            costNio: Number(row.total_cost ?? 0),
-            unitsSold: unitsByProduct.get(row.product_id) ?? 0,
-          });
-        }
-        return result;
-      },
-    );
+          const result = new Map<
+            string,
+            { costNio: number; unitsSold: number }
+          >();
+          for (const row of costRows) {
+            const pId = String(row.product_id);
+            result.set(pId, {
+              costNio: Number(row.total_cost ?? 0),
+              unitsSold: unitsByProduct.get(pId) ?? 0,
+            });
+          }
+          return result;
+        },
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to compute actual costs by product for tenant ${tenantId}: ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      return new Map();
+    }
   }
 
   private async computeProduct(
