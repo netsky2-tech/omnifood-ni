@@ -65,8 +65,8 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('Conteos de inventario'), findsOneWidget);
-    expect(find.text('NUEVA SESIÓN'), findsOneWidget);
+    expect(find.text('Conteo Físico / Ajustes'), findsOneWidget);
+    expect(find.text('INICIAR CONTEO FÍSICO'), findsOneWidget);
     expect(find.text('Todavía no hay sesiones de conteo en esta terminal.'), findsOneWidget);
   });
 

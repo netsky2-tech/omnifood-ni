@@ -71,6 +71,26 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
         backgroundColor: NhilosColors.surface,
         elevation: 0,
         actions: [
+          Consumer<PhysicalCountViewModel>(
+            builder: (context, vm, _) => IconButton(
+              icon: const Icon(Icons.add_task),
+              tooltip: 'Nueva sesión de conteo',
+              onPressed: vm.availableInsumos.isEmpty || vm.isLoading
+                  ? null
+                  : () async {
+                      await vm.startSession(
+                        warehouseId: 'wh-local',
+                        warehouseName: 'Bodega Central',
+                      );
+                      if (context.mounted) {
+                        _showToast(
+                          context,
+                          'Nueva sesión de conteo iniciada en Bodega Central.',
+                        );
+                      }
+                    },
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Actualizar conteos',
@@ -93,58 +113,8 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. Header Row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Conteos de inventario',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: NhilosColors.textPrimary,
-                            ),
-                      ),
-                    ),
-                    SizedBox(
-                      height: 44,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: NhilosColors.brandPrimary,
-                          foregroundColor: Colors.white,
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: NhilosRadii.buttonRadius,
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                        ),
-                        onPressed:
-                            viewModel.availableInsumos.isEmpty || viewModel.isLoading
-                                ? null
-                                : () async {
-                                    await viewModel.startSession(
-                                      warehouseId: 'wh-local',
-                                      warehouseName: 'Bodega Central',
-                                    );
-                                    if (context.mounted) {
-                                      _showToast(
-                                        context,
-                                        'Nueva sesión de conteo iniciada en Bodega Central.',
-                                      );
-                                    }
-                                  },
-                        icon: const Icon(Icons.add_task, size: 18),
-                        label: const Text(
-                          'NUEVA SESIÓN',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                // 2. Error Banner (if any)
+                // Error Banner (if any)
                 if (viewModel.errorMessage != null) ...[
-                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -173,6 +143,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
                 ],
                 const SizedBox(height: 16),
 
@@ -1068,6 +1039,32 @@ class _EmptyPhysicalCountState extends StatelessWidget {
               'Abra una sesión para iniciar el conteo físico y registrar ajustes de inventario.',
               style: TextStyle(color: NhilosColors.textSecondary),
               textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            Consumer<PhysicalCountViewModel>(
+              builder: (context, vm, _) => ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: NhilosColors.brandPrimary,
+                  foregroundColor: Colors.white,
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: NhilosRadii.buttonRadius,
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                ),
+                onPressed: vm.availableInsumos.isEmpty || vm.isLoading
+                    ? null
+                    : () async {
+                        await vm.startSession(
+                          warehouseId: 'wh-local',
+                          warehouseName: 'Bodega Central',
+                        );
+                      },
+                icon: const Icon(Icons.add_task, size: 18),
+                label: const Text(
+                  'INICIAR CONTEO FÍSICO',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
           ],
         ),
