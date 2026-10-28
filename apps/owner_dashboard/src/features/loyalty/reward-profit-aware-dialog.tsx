@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -7,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toFiniteNumber } from '@/lib/numeric';
 import { AlertCircle, Calendar, Info, TrendingUp } from 'lucide-react';
@@ -110,7 +113,8 @@ export function RewardProfitAwareDialog({
   open,
   onOpenChange,
 }: RewardProfitAwareDialogProps) {
-  const queryResult = useRewardProfitAware(reward?.id ?? '');
+  const [asOfDate, setAsOfDate] = useState<string>('');
+  const queryResult = useRewardProfitAware(reward?.id ?? '', asOfDate || undefined);
   const { data: metrics, isLoading = false, error = null } = queryResult ?? {};
 
   if (!open || !reward) return null;
@@ -160,13 +164,47 @@ export function RewardProfitAwareDialog({
           </div>
         ) : metrics ? (
           <div className="space-y-4 py-2">
-            {/* Window banner */}
-            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Calendar className="h-3.5 w-3.5" />
-                Ventana móvil: {metrics.window.label === 'LAST_30_DAYS' ? 'Últimos 30 días' : metrics.window.label}
-              </span>
-              <span>asOf: {new Date(metrics.asOfUtc).toLocaleDateString()}</span>
+            {/* Window banner & as_of filter */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-muted/50 rounded-lg border border-border/50 text-xs">
+              <div className="space-y-0.5">
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Calendar className="h-3.5 w-3.5 text-primary" />
+                  Ventana móvil: {metrics.window.label === 'LAST_30_DAYS' ? 'Últimos 30 días' : metrics.window.label}
+                </span>
+                <p className="text-muted-foreground text-[11px]">
+                  {metrics.window.startUtc && metrics.window.endUtc ? (
+                    <>
+                      Período analizado: del {new Date(metrics.window.startUtc).toLocaleDateString('es-NI')} al{' '}
+                      {new Date(metrics.window.endUtc).toLocaleDateString('es-NI')}
+                    </>
+                  ) : (
+                    'Período acumulado de 30 días para calibración de incentivos'
+                  )}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <label htmlFor="as-of-date-picker" className="text-xs font-medium text-muted-foreground shrink-0">
+                  Fecha de corte:
+                </label>
+                <Input
+                  id="as-of-date-picker"
+                  type="date"
+                  value={asOfDate}
+                  onChange={(e) => setAsOfDate(e.target.value)}
+                  className="h-8 text-xs w-36 bg-background"
+                />
+                {asOfDate && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => setAsOfDate('')}
+                  >
+                    Hoy
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Metrics Grid */}
