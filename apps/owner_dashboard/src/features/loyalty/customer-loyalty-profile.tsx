@@ -9,7 +9,7 @@ import {
   usePrograms,
   useAdjustPoints,
 } from './use-loyalty';
-import type { Customer, CustomerPointTransaction, AdjustPointsInput } from './types';
+import type { Customer, CustomerPointTransaction, AdjustPointsInput, LoyaltyProgram } from './types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
