@@ -20,6 +20,7 @@ class CountSessionDetailView extends StatefulWidget {
     required this.onRequestApproval,
     required this.onApprove,
     required this.onPost,
+    this.onCancel,
   });
 
   final CountSessionDocument session;
@@ -27,6 +28,7 @@ class CountSessionDetailView extends StatefulWidget {
   final CountSessionAction onRequestApproval;
   final CountSessionAction onApprove;
   final CountSessionAction onPost;
+  final CountSessionAction? onCancel;
 
   @override
   State<CountSessionDetailView> createState() => _CountSessionDetailViewState();
@@ -332,18 +334,20 @@ class _CountSessionDetailViewState extends State<CountSessionDetailView> {
         // 4. Primary Session Lifecycle Actions
         if (session.status == CountSessionStatus.open ||
             session.status == CountSessionStatus.counting ||
-            session.status == CountSessionStatus.recount)
+            session.status == CountSessionStatus.recount) ...[
           SizedBox(
             height: 48,
             child: ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                backgroundColor: NhilosColors.brandPrimary,
+                backgroundColor: countedLines == 0
+                    ? NhilosColors.neutralGrayDark
+                    : NhilosColors.brandPrimary,
                 foregroundColor: Colors.white,
                 shape: const RoundedRectangleBorder(
                   borderRadius: NhilosRadii.buttonRadius,
                 ),
               ),
-              onPressed: widget.onRequestApproval,
+              onPressed: countedLines == 0 ? null : widget.onRequestApproval,
               icon: const Icon(Icons.send_outlined, size: 18),
               label: const Text(
                 'Enviar a aprobación',
@@ -351,6 +355,15 @@ class _CountSessionDetailViewState extends State<CountSessionDetailView> {
               ),
             ),
           ),
+          if (countedLines == 0) ...[
+            const SizedBox(height: 6),
+            const Text(
+              'Debe registrar el conteo de al menos un insumo antes de enviar a aprobación.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: NhilosColors.textMuted),
+            ),
+          ],
+        ],
         if (session.status == CountSessionStatus.approvalPending)
           SizedBox(
             height: 48,
@@ -389,6 +402,57 @@ class _CountSessionDetailViewState extends State<CountSessionDetailView> {
               ),
             ),
           ),
+        if (session.status != CountSessionStatus.posted &&
+            session.status != CountSessionStatus.closed &&
+            widget.onCancel != null) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: NhilosColors.danger,
+                side: const BorderSide(color: NhilosColors.dangerBorder),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                ),
+              ),
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('¿Descartar sesión de conteo?'),
+                    content: Text(
+                      'Las observaciones registradas en ${session.warehouseName} '
+                      'no se aplicarán en el kardex y la sesión quedará cerrada.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('CANCELAR'),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: NhilosColors.danger,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('SÍ, DESCARTAR'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await widget.onCancel!();
+                }
+              },
+              icon: const Icon(Icons.cancel_outlined, size: 18),
+              label: const Text(
+                'Descartar sesión de conteo',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

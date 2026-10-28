@@ -343,4 +343,67 @@ void main() {
     ).called(1);
     expect(viewModel.selectedSession!.status, CountSessionStatus.posted);
   });
+
+  test('startSession rejects creating a second active session for the same warehouse', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+
+    expect(viewModel.hasActiveSessionForWarehouse('wh-1'), isTrue);
+
+    // Attempting to start another session for the same warehouse must throw StateError
+    await expectLater(
+      viewModel.startSession(
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test('cancelSession closes an active session and unblocks new session creation', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+
+    expect(viewModel.hasActiveSessionForWarehouse('wh-1'), isTrue);
+
+    await viewModel.cancelSession(sessionId);
+
+    expect(viewModel.selectedSession!.status, CountSessionStatus.closed);
+    expect(viewModel.hasActiveSessionForWarehouse('wh-1'), isFalse);
+
+    // Now startSession succeeds because the previous one is closed
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    expect(viewModel.hasActiveSessionForWarehouse('wh-1'), isTrue);
+  });
+
+  test('requestApproval rejects a session where zero lines were counted', () async {
+    when(() => repository.getActiveInsumos()).thenAnswer((_) async => const <Insumo>[milk]);
+
+    await viewModel.loadInitialData();
+    await viewModel.startSession(
+      warehouseId: 'wh-1',
+      warehouseName: 'Bodega Central',
+    );
+    final sessionId = viewModel.sessions.single.id;
+
+    // No lines counted yet
+    await expectLater(
+      viewModel.requestApproval(sessionId),
+      throwsA(isA<StateError>()),
+    );
+  });
 }

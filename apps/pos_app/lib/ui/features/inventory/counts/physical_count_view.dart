@@ -62,6 +62,94 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
     );
   }
 
+  Future<void> _handleNewSession(
+    BuildContext context,
+    PhysicalCountViewModel viewModel,
+  ) async {
+    const warehouseId = 'wh-local';
+    const warehouseName = 'Bodega Central';
+
+    final activeSession = viewModel.getActiveSessionForWarehouse(warehouseId);
+    if (activeSession != null) {
+      final statusLabel =
+          localize(activeSession.status, kCountSessionStatusLabels);
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: NhilosColors.surface,
+          shape: const RoundedRectangleBorder(
+            borderRadius: NhilosRadii.modalRadius,
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: NhilosColors.warning),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Conteo en curso',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Ya existe una sesión de conteo activa para $warehouseName en estado «$statusLabel».',
+                style: const TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Por control y normativa de inventario (NIC 2), solo puede existir una sesión activa por almacén para evitar duplicidad de ajustes.',
+                style: TextStyle(fontSize: 12, color: NhilosColors.textSecondary),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CERRAR'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: NhilosColors.brandPrimary,
+                foregroundColor: Colors.white,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: NhilosRadii.buttonRadius,
+                ),
+              ),
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                viewModel.selectSession(activeSession.id);
+              },
+              child: const Text('VER SESIÓN EN CURSO'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    try {
+      await viewModel.startSession(
+        warehouseId: warehouseId,
+        warehouseName: warehouseName,
+      );
+      if (context.mounted) {
+        _showToast(
+          context,
+          'Nueva sesión de conteo iniciada en $warehouseName.',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showToast(context, '$e', isError: true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -77,18 +165,7 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
               tooltip: 'Nueva sesión de conteo',
               onPressed: vm.availableInsumos.isEmpty || vm.isLoading
                   ? null
-                  : () async {
-                      await vm.startSession(
-                        warehouseId: 'wh-local',
-                        warehouseName: 'Bodega Central',
-                      );
-                      if (context.mounted) {
-                        _showToast(
-                          context,
-                          'Nueva sesión de conteo iniciada en Bodega Central.',
-                        );
-                      }
-                    },
+                  : () => _handleNewSession(context, vm),
             ),
           ),
           IconButton(
@@ -207,6 +284,17 @@ class _PhysicalCountViewState extends State<PhysicalCountView> {
                           }
                         },
                         onPost: () => _showPostingDialog(context, viewModel),
+                        onCancel: () async {
+                          await viewModel.cancelSession(
+                            viewModel.selectedSession!.id,
+                          );
+                          if (context.mounted) {
+                            _showToast(
+                              context,
+                              'Sesión de conteo descartada.',
+                            );
+                          }
+                        },
                       ),
                     ),
                   ),

@@ -75,10 +75,39 @@ class PhysicalCountViewModel extends ChangeNotifier {
     }
   }
 
+  static const Set<String> _activeStatuses = {
+    CountSessionStatus.open,
+    CountSessionStatus.counting,
+    CountSessionStatus.recount,
+    CountSessionStatus.approvalPending,
+    CountSessionStatus.approved,
+  };
+
+  CountSessionDocument? getActiveSessionForWarehouse(String warehouseId) {
+    for (final session in _sessions) {
+      if (session.warehouseId == warehouseId &&
+          _activeStatuses.contains(session.status)) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  bool hasActiveSessionForWarehouse(String warehouseId) =>
+      getActiveSessionForWarehouse(warehouseId) != null;
+
   Future<void> startSession({
     required String warehouseId,
     required String warehouseName,
   }) async {
+    final active = getActiveSessionForWarehouse(warehouseId);
+    if (active != null) {
+      throw StateError(
+        'Ya existe una sesión de conteo activa para ${active.warehouseName}. '
+        'Debe completarse o cancelarse antes de iniciar una nueva.',
+      );
+    }
+
     final now = _clock();
     final session = CountSessionDocument(
       id: 'count-${now.microsecondsSinceEpoch}',
@@ -176,9 +205,36 @@ class PhysicalCountViewModel extends ChangeNotifier {
 
   Future<void> requestApproval(String sessionId) async {
     final session = _requireSession(sessionId);
+    final hasCountedLines = session.lines.any((l) => l.entries.isNotEmpty);
+    if (!hasCountedLines) {
+      throw StateError(
+        'Debe registrar el conteo de al menos un insumo antes de enviar a aprobación.',
+      );
+    }
     await _repository.saveCountSessionDocument(
       session.copyWith(
         status: CountSessionStatus.approvalPending,
+        updatedAt: _clock(),
+        isSynced: false,
+      ),
+    );
+    await loadInitialData();
+  }
+
+  Future<void> cancelSession(String sessionId, {String? reason}) async {
+    final session = _requireSession(sessionId);
+    if (session.status == CountSessionStatus.posted) {
+      throw StateError(
+        'No se puede cancelar una sesión que ya fue aplicada en el kardex.',
+      );
+    }
+    if (session.status == CountSessionStatus.closed) {
+      return;
+    }
+
+    await _repository.saveCountSessionDocument(
+      session.copyWith(
+        status: CountSessionStatus.closed,
         updatedAt: _clock(),
         isSynced: false,
       ),

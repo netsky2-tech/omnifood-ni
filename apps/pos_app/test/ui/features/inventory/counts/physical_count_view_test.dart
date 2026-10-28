@@ -403,4 +403,51 @@ void main() {
     expect(find.textContaining('Conteo registrado para Leche Entera'), findsOneWidget);
     expect(storedSessions.first.lines.first.entries.single.countedQuantity, equals(9));
   });
+
+  testWidgets('cancels an active count session and updates status to closed', (tester) async {
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    storedSessions = [
+      CountSessionDocument(
+        id: 'count-cancel',
+        warehouseId: 'wh-1',
+        warehouseName: 'Bodega Central',
+        cutoffAt: DateTime(2026, 6, 2, 10, 30),
+        status: CountSessionStatus.open,
+        createdAt: DateTime(2026, 6, 2, 10),
+        updatedAt: DateTime(2026, 6, 2, 10),
+        lines: const [
+          CountSessionLineDocument(
+            id: 'line-milk',
+            insumoId: 'milk',
+            insumoName: 'Leche Entera',
+            uom: 'L',
+            theoreticalQuantity: 10,
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    // Verify "Descartar sesión de conteo" button is visible
+    expect(find.text('Descartar sesión de conteo'), findsOneWidget);
+
+    await tester.tap(find.text('Descartar sesión de conteo'));
+    await tester.pumpAndSettle();
+
+    // Dialog appears
+    expect(find.text('¿Descartar sesión de conteo?'), findsOneWidget);
+    expect(find.text('SÍ, DESCARTAR'), findsOneWidget);
+
+    await tester.tap(find.text('SÍ, DESCARTAR'));
+    await tester.pumpAndSettle();
+
+    // Dialog is dismissed and session is closed
+    expect(find.text('¿Descartar sesión de conteo?'), findsNothing);
+    expect(storedSessions.first.status, equals(CountSessionStatus.closed));
+  });
 }
