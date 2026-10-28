@@ -12,6 +12,8 @@ import {
   MovementType,
 } from '../../inventory/entities/inventory-movement.entity';
 import { UomConversion } from '../../inventory/entities/uom-conversion.entity';
+import { Batch } from '../../inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
@@ -843,6 +845,8 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
             UomConversion,
             Product,
             ProductInventoryMappingVersion,
+            Batch,
+            BatchOutflowTrace,
           ],
           extra: {
             allowExitOnIdle: true,
@@ -1102,6 +1106,252 @@ describe('InvoicesService deterministic sync sequencing (db)', () => {
           // Always drop the fixture's schema and roles, even when the caller
           // DataSource fails to destroy: a failing test never leaks them.
           // Either failure propagates; a second failure replaces the first.
+          await fixture.close();
+        }
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    'accepts a SALE_TIME_V1 sale with multiple bindings: only the first kardex row carries the record source_sequence (uq_inventory_kardex_source_sequence regression)',
+    async () => {
+      const fixture = await createMigrationBuiltSchemaFixture();
+      const schema = fixture.schema;
+      const tenantId = randomUUID();
+      const insumoAId = randomUUID();
+      const insumoBId = randomUUID();
+      const invoiceId = randomUUID();
+      const correlationA = 'sha256-corr-multibinding-a';
+      const correlationB = 'sha256-corr-multibinding-b';
+      let dataSource: DataSource | null = null;
+
+      try {
+        dataSource = new DataSource({
+          type: 'postgres',
+          ...postgresConnection,
+          schema,
+          entities: [
+            Tenant,
+            Invoice,
+            InvoiceItem,
+            InvoiceItemModifier,
+            Payment,
+            InventorySyncReceipt,
+            InventorySyncOutbox,
+            InventoryMovement,
+            Insumo,
+            UomConversion,
+            Product,
+            ProductInventoryMappingVersion,
+            Batch,
+            BatchOutflowTrace,
+          ],
+          extra: {
+            allowExitOnIdle: true,
+            options: `-c search_path=${schema},public -c statement_timeout=15000`,
+          },
+        });
+        await dataSource.initialize();
+
+        await dataSource.getRepository(Tenant).save(
+          dataSource.getRepository(Tenant).create({
+            id: tenantId,
+            name: 'Tenant Multi Binding V1',
+            slug: normalizeTenantSlug('Tenant Multi Binding V1'),
+          }),
+        );
+
+        // Two DIRECT-mapped products: one invoice with both produces two
+        // bindings, hence two kardex rows from ONE sync record — the shape
+        // that used to violate uq_inventory_kardex_source_sequence.
+        const mappingVersionIds = new Map<string, string>();
+        for (const [insumoId, name] of [
+          [insumoAId, 'Tortilla'],
+          [insumoBId, 'Queso'],
+        ] as const) {
+          await dataSource.getRepository(Insumo).save(
+            dataSource.getRepository(Insumo).create({
+              id: insumoId,
+              tenant_id: tenantId,
+              name,
+              purchaseUom: 'unit',
+              consumptionUom: 'unit',
+              conversionFactor: 1,
+              stock: 10,
+              existenciaActual: 10,
+              averageCost: 2,
+              negativeStockPolicy: 'ALLOW_TEMPORARY',
+            }),
+          );
+          await dataSource.getRepository(Product).save(
+            dataSource.getRepository(Product).create({
+              id: insumoId,
+              tenant_id: tenantId,
+              name,
+              uom: 'unit',
+              product_type: ProductType.SIMPLE,
+              tax_rate: 0.15,
+              is_tax_exempt: false,
+            }),
+          );
+          const mappingVersionId = randomUUID();
+          mappingVersionIds.set(insumoId, mappingVersionId);
+          await dataSource
+            .getRepository(ProductInventoryMappingVersion)
+            .save(
+              dataSource.getRepository(ProductInventoryMappingVersion).create({
+                id: mappingVersionId,
+                tenant_id: tenantId,
+                product_id: insumoId,
+                insumo_id: insumoId,
+                effective_at: new Date(0),
+              }),
+            );
+          // Real-schema running-balance trigger derives the opening balance
+          // from the ledger itself, so stock must enter via INITIAL_STOCK
+          // (same requirement as the restock replay test above).
+          await dataSource.getRepository(InventoryMovement).insert({
+            tenant_id: tenantId,
+            insumoId,
+            type: MovementType.INITIAL_STOCK,
+            quantity: 10,
+            previousStock: 0,
+            newStock: 10,
+            unitCostNio: 2,
+            totalCostNio: 20,
+            sourceDocumentType: 'SYSTEM',
+            sourceDocumentId: 'initial-stock-baseline',
+          });
+        }
+
+        const service = new InvoicesService(
+          dataSource,
+          dataSource.getRepository(Invoice),
+          dataSource.getRepository(InvoiceItem),
+          dataSource.getRepository(Payment),
+          createMockAuthorizingUserRepository(),
+          dataSource.getRepository(InventoryMovement),
+          dataSource.getRepository(InventorySyncReceipt),
+          dataSource.getRepository(InventorySyncOutbox),
+          { findActiveVersion: jest.fn().mockResolvedValue(null) } as never,
+          { explode: jest.fn() } as never,
+        );
+
+        const result = await service.syncBatch(tenantId, [
+          {
+            idempotencyKey: 'sale-multibinding-v1',
+            sourceDeviceId: 'terminal-multibinding',
+            sourceSequence: 1,
+            flowType: 'sales',
+            documentType: 'SALE',
+            invoice: {
+              id: invoiceId,
+              number: 'A-MULTI-001',
+              createdAt: new Date().toISOString(),
+              userId: 'd0000000-0000-4000-8000-00000000000d',
+              subtotal: 7,
+              totalTax: 1.05,
+              total: 8.05,
+              paymentStatus: 'PAID',
+              type: 'regular',
+              inventoryPolicyVersion: 'SALE_TIME_V1',
+              inventoryOutcome: 'APPLIED',
+              items: [
+                {
+                  id: randomUUID(),
+                  productId: insumoAId,
+                  productName: 'Tortilla',
+                  quantity: 1,
+                  unitPrice: 3.5,
+                  originalTaxRate: 0.15,
+                  appliedTaxRate: 0.15,
+                  taxAmount: 0.53,
+                  total: 4.03,
+                  discount: 0,
+                  inventorySnapshotVersion: 'SALE_TIME_V1',
+                  inventorySnapshot: {
+                    classification: 'SIMPLE',
+                    disposition: 'DIRECT',
+                    catalogRevision: 'rev-multi-001',
+                    mappingVersionId: mappingVersionIds.get(insumoAId),
+                    bindings: [
+                      {
+                        bindingOrdinal: 0,
+                        insumoId: insumoAId,
+                        quantityPerSaleUnit: 1,
+                        saleCorrelationId: correlationA,
+                      },
+                    ],
+                  },
+                },
+                {
+                  id: randomUUID(),
+                  productId: insumoBId,
+                  productName: 'Queso',
+                  quantity: 1,
+                  unitPrice: 3.5,
+                  originalTaxRate: 0.15,
+                  appliedTaxRate: 0.15,
+                  taxAmount: 0.52,
+                  total: 4.02,
+                  discount: 0,
+                  inventorySnapshotVersion: 'SALE_TIME_V1',
+                  inventorySnapshot: {
+                    classification: 'SIMPLE',
+                    disposition: 'DIRECT',
+                    catalogRevision: 'rev-multi-001',
+                    mappingVersionId: mappingVersionIds.get(insumoBId),
+                    bindings: [
+                      {
+                        bindingOrdinal: 0,
+                        insumoId: insumoBId,
+                        quantityPerSaleUnit: 1,
+                        saleCorrelationId: correlationB,
+                      },
+                    ],
+                  },
+                },
+              ],
+              payments: [],
+            },
+          },
+        ]);
+
+        // Before the fix this record was REJECTED with
+        // "duplicate key value violates unique constraint
+        // uq_inventory_kardex_source_sequence" and rolled back forever.
+        expect(result.results).toEqual([
+          expect.objectContaining({
+            status: 'ACCEPTED',
+            code: 'APPLIED',
+            inventoryOutcome: 'APPLIED',
+          }),
+        ]);
+
+        const saleMovements = await dataSource
+          .getRepository(InventoryMovement)
+          .find({
+            where: { tenant_id: tenantId, type: MovementType.SALE },
+            order: { id: 'ASC' },
+          });
+        expect(saleMovements).toHaveLength(2);
+        // Only the FIRST kardex row of the record carries the record-level
+        // sequence; the partial unique index ignores the NULL second row.
+        expect(saleMovements[0].sourceSequence).toBe('1');
+        expect(saleMovements[1].sourceSequence == null).toBe(true);
+        expect(saleMovements.map((m) => m.saleCorrelationId).sort()).toEqual(
+          [correlationA, correlationB].sort(),
+        );
+        expect(saleMovements.map((m) => m.insumoId).sort()).toEqual(
+          [insumoAId, insumoBId].sort(),
+        );
+      } finally {
+        try {
+          if (dataSource?.isInitialized) {
+            await dataSource.destroy();
+          }
+        } finally {
           await fixture.close();
         }
       }

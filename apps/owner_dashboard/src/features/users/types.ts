@@ -53,6 +53,10 @@ export const AppPermission = {
   ONBOARDING_PRODUCT_IMPORT_MANAGE: "onboarding:product_import:manage",
   ONBOARDING_ACTIVATION_MANAGE: "onboarding:activation:manage",
   ONBOARDING_SUPPORT_ASSIST: "onboarding:support:assist",
+  // Mirrors the backend AppPermission.SUPERVISION_CONFIGURE: configuring
+  // the tenant's supervision policy (who may authorize a sensitive
+  // operation, and which flows accept a self-authorization).
+  SUPERVISION_CONFIGURE: "supervision:configure",
 } as const;
 
 export type AppPermission = (typeof AppPermission)[keyof typeof AppPermission];
@@ -63,7 +67,14 @@ export interface PermissionMetadata {
   key: AppPermission;
   label: string;
   description: string;
-  category: "Ventas" | "Caja & Turnos" | "Inventario" | "Reportes" | "Lealtad" | "Onboarding & Activación";
+  category:
+    | "Ventas"
+    | "Caja & Turnos"
+    | "Inventario"
+    | "Reportes"
+    | "Lealtad"
+    | "Onboarding & Activación"
+    | "Supervisión";
 }
 
 export const PERMISSIONS_CATALOG: Record<AppPermission, PermissionMetadata> = {
@@ -212,6 +223,13 @@ export const PERMISSIONS_CATALOG: Record<AppPermission, PermissionMetadata> = {
     description: "Asistir y guiar la configuración del comercio",
     category: "Onboarding & Activación",
   },
+  [AppPermission.SUPERVISION_CONFIGURE]: {
+    key: AppPermission.SUPERVISION_CONFIGURE,
+    label: "Configurar Supervisión y Autorizaciones",
+    description:
+      "Definir quién puede autorizar las operaciones sensibles del negocio y cuáles aceptan la firma del propio operador",
+    category: "Supervisión",
+  },
 };
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]> = {
@@ -238,6 +256,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]
     AppPermission.ONBOARDING_TEMPLATE_APPLY,
     AppPermission.ONBOARDING_PRODUCT_IMPORT_MANAGE,
     AppPermission.ONBOARDING_ACTIVATION_MANAGE,
+    AppPermission.SUPERVISION_CONFIGURE,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
@@ -252,6 +271,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, readonly AppPermission[]
     AppPermission.LOYALTY_CUSTOMER_READ,
     AppPermission.LOYALTY_HISTORY_READ,
     AppPermission.ONBOARDING_READ,
+    AppPermission.SUPERVISION_CONFIGURE,
   ],
   [UserRole.CASHIER]: [],
   [UserRole.WAITER]: [],

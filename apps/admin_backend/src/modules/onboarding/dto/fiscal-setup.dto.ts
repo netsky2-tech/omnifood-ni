@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDefined,
+  IsEmail,
   IsEnum,
   IsISO8601,
   IsNumber,
@@ -184,13 +185,30 @@ export class FiscalSetupDto {
   })
   checkoutFxMode?: CheckoutFxMode | null;
 
+  /**
+   * Company identity parity P1: nullable contact fields persisted on the
+   * tenant and carried by the fiscal snapshot. A blank string transforms to
+   * null — the clear sentinel — so an absent value never reaches persistence
+   * as '' (S3 absence discipline); the service treats undefined as a no-op.
+   */
+  @Transform(blankStringToNull)
   @IsOptional()
   @IsString()
-  phone?: string;
+  @MaxLength(30, { message: 'phone must not exceed 30 characters' })
+  phone?: string | null;
 
+  @Transform(blankStringToNull)
   @IsOptional()
   @IsString()
-  address?: string;
+  @MaxLength(255, { message: 'address must not exceed 255 characters' })
+  address?: string | null;
+
+  /** Company identity parity P1: optional contact email (absent entirely before P1). */
+  @Transform(blankStringToNull)
+  @IsOptional()
+  @IsEmail({}, { message: 'email must be a valid email address' })
+  @MaxLength(254, { message: 'email must not exceed 254 characters' })
+  email?: string | null;
 
   /**
    * D-21 (#554): DGI authorization letter data. The authorization code has
@@ -256,6 +274,13 @@ export interface FiscalSetupResponse {
   tenantId: string;
   businessName: string;
   ruc: string | null;
+  /**
+   * Company identity parity P1: null = never configured (or cleared) —
+   * absence is declared, never an empty string (S3).
+   */
+  phone: string | null;
+  address: string | null;
+  email: string | null;
   regime: FiscalRegime;
   taxRateIva: number;
   pricesIncludeTax: boolean;

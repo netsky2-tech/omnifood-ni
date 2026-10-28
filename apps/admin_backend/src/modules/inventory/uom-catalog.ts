@@ -27,12 +27,32 @@
  * valid regardless of spelling (unidad → unidades).
  */
 
+/**
+ * Absolute tolerance for the universal anchor check.
+ *
+ * `insumos.conversionFactor` is `numeric(12,4)`, so the platform anchor is
+ * STORED rounded to four decimals: lb→kg = 0.45359237 is saved as 0.4536 and
+ * oz→g = 28.349523125 as 28.3495. A tolerance finer than the storage precision
+ * rejects the very value the catalog told the operator to enter, on the next
+ * write that touches a UOM field. This is tied to the column's precision, not
+ * to the anchor's mathematical precision: it still rejects the unedited
+ * factor-1 default and any materially different value.
+ */
+const ANCHOR_FACTOR_TOLERANCE = 1e-4;
+
 export type UomDimension =
   | 'mass'
   | 'volume'
   | 'count'
   | 'container'
-  | 'serving';
+  | 'serving'
+  /**
+   * A unit the TENANT declared in its own UOM catalog and the platform does
+   * not know. Its content is business data (the insumo's conversion factor),
+   * never a platform constant — exactly like container/serving, except that
+   * even the dimension is unknown.
+   */
+  | 'tenant';
 
 export interface UomCatalogEntry {
   /** Stable platform code (normalized, singular). */
@@ -274,9 +294,52 @@ for (const entry of UOM_CATALOG) {
 }
 
 /** Resolves a free-text UOM string to its platform catalog entry. */
-export function resolveUom(raw: string): UomCatalogEntry | null {
+export function resolveUom(
+  raw: string,
+  tenantUomCodes?: readonly string[],
+): UomCatalogEntry | null {
   if (!raw) return null;
-  return BY_ALIAS.get(normalize(raw)) ?? null;
+  const platform = BY_ALIAS.get(normalize(raw));
+  if (platform) return platform;
+  return tenantUomCodes ? resolveTenantUom(raw, tenantUomCodes) : null;
+}
+
+/**
+ * A unit the tenant declared in its OWN UOM catalog (Catálogos → UoM).
+ *
+ * The platform catalog is a protocol (mass/volume/count anchors plus the
+ * container/serving families), but the OPERATOR owns the units of his own
+ * business: "arroba", "cajilla", "tetrapack". The insumo guard used to
+ * reject every one of them with "no está en el catálogo de unidades...
+ * Regístrala en el catálogo" — while the only catalog it consulted was the
+ * platform one, so the promised escape did not exist. A tenant-declared unit
+ * now resolves to this entry: no universal factor, no dimension, and the
+ * conversion factor is the operator's own content declaration.
+ */
+function resolveTenantUom(
+  raw: string,
+  tenantUomCodes: readonly string[],
+): UomCatalogEntry | null {
+  const value = normalize(raw);
+  const match = tenantUomCodes.find((code) => normalize(code) === value);
+  if (!match) return null;
+  return {
+    code: match,
+    name: match,
+    dimension: 'tenant',
+    factorToAnchor: null,
+    aliases: [],
+  };
+}
+
+/**
+ * The codes of the units the tenant declared in its own UOM catalog. The
+ * catalog is the operator's registry (the insumo form says so: "¿Falta una
+ * unidad? Agrégala en Catálogos"), so the guard honours it.
+ */
+export interface UomResolutionOptions {
+  /** The tenant's UOM catalog codes (`catalog_values` of type UOM). */
+  tenantUomCodes?: readonly string[];
 }
 
 export class UnconfiguredConversionError extends Error {
@@ -300,18 +363,19 @@ export function validateInsumoConversion(
   purchaseUom: string,
   consumptionUom: string,
   factor: number,
+  options: UomResolutionOptions = {},
 ): void {
-  const purchase = resolveUom(purchaseUom);
-  const consumption = resolveUom(consumptionUom);
+  const purchase = resolveUom(purchaseUom, options.tenantUomCodes);
+  const consumption = resolveUom(consumptionUom, options.tenantUomCodes);
 
   if (!purchase) {
     throw new UnconfiguredConversionError(
-      `UOM de compra "${purchaseUom}" no está en el catálogo de unidades. Regístrala en el catálogo o usa una unidad reconocida.`,
+      `UOM de compra "${purchaseUom}" no está en el catálogo de unidades. Regístrala en Catálogos → UoM o usa una unidad reconocida.`,
     );
   }
   if (!consumption) {
     throw new UnconfiguredConversionError(
-      `UOM de consumo "${consumptionUom}" no está en el catálogo de unidades. Regístrala en el catálogo o usa una unidad reconocida.`,
+      `UOM de consumo "${consumptionUom}" no está en el catálogo de unidades. Regístrala en Catálogos → UoM o usa una unidad reconocida.`,
     );
   }
   if (!(factor > 0)) {
@@ -326,6 +390,13 @@ export function validateInsumoConversion(
       `"${purchaseUom}" y "${consumptionUom}" son la misma unidad (${purchase.code}); el factor debe ser 1, recibido ${factor}.`,
     );
   }
+
+  // A unit the TENANT declared carries no platform factor and no dimension:
+  // its content is the operator's own declaration. The only universal rule
+  // that survives is "two different units with factor 1 is the untouched
+  // default", which stays enforced below.
+  const isTenantDeclared =
+    purchase.dimension === 'tenant' || consumption.dimension === 'tenant';
 
   if (
     !sameUnit &&
@@ -343,9 +414,11 @@ export function validateInsumoConversion(
 
   // Universal units in DIFFERENT dimensions cannot have a platform factor
   // at all (mass vs volume needs a per-insumo density — a content
-  // declaration, not a universal constant).
+  // declaration, not a universal constant). A tenant-declared unit has no
+  // known dimension, so it is always a content declaration.
   if (
     !sameUnit &&
+    !isTenantDeclared &&
     purchase.dimension !== 'container' &&
     purchase.dimension !== 'serving' &&
     consumption.dimension !== 'container' &&
@@ -358,14 +431,16 @@ export function validateInsumoConversion(
   }
 
   // Universal same-dimension pairs must match the platform anchor exactly.
+  // A tenant-declared unit has no anchor, so it is never checked here.
   if (
     purchase.dimension === consumption.dimension &&
     purchase.dimension !== 'container' &&
     purchase.dimension !== 'serving' &&
+    purchase.dimension !== 'tenant' &&
     !sameUnit
   ) {
     const expected = purchase.factorToAnchor / consumption.factorToAnchor;
-    const tolerance = 1e-6;
+    const tolerance = ANCHOR_FACTOR_TOLERANCE;
     if (Math.abs(factor - expected) > tolerance) {
       throw new UnconfiguredConversionError(
         `Factor inválido para "${purchaseUom}" → "${consumptionUom}": el catálogo establece ${expected} (recibido ${factor}).`,

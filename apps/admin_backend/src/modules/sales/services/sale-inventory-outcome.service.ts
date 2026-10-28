@@ -8,6 +8,15 @@ import { RecipeVersion, RecipePublicationState } from '../../inventory/entities/
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from '../../inventory/bom-explosion.service';
+import {
+  resolveDeviations,
+  type DeviationInsumo,
+  type DeviationLeaf,
+} from '../../inventory/modifier-deviation-resolver';
 
 export interface ValidatedBindingToApply {
   item: CreateInvoiceItemDto;
@@ -15,16 +24,52 @@ export interface ValidatedBindingToApply {
   explodedQuantity: number;
 }
 
+/**
+ * The outcome vocabulary of a sale's inventory layer.
+ *
+ * `APPLIED_WITH_DIVERGENCE` (FD-01) is the one that says: the invoice IS
+ * applied and the movement IS applied, but part of the stock was not backed by
+ * the lots (or by the stock the tenant declared), and that difference is
+ * recorded as a divergence to reconcile. It is NOT a failure and it does not
+ * block anything — it is the cloud MIRRORING what happened, and saying what
+ * did not add up.
+ */
+export type SaleInventoryOutcome =
+  | 'APPLIED'
+  | 'APPLIED_NO_INVENTORY_IMPACT'
+  | 'APPLIED_INVENTORY_PENDING'
+  | 'APPLIED_WITH_DIVERGENCE';
+
+/**
+ * One declared difference: the insumo, the units nothing backed, and the
+ * money they represent.
+ */
+export interface SaleInventoryDivergenceDetail {
+  insumoId: string;
+  insumoName: string;
+  quantity: number;
+  amountNio: number;
+  cause: 'LOT_COVERAGE_INSUFFICIENT' | 'DECLARED_STOCK_INSUFFICIENT';
+}
+
 export interface SaleTimeSnapshotValidationResult {
   policyVersion: 'SALE_TIME_V1' | 'LEGACY_SYNC_TIME_V1';
-  outcome: 'APPLIED' | 'APPLIED_NO_INVENTORY_IMPACT' | 'APPLIED_INVENTORY_PENDING';
-  reason: { code: string; lines: string[] } | null;
+  outcome: SaleInventoryOutcome;
+  reason: {
+    code: string;
+    lines: string[];
+    divergences?: SaleInventoryDivergenceDetail[];
+  } | null;
   acknowledgedMovementCorrelationIds: string[];
   bindingsToApply: ValidatedBindingToApply[];
 }
 
 @Injectable()
 export class SaleInventoryOutcomeService {
+  constructor(
+    private readonly bomExplosionService: BomExplosionService,
+  ) {}
+
   /**
    * Validates SALE_TIME_V1 snapshot contracts per design Section D3.
    * Never queries current active catalog or mutable recipe at ingestion time.
@@ -55,6 +100,9 @@ export class SaleInventoryOutcomeService {
     const seenCorrelationIds = new Set<string>();
     const pendingLines: string[] = [];
     const noImpactLines: string[] = [];
+    // R28 / M4: the lines whose DECLARED deviation does not match the
+    // demand the cloud recomputed.
+    const deviationMismatchLines: string[] = [];
     const bindingsToApply: ValidatedBindingToApply[] = [];
     const allCorrelationIds: string[] = [];
 
@@ -231,6 +279,37 @@ export class SaleInventoryOutcomeService {
             });
             allCorrelationIds.push(b.saleCorrelationId);
           }
+
+          // R28 / M4: the cloud RECOMPUTES the demand the line should have
+          // and COMPARES it with the one the terminal sent. The terminal is
+          // the authority of the demand, but it is not taken on faith: a
+          // terminal that declares a deviation and applies it differently
+          // is caught here, and the line degrades to APPLIED_INVENTORY_PENDING
+          // (fail-closed, like the negative-stock guard).
+          //
+          // Only what the terminal DECLARED is verified: a terminal whose
+          // catalogue predates the effect sends no deviation, and there is
+          // nothing to compare — it is not punished (the SOHO guarantee:
+          // this feature degrades the inventory, never the sale).
+          const declaredDeviations = (item.modifiers ?? []).filter(
+            (modifier) =>
+              modifier.inventoryEffect &&
+              modifier.inventoryEffect !== 'NONE',
+          );
+          if (declaredDeviations.length > 0) {
+            const deviationMismatch = await this.verifyDeclaredDeviations({
+              tenantId,
+              item,
+              recipeVersionId: snapshot.recipeVersionId,
+              rootProductId: item.productId,
+              details,
+              bindings,
+              manager,
+            });
+            if (deviationMismatch) {
+              deviationMismatchLines.push(item.id);
+            }
+          }
           break;
         }
 
@@ -287,6 +366,19 @@ export class SaleInventoryOutcomeService {
       calculatedReason = {
         code: 'MISSING_PUBLISHED_RECIPE',
         lines: pendingLines,
+      };
+      finalBindings = [];
+      finalAckIds = [];
+    } else if (deviationMismatchLines.length > 0) {
+      // R28 / M4: the terminal declared a deviation and the demand it sent
+      // is not the one the cloud recomputed. The line is NOT applied (the
+      // movements wait), the fiscal document is persisted and the stream
+      // sequence advances — the same atomic degradation the negative-stock
+      // guard uses, so one bad line never wedges the pipeline.
+      calculatedOutcome = 'APPLIED_INVENTORY_PENDING';
+      calculatedReason = {
+        code: 'RECIPE_DEVIATION_MISMATCH',
+        lines: deviationMismatchLines,
       };
       finalBindings = [];
       finalAckIds = [];
@@ -371,12 +463,71 @@ export class SaleInventoryOutcomeService {
         if (recipeVer) {
           const details = ((await recipeDetailRepo?.find({ where: { recipe_version_id: recipeVer.id, tenant_id: tenantId } })) ?? []).sort((a, b) => a.insumo_id.localeCompare(b.insumo_id) || (a.id ?? '').localeCompare(b.id ?? ''));
           const itemBindings: InventorySnapshotBindingDto[] = [];
-          for (let i = 0; i < details.length; i++) {
-            const d = details[i];
-            if (!(await insumoRepo?.findOne({ where: { id: d.insumo_id, tenant_id: tenantId } }))) throw new BadRequestException(`insumoId '${d.insumo_id}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`);
-            const cId = corrId(i, d.insumo_id), qty = Number(d.quantity), b: InventorySnapshotBindingDto = { bindingOrdinal: i, insumoId: d.insumo_id, recipeComponentId: d.id, quantityPerSaleUnit: qty, saleCorrelationId: cId };
-            itemBindings.push(b); allCorrelationIds.push(cId);
-            bindingsToApply.push({ item, binding: b, explodedQuantity: Number((Math.abs(Number(item.quantity)) * qty).toFixed(4)) });
+
+          // R11 (S7): a SUB_RECIPE component names a PRODUCT, not an insumo, so
+          // the flat per-detail loop rejected the whole sale with "insumoId …
+          // not found". When the recipe has a sub-recipe, descend to the leaf
+          // insumos exactly like the legacy explode() path does after R4.
+          if (hasSubRecipeComponent(details)) {
+            const leafQuantities =
+              await this.bomExplosionService.explodeWithSubRecipes({
+                rootProductId: item.productId,
+                orderQuantity: 1,
+                rootComponents: details,
+                resolveSubRecipeComponents: (subRecipeProductId) =>
+                  this.resolveActiveRecipeComponents(
+                    manager,
+                    tenantId,
+                    subRecipeProductId,
+                    acceptedAt,
+                  ),
+              });
+            const rootComponentByInsumo = new Map(
+              details.map((detail) => [detail.insumo_id, detail.id] as const),
+            );
+            let ordinal = 0;
+            for (const [
+              insumoId,
+              quantityPerSaleUnit,
+            ] of leafQuantities.entries()) {
+              if (
+                !(await insumoRepo?.findOne({
+                  where: { id: insumoId, tenant_id: tenantId },
+                }))
+              ) {
+                throw new BadRequestException(
+                  `insumoId '${insumoId}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`,
+                );
+              }
+              const cId = corrId(ordinal, insumoId);
+              const binding: InventorySnapshotBindingDto = {
+                bindingOrdinal: ordinal,
+                insumoId,
+                recipeComponentId: rootComponentByInsumo.get(insumoId),
+                quantityPerSaleUnit,
+                saleCorrelationId: cId,
+              };
+              itemBindings.push(binding);
+              allCorrelationIds.push(cId);
+              bindingsToApply.push({
+                item,
+                binding,
+                explodedQuantity: Number(
+                  (
+                    Math.abs(Number(item.quantity)) * quantityPerSaleUnit
+                  ).toFixed(4),
+                ),
+              });
+              ordinal += 1;
+            }
+          } else {
+            for (let i = 0; i < details.length; i++) {
+              const d = details[i];
+              if (!(await insumoRepo?.findOne({ where: { id: d.insumo_id, tenant_id: tenantId } }))) throw new BadRequestException(`insumoId '${d.insumo_id}' in recipe '${recipeVer.id}' not found for tenant '${tenantId}'`);
+              const cId = corrId(i, d.insumo_id), qty = Number(d.quantity), b: InventorySnapshotBindingDto = { bindingOrdinal: i, insumoId: d.insumo_id, recipeComponentId: d.id, quantityPerSaleUnit: qty, saleCorrelationId: cId };
+              itemBindings.push(b); allCorrelationIds.push(cId);
+              bindingsToApply.push({ item, binding: b, explodedQuantity: Number((Math.abs(Number(item.quantity)) * qty).toFixed(4)) });
+            }
           }
           item.inventorySnapshotVersion = 'LEGACY_SYNC_TIME_V1';
           item.inventorySnapshot = { classification: product.product_type, disposition: 'RECIPE', catalogRevision: 'legacy-sync-time', recipeVersionId: recipeVer.id, acceptedAt: acceptedAtIso, bindings: itemBindings };
@@ -396,5 +547,207 @@ export class SaleInventoryOutcomeService {
     if (invoice.inventoryOutcome && invoice.inventoryOutcome !== outcome) throw new BadRequestException(`Snapshot outcome mismatch: client sent '${invoice.inventoryOutcome}', calculated '${outcome}'`);
 
     return { policyVersion: 'LEGACY_SYNC_TIME_V1', outcome, reason, acknowledgedMovementCorrelationIds: outcome === 'APPLIED' ? allCorrelationIds : [], bindingsToApply: outcome === 'APPLIED' ? bindingsToApply : [] };
+  }
+
+  /**
+   * R11 (S7): the active PUBLISHED recipe's components for a sub-recipe
+   * product, resolved inside the same tenant-bound manager the classification
+   * already uses. A missing active recipe is a DATA error, named instead of
+   * silently dropping the sub-recipe's ingredients.
+   */
+  /**
+   * R28 / M4 — the cloud recomputes the demand of a line that DECLARED a
+   * deviation and compares it with the demand the terminal sent.
+   *
+   * The recomputation uses the SAME algorithm as the terminal (the mirror in
+   * `modifier-deviation-resolver.ts`), so the two demands are comparable:
+   * the recipe's explosion plus the declared effects, with the same
+   * inheritance and the same skip reasons.
+   *
+   * Returns TRUE when the line does NOT match, which degrades the sale to
+   * APPLIED_INVENTORY_PENDING (fail-closed, like the negative-stock guard).
+   *
+   * What it deliberately does NOT do: verify anything the terminal did not
+   * declare. A terminal whose catalogue predates the effect sends no
+   * deviation and there is nothing to compare — it is not punished, because
+   * the SOHO guarantee (D6) says this feature degrades the inventory, never
+   * the sale.
+   */
+  private async verifyDeclaredDeviations(input: {
+    tenantId: string;
+    item: CreateInvoiceItemDto;
+    recipeVersionId: string;
+    rootProductId: string;
+    details: RecipeDetail[];
+    bindings: InventorySnapshotBindingDto[];
+    manager: EntityManager;
+  }): Promise<boolean> {
+    const {
+      tenantId,
+      item,
+      recipeVersionId,
+      rootProductId,
+      details,
+      bindings,
+      manager,
+    } = input;
+
+    const declared = (item.modifiers ?? []).filter(
+      (modifier) => modifier.inventoryEffect && modifier.inventoryEffect !== 'NONE',
+    );
+    if (declared.length === 0) return false;
+
+    // 1. The recipe's own consumption (per sold unit), with the root
+    //    component that introduced each leaf — the same attribution the
+    //    terminal's explosion produces.
+    const rootComponentByInsumo = new Map<string, string>();
+    for (const detail of details) {
+      if (detail.ingredient_type === 'INSUMO') {
+        rootComponentByInsumo.set(detail.insumo_id, detail.id);
+      }
+    }
+    const rootComponents = details
+      .filter((detail) => detail.ingredient_type === 'INSUMO')
+      .map((detail) => ({
+        id: detail.id,
+        insumoId: detail.insumo_id,
+        quantityPerSaleUnit: Number(detail.quantity),
+      }));
+
+    const leafQuantities = await this.bomExplosionService.explodeWithSubRecipes({
+      rootProductId,
+      orderQuantity: 1,
+      rootComponents: details,
+      resolveSubRecipeComponents: (subRecipeProductId) =>
+        this.resolveActiveRecipeComponents(
+          manager,
+          tenantId,
+          subRecipeProductId,
+          new Date(),
+        ),
+    });
+    const leaves: DeviationLeaf[] = [...leafQuantities.entries()].map(
+      ([insumoId, quantityPerSaleUnit]) => ({
+        insumoId,
+        quantityPerSaleUnit: Number(quantityPerSaleUnit),
+        rootComponentId: rootComponentByInsumo.get(insumoId) ?? null,
+      }),
+    );
+
+    // 2. The tenant's insumos the effects reference. An effect that names an
+    //    insumo the company has NOT registered is NO_IMPACT on both sides
+    //    (the SOHO guarantee), so the cloud must know it too.
+    const referencedInsumoIds = new Set<string>();
+    for (const modifier of declared) {
+      if (modifier.effectInsumoId) referencedInsumoIds.add(modifier.effectInsumoId);
+      if (modifier.effectTargetInsumoId) {
+        referencedInsumoIds.add(modifier.effectTargetInsumoId);
+      }
+    }
+    for (const detail of details) {
+      if (detail.ingredient_type === 'INSUMO') {
+        referencedInsumoIds.add(detail.insumo_id);
+      }
+    }
+    const insumoRepo = manager.getRepository(Insumo);
+    // ONLY the ACTIVE insumos: the terminal's authority projects the
+    // catalog's active rows, so an effect that points at a DEACTIVATED
+    // insumo is NO_IMPACT on both sides. If the cloud considered it
+    // applicable, the two demands would disagree and every such sale would
+    // degrade — the opposite of the SOHO guarantee.
+    const tenantInsumos = await insumoRepo.find({
+      where: { tenant_id: tenantId, is_active: true },
+    });
+    const tenantInsumosById = new Map<string, DeviationInsumo>(
+      tenantInsumos.map((insumo) => [
+        insumo.id,
+        {
+          id: insumo.id,
+          consumptionUom: insumo.consumptionUom ?? '',
+          isActive: true,
+        },
+      ]),
+    );
+
+    // 3. The demand the cloud expects, and the demand the terminal sent.
+    const expected = resolveDeviations({
+      leaves,
+      rootComponents,
+      modifiers: declared,
+      tenantInsumosById,
+    });
+    const sent = new Map<string, number>();
+    for (const binding of bindings) {
+      sent.set(
+        binding.insumoId,
+        Number(
+          (
+            (sent.get(binding.insumoId) ?? 0) +
+            Number(binding.quantityPerSaleUnit)
+          ).toFixed(4),
+        ),
+      );
+    }
+
+    // 4. Compare. The tolerance absorbs the four-decimal rounding of the
+    //    two sides; anything beyond it is a real divergence.
+    const TOLERANCE = 0.0001;
+    const insumoIds = new Set<string>([
+      ...expected.demand.keys(),
+      ...sent.keys(),
+    ]);
+    for (const insumoId of insumoIds) {
+      const expectedQty = expected.demand.get(insumoId) ?? 0;
+      const sentQty = sent.get(insumoId) ?? 0;
+      if (Math.abs(expectedQty - sentQty) > TOLERANCE) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async resolveActiveRecipeComponents(
+    manager: EntityManager,
+    tenantId: string,
+    productId: string,
+    acceptedAt: Date,
+  ): Promise<RecipeDetail[]> {
+    const recipeVerRepo = manager.getRepository?.(RecipeVersion);
+    const recipeDetailRepo = manager.getRepository?.(RecipeDetail);
+    if (!recipeVerRepo?.createQueryBuilder || !recipeDetailRepo) {
+      return [];
+    }
+
+    const version = await recipeVerRepo
+      .createQueryBuilder('rv')
+      .where(
+        'rv.tenant_id = :tenantId AND rv.product_id = :productId AND rv.publication_state = :pubState AND (rv.fecha_inicio_vigencia IS NULL OR rv.fecha_inicio_vigencia <= :acceptedAt) AND (rv.fecha_fin_vigencia IS NULL OR rv.fecha_fin_vigencia > :acceptedAt)',
+        {
+          tenantId,
+          productId,
+          pubState: RecipePublicationState.PUBLISHED,
+          acceptedAt,
+        },
+      )
+      .orderBy('rv.fecha_inicio_vigencia', 'DESC', 'NULLS LAST')
+      .addOrderBy('rv.version_number', 'DESC')
+      .getOne();
+
+    if (!version) {
+      throw new BadRequestException(
+        `Sub-recipe product ${productId} does not have an active published recipe`,
+      );
+    }
+
+    const details =
+      (await recipeDetailRepo.find({
+        where: { recipe_version_id: version.id, tenant_id: tenantId },
+      })) ?? [];
+
+    return [...details].sort(
+      (a, b) =>
+        a.insumo_id.localeCompare(b.insumo_id) ||
+        (a.id ?? '').localeCompare(b.id ?? ''),
+    );
   }
 }

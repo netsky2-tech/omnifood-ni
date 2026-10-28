@@ -24,7 +24,7 @@ export function StatCard({
     <div
       className={cn(
         "rounded-lg border bg-card p-4 sm:p-5 shadow-xs transition-colors",
-        accent ? "border-amber-300 bg-amber-50/50 dark:border-amber-900/50" : "border-border",
+        accent ? "border-warning/40 bg-warning-50/60 dark:border-amber-900/50" : "border-border",
         className,
       )}
     >
@@ -45,7 +45,7 @@ export function StatCard({
           <span
             className={cn(
               "text-xs font-semibold tabular-nums",
-              trend.isPositive ? "text-emerald-700" : "text-rose-600",
+              trend.isPositive ? "text-secondary-700" : "text-destructive",
             )}
             title={trend.value}
           >

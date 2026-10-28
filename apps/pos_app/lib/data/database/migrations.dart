@@ -3328,6 +3328,21 @@ final migration73_74 = Migration(73, 74, (database) async {
   }
 });
 
+final migration74_75 = Migration(74, 75, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(customers)');
+  // A fresh install creates the table with the column via onCreate; legacy
+  // fixtures may predate it. PRAGMA returns no rows for a missing table.
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns.map((column) => column['name']).toSet();
+  if (!existing.contains('customer_type')) {
+    await database.execute(
+      'ALTER TABLE customers ADD COLUMN customer_type TEXT',
+    );
+  }
+});
+
 /// Issue #957: activation evidence contract stamped by the backend on the
 /// attempt (1 = legacy invoice-based, 2 = invoice-free). Legacy rows keep 1.
 final migration75_76 = Migration(75, 76, (database) async {
@@ -3346,21 +3361,318 @@ final migration75_76 = Migration(75, 76, (database) async {
   }
 });
 
-final migration74_75 = Migration(74, 75, (database) async {
-  final columns = await database.rawQuery('PRAGMA table_info(customers)');
-  // A fresh install creates the table with the column via onCreate; legacy
-  // fixtures may predate it. PRAGMA returns no rows for a missing table.
-  if (columns.isEmpty) {
-    return;
-  }
-  final existing = columns.map((column) => column['name']).toSet();
-  if (!existing.contains('customer_type')) {
+/// R21 / S18 — the projection stored recipe components that reference a
+/// PRODUCT id (a SUB_RECIPE component) but the table's composite FK on
+/// `insumo_id` → `authority_insumos` rejected every such insert, so a
+/// multi-level recipe could never hydrate locally (the hydrator fails
+/// mid-loop and leaves the version partially loaded, the #519 bug class).
+///
+/// SQLite cannot drop a constraint in place, so the table is rebuilt without
+/// the insumo FK. Everything else is byte-identical: rows, the unique
+/// (tenant, version, ordinal) index and the immutability triggers (dropped
+/// with the old table, recreated after the rename). `version_id` keeps its
+/// FK — a component still hangs off exactly one recipe version.
+final migration76_77 = Migration(76, 77, (database) async {
+  await database.execute('''
+    CREATE TABLE authority_recipe_version_components_new (
+      tenant_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      version_id TEXT NOT NULL,
+      ordinal INTEGER NOT NULL,
+      insumo_id TEXT NOT NULL,
+      gross_quantity REAL NOT NULL,
+      technical_shrink_pct REAL NOT NULL,
+      ingredient_type TEXT NOT NULL,
+      component_name TEXT NOT NULL,
+      component_uom TEXT,
+      reference_version_id TEXT,
+      PRIMARY KEY (tenant_id, id),
+      FOREIGN KEY (tenant_id, version_id) REFERENCES authority_recipe_versions (tenant_id, id) ON DELETE CASCADE
+    )
+  ''');
+
+  await database.execute('''
+    INSERT INTO authority_recipe_version_components_new (
+      tenant_id,
+      id,
+      version_id,
+      ordinal,
+      insumo_id,
+      gross_quantity,
+      technical_shrink_pct,
+      ingredient_type,
+      component_name,
+      component_uom,
+      reference_version_id
+    )
+    SELECT
+      tenant_id,
+      id,
+      version_id,
+      ordinal,
+      insumo_id,
+      gross_quantity,
+      technical_shrink_pct,
+      ingredient_type,
+      component_name,
+      component_uom,
+      reference_version_id
+    FROM authority_recipe_version_components
+  ''');
+
+  await database.execute('DROP TABLE authority_recipe_version_components');
+  await database.execute(
+    'ALTER TABLE authority_recipe_version_components_new '
+    'RENAME TO authority_recipe_version_components',
+  );
+
+  await database.execute('''
+    CREATE UNIQUE INDEX IF NOT EXISTS
+      index_authority_recipe_version_components_tenant_id_version_id_ordinal
+    ON authority_recipe_version_components (tenant_id, version_id, ordinal)
+  ''');
+
+  await _createAuthorityImmutabilityTriggers(database);
+});
+
+/// R23: Negative stock policy persistence. Adds `negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'`
+/// to both `authority_insumos` and `insumos` tables.
+final migration77_78 = Migration(77, 78, (database) async {
+  final authorityColumns = await database.rawQuery('PRAGMA table_info(authority_insumos)');
+  final hasAuthorityPolicy = authorityColumns.any(
+    (column) => column['name'] == 'negative_stock_policy',
+  );
+  // A legacy database may predate the table entirely; onCreate creates it
+  // with every column, so there is nothing to alter. PRAGMA returns no rows
+  // for a missing table.
+  if (authorityColumns.isNotEmpty && !hasAuthorityPolicy) {
     await database.execute(
-      'ALTER TABLE customers ADD COLUMN customer_type TEXT',
+      "ALTER TABLE authority_insumos ADD COLUMN negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'",
+    );
+  }
+
+  final insumoColumns = await database.rawQuery('PRAGMA table_info(insumos)');
+  final hasInsumoPolicy = insumoColumns.any(
+    (column) => column['name'] == 'negative_stock_policy',
+  );
+  if (insumoColumns.isNotEmpty && !hasInsumoPolicy) {
+    await database.execute(
+      "ALTER TABLE insumos ADD COLUMN negative_stock_policy TEXT NOT NULL DEFAULT 'RESTRICT'",
     );
   }
 });
 
+/// R28: the modifier option's optional INVENTORY effect, mirrored locally
+/// so the terminal can resolve the demand of a line (M3) and the sale can
+/// carry the deviation (M2).
+///
+/// The columns are nullable and default to the price-only behaviour, so a
+/// terminal that receives a catalogue WITHOUT the effect (an older backend)
+/// keeps behaving exactly as before: every option reads as 'NONE' and the
+/// stock is not touched.
+final migration78_79 = Migration(78, 79, (database) async {
+  final optionColumns = await database.rawQuery(
+    'PRAGMA table_info(modifier_options)',
+  );
+  final hasEffect = optionColumns.any(
+    (column) => column['name'] == 'inventory_effect',
+  );
+  // A legacy database may predate the table; onCreate creates it complete.
+  if (optionColumns.isNotEmpty && !hasEffect) {
+    await database.execute(
+      "ALTER TABLE modifier_options ADD COLUMN inventory_effect TEXT NOT NULL DEFAULT 'NONE'",
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_target_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_quantity REAL',
+    );
+    await database.execute(
+      'ALTER TABLE modifier_options ADD COLUMN effect_factor REAL',
+    );
+  }
+
+  // R28: the invoice line's DEVIATION RECORD. The local row used to keep
+  // only the modifier's NAME, so after the sale neither the terminal nor
+  // the cloud could tell WHICH option was sold. The option and group ids
+  // are kept instead of a fresh UUID.
+  final itemModifierColumns = await database.rawQuery(
+    'PRAGMA table_info(invoice_item_modifiers)',
+  );
+  final hasOptionId = itemModifierColumns.any(
+    (column) => column['name'] == 'option_id',
+  );
+  if (itemModifierColumns.isNotEmpty && !hasOptionId) {
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN option_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN group_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN inventory_effect TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_target_insumo_id TEXT',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_quantity REAL',
+    );
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN effect_factor REAL',
+    );
+  }
+});
+
+/// R28 (M4.1): the authority insumo's ACTIVE state travels with it, so a
+/// deactivated insumo is not offered as stock to the terminal (an effect
+/// that points at one must not apply — the SOHO guarantee, D6).
+///
+/// The entity grew the `isActive` column, but no migration carried it: a
+/// terminal already at schema 76 therefore kept the old table shape and
+/// EVERY insert into `authority_insumos` failed with
+/// "table authority_insumos has no column named isActive" — the whole
+/// authority projection stayed empty, so the terminal resolved neither the
+/// recipe components nor the insumo names, and the inventory effect of a
+/// line could not be resolved at all. A fresh install hid the defect
+/// (Floor creates the table from the entity); only an upgrade exposed it.
+///
+/// The column is NOT NULL with a default of 1, matching the entity default:
+/// an existing row that predates the state is treated as active, and the
+/// next delta re-delivers the real state for it.
+final migration79_80 = Migration(79, 80, (database) async {
+  final authorityColumns = await database.rawQuery(
+    'PRAGMA table_info(authority_insumos)',
+  );
+  final hasIsActive = authorityColumns.any(
+    (column) => column['name'] == 'isActive',
+  );
+  if (authorityColumns.isNotEmpty && !hasIsActive) {
+    await database.execute(
+      "ALTER TABLE authority_insumos ADD COLUMN isActive INTEGER NOT NULL DEFAULT 1",
+    );
+  }
+});
+
+/// ME-04 (Unidad 3): the line's TRUTH about its inventory effect travels
+/// with it, so a sold extra whose effect did not touch the stock is
+/// reconcilable in the cloud and not only visible at the register.
+///
+/// Every column is NULLABLE and additive: a line written before this
+/// migration (and a price-only line) keeps its exact shape, and the cloud
+/// reads the absence as "this terminal says nothing about the effect".
+final migration80_81 = Migration(80, 81, (database) async {
+  final columns = await database.rawQuery(
+    'PRAGMA table_info(invoice_item_modifiers)',
+  );
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  const additions = <String, String>{
+    'effect_status': 'TEXT',
+    'effect_skip_reason': 'TEXT',
+    'effect_quantity_source': 'TEXT',
+    'effect_authorized_by': 'TEXT',
+    'effect_authorization_method': 'TEXT',
+    'effect_authorization_reason': 'TEXT',
+  };
+  for (final entry in additions.entries) {
+    if (existing.contains(entry.key)) continue;
+    await database.execute(
+      'ALTER TABLE invoice_item_modifiers ADD COLUMN ${entry.key} ${entry.value}',
+    );
+  }
+});
+
+/// FD-01 (Unidad 3): what the CLOUD declared about each sale's inventory.
+///
+/// A separate column from `inventory_outcome` on purpose: the local outcome
+/// is what THIS terminal computed (the enrichment warning counts it), and
+/// this one is what the cloud declared after applying the sale
+/// ('APPLIED_WITH_DIVERGENCE' ⇒ part of the stock was not backed and the
+/// difference waits to be reconciled in the backoffice). One column for the
+/// two truths would erase one of them.
+///
+/// NULLABLE and additive: a sale written before this migration (and a sale
+/// the cloud accepted without a difference) keeps its exact shape, and the
+/// absence reads as "the cloud said nothing".
+final migration81_82 = Migration(81, 82, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('cloud_inventory_outcome')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN cloud_inventory_outcome TEXT',
+    );
+  }
+});
+
+/// FD-02: the LOT availability of each insumo (the sum of the remaining
+/// stock of its lots) and whether it is managed by lots at all.
+///
+/// The terminal decides what it can sell and the cloud decides what it can
+/// record; they were reading different numbers (the aggregate here, the
+/// lots there). These two columns are what makes them read the SAME one.
+///
+/// NULLABLE and additive: an insumo written before this migration (and one
+/// the cloud has not published yet) keeps its exact shape, and the absence
+/// reads as "no lot information" — the terminal then keeps using the
+/// aggregate, exactly as before.
+final migration82_83 = Migration(82, 83, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(insumos)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('lot_available_stock')) {
+    await database.execute(
+      'ALTER TABLE insumos ADD COLUMN lot_available_stock REAL',
+    );
+  }
+  if (!existing.contains('is_batch_managed')) {
+    await database.execute(
+      'ALTER TABLE insumos ADD COLUMN is_batch_managed INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+});
+
+/// A-01: count lines declare whether their insumo is managed by lots, so
+/// the terminal knows when an observation needs a lot without having to
+/// re-fetch the insumo.
+final migration83_84 = Migration(83, 84, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(count_lines)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('is_batch_managed')) {
+    await database.execute(
+      'ALTER TABLE count_lines ADD COLUMN is_batch_managed INTEGER NOT NULL DEFAULT 0',
+    );
+  }
+});
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3428,6 +3740,14 @@ final allMigrations = [
   migration73_74,
   migration74_75,
   migration75_76,
+  migration76_77,
+  migration77_78,
+  migration78_79,
+  migration79_80,
+  migration80_81,
+  migration81_82,
+  migration82_83,
+  migration83_84,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

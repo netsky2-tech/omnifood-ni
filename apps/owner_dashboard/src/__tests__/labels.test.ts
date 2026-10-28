@@ -20,6 +20,8 @@ import {
   normalizeMenuImportIssueMessage,
   onboardingBlockerLabels,
   onboardingWarningLabels,
+  supervisionFlowLabels,
+  credentialMethodLabels,
 } from "@/lib/labels";
 import * as labelsLib from "@/lib/labels";
 import { OnboardingLifecycleState } from "@/features/onboarding/types";
@@ -58,6 +60,8 @@ const families: Record<string, Record<string, string>> = {
   publicationStateLabels,
   onboardingBlockerLabels,
   onboardingWarningLabels,
+  supervisionFlowLabels,
+  credentialMethodLabels,
 };
 
 describe("label families — guard coverage", () => {
@@ -152,6 +156,7 @@ describe("label families — key sets verified against source enums", () => {
         "CREDIT_NOTE_RESTOCK",
         "ADJUSTMENT",
         "REVERSAL",
+        "VALUATION_WRITEDOWN",
         "INITIAL_STOCK",
       ].sort(),
     );
@@ -171,6 +176,12 @@ describe("label families — key sets verified against source enums", () => {
         "SUPERVISOR_OVERRIDE_CLOSE_SESSION",
         "SUPERVISOR_OVERRIDE_APPROVED",
         "SUPERVISOR_OVERRIDE_REJECTED",
+        "SELF_AUTHORIZED_CLOSE_SESSION",
+        "SELF_AUTHORIZED_MANUAL_DISCOUNT",
+        "SELF_AUTHORIZED_DRAWER_OPENED",
+        "MODIFIER_EFFECT_QUANTITY_ADJUSTED",
+        "MODIFIER_EFFECT_QUANTITY_OVERRIDE",
+        "SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY",
         "DRAWER_OPENED_MANUALLY",
         "REPRINT_REQUESTED",
         "PRINT_PAYLOAD_CORRUPT",

@@ -3,6 +3,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
 import { Product, ProductType } from '../../inventory/entities/product.entity';
+import { Batch } from '../../inventory/entities/batch.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
@@ -87,6 +88,7 @@ describe('InboundSyncService', () => {
   let categoryAttachmentQb: MockQueryBuilder<CategoryModifierGroup>;
   let productAttachmentQb: MockQueryBuilder<ProductModifierGroup>;
   let creditNoteQb: MockQueryBuilder<Invoice>;
+  let batchQb: MockQueryBuilder<Batch>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
   let mockCatalogRepo: { createQueryBuilder: jest.Mock };
@@ -108,6 +110,7 @@ describe('InboundSyncService', () => {
   let mockCategoryAttachmentRepo: { createQueryBuilder: jest.Mock };
   let mockProductAttachmentRepo: { createQueryBuilder: jest.Mock };
   let mockInvoiceRepo: { createQueryBuilder: jest.Mock };
+  let mockBatchRepo: { createQueryBuilder: jest.Mock };
 
   beforeEach(async () => {
     productQb = createMockQueryBuilder<Product>([]);
@@ -129,6 +132,7 @@ describe('InboundSyncService', () => {
     categoryAttachmentQb = createMockQueryBuilder<CategoryModifierGroup>([]);
     productAttachmentQb = createMockQueryBuilder<ProductModifierGroup>([]);
     creditNoteQb = createMockQueryBuilder<Invoice>([]);
+    batchQb = createMockQueryBuilder<Batch>([]);
 
     mockProductRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productQb),
@@ -181,6 +185,9 @@ describe('InboundSyncService', () => {
     };
     mockInvoiceRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(creditNoteQb),
+    };
+    mockBatchRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(batchQb),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -253,6 +260,8 @@ describe('InboundSyncService', () => {
     overrides: Map<unknown, unknown> = new Map(),
   ) {
     return {
+      // FD-02: the lot availability read (a grouped sum over the batches).
+      query: jest.fn(async () => [] as unknown[]),
       getRepository: jest.fn((entity: unknown) => {
         if (overrides.has(entity)) return overrides.get(entity);
         if (entity === Product) return mockProductRepo;
@@ -273,6 +282,7 @@ describe('InboundSyncService', () => {
         if (entity === CategoryModifierGroup) return mockCategoryAttachmentRepo;
         if (entity === ProductModifierGroup) return mockProductAttachmentRepo;
         if (entity === Invoice) return mockInvoiceRepo;
+        if (entity === Batch) return mockBatchRepo;
         if (entity === ForensicAlert)
           return {
             createQueryBuilder: jest
@@ -649,6 +659,75 @@ describe('InboundSyncService', () => {
       parLevel: null,
       minStock: null,
       maxStock: null,
+    });
+  });
+
+  it('FD-02: publishes the LOT availability and whether the insumo is batch-managed', async () => {
+    // The terminal decides what it can sell and the cloud decides what it can
+    // record; they were reading different numbers. The cloud now publishes
+    // the number it will actually draw from.
+    insumoQb.getMany.mockResolvedValue([
+      {
+        id: 'ins-521a',
+        tenant_id: 'tenant-abc',
+        name: 'Leche',
+        purchaseUom: 'ML',
+        consumptionUom: 'ml',
+        conversionFactor: 1000,
+        stock: 150,
+        averageCost: 3.25,
+        is_active: true,
+        is_perishable: true,
+        negativeStockPolicy: 'RESTRICT',
+        parLevel: null,
+        minStock: null,
+        maxStock: null,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Insumo,
+      {
+        id: 'ins-521b',
+        tenant_id: 'tenant-abc',
+        name: 'Café',
+        purchaseUom: 'KG',
+        consumptionUom: 'G',
+        conversionFactor: 1000,
+        stock: 1.5,
+        averageCost: 12.0,
+        is_active: true,
+        is_perishable: false,
+        negativeStockPolicy: 'RESTRICT',
+        parLevel: null,
+        minStock: null,
+        maxStock: null,
+        created_at: new Date('2026-08-01T00:00:00Z'),
+        updated_at: new Date('2026-08-02T00:00:00Z'),
+      } as unknown as Insumo,
+    ]);
+
+    const manager = buildDefaultBoundManager();
+    const managerWithQuery = manager as unknown as { query: jest.Mock };
+    managerWithQuery.query.mockResolvedValue([
+      { insumo_id: 'ins-521a', lot_stock: '50.0000' },
+    ]);
+
+    const response = await service.getInboundDeltas(
+      'tenant-abc',
+      { types: 'insumos' },
+      undefined,
+      manager,
+    );
+
+    expect(response.deltas.insumos[0]).toMatchObject({
+      id: 'ins-521a',
+      lotAvailableStock: 50,
+      isBatchManaged: true,
+    });
+    // An insumo without lots: the aggregate is the only truth.
+    expect(response.deltas.insumos[1]).toMatchObject({
+      id: 'ins-521b',
+      lotAvailableStock: null,
+      isBatchManaged: false,
     });
   });
 
@@ -1651,6 +1730,8 @@ describe('InboundSyncService', () => {
         name: 'Leche',
         purchaseUom: 'L',
         consumptionUom: 'ml',
+        is_active: true,
+        negativeStockPolicy: 'RESTRICT',
         ...overrides,
       } as unknown as Insumo;
     }
@@ -1684,6 +1765,32 @@ describe('InboundSyncService', () => {
           tenantId: 'tenant-abc',
           name: 'Leche',
           uom: 'ml',
+          // R28 (M4.1): the LIVE state travels with the closure, so the
+          // terminal sees a deactivated insumo as deactivated and does not
+          // apply an effect the cloud refuses.
+          isActive: true,
+          negativeStockPolicy: 'RESTRICT',
+        },
+      ]);
+    });
+
+    it('states the LIVE state of a deactivated insumo (R28 M4.1)', async () => {
+      recipeVersionQb.getMany.mockResolvedValue([buildRecipeVersionRow()]);
+      recipeDetailQb.getMany.mockResolvedValue([buildComponentRow()]);
+      insumoQb.getMany.mockResolvedValue([
+        buildComponentInsumoRow({ is_active: false }),
+      ]);
+
+      const response = await pullRecipeVersions();
+
+      expect(response.deltas.recipeVersions[0].insumos).toEqual([
+        {
+          id: 'ins-1',
+          tenantId: 'tenant-abc',
+          name: 'Leche',
+          uom: 'ml',
+          isActive: false,
+          negativeStockPolicy: 'RESTRICT',
         },
       ]);
     });
@@ -1722,10 +1829,26 @@ describe('InboundSyncService', () => {
       // Per-version, not a global sibling delta key: each version carries
       // only the insumos its own components reference.
       expect(rv1.insumos).toEqual([
-        { id: 'ins-1', tenantId: 'tenant-abc', name: 'Leche', uom: 'ml' },
+        {
+          id: 'ins-1',
+          tenantId: 'tenant-abc',
+          name: 'Leche',
+          uom: 'ml',
+          // R28 (M4.1): the live state travels with the closure.
+          isActive: true,
+          negativeStockPolicy: 'RESTRICT',
+        },
       ]);
       expect(rv2.insumos).toEqual([
-        { id: 'ins-2', tenantId: 'tenant-abc', name: 'Café', uom: 'g' },
+        {
+          id: 'ins-2',
+          tenantId: 'tenant-abc',
+          name: 'Café',
+          uom: 'g',
+          // R28 (M4.1): the live state travels with the closure.
+          isActive: true,
+          negativeStockPolicy: 'RESTRICT',
+        },
       ]);
       // A version with no components has an empty closure, never a missing
       // field.
@@ -1758,7 +1881,93 @@ describe('InboundSyncService', () => {
     });
   });
 
-  describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
+    it('delivers recipe versions with SUB_RECIPE components without throwing insumo eligibility error (R21 / S18)', async () => {
+    // A recipe whose component is a SUB_RECIPE names a product id in insumo_id,
+    // not an insumo row. The inbound sync must not look it up in the insumos table.
+    const productRepo = { find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() };
+    const catalogRepo = { find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() };
+    const userRepo = { find: jest.fn().mockResolvedValue([]) };
+    const insumoRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getMany: jest.fn().mockResolvedValue([
+          { id: 'ins-leaf', tenant_id: 'tenant-1', name: 'Queso', consumptionUom: 'g' },
+        ]),
+      }),
+    };
+    const rvQb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: 'rv-parent',
+          tenant_id: 'tenant-1',
+          product_id: 'prod-dish',
+          version_number: 1,
+          is_active: true,
+          publication_state: 'PUBLISHED',
+          fecha_inicio_vigencia: new Date('2026-10-01'),
+          yield_quantity: 1,
+          technical_shrink_pct: 0,
+        },
+      ]),
+    };
+    const detailQb = {
+      where: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([
+        {
+          id: 'det-1',
+          tenant_id: 'tenant-1',
+          recipe_version_id: 'rv-parent',
+          insumo_id: 'prod-subrecipe-1',
+          ingredient_type: 'SUB_RECIPE',
+          gross_quantity: 1,
+          quantity: 1,
+          technical_shrink_pct: 0,
+        },
+        {
+          id: 'det-2',
+          tenant_id: 'tenant-1',
+          recipe_version_id: 'rv-parent',
+          insumo_id: 'ins-leaf',
+          ingredient_type: 'INSUMO',
+          gross_quantity: 50,
+          quantity: 50,
+          technical_shrink_pct: 0,
+        },
+      ]),
+    };
+
+    const recipeQb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) };
+    const mockManager: any = {
+      getRepository: (entity: any) => {
+        if (entity.name === 'Recipe') return { createQueryBuilder: () => recipeQb };
+        if (entity.name === 'RecipeVersion') return { createQueryBuilder: () => rvQb };
+        if (entity.name === 'RecipeDetail') return { createQueryBuilder: () => detailQb };
+        if (entity.name === 'Insumo') return insumoRepo;
+        if (entity.name === 'Product') return productRepo;
+        if (entity.name === 'CatalogValue') return catalogRepo;
+        if (entity.name === 'User') return userRepo;
+        return { find: jest.fn().mockResolvedValue([]) };
+      },
+    };
+
+    const result = await service.getInboundDeltas(
+      'tenant-1',
+      { types: 'recipes,recipeVersions' },
+      undefined,
+      mockManager,
+    );
+
+    expect(result.deltas.recipeVersions).toHaveLength(1);
+    expect(result.deltas.recipeVersions[0].components).toHaveLength(2);
+    expect(result.deltas.recipeVersions[0].insumos).toEqual([
+      { id: 'ins-leaf', tenantId: 'tenant-1', name: 'Queso', uom: 'g' },
+    ]);
+  });
+
+describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
     it('includes the three new keys by default and reads them through the bound manager', async () => {
       loyaltyProgramQb.getMany.mockResolvedValue([]);
       loyaltyRewardQb.getMany.mockResolvedValue([]);
@@ -2278,6 +2487,14 @@ describe('InboundSyncService', () => {
         is_default: true,
         sort_order: 0,
         is_active: true,
+        // R28: the inventory effect travels with the option so the POS can
+        // resolve the demand of the line. A row that never declared one
+        // reads as NONE (price only).
+        inventory_effect: 'NONE',
+        effect_insumo_id: null,
+        effect_target_insumo_id: null,
+        effect_quantity: null,
+        effect_factor: null,
         created_at: new Date('2026-08-01T00:00:00Z'),
         updated_at: new Date('2026-08-01T00:00:00Z'),
         ...overrides,
@@ -2466,6 +2683,11 @@ describe('InboundSyncService', () => {
               isDefault: true,
               sortOrder: 0,
               isActive: true,
+              inventoryEffect: 'NONE',
+              effectInsumoId: null,
+              effectTargetInsumoId: null,
+              effectQuantity: null,
+              effectFactor: null,
             },
             {
               id: 'opt-2',
@@ -2475,6 +2697,11 @@ describe('InboundSyncService', () => {
               isDefault: false,
               sortOrder: 1,
               isActive: false,
+              inventoryEffect: 'NONE',
+              effectInsumoId: null,
+              effectTargetInsumoId: null,
+              effectQuantity: null,
+              effectFactor: null,
             },
           ],
         },

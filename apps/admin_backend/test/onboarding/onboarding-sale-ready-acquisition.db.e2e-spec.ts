@@ -675,15 +675,30 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
             buildFiscalPayload({
               businessName: 'Café Managua Central',
               ruc: 'J0310000012345',
-              phone: '+505 8888-0000', // Non-persisted field (AC-05)
-              address: 'Plaza Central', // Non-persisted field (AC-05)
+              // Company identity parity P1 (AC-05 revised): these fields DO
+              // persist and DO travel — they are not throwaway inputs.
+              phone: '+505 8888-0000',
+              address: 'Plaza Central',
+              email: 'hola@cafemanagua.ni',
             }),
           )
           .expect(201);
 
         expect(fiscalRes.body.businessName).toBe('Café Managua Central');
         expect(fiscalRes.body.regime).toBe(FiscalRegime.CUOTA_FIJA);
-        expect(fiscalRes.body.phone).toBeUndefined(); // AC-05: Non-persisted field not returned
+        // AC-05 (revised — identity parity P1): the identity fields are
+        // persisted on the tenant and echoed back in the POST response.
+        expect(fiscalRes.body.phone).toBe('+505 8888-0000');
+        expect(fiscalRes.body.address).toBe('Plaza Central');
+        expect(fiscalRes.body.email).toBe('hola@cafemanagua.ni');
+
+        // AC-05 (revised): persistence proven at the row, not just the echo.
+        const dbTenant = await dataSource
+          .getRepository(Tenant)
+          .findOneOrFail({ where: { id: tenantId } });
+        expect(dbTenant.phone).toBe('+505 8888-0000');
+        expect(dbTenant.address).toBe('Plaza Central');
+        expect(dbTenant.email).toBe('hola@cafemanagua.ni');
 
         // Check readiness after fiscal: Fiscal completed, Catalog still blocking
         const readinessAfterFiscal = await request(app.getHttpServer())
@@ -749,7 +764,7 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
       'onb15_template',
       async ({ app, ownerToken }) => {
         // 1. Configure Fiscal first
-        await request(app.getHttpServer())
+        const fiscalRes = await request(app.getHttpServer())
           .post('/onboarding/fiscal-setup')
           .set('Authorization', `Bearer ${ownerToken}`)
           .send(
@@ -760,6 +775,13 @@ describe('ONB1.5 — Fiscal + Catalog Acquisition UX & SALE_READY Transition (Po
             }),
           )
           .expect(201);
+
+        // AC-05 (revised — identity parity P1) absence discipline: identity
+        // fields that were never configured read as null — never undefined
+        // and never an empty string.
+        expect(fiscalRes.body.phone).toBeNull();
+        expect(fiscalRes.body.address).toBeNull();
+        expect(fiscalRes.body.email).toBeNull();
 
         // 2. Apply Industry Template CAFETERIA
         const applyRes = await request(app.getHttpServer())

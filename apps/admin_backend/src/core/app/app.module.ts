@@ -18,6 +18,7 @@ import { ProductModifierGroup } from '../../modules/modifiers/entities/product-m
 import { SalesModule } from '../../modules/sales/sales.module';
 import { NotificationsModule } from '../../modules/notifications/notifications.module';
 import { OnboardingModule } from '../../modules/onboarding/onboarding.module';
+import { SupervisionModule } from '../../modules/supervision/supervision.module';
 import { CustomersModule } from '../../modules/customers/customers.module';
 import { Customer } from '../../modules/customers/entities/customer.entity';
 import { CustomerPointTransaction } from '../../modules/customers/entities/customer-point-transaction.entity';
@@ -35,6 +36,7 @@ import { TenantFulfillmentRecord } from '../../modules/fulfillment/entities/tena
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { Tenant } from '../../modules/tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../modules/tenant/entities/tenant-brand-asset.entity';
 import { User } from '../../modules/identity/entities/user.entity';
 import { AuditLog } from '../../modules/identity/entities/audit-log.entity';
 import { AuditIntegrityAlert } from '../../modules/identity/entities/audit-integrity-alert.entity';
@@ -52,6 +54,8 @@ import { Warehouse } from '../../modules/inventory/entities/warehouse.entity';
 import { UomConversion } from '../../modules/inventory/entities/uom-conversion.entity';
 import { UomCatalogEntry } from '../../modules/inventory/entities/uom-catalog-entry.entity';
 import { Batch } from '../../modules/inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../modules/inventory/entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from '../../modules/inventory/entities/inventory-divergence.entity';
 import { BcnFxRate } from '../../modules/inventory/entities/bcn-fx-rate.entity';
 import { PurchaseDocument } from '../../modules/inventory/entities/purchase-document.entity';
 import { ProductionOrder } from '../../modules/inventory/entities/production-order.entity';
@@ -59,6 +63,8 @@ import { ProductionOrderLine } from '../../modules/inventory/entities/production
 import { ProductionBatchHistory } from '../../modules/inventory/entities/production-batch-history.entity';
 import { Shrinkage } from '../../modules/inventory/entities/shrinkage.entity';
 import { ShrinkageDetail } from '../../modules/inventory/entities/shrinkage-detail.entity';
+import { CountSession } from '../../modules/inventory/entities/count-session.entity';
+import { CountSessionEntry } from '../../modules/inventory/entities/count-session-entry.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -134,6 +140,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
   }),
   entities: [
     Tenant,
+    TenantBrandAsset,
     User,
     SecurityProfile,
     AuditLog,
@@ -151,6 +158,10 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     UomConversion,
     UomCatalogEntry,
     Batch,
+    BatchOutflowTrace,
+    // FD-01: the declared differences between a sale and the stock that
+    // backed it (the divergence ledger).
+    InventoryDivergence,
     BcnFxRate,
     PurchaseDocument,
     ProductionOrder,
@@ -158,6 +169,9 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     ProductionBatchHistory,
     Shrinkage,
     ShrinkageDetail,
+    // R19: the count session document and its append-only counted entries.
+    CountSession,
+    CountSessionEntry,
     SystemParametersConfig,
     SystemParametersConfigActiveView,
     KardexRecalculateQueue,
@@ -237,6 +251,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     SalesModule,
     NotificationsModule,
     OnboardingModule,
+    SupervisionModule,
     CustomersModule,
     LoyaltyModule,
     PromotionsModule,

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -25,8 +26,14 @@ import { AuthGuard } from '../identity/guards/auth.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
-import { DataSource } from 'typeorm';
+import { DataSource, EntityManager } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
+import {
+  UnconfiguredConversionError,
+  validateInsumoConversion,
+} from './uom-catalog';
+import { CatalogValue } from '../catalog/entities/catalog-value.entity';
+import { CATALOG_TYPE } from '../catalog/catalog-type';
 
 @Controller('insumos')
 @UseInterceptors(TenantInterceptor)
@@ -44,6 +51,94 @@ export class InsumoController {
       throw new Error('Tenant context is required');
     }
     return tenantId;
+  }
+
+  /**
+   * S3 (H2): the UOM conversion guard existed but had a single caller — the
+   * seed script. The live catalog routes persisted an incoherent conversion in
+   * silence, and the following purchase then measured stock and cost against
+   * it. The domain error is mapped to a 400 here so the operator gets business
+   * copy and never a 500.
+   *
+   * The guard resolves the units against the PLATFORM catalog plus the
+   * TENANT's own UOM catalog: a unit the operator registered in Catálogos
+   * ("arroba", "cajilla") is a legitimate business unit whose content he
+   * declares with the factor, not a typo to be rejected. Before this, the
+   * error message promised exactly that ("Regístrala en el catálogo") while
+   * the guard consulted the platform catalog only.
+   */
+  private async assertUomConversion(
+    tenantId: string,
+    purchaseUom: string,
+    consumptionUom: string,
+    conversionFactor: number,
+    manager?: EntityManager,
+  ): Promise<void> {
+    const tenantUomCodes = await this.loadTenantUomCodes(tenantId, manager);
+    try {
+      validateInsumoConversion(purchaseUom, consumptionUom, conversionFactor, {
+        tenantUomCodes,
+      });
+    } catch (error) {
+      if (error instanceof UnconfiguredConversionError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * The unit codes the tenant registered in its own UOM catalog. Read inside
+   * the caller's tenant-bound context so RLS keeps the read tenant-scoped:
+   * when the caller already holds a bound manager, that manager is reused
+   * (no second connection, no nested transaction).
+   */
+  private async loadTenantUomCodes(
+    tenantId: string,
+    manager?: EntityManager,
+  ): Promise<string[]> {
+    const read = async (m: EntityManager): Promise<string[]> => {
+      const values = await m.getRepository(CatalogValue).find({
+        where: { tenant_id: tenantId, catalog_type: CATALOG_TYPE.UOM },
+        select: { code: true },
+      });
+      return values.map((v) => v.code);
+    };
+
+    if (manager) {
+      return read(manager);
+    }
+
+    return runInTenantTransaction(this.dataSource, tenantId, read);
+  }
+
+  /**
+   * The conversion is re-checked only when the update actually touches a UOM
+   * field. An unrelated edit (a name or a par level) must not fail because a
+   * legacy row carries an incoherent conversion the operator is not touching.
+   */
+  private async assertUomConversionOnUpdate(
+    tenantId: string,
+    dto: UpdateInsumoDto,
+    insumo: Insumo,
+    manager: EntityManager,
+  ): Promise<void> {
+    const touchesUom =
+      dto.purchaseUom !== undefined ||
+      dto.consumptionUom !== undefined ||
+      dto.conversionFactor !== undefined;
+
+    if (!touchesUom) {
+      return;
+    }
+
+    await this.assertUomConversion(
+      tenantId,
+      dto.purchaseUom ?? insumo.purchaseUom,
+      dto.consumptionUom ?? insumo.consumptionUom,
+      dto.conversionFactor ?? Number(insumo.conversionFactor ?? 1),
+      manager,
+    );
   }
 
   @Get()
@@ -79,6 +174,12 @@ export class InsumoController {
     @GetTenantId() tenantId?: string,
   ): Promise<InsumoResponse> {
     const normalizedTenantId = this.requireTenant(tenantId);
+    await this.assertUomConversion(
+      normalizedTenantId,
+      dto.purchaseUom,
+      dto.consumptionUom,
+      dto.conversionFactor ?? 1,
+    );
 
     const saved = await runInTenantTransaction(
       this.dataSource,
@@ -110,6 +211,7 @@ export class InsumoController {
           is_perishable: dto.is_perishable ?? false,
           negativeStockPolicy: dto.negativeStockPolicy ?? 'RESTRICT',
           warehouse_id: dto.warehouse_id ?? null,
+          ivaRatePct: dto.ivaRatePct ?? null,
           stock: 0,
           existenciaActual: 0,
           is_active: true,
@@ -142,6 +244,13 @@ export class InsumoController {
           throw new NotFoundException(`Insumo '${id}' no encontrado`);
         }
 
+        await this.assertUomConversionOnUpdate(
+          normalizedTenantId,
+          dto,
+          insumo,
+          manager,
+        );
+
         if (dto.name && dto.name !== insumo.name) {
           const duplicate = await repo.findOne({
             where: { tenant_id: normalizedTenantId, name: dto.name },
@@ -165,11 +274,15 @@ export class InsumoController {
           insumo.averageCost = dto.averageCost;
         if (dto.is_perishable !== undefined)
           insumo.is_perishable = dto.is_perishable;
+        if (dto.ivaRatePct !== undefined)
+          insumo.ivaRatePct = dto.ivaRatePct;
         if (dto.negativeStockPolicy !== undefined)
           insumo.negativeStockPolicy = dto.negativeStockPolicy;
         if (dto.warehouse_id !== undefined)
           insumo.warehouse_id = dto.warehouse_id;
         if (dto.is_active !== undefined) insumo.is_active = dto.is_active;
+
+
 
         return repo.save(insumo);
       },

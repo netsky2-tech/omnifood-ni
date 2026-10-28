@@ -1,12 +1,43 @@
 import { ConflictException } from '@nestjs/common';
 import type { EntityManager } from 'typeorm';
 import { Batch } from './entities/batch.entity';
+import { BatchOutflowTrace } from './entities/batch-outflow-trace.entity';
 import {
   BatchCostingService,
   type BatchCandidate,
+  type BatchConsumptionTrace,
 } from './batch-costing.service';
 
 const round4 = (value: number): number => Number(value.toFixed(4));
+
+/**
+ * WHY A TYPED ERROR: the sync path reports a REJECTED record with a
+ * machine-readable code, and that code is what a terminal, a dashboard and
+ * a support ticket group by. A bare `ConflictException` used to be caught
+ * by a catch-all and reported as `LOYALTY_IDEMPOTENCY_CONFLICT` — a
+ * loyalty code for an INVENTORY conflict, which sent the triage (and the
+ * owner) looking at the points ledger instead of at the batches.
+ *
+ * The reason travels with the error, so the surface can name the cause it
+ * actually is.
+ */
+export type BatchAllocationConflictReason =
+  /** The batches cannot cover the outflow: reconcile them before recording it. */
+  | 'BALANCE_INSUFFICIENT'
+  /** The movement references a batch that does not exist. */
+  | 'UNKNOWN_SOURCE_BATCH'
+  /** The trace references a batch that does not exist. */
+  | 'UNKNOWN_TRACE_BATCH';
+
+export class BatchAllocationConflictException extends ConflictException {
+  constructor(
+    readonly reason: BatchAllocationConflictReason,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'BatchAllocationConflictException';
+  }
+}
 
 /**
  * `BatchCostingService` holds no state and injects nothing, so a single
@@ -16,6 +47,27 @@ const round4 = (value: number): number => Number(value.toFixed(4));
  * and through every spec that constructs them.
  */
 const batchCosting = new BatchCostingService();
+
+/**
+ * The PLAN of an outflow: what the lots can back, what they cannot, and which
+ * lots leave.
+ *
+ * FD-01 (openspec/changes/fiscal-no-se-congela-por-inventario): the plan is
+ * separated from the application so that a sale can apply the part the lots
+ * back and DECLARE the rest, instead of the whole outflow being rejected —
+ * which used to block the fiscal stream and freeze the terminal's sequence.
+ */
+export interface BatchOutflowPlan {
+  /** Whether the insumo has lots at all. Without lots the aggregate IS the
+   * only truth, and there is nothing to draw from. */
+  hasLots: boolean;
+  /** Units the lots back. */
+  covered: number;
+  /** Units the lots do NOT back (only meaningful when `hasLots`). */
+  uncovered: number;
+  /** The (batch, quantity) pairs that leave, in FEFO order. */
+  traces: BatchConsumptionTrace[];
+}
 
 /**
  * Draws ONE outflow (shrinkage, sync delta or count variance) from the batch
@@ -60,6 +112,13 @@ export const drawBatchOutflow = async (input: {
   quantity: number;
   /** ISO calendar day (`YYYY-MM-DD`) used for the FEFO / soft-expiry ordering. */
   operationDay: string;
+  /**
+   * The Kardex movement this outflow belongs to. When present, the exact
+   * (batch, quantity) pairs drawn are recorded in `batch_outflow_traces` so a
+   * later cancellation can restore them (R3). Movable callers that save the
+   * movement AFTER drawing simply omit it.
+   */
+  movementId?: string;
 }): Promise<void> => {
   const required = round4(input.quantity);
   if (required <= 0) {
@@ -93,7 +152,8 @@ export const drawBatchOutflow = async (input: {
   );
 
   if (covered < required) {
-    throw new ConflictException(
+    throw new BatchAllocationConflictException(
+      'BALANCE_INSUFFICIENT',
       `Batch balances cannot cover the outflow for insumo ${input.insumoId}: ` +
         `required ${required}, batch balances total ${covered}. The aggregate ` +
         `stock and the batch balances have diverged; reconcile them before ` +
@@ -106,7 +166,8 @@ export const drawBatchOutflow = async (input: {
   for (const consumed of trace) {
     const batch = byId.get(consumed.batchId);
     if (!batch) {
-      throw new ConflictException(
+      throw new BatchAllocationConflictException(
+        'UNKNOWN_SOURCE_BATCH',
         `Outflow referenced an unknown source batch: ${consumed.batchId}`,
       );
     }
@@ -114,6 +175,179 @@ export const drawBatchOutflow = async (input: {
     batch.remaining_stock = round4(
       Number(batch.remaining_stock) - consumed.consumedQuantity,
     );
+    await batchRepo.save(batch);
+  }
+
+  if (input.movementId) {
+    const traceRepo = input.manager.getRepository(BatchOutflowTrace);
+    for (const consumed of trace) {
+      await traceRepo.save(
+        traceRepo.create({
+          tenant_id: input.tenantId,
+          movement_id: input.movementId,
+          batch_id: consumed.batchId,
+          quantity: round4(consumed.consumedQuantity),
+        }),
+      );
+    }
+  }
+};
+
+/**
+ * The PARTIAL draw: the same FEFO rule, but the part the lots cannot back is
+ * REPORTED instead of thrown.
+ *
+ * WHY (FD-01, openspec/changes/fiscal-no-se-congela-por-inventario): the
+ * strict draw above REJECTED the whole movement when the batches could not
+ * cover it, and in the sale path that rejection blocked the fiscal stream:
+ * every later sale stopped landing in the cloud and the terminal's fiscal
+ * sequence froze. The owner ruled that the invoice is ALWAYS applied and that
+ * what does not add up is declared, not buried.
+ *
+ * So the sale path applies the part the lots back (with its trace, so a
+ * cancellation can restore exactly those lots — R3) and hands the uncovered
+ * units back to the caller, which DECLARES them as a divergence.
+ *
+ * WHAT IT DOES NOT DO: it does not invent a lot. `batches.expiration_date` is
+ * NOT NULL, so a lot without a real expiration date cannot be created to cover
+ * a difference; the difference is a fact about the stock, and it is recorded
+ * as such.
+ *
+ * The strict draw stays the behaviour of the non-fiscal paths (shrinkage,
+ * count variance): a physical shortage in a shrinkage or a count is not
+ * something to be papered over.
+ */
+export const drawBatchOutflowPartial = async (input: {
+  manager: EntityManager;
+  tenantId: string;
+  insumoId: string;
+  /** Positive magnitude of what is leaving. */
+  quantity: number;
+  /** ISO calendar day (`YYYY-MM-DD`) used for the FEFO / soft-expiry ordering. */
+  operationDay: string;
+  /** The Kardex movement this outflow belongs to (for the trace). */
+  movementId?: string;
+}): Promise<BatchOutflowPlan> => {
+  const required = round4(input.quantity);
+  if (required <= 0) {
+    return { hasLots: false, covered: 0, uncovered: 0, traces: [] };
+  }
+
+  const batchRepo = input.manager.getRepository(Batch);
+  const candidates = await batchRepo.find({
+    where: { tenant_id: input.tenantId, insumo_id: input.insumoId },
+    order: { batch_number: 'ASC' },
+  });
+
+  if (candidates.length === 0) {
+    // No lots: the aggregate IS the truth, so there is nothing to draw and
+    // nothing to declare on the lot side.
+    return { hasLots: false, covered: 0, uncovered: 0, traces: [] };
+  }
+
+  const trace = batchCosting.buildValuationTrace({
+    requiredQuantity: required,
+    operationDate: input.operationDay,
+    candidates: candidates.map<BatchCandidate>((batch) => ({
+      batchId: batch.id,
+      insumoId: input.insumoId,
+      remainingStock: Number(batch.remaining_stock),
+      unitCostNio: Number(batch.cost),
+      expirationDate: batch.expiration_date,
+    })),
+  });
+
+  const covered = round4(
+    trace.reduce((total, consumed) => total + consumed.consumedQuantity, 0),
+  );
+
+  const byId = new Map(candidates.map((batch) => [batch.id, batch] as const));
+
+  for (const consumed of trace) {
+    const batch = byId.get(consumed.batchId);
+    if (!batch) {
+      throw new BatchAllocationConflictException(
+        'UNKNOWN_SOURCE_BATCH',
+        `Outflow referenced an unknown source batch: ${consumed.batchId}`,
+      );
+    }
+
+    batch.remaining_stock = round4(
+      Number(batch.remaining_stock) - consumed.consumedQuantity,
+    );
+    await batchRepo.save(batch);
+  }
+
+  if (input.movementId) {
+    const traceRepo = input.manager.getRepository(BatchOutflowTrace);
+    for (const consumed of trace) {
+      await traceRepo.save(
+        traceRepo.create({
+          tenant_id: input.tenantId,
+          movement_id: input.movementId,
+          batch_id: consumed.batchId,
+          quantity: round4(consumed.consumedQuantity),
+        }),
+      );
+    }
+  }
+
+  return {
+    hasLots: true,
+    covered,
+    uncovered: round4(Math.max(0, required - covered)),
+    traces: trace,
+  };
+};
+
+/**
+ * Reverses ONE outflow: returns the traced quantities to the SAME batches the
+ * original movement drew from.
+ *
+ * Why an inflow cannot be approximated instead: a POSITIVE movement has no
+ * known lot, and `batches.expiration_date` is NOT NULL, so no batch can be
+ * invented. The only faithful reversal is the recorded trace. A movement with
+ * no trace (a pre-R3 sale, or a non batch-managed insumo) restores nothing.
+ */
+export const restoreBatchInflow = async (input: {
+  manager: EntityManager;
+  tenantId: string;
+  /** The movement whose outflow is being reversed. */
+  movementId: string;
+}): Promise<void> => {
+  const traceRepo = input.manager.getRepository(BatchOutflowTrace);
+  const traces = await traceRepo.find({
+    where: { tenant_id: input.tenantId, movement_id: input.movementId },
+  });
+
+  if (traces.length === 0) {
+    return;
+  }
+
+  const batchRepo = input.manager.getRepository(Batch);
+  const restored = new Map<string, Batch>();
+
+  for (const trace of traces) {
+    let batch = restored.get(trace.batch_id);
+    if (!batch) {
+      batch = await batchRepo.findOne({
+        where: { id: trace.batch_id, tenant_id: input.tenantId },
+      });
+      if (!batch) {
+        throw new BatchAllocationConflictException(
+          'UNKNOWN_TRACE_BATCH',
+          `Batch trace referenced an unknown batch: ${trace.batch_id}`,
+        );
+      }
+      restored.set(trace.batch_id, batch);
+    }
+
+    batch.remaining_stock = round4(
+      Number(batch.remaining_stock) + Number(trace.quantity),
+    );
+  }
+
+  for (const batch of restored.values()) {
     await batchRepo.save(batch);
   }
 };

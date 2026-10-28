@@ -3,6 +3,7 @@ import {
   FiscalRegime,
   TenantOperationMode,
 } from './fiscal-setup.dto';
+import type { SupervisionPolicy } from '../../supervision/contracts/supervision-policy.contract';
 
 export interface FiscalConfigVersion {
   revision: number;
@@ -17,6 +18,33 @@ export interface EffectiveFiscalPayload {
   ruc: string | null;
   taxRate: number;
   tenantId: string;
+  /**
+   * Company identity parity P1: the business contact identity rides the
+   * fingerprinted payload (null = never configured — rides as null, same
+   * school as D-4, so absence and configured- absence fingerprint alike and
+   * a first configuration materializes a new revision). The snapshot is the
+   * ONLY delivery channel (S2): no second sync mechanism.
+   *
+   * S6 — declared local exception: the terminal may still override what it
+   * PRINTS via its local printer_header_* settings (POS precedence
+   * `printer_header_* ?? business_*`). The cloud is the owner of the
+   * identity (S1); the terminal's local header override is an explicit,
+   * documented exception, NOT a hidden divergence — P2 applies these values
+   * as the business_* fallback without removing that precedence.
+   */
+  phone: string | null;
+  address: string | null;
+  email: string | null;
+  /**
+   * Company identity parity P3, slice 1 (S5): the sha256 of the tenant's
+   * cloud-stored logo ORIGINAL — a REFERENCE, never the bytes. The fiscal
+   * payload is stored whole per revision in fiscal_config_revisions, so
+   * embedding base64 here would be one logo copy per revision; the reference
+   * rides the fingerprint instead, which makes a logo change read as what it
+   * is: a TERMINAL-CONFIG change delivered through the existing versioned
+   * channel (S2), not a fiscal one. null = the tenant has no logo.
+   */
+  logoSha256: string | null;
   /** BXW-007 U1 rev 2: null = the tenant never configured it — rides the fingerprint as null. */
   operationMode: TenantOperationMode | null;
   /** BXW-007 U1 rev 2: null = the tenant never configured it — rides the fingerprint as null. */
@@ -33,12 +61,36 @@ export interface EffectiveFiscalPayload {
    */
   maxDiscountAmount: number | null;
   maxDiscountPercent: number | null;
+  /**
+   * The tenant's SUPERVISION policy: who may authorize a sensitive
+   * operation here, and which flows accept a self-authorization.
+   *
+   * It rides this payload because this snapshot is the ONLY versioned,
+   * fingerprinted, acknowledged channel to the terminal (the S2 rule: no
+   * second sync mechanism) — the same reason the operation mode and the
+   * discount caps ride it. null = the tenant never configured one: the
+   * terminal keeps the default for its operation mode, which never
+   * dead-ends the shift close.
+   */
+  supervisionPolicy: SupervisionPolicy | null;
 }
 
 export interface FiscalConfigSnapshot {
   tenantId: string;
   businessName: string;
   ruc?: string | null;
+  /** Company identity parity P1: null = never configured (optional so pre-P1 builders keep compiling). */
+  phone?: string | null;
+  address?: string | null;
+  email?: string | null;
+  /**
+   * Company identity parity P3, slice 1 (S5): the sha256 REFERENCE to the
+   * tenant's cloud logo original (null = no logo). Optional so pre-P3
+   * builders keep compiling. The terminal uses it to know it must re-fetch
+   * and re-derive its local raster; the bytes themselves are fetched from
+   * the brand-asset surface, never from this payload.
+   */
+  logoSha256?: string | null;
   fiscalRegime: FiscalRegime;
   taxRate: number;
   pricesIncludeTax: boolean;
@@ -54,6 +106,8 @@ export interface FiscalConfigSnapshot {
   /** SOHO P3 (D-A): null = no cap configured (optional so existing builders keep compiling). */
   maxDiscountAmount?: number | null;
   maxDiscountPercent?: number | null;
+  /** The tenant's supervision policy (null = never configured). */
+  supervisionPolicy?: SupervisionPolicy | null;
   configVersion: FiscalConfigVersion;
   generatedAt: string;
 }

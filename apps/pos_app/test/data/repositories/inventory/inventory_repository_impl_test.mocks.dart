@@ -1297,6 +1297,17 @@ class MockBatchDao extends _i1.Mock implements _i29.BatchDao {
   }
 
   @override
+  _i59.Future<List<_i70.BatchEntity>> findBatchesByInsumoId(String? insumoId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #findBatchesByInsumoId,
+          [insumoId],
+        ),
+        returnValue:
+            _i59.Future<List<_i70.BatchEntity>>.value(<_i70.BatchEntity>[]),
+      ) as _i59.Future<List<_i70.BatchEntity>>);
+
+  @override
   _i59.Future<List<_i70.BatchEntity>> findActiveBatchesByInsumoId(
           String? insumoId) =>
       (super.noSuchMethod(

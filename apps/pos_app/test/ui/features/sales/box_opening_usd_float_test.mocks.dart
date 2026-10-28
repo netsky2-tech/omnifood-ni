@@ -368,6 +368,13 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as bool);
 
   @override
+  bool get canCloseOwnShift => (super.noSuchMethod(
+        Invocation.getter(#canCloseOwnShift),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   bool get canVoidInvoice => (super.noSuchMethod(
         Invocation.getter(#canVoidInvoice),
         returnValue: false,
@@ -787,6 +794,16 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
       ) as _i17.Future<void>);
 
   @override
+  _i17.Future<void> refreshTerminalCajaLabel() => (super.noSuchMethod(
+        Invocation.method(
+          #refreshTerminalCajaLabel,
+          [],
+        ),
+        returnValue: _i17.Future<void>.value(),
+        returnValueForMissingStub: _i17.Future<void>.value(),
+      ) as _i17.Future<void>);
+
+  @override
   void setCompanyTaxRegime(_i18.TaxRegime? regime) => super.noSuchMethod(
         Invocation.method(
           #setCompanyTaxRegime,
@@ -850,6 +867,16 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
         ),
         returnValueForMissingStub: null,
       );
+
+  @override
+  _i17.Future<void> reloadOperatorContext() => (super.noSuchMethod(
+        Invocation.method(
+          #reloadOperatorContext,
+          [],
+        ),
+        returnValue: _i17.Future<void>.value(),
+        returnValueForMissingStub: _i17.Future<void>.value(),
+      ) as _i17.Future<void>);
 
   @override
   double getCartItemLineAmount(_i13.CartItem? item) => (super.noSuchMethod(

@@ -40,6 +40,10 @@ describe('FiscalSetupController (Unit)', () => {
         tenantId: 'tenant-1',
         businessName: 'Café Managua',
         ruc: 'J0310000001234',
+        // Company identity parity P1: required nullable keys on the response.
+        phone: null,
+        address: null,
+        email: null,
         regime: FiscalRegime.REGIMEN_GENERAL,
         taxRateIva: 0.15,
         pricesIncludeTax: true,
@@ -98,6 +102,10 @@ describe('FiscalSetupController (Unit)', () => {
         tenantId: 'tenant-1',
         businessName: 'Cafetín',
         ruc: 'J0310000055555',
+        // Company identity parity P1: required nullable keys on the response.
+        phone: null,
+        address: null,
+        email: null,
         regime: FiscalRegime.CUOTA_FIJA,
         taxRateIva: 0.0,
         pricesIncludeTax: true,

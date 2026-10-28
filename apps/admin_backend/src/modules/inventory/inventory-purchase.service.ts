@@ -81,6 +81,10 @@ export interface PurchasePreview {
   bcnRate: number;
   bcnRateSource: string;
   unitCostNio: number;
+  /** NIO per INVOICE unit — the value the purchase document freezes. */
+  invoiceUnitCostNio: number;
+  /** Quantity added to stock, expressed in the insumo's CONSUMPTION unit. */
+  entryQuantityConsumption: number;
   previousCppNio: number;
   projectedCppNio: number;
   previousStock: number;
@@ -341,6 +345,12 @@ export class InventoryPurchaseService {
      * in business Spanish without raw UUIDs.
      */
     messageLocale?: PurchaseMessageLocale;
+    /**
+     * R9 (S11): the operator's declaration of whether `unitCost` carries IVA.
+     * Mandatory and false-only when the insumo declares a rate; ignored
+     * otherwise (see the guard below).
+     */
+    costIncludesIva?: boolean;
   }) {
     const tenantId = this.requireTenantId(input.tenantId);
     const invoiceNumber = this.requireInvoiceNumber(input.invoiceNumber);
@@ -358,6 +368,34 @@ export class InventoryPurchaseService {
             .where('insumo.id = :insumoId', { insumoId: input.insumoId })
             .andWhere('insumo.tenant_id = :tenantId', { tenantId })
             .getOne();
+
+          // R9 (S11): the owner decided the purchase cost is loaded NET and
+          // the system guarantees it. When the insumo declares an IVA rate,
+          // the load requires the explicit net/gross declaration and REJECTS
+          // a gross cost — a gross cost would overvalue the inventory (NIC 2
+          // §23-25 excludes recoverable taxes). With no declared rate the
+          // declaration is not required and the guard is inert.
+          const ivaRatePct = Number(insumo?.ivaRatePct ?? 0);
+          if (ivaRatePct > 0) {
+            if (input.costIncludesIva === undefined) {
+              throw messagesInSpanish
+                ? new BadRequestException(
+                    `El insumo declara IVA ${ivaRatePct}%. Debe declarar si el costo que carga es neto (sin IVA) o con IVA incluido.`,
+                  )
+                : new BadRequestException(
+                    `Insumo declares IVA ${ivaRatePct}%. Declare whether the loaded cost is net (without IVA) or IVA-inclusive.`,
+                  );
+            }
+            if (input.costIncludesIva) {
+              throw messagesInSpanish
+                ? new BadRequestException(
+                    `El costo cargado trae IVA incluido. Cargue el costo NETO (sin IVA): divida el precio de factura entre ${(1 + ivaRatePct / 100).toFixed(4)} para este insumo con IVA ${ivaRatePct}%.`,
+                  )
+                : new BadRequestException(
+                    `The loaded cost carries IVA. Load the NET cost (without IVA): divide the invoice price by ${(1 + ivaRatePct / 100).toFixed(4)} for this insumo with IVA ${ivaRatePct}%.`,
+                  );
+            }
+          }
 
           if (!insumo) {
             throw messagesInSpanish
@@ -425,7 +463,7 @@ export class InventoryPurchaseService {
             unit_cost: round4(input.unitCost),
             currency: input.currency,
             bcn_rate: preview.bcnRate,
-            unit_cost_nio: preview.unitCostNio,
+            unit_cost_nio: preview.invoiceUnitCostNio,
             projected_cpp_nio: preview.projectedCppNio,
             lot_code: input.lotCode ?? null,
             received_date: input.receivedDate
@@ -446,12 +484,14 @@ export class InventoryPurchaseService {
             tenant_id: tenantId,
             insumoId: insumo.id,
             type: MovementType.ENTRADA_COMPRA,
-            quantity: round4(input.quantity),
+            quantity: preview.entryQuantityConsumption,
             previousStock: preview.previousStock,
             newStock: preview.projectedStock,
             averageCostAfterNio: preview.projectedCppNio,
             unitCostNio: preview.unitCostNio,
-            totalCostNio: round4(input.quantity * preview.unitCostNio),
+            totalCostNio: round4(
+              preview.entryQuantityConsumption * preview.unitCostNio,
+            ),
             sourceDocumentId: purchaseDocument.id,
             sourceDocumentType: 'PURCHASE',
           });
@@ -465,7 +505,7 @@ export class InventoryPurchaseService {
               batch_number: input.lotCode,
               received_date: toCalendarDay(input.receivedDate),
               expiration_date: toCalendarDay(input.expirationDate),
-              remaining_stock: round4(input.quantity),
+              remaining_stock: preview.entryQuantityConsumption,
               cost: preview.unitCostNio,
             });
             await manager.save(Batch, batch);
@@ -572,7 +612,13 @@ export class InventoryPurchaseService {
 
           const previousStock = round4(Number(insumo.stock));
           const previousCppNio = round4(Number(insumo.averageCost));
+          // R10: the valued movement is in CONSUMPTION units while the purchase
+          // document is an invoice record in INVOICE units. They only coincide
+          // when the insumo's conversion factor is 1.
           const correctedQuantity = round4(-Number(originalMovement.quantity));
+          const correctedDocumentQuantity = round4(
+            -Number(originalDocument.quantity),
+          );
           const correctedTotalCostNio = round4(
             -Number(originalMovement.totalCostNio),
           );
@@ -600,7 +646,7 @@ export class InventoryPurchaseService {
             invoice_date: originalDocument.invoice_date,
             entry_date: todayCalendarDay(),
             entry_timestamp: new Date(),
-            quantity: correctedQuantity,
+            quantity: correctedDocumentQuantity,
             unit_cost: Number(originalDocument.unit_cost),
             currency: originalDocument.currency,
             bcn_rate: Number(originalDocument.bcn_rate),
@@ -721,11 +767,31 @@ export class InventoryPurchaseService {
       fxRateMode: input.fxRateMode,
       bcnRate: input.bcnRate,
     });
+
+    // S4 (H1): the insumo declares how many CONSUMPTION units one PURCHASE
+    // unit yields. Stock and CPP live in the consumption unit, so both the
+    // quantity and the unit cost are converted before they reach the cost
+    // calculator — the invoice keeps its own unit and NIO cost untouched.
+    const conversionFactor = Number(insumo.conversionFactor ?? 1);
+    if (!(conversionFactor > 0)) {
+      throw new BadRequestException(
+        `Insumo ${insumo.id} has an invalid conversion factor (${insumo.conversionFactor}); expected a positive number of consumption units per purchase unit`,
+      );
+    }
+    const entryQuantityConsumption = round4(
+      input.quantity * conversionFactor,
+    );
+    const entryUnitCostConsumption = input.unitCost / conversionFactor;
+    const invoiceUnitCostNio = round4(
+      input.currency === CURRENCY.NIO
+        ? input.unitCost
+        : input.unitCost * rateResolution.bcnRate,
+    );
     const cpp = this.costCalculator.calculatePurchaseCpp({
       currentStock: Number(insumo.stock),
       currentCppNio: Number(insumo.averageCost),
-      entryQuantity: input.quantity,
-      entryUnitCost: input.unitCost,
+      entryQuantity: entryQuantityConsumption,
+      entryUnitCost: entryUnitCostConsumption,
       currency: input.currency,
       bcnRateNio: rateResolution.bcnRate,
     });
@@ -736,6 +802,8 @@ export class InventoryPurchaseService {
       bcnRate: rateResolution.bcnRate,
       bcnRateSource: rateResolution.bcnRateSource,
       unitCostNio: cpp.unitCostNio,
+      invoiceUnitCostNio,
+      entryQuantityConsumption,
       previousCppNio: cpp.previousCppNio,
       projectedCppNio: cpp.projectedCppNio,
       previousStock: cpp.previousStock,

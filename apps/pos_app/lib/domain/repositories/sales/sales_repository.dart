@@ -56,6 +56,12 @@ abstract class SalesRepository {
     required List<String> acknowledgedCorrelationIds,
   });
   Future<int> getInventoryEnrichmentPendingCount();
+
+  /// FD-01: the sales the cloud applied while declaring that part of the
+  /// stock was not backed (a difference to reconcile in the backoffice).
+  /// Informational: it NEVER blocks a sale, a shift close or the DGI
+  /// numbering.
+  Future<int> getInventoryDivergenceCount();
   /// D-13: assembles the faithful reprint payload for [invoiceId] from the
   /// immutable fiscal snapshot taken at issuance (header) plus the stored
   /// items/payments. Throws [ArgumentError] on a blank reason code and

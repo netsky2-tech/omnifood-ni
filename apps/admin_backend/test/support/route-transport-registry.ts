@@ -526,6 +526,22 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   { controller: 'OnboardingSessionController', transport: 'human' },
   { controller: 'TerminalPrimingController', transport: 'human' },
   { controller: 'FiscalSetupController', transport: 'human' },
+  {
+    controller: 'SupervisionPolicyController',
+    transport: 'human',
+    reason:
+      'the tenant supervision policy is edited by a person in the backoffice; no device transport',
+  },
+  // Company identity parity P3/P4: the dashboard logo read/upload is a human
+  // surface (OWNER/MANAGER session); it was served but never declared when
+  // slice 1 landed, which left the registry red on HEAD.
+  { controller: 'CompanyLogoController', transport: 'human' },
+  // P4 (identidad-empresa-paridad.md, L4): the terminal fetches the logo
+  // ORIGINAL bytes to derive its raster on explicit human adoption. The
+  // dashboard route is human transport, useless to an offline-PIN terminal,
+  // so the read rides the device channel behind SyncTransportGuard with the
+  // `sync:pull` scope — same class as InboundSyncController.
+  { controller: 'CompanyLogoDeviceController', transport: 'device' },
   { controller: 'ActivationController', transport: 'human' },
   {
     controller: 'DeviceLinkingController',
@@ -658,7 +674,14 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   },
   { controller: 'RemediationController', transport: 'human' },
   { controller: 'InventoryReportsController', transport: 'human' },
+  // FD-01: the divergence ledger and the parity diagnostic. Human session
+  // (the owner reads what did not add up); no device transport.
+  { controller: 'InventoryDivergenceController', transport: 'human' },
   { controller: 'ProductController', transport: 'human' },
   { controller: 'RecipeController', transport: 'human' },
   { controller: 'InsumoController', transport: 'human' },
+  // The platform units-of-measure catalog (protocol data with the physical
+  // anchor factors). Read by the owner dashboard's insumo form under a human
+  // session; it is not a device transport.
+  { controller: 'UomCatalogController', transport: 'human' },
 ];

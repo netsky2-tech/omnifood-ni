@@ -63,6 +63,30 @@ export interface RecipeSnapshot {
   components: RecipeDetail[];
 }
 
+/**
+ * One row of the Recetas grid: a product with an ACTIVE PUBLISHED recipe.
+ *
+ * `estimatedCostNio` is the theoretical unit cost of the recipe (the batch
+ * cost of the components at their current CPP, divided by the yield) — the
+ * same figure the "Costo por plato" report shows. It is null when the
+ * recipe cannot be priced, and `costUnavailableReason` then carries the
+ * operator-facing explanation.
+ */
+export interface ActiveRecipeSummary {
+  productId: string;
+  productName: string;
+  productUom: string | null;
+  recipeVersionId: string;
+  versionNumber: number;
+  componentCount: number;
+  yieldQuantity: number;
+  technicalShrinkPct: number;
+  versionNote: string | null;
+  effectiveAt: string | null;
+  estimatedCostNio: number | null;
+  costUnavailableReason: string | null;
+}
+
 export interface RecipeSuggestionListItem {
   recipeVersionId: string;
   productId: string;
@@ -79,7 +103,6 @@ export interface Insumo {
   name: string;
   purchaseUom?: string;
   consumptionUom?: string;
-  consumption_uom?: string;
   conversionFactor?: number;
   stock: number;
   averageCost: number;
@@ -88,6 +111,7 @@ export interface Insumo {
   is_perishable?: boolean;
   negativeStockPolicy?: string;
   is_active: boolean;
+  ivaRatePct?: number | null;
 }
 
 export interface CreateInsumoInput {
@@ -101,6 +125,7 @@ export interface CreateInsumoInput {
   is_perishable?: boolean;
   negativeStockPolicy?: 'ALLOW_TEMPORARY' | 'RESTRICT';
   warehouse_id?: string;
+  ivaRatePct?: number | null;
 }
 
 export interface UpdateInsumoInput extends Partial<CreateInsumoInput> {

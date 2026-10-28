@@ -14,6 +14,7 @@ import { Observable } from 'rxjs';
 import { DataSource } from 'typeorm';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
+import { ForensicAlertService } from '../../src/modules/inventory/forensic-alert.service';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
@@ -32,6 +33,10 @@ import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 // route contract with a batch-less insumo, where the outflow is a documented
 // no-op (no candidates → return).
 import { Batch } from '../../src/modules/inventory/entities/batch.entity';
+// R19: the service also persists the count document itself, so this spec's
+// manager closure now needs the two session entities as well.
+import { CountSession } from '../../src/modules/inventory/entities/count-session.entity';
+import { CountSessionEntry } from '../../src/modules/inventory/entities/count-session-entry.entity';
 import {
   InventoryMovement,
   MovementType,
@@ -123,7 +128,20 @@ describe('Count session route (integration)', () => {
     savedMovements.push(movement);
     return Promise.resolve(movement);
   });
+  const managerCreate = jest.fn(
+    // TypeORM's EntityManager.create(Entity, plain) returns the hydrated
+    // instance, so the stub returns the plain data — that is what manager.save
+    // and the assertions below actually see.
+    (entity: unknown, data: unknown) => data,
+  );
+  const managerSave = jest.fn().mockResolvedValue(undefined);
   const manager = {
+    // R19 (S13): CountSessionService persists the count document itself
+    // through the EntityManager's own create/save on this same transaction,
+    // mirroring the stub shape in
+    // src/modules/inventory/count-session.service.spec.ts.
+    create: managerCreate,
+    save: managerSave,
     getRepository: jest.fn((entity: unknown) => {
       if (entity === Insumo) {
         return {
@@ -161,6 +179,10 @@ describe('Count session route (integration)', () => {
       controllers: [InventoryMovementController],
       providers: [
         CountSessionService,
+        {
+          provide: ForensicAlertService,
+          useValue: { create: jest.fn().mockResolvedValue(undefined) },
+        },
         {
           provide: DataSource,
           useValue: { transaction },
@@ -285,6 +307,26 @@ describe('Count session route (integration)', () => {
     );
     expect(saveInsumo).toHaveBeenCalledWith(
       expect.objectContaining({ stock: 10, existenciaActual: 10 }),
+    );
+    // R19 (S13): the count document itself persists on the SAME transaction,
+    // so the route response only exists after the header and entries were
+    // queued for save on this manager.
+    expect(managerCreate).toHaveBeenCalledWith(
+      CountSession,
+      expect.objectContaining({
+        id: validCountSessionPayload.id,
+        tenant_id: TEST_TENANT_ID,
+      }),
+    );
+    expect(managerSave).toHaveBeenCalledWith(
+      CountSessionEntry,
+      expect.arrayContaining([
+        expect.objectContaining({
+          insumo_id: 'ins-count-1',
+          counted_quantity: 10,
+          is_approved: true,
+        }),
+      ]),
     );
     expect(savedMovements).toHaveLength(1);
     expect(savedMovements[0]).toEqual(

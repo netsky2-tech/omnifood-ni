@@ -1177,9 +1177,19 @@ Dado un Owner que completa correctamente los campos fiscales mínimos soportados
 
 Un RUC ausente, vacío o con formato inválido es un error de validación en el boundary de Fiscal Setup: no se persiste y el tenant no alcanza `SALE_READY`. El RUC del emisor se imprime en el comprobante fiscal.
 
-## AC-05 — Campo no persistido
+## AC-05 — Identidad de empresa persistida y transportada (revised)
 
-Dado un campo que el backend no persiste, la UI no lo marca como guardado ni lo utiliza para readiness.
+Dado que el Owner envía `phone`, `address` o `email` en Fiscal Setup, el backend los persiste en el tenant y los devuelve en la respuesta; dado que nunca fueron configurados, se leen como `null` — nunca `undefined` ni cadena vacía (ausencia disciplinada). Un campo que el backend no persiste no se marca como guardado ni se utiliza para readiness (esa parte del criterio original sigue vigente para campos fuera de la identidad de empresa).
+
+La identidad de empresa (`tenant.phone` / `tenant.address` / `tenant.email`) es nullable por diseño y viaja en el snapshot fiscal; el formulario del dashboard la prefiere y la envía.
+
+**Criterio anterior — SUPERSEDED (2026-10-15) por company identity parity P1, commit `34eaee29`:**
+
+> **AC-05 — Campo no persistido**
+>
+> Dado un campo que el backend no persiste, la UI no lo marca como guardado ni lo utiliza para readiness.
+
+**Razón de la supersesión:** la paridad de identidad hizo del tenant el dueño de su identidad para que reportes y tickets impriman una sola fuente. `phone` y `address` nunca fueron inputs desechables, y `email` se les unió como columna declarada y nullable; un criterio que afirma que no se persisten contradice el contrato del sistema y su prueba e2e. Registro canónico de la supersesión: `openspec/changes/onboarding-ac05-identity-parity-supersession/proposal.md`.
 
 ## AC-06 — Catálogo mínimo
 

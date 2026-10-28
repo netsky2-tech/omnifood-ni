@@ -200,6 +200,7 @@ export function SuppliersTab() {
           input: payload,
         });
         toast({
+          variant: "success",
           title: "Proveedor actualizado",
           description: `Se guardaron los cambios para ${trimmedName}.`,
         });
@@ -212,6 +213,7 @@ export function SuppliersTab() {
         };
         await createSupplier.mutateAsync(payload);
         toast({
+          variant: "success",
           title: "Proveedor creado",
           description: `Se registró ${trimmedName} exitosamente.`,
         });
@@ -230,6 +232,7 @@ export function SuppliersTab() {
         input: { isActive: nextActive },
       });
       toast({
+        variant: "success",
         title: nextActive ? "Proveedor reactivado" : "Proveedor desactivado",
         description: nextActive
           ? `${supplier.name} está activo y disponible para compras.`

@@ -10,9 +10,11 @@ import {
 import { RecipeService } from './recipe.service';
 import { CreateRecipeVersionDto } from './dto/create-recipe-version.dto';
 import {
+  ActiveRecipeSummaryResponseDto,
   RecipeSuggestionListItemDto,
   RecipeVersionSnapshotResponseDto,
 } from './dto/recipe-version-response.dto';
+import { TheoreticalCostService } from './services/theoretical-cost.service';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
 import { GetTenantId } from '../../core/decorators/tenant.decorator';
@@ -28,7 +30,10 @@ import { UserRole } from '../identity/entities/user.entity';
 @UseGuards(AuthGuard, RolesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
 export class RecipeController {
-  constructor(private readonly recipeService: RecipeService) {}
+  constructor(
+    private readonly recipeService: RecipeService,
+    private readonly theoreticalCostService: TheoreticalCostService,
+  ) {}
 
   private requireTenant(tenantId?: string): string {
     if (!tenantId) {
@@ -165,6 +170,49 @@ export class RecipeController {
    * `:recipeVersionId/snapshot` or three-segment `products/:productId/active`
    * routes declared on this controller.
    */
+  /**
+   * The Recetas grid: every product that has an ACTIVE PUBLISHED recipe, with
+   * the recipe's own figures (yield, ingredient count, theoretical unit cost)
+   * instead of the catalog product's price/stock.
+   *
+   * Before this route the grid asked for the active recipe of the SELECTED
+   * product only, so every other card showed the product's catalog columns
+   * (0 NIO / 0 stock for a compound product that was never produced) and
+   * claimed to have no recipe.
+   */
+  @Get('active')
+  async listActiveRecipes(
+    @GetTenantId() tenantId?: string,
+  ): Promise<ActiveRecipeSummaryResponseDto[]> {
+    const normalizedTenantId = this.requireTenant(tenantId);
+
+    const summaries = await this.recipeService.listActiveRecipeSummaries(
+      normalizedTenantId,
+    );
+    if (summaries.length === 0) {
+      return [];
+    }
+
+    // The theoretical cost is the same computation the "Costo por plato"
+    // route exposes, so the Recetas card and the margin report can never
+    // disagree. Products that cannot be priced are reported with the
+    // operator-facing reason instead of a silent zero.
+    const { dishes, skipped } =
+      await this.theoreticalCostService.listDishMargins(normalizedTenantId);
+    const costByProductId = new Map(dishes.map((d) => [d.productId, d]));
+    const skipByProductId = new Map(skipped.map((s) => [s.productId, s]));
+
+    return summaries.map((summary) => {
+      const dish = costByProductId.get(summary.productId);
+      const skip = skipByProductId.get(summary.productId);
+      return {
+        ...summary,
+        estimatedCostNio: dish ? dish.unitTheoreticalCostNio : null,
+        costUnavailableReason: dish ? null : (skip?.reason ?? null),
+      };
+    });
+  }
+
   @Get('suggestions')
   async listPendingSuggestions(
     @GetTenantId() tenantId?: string,
@@ -210,6 +258,17 @@ export class RecipeController {
         insumoId: c.ingredientId,
         grossQuantity: c.grossQuantity,
         technicalShrinkPct: c.technicalShrinkPct,
+        // R6 (H3): these three were dropped here, so the detail was always
+        // saved as INSUMO with no unit and no sub-recipe reference.
+        ingredientType: c.ingredientType,
+        componentUom: c.componentUom ?? null,
+        referenceVersionId: c.referenceVersionId ?? null,
+        // The name is a snapshot of the referenced insumo/product. It was
+        // dropped here too, so `recipe_details.ingredient_name` stayed NULL
+        // and the next edit round-tripped NULL as "" into the DTO (400
+        // `components.N.ingredientName should not be empty`). The service
+        // resolves it authoritatively; the client copy is only a fallback.
+        ingredientName: c.ingredientName ?? null,
       })),
       yieldQuantity: dto.yieldQuantity,
       technicalShrinkPct: dto.technicalShrinkPct,

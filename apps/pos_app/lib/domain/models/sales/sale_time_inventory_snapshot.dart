@@ -36,10 +36,27 @@ class SaleTimeInventorySnapshot {
   final UnmodifiableListView<SaleTimeInventoryBinding> bindings;
   bool _valid() => switch (disposition) {
     SaleInventoryDisposition.direct => classification == SaleInventoryClassification.simple && mappingVersionId?.isNotEmpty == true && recipeVersionId == null && bindings.length == 1 && bindings.single.recipeComponentId == null && reasonCode == null,
-    SaleInventoryDisposition.recipe => (classification == SaleInventoryClassification.prepared || classification == SaleInventoryClassification.compound) && recipeVersionId?.isNotEmpty == true && mappingVersionId == null && bindings.isNotEmpty && bindings.every((binding) => binding.recipeComponentId?.isNotEmpty == true) && reasonCode == null,
+    SaleInventoryDisposition.recipe => _validRecipe(),
     SaleInventoryDisposition.noImpact => classification == SaleInventoryClassification.simple && mappingVersionId == null && recipeVersionId == null && bindings.isEmpty && reasonCode == 'NO_EXPLICIT_INSUMO_MAPPING',
     SaleInventoryDisposition.pendingRecipe => (classification == SaleInventoryClassification.prepared || classification == SaleInventoryClassification.compound) && mappingVersionId == null && recipeVersionId == null && bindings.isEmpty && reasonCode == 'MISSING_PUBLISHED_RECIPE',
   };
+
+  /// R21 / S18: a binding that came from a nested SUB_RECIPE carries no
+  /// `recipeComponentId` — the backend validates that id against the ROOT
+  /// recipe's details only, and its own explosion omits it for nested leaves
+  /// too. A recorded id must still be non-empty.
+  bool _validRecipe() =>
+      (classification == SaleInventoryClassification.prepared ||
+          classification == SaleInventoryClassification.compound) &&
+      recipeVersionId?.isNotEmpty == true &&
+      mappingVersionId == null &&
+      bindings.isNotEmpty &&
+      bindings.every(
+        (binding) =>
+            binding.recipeComponentId == null ||
+            binding.recipeComponentId!.isNotEmpty,
+      ) &&
+      reasonCode == null;
   static bool _stable(List<SaleTimeInventoryBinding> values) {
     for (var i = 0; i < values.length; i++) {
       if (values[i].bindingOrdinal != i || (i > 0 && _compare(values[i - 1], values[i]) > 0)) return false;

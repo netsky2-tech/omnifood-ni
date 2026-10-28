@@ -537,6 +537,32 @@ class SalesMapper {
             name: m.name,
             extraPrice: m.extraPrice,
             quantity: m.quantity,
+            // R28: the option's IDENTITY and its INVENTORY EFFECT are kept
+            // with the line. The row's own id stays a local UUID (it is the
+            // table's key), but the catalogue option id and the deviation
+            // travel in their own columns, so the terminal and the cloud
+            // can both say WHICH option was sold and what it did to the
+            // stock. A legacy local modifier has neither, and that is
+            // recorded as such (null), never invented.
+            optionId: m.optionId,
+            groupId: m.groupId,
+            inventoryEffect: m.hasInventoryEffect ? m.inventoryEffect : null,
+            effectInsumoId: m.effectInsumoId,
+            effectTargetInsumoId: m.effectTargetInsumoId,
+            effectQuantity: m.effectQuantity,
+            effectFactor: m.effectFactor,
+            // ME-04: the truth of the effect, as the sale knew it. The
+            // status and the reason are written at SALE TIME (the resolver
+            // is the only place that knows); the source and the
+            // authorization come from the register. A line that says
+            // APPLIED when the stock did not move would be a lie in the
+            // cloud, so nothing here is ever inferred.
+            effectStatus: m.effectStatus,
+            effectSkipReason: m.effectSkipReason,
+            effectQuantitySource: m.effectQuantitySource,
+            effectAuthorizedBy: m.effectAuthorizedBy,
+            effectAuthorizationMethod: m.effectAuthorizationMethod,
+            effectAuthorizationReason: m.effectAuthorizationReason,
           ),
         )
         .toList();
@@ -552,6 +578,22 @@ class SalesMapper {
         name: row.name,
         extraPrice: row.extraPrice,
         quantity: row.quantity,
+        optionId: row.optionId,
+        groupId: row.groupId,
+        inventoryEffect: row.inventoryEffect ?? 'NONE',
+        effectInsumoId: row.effectInsumoId,
+        effectTargetInsumoId: row.effectTargetInsumoId,
+        effectQuantity: row.effectQuantity,
+        effectFactor: row.effectFactor,
+        // ME-04: the inverse carries the truth back, so a rebuilt line
+        // (the activation-controlled rebuild) is byte-identical to the one
+        // that was sold.
+        effectStatus: row.effectStatus,
+        effectSkipReason: row.effectSkipReason,
+        effectQuantitySource: row.effectQuantitySource,
+        effectAuthorizedBy: row.effectAuthorizedBy,
+        effectAuthorizationMethod: row.effectAuthorizationMethod,
+        effectAuthorizationReason: row.effectAuthorizationReason,
       );
 
   // --- Payment ---
@@ -743,6 +785,49 @@ class SalesMapper {
                       'name': m.name,
                       'extraPrice': m.extraPrice,
                       'quantity': m.quantity,
+                      // R28: the option's identity and its inventory
+                      // effect. The fields are sent ONLY when they exist,
+                      // so a line whose option is price-only (or comes from
+                      // the legacy local modifiers) keeps the exact wire
+                      // shape it had before, and the cloud's DTO — whose new
+                      // fields are all optional — accepts it unchanged.
+                      if (m.optionId != null) 'optionId': m.optionId,
+                      if (m.groupId != null) 'groupId': m.groupId,
+                      if (m.hasInventoryEffect) ...{
+                        'inventoryEffect': m.inventoryEffect,
+                        if (m.effectInsumoId != null)
+                          'effectInsumoId': m.effectInsumoId,
+                        if (m.effectTargetInsumoId != null)
+                          'effectTargetInsumoId': m.effectTargetInsumoId,
+                        if (m.effectQuantity != null)
+                          'effectQuantity': m.effectQuantity,
+                        if (m.effectFactor != null)
+                          'effectFactor': m.effectFactor,
+                        // ME-04: the TRUTH of the effect travels with the
+                        // line, so a sold extra whose effect did not touch
+                        // the stock is reconcilable in the cloud and not
+                        // only visible at the register.
+                        //
+                        // The fields are sent ONLY when they exist, so a
+                        // line whose terminal says nothing about the effect
+                        // (a legacy line, a price-only option) keeps the
+                        // exact wire shape it had before — the credit-note
+                        // conflict hash covers these bytes.
+                        if (m.effectStatus != null)
+                          'effectStatus': m.effectStatus,
+                        if (m.effectSkipReason != null)
+                          'effectSkipReason': m.effectSkipReason,
+                        if (m.effectQuantitySource != null)
+                          'effectQuantitySource': m.effectQuantitySource,
+                        if (m.effectAuthorizedBy != null)
+                          'effectAuthorizedBy': m.effectAuthorizedBy,
+                        if (m.effectAuthorizationMethod != null)
+                          'effectAuthorizationMethod':
+                              m.effectAuthorizationMethod,
+                        if (m.effectAuthorizationReason != null)
+                          'effectAuthorizationReason':
+                              m.effectAuthorizationReason,
+                      },
                     },
                   )
                   .toList(),

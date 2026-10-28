@@ -231,7 +231,7 @@ describe("W3 — InventoryPage", () => {
       expect(screen.getAllByText("Entrada Compra").length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText("Venta").length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText("Ajuste")).toBeInTheDocument();
-      expect(screen.getByText("2 movimiento(s)")).toBeInTheDocument();
+      expect(screen.getByText(/2 movimientos/i)).toBeInTheDocument();
     });
   });
 

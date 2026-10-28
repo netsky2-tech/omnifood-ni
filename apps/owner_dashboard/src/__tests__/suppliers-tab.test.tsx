@@ -179,14 +179,14 @@ describe("SuppliersTab (SOHO office master data - BXW-001)", () => {
     expect(activeBadges).toHaveLength(2);
     for (const badge of activeBadges) {
       // Solid dark-green success (design-system update, mirrors the toast).
-      expect(badge.className).toContain("bg-emerald-700");
-      expect(badge.className).toContain("text-white");
+      expect(badge.className).toContain("bg-secondary-700");
+      expect(badge.className).toContain("text-secondary-foreground");
     }
 
     const inactiveBadge = screen.getByText("Inactivo");
     expect(inactiveBadge).toBeInTheDocument();
     expect(inactiveBadge.className).toContain("bg-muted");
-    expect(inactiveBadge.className).not.toContain("bg-red-50");
+    expect(inactiveBadge.className).not.toContain("bg-destructive-50");
   });
 
   it("filters suppliers by search input", async () => {

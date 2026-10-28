@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
 import { CountSessionService } from './count-session.service';
+import { ForensicAlertService } from './forensic-alert.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { Insumo } from './entities/insumo.entity';
 import { Batch } from './entities/batch.entity';
@@ -43,12 +44,22 @@ describe('CountSessionService', () => {
   const findOneBy = jest.fn();
   const bindTenantQuery = jest.fn();
   const create = jest.fn((entity: unknown) => entity);
+  const forensicAlertCreate = jest.fn();
+  // R19 T2 persists the count-session document through the EntityManager's
+  // own create/save on this same transaction, so the fake manager needs those
+  // two methods. They are separate from `create` above on purpose: that one
+  // belongs to the InventoryMovement repository, and the assertions about the
+  // movement must keep seeing only its own calls.
+  const managerCreate = jest.fn((entity: unknown) => entity);
+  const managerSave = jest.fn();
   const transaction = jest.fn((callback: (manager: unknown) => unknown) =>
     Promise.resolve(
       callback({
         // CountSessionService binds the RLS tenant context on its own
         // transaction (bindTenantContext) before any RLS-protected query.
         query: bindTenantQuery,
+        create: managerCreate,
+        save: managerSave,
         getRepository: (entity: unknown) => {
           if (entity === Insumo) return { findOne, save };
           if (entity === InventoryMovement) return { create, findOneBy, save };
@@ -57,7 +68,8 @@ describe('CountSessionService', () => {
           // stub reports no batches, which is the honest fixture for a
           // non batch-managed insumo: `drawBatchOutflow` returns early and this
           // spec keeps asserting exactly what it asserted before.
-          if (entity === Batch) return { find: jest.fn().mockResolvedValue([]), save };
+          if (entity === Batch)
+            return { find: jest.fn().mockResolvedValue([]), save };
           throw new Error('Unexpected repository');
         },
       }),
@@ -77,6 +89,10 @@ describe('CountSessionService', () => {
       providers: [
         CountSessionService,
         { provide: DataSource, useValue: { transaction } },
+        {
+          provide: ForensicAlertService,
+          useValue: { create: forensicAlertCreate },
+        },
       ],
     }).compile();
     service = module.get<CountSessionService>(CountSessionService);
@@ -129,5 +145,47 @@ describe('CountSessionService', () => {
 
     expect(create).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('raises the high-value forensic alert for a count adjustment above the threshold (R7)', async () => {
+    await service.replayCountSession({
+      tenantId: 'tenant-A',
+      document: countDocument({
+        lines: [
+          {
+            id: 'line-1',
+            insumoId: 'ins-1',
+            insumoName: 'Leche',
+            uom: 'L',
+            theoreticalQuantity: 200,
+            approvedEntryIndex: 0,
+            entries: [{ countedQuantity: 0 }],
+          },
+        ],
+      }),
+    });
+
+    expect(forensicAlertCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-A',
+        alertType: 'HIGH_VALUE_COUNT_ADJUSTMENT',
+        severity: 'HIGH',
+        metadata: expect.objectContaining({
+          sourceDocumentType: 'AJUSTE_CONTEO',
+          valuationNio: 1600,
+          insumoId: 'ins-1',
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('does not raise the forensic alert below the threshold (R7)', async () => {
+    await service.replayCountSession({
+      tenantId: 'tenant-A',
+      document: countDocument(),
+    });
+
+    expect(forensicAlertCreate).not.toHaveBeenCalled();
   });
 });

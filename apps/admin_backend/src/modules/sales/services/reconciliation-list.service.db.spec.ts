@@ -211,7 +211,7 @@ describe('ReconciliationListService (db - Real PostgreSQL, migration-built schem
     await runtime.initialize();
 
     service = new ReconciliationListService(runtime);
-  });
+  }, TEST_TIMEOUT_MS);
 
   afterAll(async () => {
     if (runtime?.isInitialized) {

@@ -22,7 +22,7 @@ import { Insumo } from './entities/insumo.entity';
  */
 export type InsumoResponse = Omit<
   Insumo,
-  'conversionFactor' | 'stock' | 'existenciaActual' | 'averageCost' | 'parLevel' | 'minStock' | 'maxStock'
+  'conversionFactor' | 'stock' | 'existenciaActual' | 'averageCost' | 'parLevel' | 'minStock' | 'maxStock' | 'ivaRatePct'
 > & {
   conversionFactor: number;
   stock: number;
@@ -31,6 +31,7 @@ export type InsumoResponse = Omit<
   parLevel: number | null;
   minStock: number | null;
   maxStock: number | null;
+  ivaRatePct: number | null;
 };
 
 function toFiniteNumber(value: unknown): number {
@@ -52,6 +53,7 @@ export function serializeInsumo(insumo: Insumo): InsumoResponse {
     averageCost: toFiniteNumber(insumo.averageCost),
     parLevel: toFiniteNumberOrNull(insumo.parLevel),
     minStock: toFiniteNumberOrNull(insumo.minStock),
+    ivaRatePct: toFiniteNumberOrNull(insumo.ivaRatePct),
     maxStock: toFiniteNumberOrNull(insumo.maxStock),
   };
 }

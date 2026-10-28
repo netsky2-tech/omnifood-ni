@@ -404,6 +404,114 @@ describe('SyncInvoiceDto per-line discountOrigin amounts breakdown (D-A2)', () =
   });
 });
 
+// ME-04: the TRUTH of the effect travels with the line. The fields are
+// optional (a terminal that predates ME-04 sends nothing), and the
+// vocabulary is closed: an unknown status or reason is a payload
+// corruption, rejected here instead of persisted as a fiction.
+describe('CreateModifierDto la verdad del efecto (ME-04)', () => {
+  const baseModifier = {
+    name: 'Almendras',
+    extraPrice: 10,
+  };
+
+  const baseItem = {
+    id: 'item-1',
+    productId: 'prod-1',
+    productName: 'Capuccino',
+    quantity: 1,
+    unitPrice: 70,
+    originalTaxRate: 0.15,
+    appliedTaxRate: 0.15,
+    taxAmount: 10.5,
+    total: 80.5,
+    discount: 0,
+    modifiers: [baseModifier],
+  };
+
+  const basePayload = {
+    id: 'inv-1',
+    number: '001',
+    createdAt: new Date().toISOString(),
+    userId: 'user-1',
+    subtotal: 80,
+    totalTax: 10.5,
+    total: 90.5,
+    paymentStatus: 'PAID',
+    items: [baseItem],
+    payments: [],
+  };
+
+  const validate = (payload: Record<string, unknown>) => {
+    const dto = plainToInstance(SyncInvoiceDto, payload);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidUnknownValues: false,
+      forbidNonWhitelisted: true,
+    });
+    return { dto, errors };
+  };
+
+  it('acepta la verdad del efecto con el vocabulario cerrado', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        {
+          ...baseItem,
+          modifiers: [
+            {
+              ...baseModifier,
+              effectStatus: 'PENDING',
+              effectSkipReason: 'INSUMSO_NOT_IN_CATALOG',
+              effectQuantitySource: 'DECLARED',
+              effectAuthorizedBy: '11111111-1111-1111-1111-111111111111',
+              effectAuthorizationMethod: 'PIN',
+              effectAuthorizationReason: 'el insumo no está registrado',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('acepta una línea que no dice nada del efecto (terminal anterior a ME-04)', () => {
+    const { errors } = validate(basePayload);
+
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rechaza un estado de efecto que no existe', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        {
+          ...baseItem,
+          modifiers: [{ ...baseModifier, effectStatus: 'APPLIED_MAYBE' }],
+        },
+      ],
+    });
+
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('rechaza un motivo de efecto que no existe', () => {
+    const { errors } = validate({
+      ...basePayload,
+      items: [
+        {
+          ...baseItem,
+          modifiers: [
+            { ...baseModifier, effectStatus: 'PENDING', effectSkipReason: 'NOPE' },
+          ],
+        },
+      ],
+    });
+
+    expect(errors.length).toBeGreaterThan(0);
+  });
+});
+
 describe('CreateModifierDto modifier quantity (SOHO P3)', () => {
   const baseModifier = {
     name: 'Michelada Extra',

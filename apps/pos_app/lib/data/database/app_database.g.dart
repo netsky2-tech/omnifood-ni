@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 76,
+      version: 84,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -206,13 +206,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `local_configs` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, `description` TEXT, PRIMARY KEY (`key`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `insumos` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `consumption_uom` TEXT NOT NULL, `warehouse_id` TEXT, `is_perishable` INTEGER NOT NULL, `stock` REAL NOT NULL, `average_cost` REAL NOT NULL, `par_level` REAL, `stock_min` REAL, `stock_max` REAL, `is_active` INTEGER NOT NULL, `negative_stock_policy` TEXT NOT NULL, `lot_available_stock` REAL, `is_batch_managed` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
+            'CREATE TABLE IF NOT EXISTS `authority_insumos` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `name` TEXT NOT NULL, `uom` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `negative_stock_policy` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_recipe_versions` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `version_number` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `publication_state` TEXT NOT NULL, `effective_from` TEXT NOT NULL, `effective_until` TEXT, `yield_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `published_at` TEXT, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY (`tenant_id`, `insumo_id`) REFERENCES `authority_insumos` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE RESTRICT, PRIMARY KEY (`tenant_id`, `id`))');
+            'CREATE TABLE IF NOT EXISTS `authority_recipe_version_components` (`tenant_id` TEXT NOT NULL, `id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `ordinal` INTEGER NOT NULL, `insumo_id` TEXT NOT NULL, `gross_quantity` REAL NOT NULL, `technical_shrink_pct` REAL NOT NULL, `ingredient_type` TEXT NOT NULL, `component_name` TEXT NOT NULL, `component_uom` TEXT, `reference_version_id` TEXT, FOREIGN KEY (`tenant_id`, `version_id`) REFERENCES `authority_recipe_versions` (`tenant_id`, `id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`tenant_id`, `id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `authority_ingestion_verdicts` (`recipe_version_id` TEXT NOT NULL, `code` TEXT NOT NULL, `product_id` TEXT NOT NULL, `tenant_id` TEXT NOT NULL, `created_at` TEXT NOT NULL, PRIMARY KEY (`recipe_version_id`, `code`))');
         await database.execute(
@@ -240,7 +240,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `count_session_documents` (`id` TEXT NOT NULL, `warehouse_id` TEXT NOT NULL, `warehouse_name` TEXT NOT NULL, `cutoff_at` TEXT NOT NULL, `status` TEXT NOT NULL, `created_at` TEXT NOT NULL, `updated_at` TEXT NOT NULL, `notes` TEXT, `posted_at` TEXT, `movement_references_json` TEXT NOT NULL, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `count_lines` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `insumo_name` TEXT NOT NULL, `uom` TEXT NOT NULL, `theoretical_quantity` REAL NOT NULL, `approved_entry_index` INTEGER, `entries_json` TEXT NOT NULL, FOREIGN KEY (`session_id`) REFERENCES `count_session_documents` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `count_lines` (`id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `insumo_id` TEXT NOT NULL, `insumo_name` TEXT NOT NULL, `uom` TEXT NOT NULL, `theoretical_quantity` REAL NOT NULL, `approved_entry_index` INTEGER, `entries_json` TEXT NOT NULL, `is_batch_managed` INTEGER NOT NULL, FOREIGN KEY (`session_id`) REFERENCES `count_session_documents` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `forensic_alerts` (`id` TEXT NOT NULL, `alert_type` TEXT NOT NULL, `severity` TEXT NOT NULL, `message` TEXT NOT NULL, `created_at` TEXT NOT NULL, `status` TEXT NOT NULL, `note` TEXT, `actor_label` TEXT, `acted_at` TEXT, `source_movement_id` TEXT, `source_document_id` TEXT, `source_document_type` TEXT, `metadata_json` TEXT, `is_synced` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -266,11 +266,11 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `customer_name` TEXT, `customer_tax_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `customer_name` TEXT, `customer_tax_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `cloud_inventory_outcome` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, `discount_origin_json` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, `quantity` INTEGER NOT NULL, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoice_item_modifiers` (`id` TEXT NOT NULL, `invoice_item_id` TEXT NOT NULL, `name` TEXT NOT NULL, `extra_price` REAL NOT NULL, `quantity` INTEGER NOT NULL, `option_id` TEXT, `group_id` TEXT, `inventory_effect` TEXT, `effect_insumo_id` TEXT, `effect_target_insumo_id` TEXT, `effect_quantity` REAL, `effect_factor` REAL, `effect_status` TEXT, `effect_skip_reason` TEXT, `effect_quantity_source` TEXT, `effect_authorized_by` TEXT, `effect_authorization_method` TEXT, `effect_authorization_reason` TEXT, FOREIGN KEY (`invoice_item_id`) REFERENCES `invoice_items` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `method` TEXT NOT NULL, `amount` REAL NOT NULL, `currency` TEXT NOT NULL, `exchange_rate` REAL NOT NULL, `amount_nio` REAL NOT NULL, `change_given` REAL NOT NULL, `change_currency` TEXT NOT NULL, `voucher_code` TEXT, `card_brand` TEXT, `card_type` TEXT, `bank_pos` TEXT, `reconciliation_status` TEXT, `last4` TEXT, `batch_number` TEXT, `reconciled_at` INTEGER, `reconciled_by_user_id` TEXT, `override_supervisor_ref` TEXT, `reconciliation_sync_status` TEXT NOT NULL, `created_at` INTEGER, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -288,7 +288,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `modifier_groups` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `min_selected` INTEGER NOT NULL, `max_selected` INTEGER NOT NULL, `allow_quantities` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `modifier_options` (`id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_delta` REAL NOT NULL, `is_default` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `modifier_options` (`id` TEXT NOT NULL, `group_id` TEXT NOT NULL, `name` TEXT NOT NULL, `price_delta` REAL NOT NULL, `is_default` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, `is_active` INTEGER NOT NULL, `inventory_effect` TEXT NOT NULL, `effect_insumo_id` TEXT, `effect_target_insumo_id` TEXT, `effect_quantity` REAL, `effect_factor` REAL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `category_modifier_groups` (`id` TEXT NOT NULL, `catalog_value_id` TEXT NOT NULL, `catalog_code` TEXT NOT NULL, `group_id` TEXT NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1151,7 +1151,10 @@ class _$InsumoDao extends InsumoDao {
                   'par_level': item.parLevel,
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy,
+                  'lot_available_stock': item.lotAvailableStock,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -1168,7 +1171,10 @@ class _$InsumoDao extends InsumoDao {
                   'par_level': item.parLevel,
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy,
+                  'lot_available_stock': item.lotAvailableStock,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1195,7 +1201,10 @@ class _$InsumoDao extends InsumoDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0));
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0));
   }
 
   @override
@@ -1212,7 +1221,10 @@ class _$InsumoDao extends InsumoDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0),
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [id]);
   }
 
@@ -1235,7 +1247,10 @@ class _$InsumoDao extends InsumoDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0),
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [...ids]);
   }
 
@@ -1781,7 +1796,8 @@ class _$CountLineDao extends CountLineDao {
                   'uom': item.uom,
                   'theoretical_quantity': item.theoreticalQuantity,
                   'approved_entry_index': item.approvedEntryIndex,
-                  'entries_json': item.entriesJson
+                  'entries_json': item.entriesJson,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -1804,7 +1820,8 @@ class _$CountLineDao extends CountLineDao {
             uom: row['uom'] as String,
             theoreticalQuantity: row['theoretical_quantity'] as double,
             entriesJson: row['entries_json'] as String,
-            approvedEntryIndex: row['approved_entry_index'] as int?),
+            approvedEntryIndex: row['approved_entry_index'] as int?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [sessionId]);
   }
 
@@ -3095,6 +3112,14 @@ class _$BatchDao extends BatchDao {
   final UpdateAdapter<BatchEntity> _batchEntityUpdateAdapter;
 
   @override
+  Future<List<BatchEntity>> findBatchesByInsumoId(String insumoId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM batches WHERE insumo_id = ?1 ORDER BY expiration_date ASC',
+        mapper: (Map<String, Object?> row) => BatchEntity(id: row['id'] as String, insumoId: row['insumo_id'] as String, batchNumber: row['batch_number'] as String, receivedDate: row['received_date'] as String?, expirationDate: row['expiration_date'] as String, remainingStock: row['remaining_stock'] as double, cost: row['cost'] as double, isSynced: (row['is_synced'] as int) != 0),
+        arguments: [insumoId]);
+  }
+
+  @override
   Future<List<BatchEntity>> findActiveBatchesByInsumoId(String insumoId) async {
     return _queryAdapter.queryList(
         'SELECT * FROM batches WHERE insumo_id = ?1 AND remaining_stock > 0 ORDER BY expiration_date ASC',
@@ -3228,6 +3253,7 @@ class _$InvoiceDao extends InvoiceDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -3273,6 +3299,7 @@ class _$InvoiceDao extends InvoiceDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -3328,6 +3355,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3375,6 +3403,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3422,6 +3451,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3468,6 +3498,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3518,6 +3549,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3565,6 +3597,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3619,6 +3652,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3681,6 +3715,7 @@ class _$InvoiceDao extends InvoiceDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -3699,6 +3734,23 @@ class _$InvoiceDao extends InvoiceDao {
     return _queryAdapter.query(
         'SELECT COUNT(*) FROM invoices WHERE inventory_outcome = \'APPLIED_INVENTORY_PENDING\'',
         mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<int?> getInventoryDivergenceCount() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM invoices WHERE cloud_inventory_outcome = \'APPLIED_WITH_DIVERGENCE\'',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> updateCloudInventoryOutcome(
+    String invoiceId,
+    String outcome,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE invoices SET cloud_inventory_outcome = ?2 WHERE id = ?1',
+        arguments: [invoiceId, outcome]);
   }
 
   @override
@@ -3783,7 +3835,7 @@ class _$InvoiceItemDao extends InvoiceItemDao {
       String invoiceId) async {
     return _queryAdapter.queryList(
         'SELECT invoice_item_modifiers.* FROM invoice_item_modifiers INNER JOIN invoice_items ON invoice_items.id = invoice_item_modifiers.invoice_item_id WHERE invoice_items.invoice_id = ?1 ORDER BY invoice_item_modifiers.rowid',
-        mapper: (Map<String, Object?> row) => InvoiceItemModifierEntity(id: row['id'] as String, invoiceItemId: row['invoice_item_id'] as String, name: row['name'] as String, extraPrice: row['extra_price'] as double, quantity: row['quantity'] as int),
+        mapper: (Map<String, Object?> row) => InvoiceItemModifierEntity(id: row['id'] as String, invoiceItemId: row['invoice_item_id'] as String, name: row['name'] as String, extraPrice: row['extra_price'] as double, quantity: row['quantity'] as int, optionId: row['option_id'] as String?, groupId: row['group_id'] as String?, inventoryEffect: row['inventory_effect'] as String?, effectInsumoId: row['effect_insumo_id'] as String?, effectTargetInsumoId: row['effect_target_insumo_id'] as String?, effectQuantity: row['effect_quantity'] as double?, effectFactor: row['effect_factor'] as double?, effectStatus: row['effect_status'] as String?, effectSkipReason: row['effect_skip_reason'] as String?, effectQuantitySource: row['effect_quantity_source'] as String?, effectAuthorizedBy: row['effect_authorized_by'] as String?, effectAuthorizationMethod: row['effect_authorization_method'] as String?, effectAuthorizationReason: row['effect_authorization_reason'] as String?),
         arguments: [invoiceId]);
   }
 
@@ -4135,6 +4187,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -4177,7 +4230,20 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'invoice_item_id': item.invoiceItemId,
                   'name': item.name,
                   'extra_price': item.extraPrice,
-                  'quantity': item.quantity
+                  'quantity': item.quantity,
+                  'option_id': item.optionId,
+                  'group_id': item.groupId,
+                  'inventory_effect': item.inventoryEffect,
+                  'effect_insumo_id': item.effectInsumoId,
+                  'effect_target_insumo_id': item.effectTargetInsumoId,
+                  'effect_quantity': item.effectQuantity,
+                  'effect_factor': item.effectFactor,
+                  'effect_status': item.effectStatus,
+                  'effect_skip_reason': item.effectSkipReason,
+                  'effect_quantity_source': item.effectQuantitySource,
+                  'effect_authorized_by': item.effectAuthorizedBy,
+                  'effect_authorization_method': item.effectAuthorizationMethod,
+                  'effect_authorization_reason': item.effectAuthorizationReason
                 }),
         _paymentEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -4389,6 +4455,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'inventory_policy_version': item.inventoryPolicyVersion,
                   'inventory_outcome': item.inventoryOutcome,
                   'inventory_outcome_reason': item.inventoryOutcomeReason,
+                  'cloud_inventory_outcome': item.cloudInventoryOutcome,
                   'bcn_official_rate': item.bcnOfficialRate,
                   'commercial_rate': item.commercialRate,
                   'total_usd': item.totalUsd,
@@ -4415,7 +4482,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'par_level': item.parLevel,
                   'stock_min': item.stockMin,
                   'stock_max': item.stockMax,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy,
+                  'lot_available_stock': item.lotAvailableStock,
+                  'is_batch_managed': item.isBatchManaged ? 1 : 0
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -4468,7 +4538,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             parLevel: row['par_level'] as double?,
             stockMin: row['stock_min'] as double?,
             stockMax: row['stock_max'] as double?,
-            isActive: (row['is_active'] as int) != 0),
+            isActive: (row['is_active'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String,
+            lotAvailableStock: row['lot_available_stock'] as double?,
+            isBatchManaged: (row['is_batch_managed'] as int) != 0),
         arguments: [id]);
   }
 
@@ -4505,6 +4578,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -4553,6 +4627,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             inventoryPolicyVersion: row['inventory_policy_version'] as String?,
             inventoryOutcome: row['inventory_outcome'] as String?,
             inventoryOutcomeReason: row['inventory_outcome_reason'] as String?,
+            cloudInventoryOutcome: row['cloud_inventory_outcome'] as String?,
             bcnOfficialRate: row['bcn_official_rate'] as double,
             commercialRate: row['commercial_rate'] as double,
             totalUsd: row['total_usd'] as double,
@@ -5572,7 +5647,12 @@ class _$ModifierDao extends ModifierDao {
                   'price_delta': item.priceDelta,
                   'is_default': item.isDefault ? 1 : 0,
                   'sort_order': item.sortOrder,
-                  'is_active': item.isActive ? 1 : 0
+                  'is_active': item.isActive ? 1 : 0,
+                  'inventory_effect': item.inventoryEffect,
+                  'effect_insumo_id': item.effectInsumoId,
+                  'effect_target_insumo_id': item.effectTargetInsumoId,
+                  'effect_quantity': item.effectQuantity,
+                  'effect_factor': item.effectFactor
                 }),
         _categoryModifierGroupEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -5657,7 +5737,12 @@ class _$ModifierDao extends ModifierDao {
             priceDelta: row['price_delta'] as double,
             isDefault: (row['is_default'] as int) != 0,
             sortOrder: row['sort_order'] as int,
-            isActive: (row['is_active'] as int) != 0));
+            isActive: (row['is_active'] as int) != 0,
+            inventoryEffect: row['inventory_effect'] as String,
+            effectInsumoId: row['effect_insumo_id'] as String?,
+            effectTargetInsumoId: row['effect_target_insumo_id'] as String?,
+            effectQuantity: row['effect_quantity'] as double?,
+            effectFactor: row['effect_factor'] as double?));
   }
 
   @override
@@ -7774,7 +7859,9 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
                   'tenant_id': item.tenantId,
                   'id': item.id,
                   'name': item.name,
-                  'uom': item.uom
+                  'uom': item.uom,
+                  'isActive': item.isActive ? 1 : 0,
+                  'negative_stock_policy': item.negativeStockPolicy
                 }),
         _authorityRecipeVersionEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -7862,7 +7949,9 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
             tenantId: row['tenant_id'] as String,
             id: row['id'] as String,
             name: row['name'] as String,
-            uom: row['uom'] as String),
+            uom: row['uom'] as String,
+            isActive: (row['isActive'] as int) != 0,
+            negativeStockPolicy: row['negative_stock_policy'] as String),
         arguments: [tenantId, id]);
   }
 
@@ -7872,6 +7961,19 @@ class _$AuthorityProjectionDao extends AuthorityProjectionDao {
         'SELECT COUNT(*) FROM authority_insumos WHERE tenant_id = ?1',
         mapper: (Map<String, Object?> row) => row.values.first as int,
         arguments: [tenantId]);
+  }
+
+  @override
+  Future<int?> updateInsumoState(
+    String tenantId,
+    String id,
+    int isActive,
+    String negativeStockPolicy,
+  ) async {
+    return _queryAdapter.query(
+        'UPDATE authority_insumos SET isActive = ?3, negative_stock_policy = ?4 WHERE tenant_id = ?1 AND id = ?2',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [tenantId, id, isActive, negativeStockPolicy]);
   }
 
   @override

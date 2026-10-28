@@ -101,6 +101,19 @@ _$ModifierImpl _$$ModifierImplFromJson(Map<String, dynamic> json) =>
       name: json['name'] as String,
       extraPrice: (json['extraPrice'] as num).toDouble(),
       quantity: json['quantity'] as int? ?? 1,
+      optionId: json['optionId'] as String?,
+      groupId: json['groupId'] as String?,
+      inventoryEffect: json['inventoryEffect'] as String? ?? 'NONE',
+      effectInsumoId: json['effectInsumoId'] as String?,
+      effectTargetInsumoId: json['effectTargetInsumoId'] as String?,
+      effectQuantity: (json['effectQuantity'] as num?)?.toDouble(),
+      effectFactor: (json['effectFactor'] as num?)?.toDouble(),
+      effectStatus: json['effectStatus'] as String?,
+      effectSkipReason: json['effectSkipReason'] as String?,
+      effectQuantitySource: json['effectQuantitySource'] as String?,
+      effectAuthorizedBy: json['effectAuthorizedBy'] as String?,
+      effectAuthorizationMethod: json['effectAuthorizationMethod'] as String?,
+      effectAuthorizationReason: json['effectAuthorizationReason'] as String?,
     );
 
 Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
@@ -109,6 +122,19 @@ Map<String, dynamic> _$$ModifierImplToJson(_$ModifierImpl instance) =>
       'name': instance.name,
       'extraPrice': instance.extraPrice,
       'quantity': instance.quantity,
+      'optionId': instance.optionId,
+      'groupId': instance.groupId,
+      'inventoryEffect': instance.inventoryEffect,
+      'effectInsumoId': instance.effectInsumoId,
+      'effectTargetInsumoId': instance.effectTargetInsumoId,
+      'effectQuantity': instance.effectQuantity,
+      'effectFactor': instance.effectFactor,
+      'effectStatus': instance.effectStatus,
+      'effectSkipReason': instance.effectSkipReason,
+      'effectQuantitySource': instance.effectQuantitySource,
+      'effectAuthorizedBy': instance.effectAuthorizedBy,
+      'effectAuthorizationMethod': instance.effectAuthorizationMethod,
+      'effectAuthorizationReason': instance.effectAuthorizationReason,
     };
 
 _$EffectiveModifierOptionImpl _$$EffectiveModifierOptionImplFromJson(
@@ -118,6 +144,11 @@ _$EffectiveModifierOptionImpl _$$EffectiveModifierOptionImplFromJson(
       name: json['name'] as String,
       priceDelta: (json['priceDelta'] as num).toDouble(),
       isDefault: json['isDefault'] as bool,
+      inventoryEffect: json['inventoryEffect'] as String? ?? 'NONE',
+      effectInsumoId: json['effectInsumoId'] as String?,
+      effectTargetInsumoId: json['effectTargetInsumoId'] as String?,
+      effectQuantity: (json['effectQuantity'] as num?)?.toDouble(),
+      effectFactor: (json['effectFactor'] as num?)?.toDouble(),
     );
 
 Map<String, dynamic> _$$EffectiveModifierOptionImplToJson(
@@ -127,6 +158,11 @@ Map<String, dynamic> _$$EffectiveModifierOptionImplToJson(
       'name': instance.name,
       'priceDelta': instance.priceDelta,
       'isDefault': instance.isDefault,
+      'inventoryEffect': instance.inventoryEffect,
+      'effectInsumoId': instance.effectInsumoId,
+      'effectTargetInsumoId': instance.effectTargetInsumoId,
+      'effectQuantity': instance.effectQuantity,
+      'effectFactor': instance.effectFactor,
     };
 
 _$EffectiveModifierGroupImpl _$$EffectiveModifierGroupImplFromJson(

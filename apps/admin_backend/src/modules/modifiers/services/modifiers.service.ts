@@ -22,6 +22,15 @@ import {
   AttachCategoryDto,
   AttachProductDto,
 } from '../dto/attach-modifier-group.dto';
+import {
+  assertValidModifierInventoryEffect,
+  MODIFIER_INVENTORY_EFFECT,
+  ModifierInventoryEffectError,
+  normalizeModifierInventoryEffect,
+  type ModifierInventoryEffect,
+  type ModifierInventoryEffectSpec,
+} from '../modifier-inventory-effect';
+import { Insumo } from '../../inventory/entities/insumo.entity';
 
 /** A uuid string only — the same shape the DTOs enforce with @IsUUID. */
 const UUID_PATTERN =
@@ -49,6 +58,15 @@ export interface EffectiveModifierOption {
   price_delta: number;
   is_default: boolean;
   sort_order: number;
+  /**
+   * R28: the option's inventory effect. `NONE` is the default and means the
+   * option is price-only, exactly as before R28.
+   */
+  inventory_effect: ModifierInventoryEffect;
+  effect_insumo_id: string | null;
+  effect_target_insumo_id: string | null;
+  effect_quantity: number | null;
+  effect_factor: number | null;
 }
 
 /**
@@ -206,6 +224,21 @@ export class ModifiersService {
         if (dto.is_default) {
           await this.clearSiblingDefaults(manager, tenantId, group.id);
         }
+        // R28: the optional inventory effect. Validated (shape + tenant
+        // ownership of the referenced insumos) BEFORE the write, inside the
+        // same transaction that persists it, so a half-configured effect can
+        // never reach the resolution.
+        const effect = await this.assertEffectIsUsable(
+          manager,
+          tenantId,
+          {
+            effect: dto.inventory_effect ?? MODIFIER_INVENTORY_EFFECT.NONE,
+            effect_insumo_id: dto.effect_insumo_id ?? null,
+            effect_target_insumo_id: dto.effect_target_insumo_id ?? null,
+            effect_quantity: dto.effect_quantity ?? null,
+            effect_factor: dto.effect_factor ?? null,
+          },
+        );
         const option = manager.getRepository(ModifierOption).create({
           name,
           price_delta: dto.price_delta ?? 0,
@@ -214,6 +247,7 @@ export class ModifiersService {
           tenant_id: tenantId,
           group_id: group.id,
           is_active: true,
+          ...effect,
         });
         return manager.getRepository(ModifierOption).save(option);
       },
@@ -250,7 +284,20 @@ export class ModifiersService {
             option.id,
           );
         }
-        Object.assign(option, dto);
+        // R28: the effect is merged with the stored one and validated
+        // against the MERGED values (same doctrine as the group's selection
+        // range). Declaring `inventory_effect: 'NONE'` is an explicit
+        // "make this option price-only" and therefore CLEARS the effect
+        // fields; without that, an operator could never take an effect back.
+        const mergedEffect = this.mergeEffect(option, dto);
+        const effect = await this.assertEffectIsUsable(
+          manager,
+          tenantId,
+          mergedEffect,
+        );
+        const { inventory_effect, ...rest } = dto;
+        Object.assign(option, rest);
+        Object.assign(option, effect);
         return manager.getRepository(ModifierOption).save(option);
       },
     );
@@ -569,6 +616,7 @@ export class ModifiersService {
                 price_delta: option.price_delta,
                 is_default: option.is_default,
                 sort_order: option.sort_order,
+                ...this.readEffect(option),
               }),
             ),
           };
@@ -710,6 +758,136 @@ export class ModifiersService {
       throw new NotFoundException(`Modifier group with ID ${id} not found`);
     }
     return group;
+  }
+
+  /**
+   * R28 — reads the effect of a stored option in the shape the read models
+   * expose. An option that predates R28 (or that never declared an effect)
+   * reads as `NONE`: price only, exactly as before.
+   */
+  private readEffect(option: ModifierOption): {
+    inventory_effect: ModifierInventoryEffect;
+    effect_insumo_id: string | null;
+    effect_target_insumo_id: string | null;
+    effect_quantity: number | null;
+    effect_factor: number | null;
+  } {
+    const normalized = normalizeModifierInventoryEffect({
+      effect: (option.inventory_effect ??
+        MODIFIER_INVENTORY_EFFECT.NONE) as ModifierInventoryEffect,
+      effect_insumo_id: option.effect_insumo_id ?? null,
+      effect_target_insumo_id: option.effect_target_insumo_id ?? null,
+      effect_quantity: option.effect_quantity ?? null,
+      effect_factor: option.effect_factor ?? null,
+    });
+    return {
+      inventory_effect: normalized.effect,
+      effect_insumo_id: normalized.effect_insumo_id,
+      effect_target_insumo_id: normalized.effect_target_insumo_id,
+      effect_quantity: normalized.effect_quantity,
+      effect_factor: normalized.effect_factor,
+    };
+  }
+
+  /**
+   * R28 — merges an update payload with the stored effect.
+   *
+   * `inventory_effect: 'NONE'` is an explicit "make this option price-only"
+   * and therefore clears the effect fields: without that, an operator could
+   * never take an effect back off an option.
+   */
+  private mergeEffect(
+    option: ModifierOption,
+    dto: UpdateModifierOptionDto,
+  ): ModifierInventoryEffectSpec {
+    if (dto.inventory_effect === MODIFIER_INVENTORY_EFFECT.NONE) {
+      return {
+        effect: MODIFIER_INVENTORY_EFFECT.NONE,
+        effect_insumo_id: null,
+        effect_target_insumo_id: null,
+        effect_quantity: null,
+        effect_factor: null,
+      };
+    }
+    const stored = this.readEffect(option);
+    return {
+      effect:
+        dto.inventory_effect ??
+        (stored.inventory_effect as ModifierInventoryEffect),
+      effect_insumo_id:
+        dto.effect_insumo_id !== undefined
+          ? dto.effect_insumo_id
+          : stored.effect_insumo_id,
+      effect_target_insumo_id:
+        dto.effect_target_insumo_id !== undefined
+          ? dto.effect_target_insumo_id
+          : stored.effect_target_insumo_id,
+      effect_quantity:
+        dto.effect_quantity !== undefined
+          ? dto.effect_quantity
+          : stored.effect_quantity,
+      effect_factor:
+        dto.effect_factor !== undefined
+          ? dto.effect_factor
+          : stored.effect_factor,
+    };
+  }
+
+  /**
+   * R28 — the guard of the effect declaration: the SHAPE (which fields each
+   * effect needs and forbids) and the TENANT OWNERSHIP of the referenced
+   * insumos.
+   *
+   * A missing insumo is a 400 with operator copy, never a 500 from the
+   * database rejecting the write. The shape rules are mirrored by the
+   * migration's CHECK constraint; the service mirrors them so the operator
+   * gets an actionable message instead of a constraint violation.
+   */
+  private async assertEffectIsUsable(
+    manager: EntityManager,
+    tenantId: string,
+    spec: ModifierInventoryEffectSpec,
+  ): Promise<{
+    inventory_effect: ModifierInventoryEffect;
+    effect_insumo_id: string | null;
+    effect_target_insumo_id: string | null;
+    effect_quantity: number | null;
+    effect_factor: number | null;
+  }> {
+    try {
+      assertValidModifierInventoryEffect(spec);
+    } catch (error) {
+      if (error instanceof ModifierInventoryEffectError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+
+    const referenced = [spec.effect_insumo_id, spec.effect_target_insumo_id]
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      .filter((id, index, all) => all.indexOf(id) === index);
+
+    if (referenced.length > 0) {
+      const found = await manager.getRepository(Insumo).find({
+        where: { tenant_id: tenantId, id: In(referenced) },
+        select: { id: true, name: true },
+      });
+      const foundIds = new Set(found.map((i) => i.id));
+      const missing = referenced.filter((id) => !foundIds.has(id));
+      if (missing.length > 0) {
+        throw new BadRequestException(
+          `El insumo ${missing.join(', ')} no existe en esta empresa. Registre el insumo antes de declararlo en el efecto del modificador.`,
+        );
+      }
+    }
+
+    return {
+      inventory_effect: spec.effect,
+      effect_insumo_id: spec.effect_insumo_id ?? null,
+      effect_target_insumo_id: spec.effect_target_insumo_id ?? null,
+      effect_quantity: spec.effect_quantity ?? null,
+      effect_factor: spec.effect_factor ?? null,
+    };
   }
 
   private async findOptionById(

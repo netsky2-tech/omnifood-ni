@@ -31,6 +31,15 @@ class AuthorityHydrationPayload {
       final id = map['id'] as String?;
       final name = map['name'] as String?;
       final uom = map['uom'] as String?;
+      // R28: the insumo's active state travels with it, so a deactivated
+      // insumo is not offered as stock to the terminal (an effect that
+      // points at one must not apply — the SOHO guarantee, D6).
+      final isActive = map['isActive'] as bool? ?? true;
+      final negativeStockPolicy = (map['negativeStockPolicy'] as String?)?.trim();
+      final effectivePolicy =
+          (negativeStockPolicy != null && negativeStockPolicy.isNotEmpty)
+              ? negativeStockPolicy
+              : 'RESTRICT';
 
       if (tenantId == null ||
           tenantId != expectedTenantId ||
@@ -46,6 +55,8 @@ class AuthorityHydrationPayload {
         id: id,
         name: name,
         uom: uom,
+        isActive: isActive,
+        negativeStockPolicy: effectivePolicy,
       ));
     }
 

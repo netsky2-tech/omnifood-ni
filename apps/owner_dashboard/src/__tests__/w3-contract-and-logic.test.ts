@@ -375,6 +375,8 @@ describe("W3 — MovementType label mapping covers all backend types", () => {
     CREDIT_NOTE_RESTOCK: "Nota Crédito",
     ADJUSTMENT: "Ajuste",
     REVERSAL: "Reversión",
+    VALUATION_WRITEDOWN: "Castigo por valuación",
+    INITIAL_STOCK: "Stock inicial",
   };
 
   const allBackendTypes: MovementType[] = [

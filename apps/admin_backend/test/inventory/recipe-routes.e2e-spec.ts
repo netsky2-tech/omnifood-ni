@@ -18,6 +18,7 @@ import { RecipeService } from '../../src/modules/inventory/recipe.service';
 import { ProductService } from '../../src/modules/inventory/product.service';
 import { ChangeLogService } from '../../src/modules/audit/change-log.service';
 import { RecipeController } from '../../src/modules/inventory/recipe.controller';
+import { TheoreticalCostService } from '../../src/modules/inventory/services/theoretical-cost.service';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -113,6 +114,12 @@ async function withIsolatedSchema(
         },
         { provide: RecipeService, useValue: recipeService },
         { provide: ProductService, useValue: productService },
+        // The `GET /recipes/active` route prices every recipe with the same
+        // theoretical-cost service the "Costo por plato" report uses.
+        {
+          provide: TheoreticalCostService,
+          useValue: { listDishMargins: jest.fn().mockResolvedValue({ dishes: [], skipped: [] }) },
+        },
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
@@ -253,10 +260,16 @@ describe('RecipeController E2E — real PostgreSQL', () => {
                 expect.objectContaining({
                   insumo_id: arrozId,
                   gross_quantity: 5,
+                  // The ingredient name is PERSISTED: it was dropped on the
+                  // way to the service, so the column stayed NULL and the
+                  // next edit round-tripped NULL as "" into the DTO (400
+                  // `components.0.ingredientName should not be empty`).
+                  ingredient_name: 'Arroz',
                 }),
                 expect.objectContaining({
                   insumo_id: frijolId,
                   gross_quantity: 3,
+                  ingredient_name: 'Frijol',
                 }),
               ]),
             );

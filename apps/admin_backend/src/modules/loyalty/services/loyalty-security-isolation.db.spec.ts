@@ -62,7 +62,8 @@ describe('LV1.7D — Security & Two-Tenant Isolation (Real PostgreSQL)', () => {
     await bootstrap.query(`CREATE SCHEMA "${schema}"`);
 
     await bootstrap.query(`CREATE TABLE "${schema}".tenants (
-      id text PRIMARY KEY, name text NOT NULL, slug text NOT NULL, ruc text, is_active boolean DEFAULT true,
+      id text PRIMARY KEY, name text NOT NULL, slug text NOT NULL, ruc text,
+      phone text, email text, address text, is_active boolean DEFAULT true,
       created_at timestamptz DEFAULT now(), updated_at timestamptz DEFAULT now()
     )`);
 

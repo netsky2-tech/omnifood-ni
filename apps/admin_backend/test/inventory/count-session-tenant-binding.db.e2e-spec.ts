@@ -8,6 +8,7 @@ import * as request from 'supertest';
 import { DataSource, QueryRunner } from 'typeorm';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
+import { ForensicAlertService } from '../../src/modules/inventory/forensic-alert.service';
 import { FxRateResolverService } from '../../src/modules/inventory/fx-rate-resolver.service';
 import { InventoryPurchaseService } from '../../src/modules/inventory/inventory-purchase.service';
 import { RecipeService } from '../../src/modules/inventory/recipe.service';
@@ -22,6 +23,8 @@ import { Insumo } from '../../src/modules/inventory/entities/insumo.entity';
 import { Batch } from '../../src/modules/inventory/entities/batch.entity';
 import { UomConversion } from '../../src/modules/inventory/entities/uom-conversion.entity';
 import { InventoryMovement } from '../../src/modules/inventory/entities/inventory-movement.entity';
+import { CountSession } from '../../src/modules/inventory/entities/count-session.entity';
+import { CountSessionEntry } from '../../src/modules/inventory/entities/count-session-entry.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
 import { ActivationAttempt } from '../../src/modules/onboarding/entities/activation-attempt.entity';
@@ -75,6 +78,12 @@ const ALL_ENTITIES = [
   Batch,
   DeviceSyncCredential,
   ActivationAttempt,
+  // R19 (S13) persists the session document itself on the same transaction as
+  // the variance, so the closure grows with both session entities — same
+  // fixture shape as
+  // src/modules/inventory/batch-aggregate-parity.db.spec.ts.
+  CountSession,
+  CountSessionEntry,
 ];
 
 /**
@@ -89,6 +98,10 @@ const RLS_ROLE_TABLES = [
   'batches',
   'device_sync_credentials',
   'onboarding_activation_attempts',
+  // R19 (S13) persists the count document into count_sessions /
+  // count_session_entries on the same transaction as the variance.
+  'count_sessions',
+  'count_session_entries',
 ] as const;
 
 /**
@@ -173,10 +186,14 @@ async function withIsolatedSchema(
       schema,
       tables: RLS_ROLE_TABLES,
     });
-    // The count flow writes stock updates and adjustment movements, which the
-    // SELECT-only role grant inside the helper does not cover.
+    // The count flow writes stock updates, adjustment movements and the count
+    // document itself, which the SELECT-only role grant inside the helper does
+    // not cover.
     await bootstrap.query(
       `GRANT INSERT, UPDATE ON "${schema}"."insumos", "${schema}"."inventory_kardex" TO "${roleName}"`,
+    );
+    await bootstrap.query(
+      `GRANT INSERT ON "${schema}"."count_sessions", "${schema}"."count_session_entries" TO "${roleName}"`,
     );
     await bootstrap.query(
       `GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA "${schema}" TO "${roleName}"`,
@@ -234,6 +251,10 @@ async function withIsolatedSchema(
       controllers: [InventoryMovementController],
       providers: [
         CountSessionService,
+        {
+          provide: ForensicAlertService,
+          useValue: { create: jest.fn().mockResolvedValue(undefined) },
+        },
         { provide: DataSource, useValue: dataSource },
         {
           provide: FxRateResolverService,

@@ -31,6 +31,8 @@ class InventoryMapper {
       stockMax: entity.stockMax,
       warehouseId: entity.warehouseId,
       isPerishable: entity.isPerishable,
+      isBatchManaged: entity.isBatchManaged,
+      lotAvailableStock: entity.lotAvailableStock,
     );
   }
 
@@ -46,6 +48,8 @@ class InventoryMapper {
       stockMax: domain.stockMax,
       warehouseId: domain.warehouseId,
       isPerishable: domain.isPerishable,
+      isBatchManaged: domain.isBatchManaged,
+      lotAvailableStock: domain.lotAvailableStock,
     );
   }
 

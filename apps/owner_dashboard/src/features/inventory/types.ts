@@ -57,6 +57,8 @@ export const MovementType = {
   CREDIT_NOTE_RESTOCK: "CREDIT_NOTE_RESTOCK",
   ADJUSTMENT: "ADJUSTMENT",
   REVERSAL: "REVERSAL",
+  VALUATION_WRITEDOWN: "VALUATION_WRITEDOWN",
+  INITIAL_STOCK: "INITIAL_STOCK",
 } as const;
 
 export type MovementType = (typeof MovementType)[keyof typeof MovementType];
@@ -77,6 +79,19 @@ export interface KardexMovement {
   sourceDocumentType?: string;
   sourceDocumentId?: string;
   createdAt: string;
+}
+
+/**
+ * One entry of the platform units-of-measure catalog (with the anchor
+ * factor). `factorToAnchor` is null for the container/serving families,
+ * which carry no universal factor: their content is declared per insumo.
+ */
+export interface PlatformUomEntry {
+  code: string;
+  name: string;
+  dimension: "mass" | "volume" | "count" | "container" | "serving";
+  factorToAnchor: number | null;
+  aliases: string[];
 }
 
 export interface KardexReport {
@@ -189,6 +204,7 @@ export interface ManualPurchaseInput {
   lotCode?: string;
   receivedDate?: string;
   expirationDate?: string;
+  costIncludesIva?: boolean;
 }
 
 export interface CreateSupplierInput {

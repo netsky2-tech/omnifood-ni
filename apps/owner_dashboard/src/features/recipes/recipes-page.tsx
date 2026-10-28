@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, Search, ChefHat, Package, Edit } from 'lucide-react';
 import { useProducts } from '@/features/catalog/use-product';
-import { useActiveRecipe, useInsumos } from './use-recipes';
+import { useActiveRecipe, useActiveRecipes, useInsumos } from './use-recipes';
+import type { ActiveRecipeSummary } from './types';
 import { fetchPendingSuggestions, suggestionsQueryKey } from './recipes-api';
 import { SuggestionReview } from './suggestion-review';
 import { useTenantId } from '@/lib/tenant';
@@ -21,7 +22,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { RecipeForm } from './RecipeForm';
-import { formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import { getApiErrorMessage } from '@/lib/api-error';
 
 type RecipesTabId = 'recetas' | 'sugerencias';
@@ -50,12 +51,32 @@ function usePendingSuggestionCount() {
 function RecipesOverview() {
   const { data: products, isLoading: productsLoading, error: productsError, refetch: refetchProducts } = useProducts('COMPOUND');
   const { data: insumos } = useInsumos();
+  // Every product with an active published recipe, with the recipe's own
+  // figures. The grid needs the recipe data for ALL its cards, not only for
+  // the selected one.
+  const {
+    data: activeRecipes,
+    isLoading: activeRecipesLoading,
+    isFetching: activeRecipesFetching,
+  } = useActiveRecipes();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<{ productId: string; productName: string } | null>(null);
 
-  const { data: activeRecipe, refetch: refetchRecipe } = useActiveRecipe(selectedProductId || '', !!selectedProductId);
+  const {
+    data: activeRecipe,
+    isLoading: activeRecipeLoading,
+    refetch: refetchRecipe,
+  } = useActiveRecipe(selectedProductId || '', !!selectedProductId);
+
+  const recipeByProductId = useMemo(() => {
+    const map = new Map<string, ActiveRecipeSummary>();
+    for (const summary of activeRecipes ?? []) {
+      map.set(summary.productId, summary);
+    }
+    return map;
+  }, [activeRecipes]);
 
   const filteredProducts = products?.filter((p: { name: string; id: string }) =>
     p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -63,6 +84,10 @@ function RecipesOverview() {
   ) ?? [];
 
   const handleOpenForm = (productId: string, productName: string) => {
+    // Selecting the product loads its active recipe snapshot, so "Editar
+    // Receta" opens the EXISTING recipe instead of an empty form (which
+    // would silently replace it on save).
+    setSelectedProductId(productId);
     setEditingRecipe({ productId, productName });
     setIsFormOpen(true);
   };
@@ -96,7 +121,7 @@ function RecipesOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col sm:flex-row gap-4 items-center">
         <div className="relative flex-1 max-w-md">
           <label htmlFor="recipe-search" className="sr-only">Buscar productos compuestos</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -108,6 +133,17 @@ function RecipesOverview() {
             className="pl-10"
           />
         </div>
+        {/* §28.3: after a save the grid refetches; the cards keep the valid
+            data they have, so the refresh is announced instead of silently
+            swapping the numbers under the operator's eyes. */}
+        {activeRecipesFetching && !activeRecipesLoading && (
+          <span
+            className="text-xs text-muted-foreground"
+            data-testid="recipes-grid-refreshing"
+          >
+            Actualizando…
+          </span>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -127,7 +163,9 @@ function RecipesOverview() {
             className="col-span-full py-12"
           />
         ) : (
-          filteredProducts.map((product) => (
+          filteredProducts.map((product) => {
+            const summary = recipeByProductId.get(product.id);
+            return (
             <div
               key={product.id}
               className={`relative border rounded-lg p-4 transition-all ${selectedProductId === product.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
@@ -138,38 +176,93 @@ function RecipesOverview() {
                   <ChefHat className="h-5 w-5 text-primary" />
                   <h3 className="font-semibold text-foreground">{product.name}</h3>
                 </div>
-                <Badge variant={product.is_active ? 'success' : 'destructive'}>
+                {/* §26: INACTIVE is a neutral lifecycle state, not an
+                    exception — a destructive badge misreports a quiet
+                    state as a problem (the Insumos table already carries
+                    the neutral badge). */}
+                <Badge variant={product.is_active ? 'success' : 'secondary'}>
                   {product.is_active ? 'Activo' : 'Inactivo'}
                 </Badge>
               </div>
 
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Precio:</span>
-                  <span className="font-medium tabular-nums">{formatNumber(product.sellPrice)} NIO</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Stock:</span>
-                  <span className="font-medium tabular-nums">{formatNumber(product.stock)} {product.uom}</span>
-                </div>
-                <div className="flex justify-between text-muted-foreground">
-                  <span>UOM:</span>
-                  <span className="font-medium">{product.uom}</span>
-                </div>
+                {summary ? (
+                  // The RECIPE's own figures: the cost of the recipe, the
+                  // units a batch yields and the unit of measure. The card
+                  // used to render the PRODUCT's catalog columns (sell
+                  // price, stock), which for a compound product nobody has
+                  // produced yet are 0 NIO / 0 g — a recipe card that never
+                  // changed no matter what the operator entered.
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Costo receta:</span>
+                      <span className="font-medium tabular-nums">
+                        {summary.estimatedCostNio != null
+                          ? formatCurrency(summary.estimatedCostNio)
+                          : '—'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Rendimiento:</span>
+                      <span className="font-medium tabular-nums">
+                        {formatNumber(summary.yieldQuantity)} {summary.productUom ?? product.uom}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>UOM:</span>
+                      <span className="font-medium">{summary.productUom ?? product.uom}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Precio:</span>
+                      <span className="font-medium tabular-nums">{formatCurrency(product.sellPrice)}</span>
+                    </div>
+                  </>
+                ) : activeRecipesLoading ? (
+                  // The recipe list is still loading: the card MUST NOT
+                  // claim "Sin receta vigente" — that is an unknown
+                  // presented as a fact (AP-02). Until the list resolves the
+                  // verdict is simply absent.
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Receta:</span>
+                    <span className="font-medium text-muted-foreground/70">
+                      Cargando…
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Receta:</span>
+                      <span className="font-medium">Sin receta vigente</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Stock:</span>
+                      <span className="font-medium tabular-nums">{formatNumber(product.stock)} {product.uom}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>UOM:</span>
+                      <span className="font-medium">{product.uom}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {activeRecipe && activeRecipe.recipeVersion.product_id === product.id && activeRecipe.recipeVersion.version_number > 0 && (
+              {summary && (
                 <div className="mt-3 p-2 bg-muted rounded text-xs space-y-1 border-l-2 border-primary">
                   <div className="flex items-center gap-1 text-primary font-medium">
                     <ChefHat className="h-3 w-3" />
-                    <span>Receta v{activeRecipe.recipeVersion.version_number} activa</span>
+                    <span>Receta v{summary.versionNumber} activa</span>
                   </div>
                   <div className="text-muted-foreground">
-                    {activeRecipe.components.length} ingrediente{activeRecipe.components.length !== 1 ? 's' : ''}
+                    {summary.componentCount} ingrediente{summary.componentCount !== 1 ? 's' : ''}
                   </div>
                   <div className="text-muted-foreground">
-                    Rendimiento: {formatNumber(activeRecipe.recipeVersion.yield_quantity)} {product.uom}
+                    Costo de receta: {summary.estimatedCostNio != null ? formatCurrency(summary.estimatedCostNio) : 'no disponible'}
                   </div>
+                  {summary.estimatedCostNio == null && summary.costUnavailableReason && (
+                    <div className="text-muted-foreground">
+                      Costo no disponible: {summary.costUnavailableReason}
+                    </div>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -182,7 +275,7 @@ function RecipesOverview() {
                 </div>
               )}
 
-              {!activeRecipe || activeRecipe.recipeVersion.product_id !== product.id || activeRecipe.recipeVersion.version_number === 0 ? (
+              {!summary && !activeRecipesLoading && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -192,9 +285,10 @@ function RecipesOverview() {
                   <Plus className="h-3 w-3 mr-1" />
                   Crear Receta
                 </Button>
-              ) : null}
+              )}
             </div>
-          ))
+            );
+          })
         )}
       </div>
 
@@ -211,15 +305,23 @@ function RecipesOverview() {
             </DialogDescription>
           </DialogHeader>
           {editingRecipe && (
-            <RecipeForm
-              productId={editingRecipe.productId}
-              productName={editingRecipe.productName}
-              insumos={insumos ?? []}
-              compoundProducts={products?.filter(p => p.id !== editingRecipe?.productId) ?? []}
-              existingRecipe={activeRecipe && activeRecipe.recipeVersion.product_id === editingRecipe.productId ? activeRecipe : null}
-              onSuccess={handleFormSuccess}
-              onCancel={handleFormClose}
-            />
+            // The form opens with the EXISTING recipe. While the snapshot is
+            // still in flight the form must not render: an empty form shown
+            // for a product that HAS a recipe is a silent data loss when the
+            // operator saves it.
+            activeRecipeLoading ? (
+              <LoadingState message="Cargando la receta vigente..." className="h-40" />
+            ) : (
+              <RecipeForm
+                productId={editingRecipe.productId}
+                productName={editingRecipe.productName}
+                insumos={insumos ?? []}
+                compoundProducts={products?.filter(p => p.id !== editingRecipe?.productId) ?? []}
+                existingRecipe={activeRecipe && activeRecipe.recipeVersion.product_id === editingRecipe.productId ? activeRecipe : null}
+                onSuccess={handleFormSuccess}
+                onCancel={handleFormClose}
+              />
+            )
           )}
         </DialogContent>
       </Dialog>

@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'validated_sale_inventory_authority.dart';
 class SaleInventoryPlanningException implements Exception {
   const SaleInventoryPlanningException();
@@ -22,9 +23,14 @@ class SaleInventoryLine {
     required this.id,
     required this.productId,
     required this.quantity,
+    // R28: the line's modifiers. Their INVENTORY effects are what turns the
+    // recipe's consumption into the demand the line really has (an extra
+    // shot adds coffee; almond milk replaces the recipe's whole milk).
+    this.modifiers = const [],
   });
   final String id, productId;
   final double quantity;
+  final List<Modifier> modifiers;
 }
 
 class SaleInventoryLinePlan {

@@ -244,6 +244,7 @@ export class InventoryMovementController {
       lotCode: dto.lotCode,
       receivedDate: dto.receivedDate,
       expirationDate: dto.expirationDate,
+      costIncludesIva: dto.costIncludesIva,
     });
     // Response-boundary decimal coercion on the exposed document (see
     // purchase-document-response.ts): the decimals were assigned in code,
@@ -353,6 +354,7 @@ export class InventoryMovementController {
       lotCode: dto.lotCode,
       receivedDate: dto.receivedDate,
       expirationDate: dto.expirationDate,
+      costIncludesIva: dto.costIncludesIva,
       messageLocale: 'es',
     });
     // Same identity pass-through as the device write path above.

@@ -21,6 +21,7 @@ import 'data/database/database_seeder.dart';
 import 'data/daos/local_config_dao.dart';
 import 'data/network/cloud_auth_interceptor.dart';
 import 'data/network/device_sync_auth_interceptor.dart';
+import 'data/network/dio_company_logo_port.dart';
 import 'data/network/unconfigured_backend_interceptor.dart';
 import 'data/adapters/activation/dio_activation_priming_port.dart';
 import 'package:path_provider/path_provider.dart';
@@ -33,6 +34,7 @@ import 'data/services/activation_reconnect_sync_runner.dart';
 import 'data/services/activation_required_config_adapter.dart';
 import 'data/services/activation_session_service.dart';
 import 'data/services/activation_verification_sale_cleanup_runner.dart';
+import 'data/services/company_logo_adoption_service.dart';
 import 'data/services/api_base_url_service.dart';
 import 'data/security/app_private_device_sync_credential_store.dart';
 import 'data/security/dio_device_sync_exchange_port.dart';
@@ -51,6 +53,7 @@ import 'core/navigation/route_observer.dart';
 import 'data/repositories/tenant_capability_cache.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
+import 'domain/repositories/audit_repository.dart';
 import 'data/services/fiscal_projection_repair_service.dart';
 import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
@@ -703,10 +706,29 @@ void main() async {
           ),
           lazy: false,
         ),
+        // Company identity parity P4 (S7/L4): the adoption service is wired
+        // into the hardware screen so a HUMAN can adopt the company logo.
+        // ONE PrinterConfigService is shared between the view model and the
+        // adoption service, so the adoption's write lands on the SAME
+        // service every read in this screen goes through. The affordance is
+        // only reachable when the fiscal snapshot actually carries a cloud
+        // logo REFERENCE (canAdoptCompanyLogo): a tenant with no cloud logo
+        // sees nothing new here and prints exactly what it printed before
+        // this feature existed.
         ChangeNotifierProvider(
-          create: (_) => HardwareSettingsViewModel(
-            configService: PrinterConfigService(database.localConfigDao),
-          ),
+          create: (_) {
+            final printerConfigService = PrinterConfigService(
+              database.localConfigDao,
+            );
+            return HardwareSettingsViewModel(
+              configService: printerConfigService,
+              companyLogoAdoption: CompanyLogoAdoptionService(
+                database: database,
+                configService: printerConfigService,
+                logoPort: DioCompanyLogoPort(syncDio),
+              ),
+            );
+          },
         ),
         // T1 (OTA automatic discovery): the coordinator is materialized in
         // main() before runApp and registered as its own app-root provider
@@ -796,7 +818,14 @@ void main() async {
         ),
         Provider<AppDatabase>.value(value: database),
         Provider<AuthRepository>.value(value: authRepository),
-        Provider<AuditRepositoryImpl>.value(value: auditRepository),
+        // The INTERFACE, not the implementation: every read in the app asks
+        // for `AuditRepository` (`context.read<AuditRepository>()`), and
+        // Provider matches by EXACT type. Providing the implementation broke
+        // the supervisor override flows in production while the tests kept
+        // passing, because the tests wire the interface (the rig caught it:
+        // ProviderNotFoundException on the override of the modifier's
+        // quantity).
+        Provider<AuditRepository>.value(value: auditRepository),
         Provider<AlertService>.value(value: alertService),
         Provider<MovementEngineImpl>.value(value: movementEngine),
         Provider<SalesRepositoryImpl>.value(value: salesRepository),

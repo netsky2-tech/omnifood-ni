@@ -2457,6 +2457,9 @@ void main() {
       'inventory_policy_version': 'SALE_TIME_V1',
       'inventory_outcome': 'APPLIED_INVENTORY_APPLIED',
       'inventory_outcome_reason': 'frozen-sale',
+      // FD-01: what the cloud declared about the inventory of the sale (a
+      // different truth from the local outcome).
+      'cloud_inventory_outcome': 'APPLIED_WITH_DIVERGENCE',
       'bcn_official_rate': 40.1234,
       'commercial_rate': 38.9876,
       'total_usd': 3.21,

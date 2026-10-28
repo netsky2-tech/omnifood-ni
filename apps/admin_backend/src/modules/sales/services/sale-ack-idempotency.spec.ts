@@ -1,6 +1,7 @@
 import { EntityManager } from 'typeorm';
 import { InvoicesService, calculateSyncPayloadHash } from './invoices.service';
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
+import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { InventoryMovement, MovementType } from '../../inventory/entities/inventory-movement.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
@@ -13,6 +14,8 @@ import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { InvoiceItemModifier } from '../entities/invoice-item-modifier.entity';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
+import { Batch } from '../../inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
 
 describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', () => {
   let service: InvoicesService, outcomeService: SaleInventoryOutcomeService, mockTxManager: any;
@@ -58,6 +61,17 @@ describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', (
       // transaction (delete-then-insert). The mock must expose that repo or
       // `getRepository` hands back `{}` and the whole record is rejected.
       [InvoiceItemModifier, { delete: jest.fn(), insert: jest.fn() }],
+      // R3: the sale path draws the batch outflow and records its trace. No
+      // batches / no traces keeps both as no-ops for these scenarios.
+      [Batch, { find: jest.fn(async () => []), save: jest.fn() }],
+      [
+        BatchOutflowTrace,
+        {
+          find: jest.fn(async () => []),
+          save: jest.fn(),
+          create: jest.fn((d: any) => d),
+        },
+      ],
     ]);
     mockTxManager = {
       query: jest.fn(async () => []),
@@ -70,7 +84,7 @@ describe('Slice 7B: Backend sale ACK, idempotency, and legacy classification', (
         return item;
       }),
     };
-    outcomeService = new SaleInventoryOutcomeService();
+    outcomeService = new SaleInventoryOutcomeService(new BomExplosionService());
     service = new InvoicesService(
       { transaction: jest.fn(async (iso: any, cb?: any) => (typeof iso === 'function' ? iso : cb)(mockTxManager as EntityManager)) } as any,
       { upsert: jest.fn(), findOne: jest.fn() } as any, { upsert: jest.fn(), find: jest.fn() } as any, { save: jest.fn() } as any, { findOne: jest.fn() } as any,

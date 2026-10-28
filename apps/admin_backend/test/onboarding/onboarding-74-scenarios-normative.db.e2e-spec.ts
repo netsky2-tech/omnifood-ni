@@ -11,6 +11,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../src/modules/tenant/entities/tenant-brand-asset.entity';
 import {
   User,
   UserRole,
@@ -202,6 +203,9 @@ async function with74ScenariosIsolatedSchema(
       schema,
       entities: [
         Tenant,
+        // Company-identity parity P1: the lifecycle/activation path reads the
+        // tenant's brand assets through CompanyIdentityService.
+        TenantBrandAsset,
         User,
         SecurityProfile,
         SystemParametersConfig,

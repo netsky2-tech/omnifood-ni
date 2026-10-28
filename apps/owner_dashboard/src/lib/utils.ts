@@ -18,6 +18,16 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat("es-NI").format(value);
 }
 
+/**
+ * Formats a conversion factor without trailing zeros: 453.59237, 1000,
+ * 0.001. The platform catalog carries up to eight decimals (a pound is
+ * 453.59237 g), so a fixed-decimal format would round the very value the
+ * server validates against.
+ */
+export function formatFactor(value: number): string {
+  return String(Number(value.toFixed(8)));
+}
+
 export function formatPercent(value: number): string {
   return new Intl.NumberFormat("es-NI", {
     style: "percent",

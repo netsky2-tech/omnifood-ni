@@ -30,6 +30,48 @@ export async function updateFiscalSetup(
   return api.post<FiscalSetupResponse>("/onboarding/fiscal-setup", payload);
 }
 
+// --- Company Logo Endpoints (company identity parity P3, slice 1) ---
+
+/**
+ * The tenant's cloud-stored logo ORIGINAL, exactly as the backend declares
+ * it. `null` is a DECLARED absence (S3/S15): a tenant without a logo reads
+ * as null everywhere, never as an empty string or a placeholder.
+ */
+export interface CompanyLogoResponse {
+  sha256: string;
+  contentType: string;
+  byteLength: number;
+  base64: string;
+}
+
+/**
+ * Client-side pre-check mirroring the backend ceiling (2 MiB decoded). The
+ * authoritative validation is server-side; this only fails fast before a
+ * multi-megabyte body is sent.
+ */
+export const COMPANY_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+
+/**
+ * The only accepted logo format, mirroring the backend allowlist
+ * (TenantBrandAssetService.ACCEPTED_LOGO_CONTENT_TYPES). They must AGREE:
+ * the single stored original must be one every consumer can use — the
+ * terminal derives its 1-bit print raster from a PNG — so a JPEG is refused
+ * client-side too instead of being invited and then silently unusable.
+ */
+export const COMPANY_LOGO_ACCEPTED_TYPES = ["image/png"] as const;
+
+export async function fetchCompanyLogo(
+  options?: { signal?: AbortSignal },
+): Promise<CompanyLogoResponse | null> {
+  return api.get<CompanyLogoResponse | null>("/onboarding/company-logo", options);
+}
+
+export async function uploadCompanyLogo(
+  payload: { content_type: string; data: string },
+): Promise<CompanyLogoResponse> {
+  return api.post<CompanyLogoResponse>("/onboarding/company-logo", payload);
+}
+
 // --- Industry Templates Endpoints ---
 
 export async function fetchIndustryTemplates(): Promise<IndustryTemplate[]> {

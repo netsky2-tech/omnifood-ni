@@ -59,12 +59,24 @@ export function RecipeForm({
       return existingRecipe.components.map((c, index) => ({
         tempId: `existing-${index}`,
         ingredientId: c.insumo_id,
-        ingredientName: c.ingredient_name ?? '',
+        // Legacy rows carry a NULL ingredient_name (the write path never
+        // persisted it). The name is resolved from the referenced insumo /
+        // sub-recipe product so the operator sees WHICH ingredient the row
+        // is, and the round trip no longer sends an empty name back.
+        ingredientName:
+          c.ingredient_name ??
+          insumos.find((i) => i.id === c.insumo_id)?.name ??
+          compoundProducts.find((p) => p.id === c.insumo_id)?.name ??
+          '',
         ingredientType: c.ingredient_type as IngredientType,
         grossQuantity: Number(c.gross_quantity),
         technicalShrinkPct: Number(c.technical_shrink_pct),
         referenceVersionId: c.reference_version_id ?? null,
-        componentUom: c.component_uom ?? null,
+        // Legacy recipe rows carry component_uom NULL: resolve the insumo's
+        // consumption UOM so the field shows the real unit and the component
+        // can be saved (R15/S12). SUB_RECIPE ids never match the find, so
+        // they keep null.
+        componentUom: c.component_uom ?? insumos.find((i) => i.id === c.insumo_id)?.consumptionUom ?? null,
       }));
     }
     return [];
@@ -93,7 +105,10 @@ export function RecipeForm({
   };
 
   const updateComponent = (tempId: string, field: keyof FormComponent, value: FormComponent[keyof FormComponent]) => {
-    setComponents(components.map((c) =>
+    // Functional updater, never the render-captured `components`: handlers
+    // chain 2-5 updates of the same component inside one event, and with the
+    // flat capture only the last write survived (R15).
+    setComponents((prev) => prev.map((c) =>
       c.tempId === tempId ? { ...c, [field]: value } : c
     ));
     // Clear error for this field
@@ -178,7 +193,13 @@ export function RecipeForm({
         },
       });
 
-      toast({ variant: 'success', title: 'Éxito', description: 'Receta creada correctamente' });
+      // §19.2: the success feedback states WHAT happened; "Éxito" is a
+      // generic label for a specific fact.
+      toast({
+        variant: 'success',
+        title: 'Receta guardada',
+        description: `La receta v${versionNumber} de ${productName} quedó vigente con ${components.length} ingrediente${components.length !== 1 ? 's' : ''}.`,
+      });
       onSuccess();
     } catch (err: unknown) {
       toast({
@@ -195,7 +216,7 @@ export function RecipeForm({
     const options: { value: string; label: string; type: IngredientType }[] = [];
 
     insumos.filter(i => i.is_active).forEach(i => {
-      options.push({ value: i.id, label: `${i.name} (${i.consumption_uom})`, type: 'INSUMO' });
+      options.push({ value: i.id, label: `${i.name} (${i.consumptionUom})`, type: 'INSUMO' });
     });
 
     compoundProducts.filter(p => p.is_active).forEach(p => {
@@ -207,7 +228,7 @@ export function RecipeForm({
 
   const getComponentUom = (ingredientId: string): string | null => {
     const insumo = insumos.find(i => i.id === ingredientId);
-    return insumo?.consumption_uom ?? null;
+    return insumo?.consumptionUom ?? null;
   };
 
   const handleIngredientTypeChange = (tempId: string, type: IngredientType) => {
@@ -234,6 +255,21 @@ export function RecipeForm({
           <CardTitle>Información de la Versión</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {existingRecipe && (
+            // §22: the edit flow must make its scope clear. Saving does not
+            // rewrite the live recipe: it publishes a NEW version and the
+            // previous one stays as history (it stops being consumed, but it
+            // is never deleted — the recipe versions are the DGI/audit
+            // trail).
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="recipe-form-edit-scope"
+            >
+              Al guardar se publica la versión {versionNumber}. La versión
+              anterior queda como historial y deja de consumirse; ninguna
+              versión se borra.
+            </p>
+          )}
           <div className="grid gap-4 md:grid-cols-3">
             <div>
               <Label htmlFor="versionNumber">Número de Versión *</Label>
@@ -366,14 +402,20 @@ export function RecipeForm({
                       <Select
                         value={component.ingredientId}
                         onValueChange={(value) => {
-                          updateComponent(component.tempId, 'ingredientId', value);
+                          // Radix's hidden native select dispatches a synthetic
+                          // change carrying '' when the value moves with the
+                          // content closed; no selectable option is '' (the empty
+                          // ones are disabled), so it is never user intent (R15).
+                          if (!value) return;
                           const option = getIngredientOptions().find(o => o.value === value);
-                          if (option) {
-                            updateComponent(component.tempId, 'ingredientName', option.label.split(' (')[0]);
-                            if (option.type === 'INSUMO') {
-                              updateComponent(component.tempId, 'componentUom', getComponentUom(value));
-                            }
-                          }
+                          updateComponent(component.tempId, 'ingredientId', value);
+                          updateComponent(component.tempId, 'ingredientName', option ? option.label.split(' (')[0] : '');
+                          // Keep the Tipo <-> ingredient pair consistent: the
+                          // type derives from the chosen option and the unit and
+                          // reference version are recomputed (R15).
+                          updateComponent(component.tempId, 'ingredientType', option ? option.type : component.ingredientType);
+                          updateComponent(component.tempId, 'componentUom', option && option.type === 'INSUMO' ? getComponentUom(value) : null);
+                          updateComponent(component.tempId, 'referenceVersionId', null);
                         }}
                       >
                         <SelectTrigger id={`ingredient-${component.tempId}`} aria-invalid={!!errors[`${component.tempId}-ingredientId`]}>
@@ -407,7 +449,11 @@ export function RecipeForm({
                       <Label htmlFor={`ingredientType-${component.tempId}`}>Tipo</Label>
                       <Select
                         value={component.ingredientType}
-                        onValueChange={(value) => handleIngredientTypeChange(component.tempId, value as IngredientType)}
+                        onValueChange={(value) => {
+                          // Same synthetic '' guard as the ingredient select (R15).
+                          if (!value) return;
+                          handleIngredientTypeChange(component.tempId, value as IngredientType);
+                        }}
                       >
                         <SelectTrigger id={`ingredientType-${component.tempId}`}>
                           <SelectValue />
@@ -422,32 +468,42 @@ export function RecipeForm({
                       </Select>
                     </div>
 
-                    <div>
-                      <Label htmlFor={`componentUom-${component.tempId}`}>Unidad de Medida</Label>
-                      <Select
-                        value={component.componentUom ?? ''}
-                        onValueChange={(value) => updateComponent(component.tempId, 'componentUom', value || null)}
-                        disabled={component.ingredientType !== 'INSUMO' || !component.ingredientId}
-                      >
-                        <SelectTrigger id={`componentUom-${component.tempId}`} aria-invalid={!!errors[`${component.tempId}-componentUom`]}>
-                          <SelectValue placeholder="UOM" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {component.ingredientId && component.ingredientType === 'INSUMO' ? (
-                            <>
+                    {component.ingredientType === 'INSUMO' && (
+                      <div>
+                        <Label htmlFor={`componentUom-${component.tempId}`}>Unidad de Medida</Label>
+                        <Select
+                          value={component.componentUom ?? ''}
+                          onValueChange={(value) => {
+                          // The synthetic '' change fired here actually arrived
+                          // (wiped the unit right after the pick): every real
+                          // option is a non-empty unit, so '' is ignored (R15).
+                          if (value) updateComponent(component.tempId, 'componentUom', value);
+                        }}
+                          disabled={!component.ingredientId}
+                        >
+                          <SelectTrigger id={`componentUom-${component.tempId}`} aria-invalid={!!errors[`${component.tempId}-componentUom`]}>
+                            <SelectValue placeholder="Seleccione un ingrediente..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {!component.ingredientId ? (
+                              <SelectItem value="" disabled>Seleccione ingrediente primero</SelectItem>
+                            ) : getComponentUom(component.ingredientId) ? (
+                              // The insumo's consumption UOM is the only valid
+                              // value (owner decision, S12/R15); the backend
+                              // accepts only it or a registered conversion.
                               <SelectItem value={getComponentUom(component.ingredientId) ?? ''}>
-                                {getComponentUom(component.ingredientId) ?? 'Base'}
+                                {getComponentUom(component.ingredientId)}
                               </SelectItem>
-                            </>
-                          ) : (
-                            <SelectItem value="" disabled>Seleccione ingrediente primero</SelectItem>
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {errors[`${component.tempId}-componentUom`] && (
-                        <p className="text-sm text-destructive mt-1">{errors[`${component.tempId}-componentUom`]}</p>
-                      )}
-                    </div>
+                            ) : (
+                              <SelectItem value="" disabled>Sin unidad de consumo registrada</SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        {errors[`${component.tempId}-componentUom`] && (
+                          <p className="text-sm text-destructive mt-1">{errors[`${component.tempId}-componentUom`]}</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <Separator />

@@ -5,6 +5,7 @@ import 'package:pos_app/data/daos/user_dao.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
+import 'package:pos_app/domain/models/config/supervision_policy.dart';
 import 'package:pos_app/domain/models/auth/terminal_linking.dart';
 import 'package:pos_app/ui/features/auth/viewmodels/lock_screen_viewmodel.dart';
 import 'package:pos_app/ui/features/auth/views/lock_screen_view.dart';
@@ -44,6 +45,13 @@ class _FakeAuthRepository implements AuthRepository {
   Future<void> syncStaff() async {}
   @override
   Future<bool> authorizeOverride({required String supervisorId, String? pin, String? totpCode}) async => false;
+
+  @override
+  Future<List<CredentialMatch>> identifyByCredential({
+    required String credential,
+    required SupervisionPolicy policy,
+    String? userId,
+  }) async => const [];
 }
 
 class _FakeUserDao implements UserDao {

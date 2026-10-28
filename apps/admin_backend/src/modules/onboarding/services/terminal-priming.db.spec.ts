@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { DataSource, QueryRunner, Repository } from 'typeorm';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import { Product } from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import {
@@ -97,6 +98,9 @@ const SCHEMA_PREFIX = 'term_priming';
 
 const schemaEntities = [
   Tenant,
+  // P3 slice 1: the snapshot reads the logo sha256 REFERENCE (metadata only;
+  // synchronize creates the scratch table).
+  TenantBrandAsset,
   Product,
   CatalogValue,
   FiscalConfigRevision,
@@ -305,6 +309,7 @@ async function withIsolatedRlsSchema(
                         "${schema}".catalog_values,
                         "${schema}".fiscal_config_revisions,
                         "${schema}".tenants,
+                        "${schema}".tenant_brand_assets,
                         "${schema}".sys_parametros_config,
                         "${schema}".v_sys_parametros_config_active,
                         "${schema}".invoices

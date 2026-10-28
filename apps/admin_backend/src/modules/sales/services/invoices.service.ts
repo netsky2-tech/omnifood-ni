@@ -25,8 +25,16 @@ import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-re
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { RecipeService } from '../../inventory/recipe.service';
-import { BomExplosionService } from '../../inventory/bom-explosion.service';
-import { drawBatchOutflow } from '../../inventory/batch-allocation';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from '../../inventory/bom-explosion.service';
+import {
+  BatchAllocationConflictException,
+  drawBatchOutflow,
+  drawBatchOutflowPartial,
+  restoreBatchInflow,
+} from '../../inventory/batch-allocation';
 import {
   toCalendarDay,
   todayCalendarDay,
@@ -40,9 +48,11 @@ import {
 import { User, UserRole } from '../../identity/entities/user.entity';
 import {
   SaleInventoryOutcomeService,
+  SaleInventoryDivergenceDetail,
   ValidatedBindingToApply,
   SaleTimeSnapshotValidationResult,
 } from './sale-inventory-outcome.service';
+import { InventoryDivergence } from '../../inventory/entities/inventory-divergence.entity';
 import { TenantFulfillmentRecord } from '../../fulfillment/entities/tenant-fulfillment-record.entity';
 import { bindTenantContext } from '../../../core/database/tenant-transaction';
 import {
@@ -234,7 +244,8 @@ export class InvoicesService {
     private readonly loyaltyLedgerService?: LoyaltyLedgerService,
   ) {
     this.outcomeService =
-      this.saleInventoryOutcomeService ?? new SaleInventoryOutcomeService();
+      this.saleInventoryOutcomeService ??
+      new SaleInventoryOutcomeService(this.bomExplosionService);
   }
 
   async syncInvoices(
@@ -330,6 +341,39 @@ export class InvoicesService {
             // invoice_item_modifier_entity.dart:30). 0/negative can never
             // reach this code: the DTO rejects them with a named error.
             quantity: modifier.quantity ?? 1,
+            // R28: the line's DEVIATION RECORD — which option it carries
+            // and what it did to the stock. Absent for a price-only line
+            // and for every line written by a terminal that predates R28,
+            // so the historical records stay exactly as they are.
+            optionId: modifier.optionId ?? null,
+            groupId: modifier.groupId ?? null,
+            inventoryEffect:
+              modifier.inventoryEffect &&
+              modifier.inventoryEffect !== 'NONE'
+                ? modifier.inventoryEffect
+                : null,
+            effectInsumoId: modifier.effectInsumoId ?? null,
+            effectTargetInsumoId: modifier.effectTargetInsumoId ?? null,
+            effectQuantity:
+              modifier.effectQuantity === undefined
+                ? null
+                : modifier.effectQuantity,
+            effectFactor:
+              modifier.effectFactor === undefined ? null : modifier.effectFactor,
+            // ME-04: the TRUTH of the effect, as the sale resolved it. A
+            // pending effect is a sale that happened WITHOUT the inventory
+            // movement it announced: the cloud has to be able to see it to
+            // reconcile it. Absent for every line whose terminal says
+            // nothing (a terminal that predates ME-04), so the historical
+            // records stay exactly as they are.
+            effectStatus: modifier.effectStatus ?? null,
+            effectSkipReason: modifier.effectSkipReason ?? null,
+            effectQuantitySource: modifier.effectQuantitySource ?? null,
+            effectAuthorizedBy: modifier.effectAuthorizedBy ?? null,
+            effectAuthorizationMethod:
+              modifier.effectAuthorizationMethod ?? null,
+            effectAuthorizationReason:
+              modifier.effectAuthorizationReason ?? null,
           })),
         );
         if (modifierRows.length) {
@@ -975,7 +1019,28 @@ export class InvoicesService {
             allowCreditNotes: record.documentType === 'CREDIT_NOTE',
           });
         }
-        await this.appendInventoryDeltas(tenantId, record, manager);
+        const declaredDivergences = await this.appendInventoryDeltas(
+          tenantId,
+          record,
+          manager,
+        );
+        // FD-01: the divergence does not make the record a failure, it says
+        // what did not add up — and it travels with the receipt.
+        const effectiveReason =
+          declaredDivergences.length > 0
+            ? {
+                code: 'INVENTORY_DIVERGENCE_DECLARED',
+                lines: declaredDivergences.map((d) => d.insumoId),
+                divergences: declaredDivergences,
+              }
+            : null;
+        const effectiveOutcome = effectiveReason
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : 'APPLIED';
+        const inventoryOutcome = effectiveReason
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : null;
+
         await manager.save(
           this.receiptRepository.create({
             tenant_id: tenantId,
@@ -985,7 +1050,10 @@ export class InvoicesService {
             source_sequence: String(record.sourceSequence),
             payload_hash: calculateSyncPayloadHash(record),
             result_status: SYNC_RESULT_STATUS.ACCEPTED,
-            result_code: 'APPLIED',
+            result_code: effectiveOutcome,
+            inventoryOutcome,
+            inventoryOutcomeReason:
+              effectiveReason as unknown as Record<string, any> | null,
           }),
         );
       });
@@ -1344,6 +1412,10 @@ export class InvoicesService {
   ): Promise<{ accepted: boolean; result: SyncBatchResultItem }> {
     try {
       let v1Outcome: SaleTimeSnapshotValidationResult | null = null;
+      // FD-01: the differences declared while applying the inventory. They
+      // are declared INSIDE the transaction (with the invoice and the
+      // movement) and travel OUT with the result, so the terminal sees them.
+      let declaredDivergences: SaleInventoryDivergenceDetail[] = [];
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
         await bindTenantContext(manager, tenantId);
         this.assertRecordCreditNoteBoundary(record);
@@ -1369,6 +1441,18 @@ export class InvoicesService {
             );
           }
 
+          // FD-01 (openspec/changes/fiscal-no-se-congela-por-inventario): the
+          // negative-stock policy is NO LONGER a pre-check that degrades the
+          // outcome. R22 degraded it to APPLIED_INVENTORY_PENDING so the
+          // invoice would land — but that left the CLOUD's stock frozen while
+          // the TERMINAL's stock had already moved, so the two drifted apart
+          // and the drift spread to the whole catalog.
+          //
+          // Now the movement applies (the goods left the business) and the
+          // shortfall is DECLARED as a divergence, in the same transaction as
+          // the invoice. The invoice is applied, the stock mirrors the
+          // terminal, and the difference is on the tenant's desk.
+
           const invoiceToSync: SyncInvoiceDto = {
             ...record.invoice,
             ...(v1Outcome
@@ -1392,14 +1476,62 @@ export class InvoicesService {
             allowCreditNotes: record.documentType === 'CREDIT_NOTE',
           });
         }
+        // FD-01: the differences declared while applying the inventory of
+        // this sale. They are collected HERE (the movements are applied after
+        // the invoice is persisted) and turned into the outcome.
+        declaredDivergences = [];
         if (v1Outcome) {
           if (v1Outcome.outcome === 'APPLIED') {
+            const nextSourceSequence = this.recordSequenceAllocator(record);
             for (const b of v1Outcome.bindingsToApply) {
-              await this.appendV1Movement(tenantId, record, b, manager);
+              const declared = await this.appendV1Movement(
+                tenantId,
+                record,
+                b,
+                manager,
+                nextSourceSequence,
+              );
+              declaredDivergences.push(...declared);
             }
           }
         } else {
-          await this.appendInventoryDeltas(tenantId, record, manager);
+          const declared = await this.appendInventoryDeltas(
+            tenantId,
+            record,
+            manager,
+          );
+          declaredDivergences.push(...declared);
+        }
+
+        // FD-01: the divergence reason travels with the result AND with the
+        // receipt, so the terminal sees it and the audit trail keeps it.
+        const divergenceReason =
+          declaredDivergences.length > 0
+            ? {
+                code: 'INVENTORY_DIVERGENCE_DECLARED',
+                lines: declaredDivergences.map((d) => d.insumoId),
+                divergences: declaredDivergences,
+              }
+            : null;
+
+        if (divergenceReason && v1Outcome) {
+          v1Outcome = {
+            ...v1Outcome,
+            outcome: 'APPLIED_WITH_DIVERGENCE',
+            reason: divergenceReason,
+          };
+          // The invoice is the fiscal record: it carries the truth about its
+          // own inventory, so the amendment reaches the invoice too (not only
+          // the sync receipt).
+          await manager.update(
+            Invoice,
+            { id: record.invoice.id, tenant_id: tenantId },
+            {
+              inventoryOutcome: 'APPLIED_WITH_DIVERGENCE',
+              inventoryOutcomeReason:
+                divergenceReason as unknown as Record<string, any>,
+            },
+          );
         }
 
         if (
@@ -1431,6 +1563,22 @@ export class InvoicesService {
             ['id'],
           );
         }
+        // The effective outcome: the divergence does not make the record a
+        // failure, it says what did not add up.
+        const effectiveOutcome: string = divergenceReason
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : v1Outcome
+            ? v1Outcome.outcome
+            : 'APPLIED';
+        const effectiveReason = divergenceReason
+          ? divergenceReason
+          : v1Outcome
+            ? v1Outcome.reason
+            : null;
+        const inventoryOutcome = divergenceReason
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : (v1Outcome ? v1Outcome.outcome : null);
+
         await manager.save(
           this.receiptRepository.create({
             tenant_id: tenantId,
@@ -1440,10 +1588,11 @@ export class InvoicesService {
             source_sequence: String(record.sourceSequence),
             payload_hash: payloadHash,
             result_status: SYNC_RESULT_STATUS.ACCEPTED,
-            result_code: v1Outcome ? v1Outcome.outcome : 'APPLIED',
+            result_code: effectiveOutcome,
             inventoryPolicyVersion: v1Outcome ? v1Outcome.policyVersion : null,
-            inventoryOutcome: v1Outcome ? v1Outcome.outcome : null,
-            inventoryOutcomeReason: v1Outcome ? v1Outcome.reason : null,
+            inventoryOutcome,
+            inventoryOutcomeReason:
+              effectiveReason as unknown as Record<string, any> | null,
             acknowledgedCorrelationIds: v1Outcome
               ? v1Outcome.acknowledgedMovementCorrelationIds
               : null,
@@ -1457,13 +1606,30 @@ export class InvoicesService {
           manager,
         );
       });
+      // FD-01: the result carries the divergence. The record is ACCEPTED —
+      // a difference in the inventory is not a failure of the sale, and it
+      // must never read as one to the terminal.
+      const effectiveReason =
+        declaredDivergences.length > 0
+          ? {
+              code: 'INVENTORY_DIVERGENCE_DECLARED',
+              lines: declaredDivergences.map((d) => d.insumoId),
+              divergences: declaredDivergences,
+            }
+          : (v1Outcome?.reason ?? null);
+      const effectiveOutcome =
+        declaredDivergences.length > 0
+          ? 'APPLIED_WITH_DIVERGENCE'
+          : (v1Outcome?.outcome ?? 'APPLIED');
+
       return {
         accepted: true,
         result: this.buildResult(record, SYNC_RESULT_STATUS.ACCEPTED, {
-          code: v1Outcome ? v1Outcome.outcome : 'APPLIED',
+          code: effectiveOutcome,
           retryable: false,
-          inventoryOutcome: v1Outcome?.outcome,
-          inventoryOutcomeReason: v1Outcome?.reason,
+          inventoryOutcome: effectiveOutcome,
+          inventoryOutcomeReason:
+            effectiveReason as unknown as Record<string, any> | null,
           acknowledgedMovementCorrelationIds:
             v1Outcome?.acknowledgedMovementCorrelationIds,
           policyVersion: v1Outcome?.policyVersion,
@@ -1472,11 +1638,62 @@ export class InvoicesService {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sync failed';
       const dbErr = error as { code?: string; constraint?: string };
-      if (error instanceof ConflictException) {
+      // The conflicts each get their OWN code. A catch-all used to report
+      // every one of them as `LOYALTY_IDEMPOTENCY_CONFLICT` — a LOYALTY
+      // code for an INVENTORY conflict — which sent the triage (and the
+      // owner) to the points ledger instead of to the batches. The code is
+      // what a terminal, a dashboard and a support ticket group by, so it
+      // has to name the cause it actually is.
+      if (error instanceof BatchAllocationConflictException) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code:
+              error.reason === 'BALANCE_INSUFFICIENT'
+                ? 'INVENTORY_BATCH_BALANCE_INSUFFICIENT'
+                : 'INVENTORY_BATCH_UNKNOWN_SOURCE',
+            // NOT retryable: it needs a reconciliation (the batches have to
+            // cover the movement), not another attempt.
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof ConflictException &&
+        message.includes('CREDIT_NOTE_NUMBER_CONFLICT')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CREDIT_NOTE_NUMBER_CONFLICT',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof ConflictException &&
+        message.includes('Integrity conflict: idempotency key')
+      ) {
+        // The loyalty ledger's own conflict: the one case the old catch-all
+        // was written for, and the only one it named correctly.
         return {
           accepted: false,
           result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
             code: 'LOYALTY_IDEMPOTENCY_CONFLICT',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (error instanceof ConflictException) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            // An unnamed conflict is reported as such: a code that claims
+            // a cause we cannot prove is worse than a generic one.
+            code: 'SYNC_CONFLICT',
             retryable: false,
             message,
           }),
@@ -1784,17 +2001,44 @@ export class InvoicesService {
     return null;
   }
 
+  /**
+   * `uq_inventory_kardex_source_sequence` allows exactly ONE kardex row per
+   * (tenant, device, sales|inventory family, source_sequence), but a single
+   * sync record legitimately produces MULTIPLE rows: V1 snapshot replay emits
+   * one row per binding, multi-movement deltas one per movement, and credit
+   * notes one per compensated origin movement. Stamping the record-level
+   * sequence on every row made any multi-row record violate the index and
+   * roll back forever (retryable REJECTED loop on the terminal). Only the
+   * FIRST kardex row of a record carries the record sequence; the rest carry
+   * NULL, which the partial index ignores. Whole-record idempotency stays
+   * with the receipt row + transaction, and V1 rows keep the per-binding
+   * `uq_inventory_kardex_sale_correlation` guard.
+   */
+  private recordSequenceAllocator(
+    record: SyncBatchRecordDto,
+  ): () => string | null {
+    let allocated = false;
+    return () => {
+      if (allocated) return null;
+      allocated = true;
+      return String(record.sourceSequence);
+    };
+  }
+
   private async appendFohMovements(
     tenantId: string,
     record: SyncBatchRecordDto,
     manager: EntityManager,
-  ): Promise<void> {
+  ): Promise<SaleInventoryDivergenceDetail[]> {
+    const nextSourceSequence = this.recordSequenceAllocator(record);
     const movementType =
       record.documentType === 'SALE_CANCEL'
         ? MovementType.SALE_CANCEL
         : MovementType.SALE;
     const invoice = record.invoice;
-    if (!invoice?.items?.length) return;
+    if (!invoice?.items?.length) return [];
+    // FD-01: the differences declared while applying this sale.
+    const declaredDivergences: SaleInventoryDivergenceDetail[] = [];
 
     for (const item of invoice.items) {
       const exploded = await this.resolveExplodedMovements(
@@ -1825,12 +2069,23 @@ export class InvoicesService {
         const newStock = Number(
           (previousStock + normalizedQuantity).toFixed(4),
         );
-        this.assertNegativeStockPolicy(
-          insumo.negativeStockPolicy,
-          newStock,
-          insumoId,
-          movementType,
-        );
+        // FD-01: the legacy branch follows the same rule as the live one — in
+        // a SALE the policy declares the shortfall instead of rejecting it.
+        const declaredShortfall =
+          movementType === MovementType.SALE
+            ? this.evaluateDeclaredStockShortfall(
+                insumo.negativeStockPolicy,
+                newStock,
+              )
+            : 0;
+        if (movementType !== MovementType.SALE) {
+          this.assertNegativeStockPolicy(
+            insumo.negativeStockPolicy,
+            newStock,
+            insumoId,
+            movementType,
+          );
+        }
         const unitCostNio = round4(Number(insumo.averageCost ?? 0));
         const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
         insumo.stock = newStock;
@@ -1847,7 +2102,7 @@ export class InvoicesService {
               )
             : null;
 
-        await manager.save(
+        const savedMovement = await manager.save(
           this.movementRepository.create({
             tenant_id: tenantId,
             insumoId,
@@ -1862,7 +2117,7 @@ export class InvoicesService {
             ),
             idempotencyKey: `${record.idempotencyKey}:${item.id}:${insumoId}`,
             sourceDeviceId: record.sourceDeviceId,
-            sourceSequence: String(record.sourceSequence),
+            sourceSequence: nextSourceSequence(),
             sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
             sourceDocumentType: movementType,
             compensationForKardexId,
@@ -1875,27 +2130,69 @@ export class InvoicesService {
             user_id: invoice.userId,
           }),
         );
+
+        // R3 (S6): the legacy no-flowType branch gets the same batch
+        // discipline as the live branch, so both keep the aggregate and the
+        // batch balances in step.
+        if (movementType === MovementType.SALE) {
+          // FD-01: the PARTIAL draw (the lots back what they can; the rest is
+          // declared). See the live branch for the full rationale.
+          const plan = await drawBatchOutflowPartial({
+            manager,
+            tenantId,
+            insumoId,
+            quantity: Math.abs(normalizedQuantity),
+            operationDay: toCalendarDay(invoice.createdAt),
+            movementId: String(savedMovement.id),
+          });
+          const divergence = await this.declareSaleDivergence({
+            tenantId,
+            record,
+            invoice,
+            manager,
+            insumoId,
+            insumoName: insumo.name ?? insumoId,
+            requiredQuantity: Math.abs(normalizedQuantity),
+            declaredShortfall,
+            lotShortfall: plan.uncovered,
+            hasLots: plan.hasLots,
+            unitCostNio,
+          });
+          if (divergence) {
+            declaredDivergences.push(divergence);
+          }
+        } else if (compensationForKardexId) {
+          await restoreBatchInflow({
+            manager,
+            tenantId,
+            movementId: String(compensationForKardexId),
+          });
+        }
       }
     }
+
+    return declaredDivergences;
   }
 
   private async appendInventoryDeltas(
     tenantId: string,
     record: SyncBatchRecordDto,
     manager: EntityManager,
-  ): Promise<void> {
+  ): Promise<SaleInventoryDivergenceDetail[]> {
     if (record.documentType === 'CREDIT_NOTE') {
       await this.appendCreditNoteCompensation(tenantId, record, manager);
-      return;
+      return [];
     }
     if (
       record.documentType === 'SALE' ||
       record.documentType === 'SALE_CANCEL'
     ) {
-      await this.appendFohMovements(tenantId, record, manager);
-      return;
+      return this.appendFohMovements(tenantId, record, manager);
     }
-    if (!record.movements?.length) return;
+    if (!record.movements?.length) return [];
+    const declaredDivergences: SaleInventoryDivergenceDetail[] = [];
+
+    const nextSourceSequence = this.recordSequenceAllocator(record);
 
     for (const movement of record.movements) {
       const insumo = await manager
@@ -1967,7 +2264,7 @@ export class InvoicesService {
           totalCostNio: Number((Math.abs(delta) * unitCostNio).toFixed(4)),
           idempotencyKey: `${record.idempotencyKey}:${movement.insumoId}`,
           sourceDeviceId: record.sourceDeviceId,
-          sourceSequence: String(record.sourceSequence),
+          sourceSequence: nextSourceSequence(),
           reason: record.invoice?.id ?? record.idempotencyKey,
           sourceDocumentType: record.documentType,
           // The kardex `source_document_id` column is NOT NULL and this insert
@@ -1993,6 +2290,8 @@ export class InvoicesService {
         }),
       );
     }
+
+    return declaredDivergences;
   }
 
   private async resolveCompensatedMovementId(
@@ -2006,7 +2305,12 @@ export class InvoicesService {
         tenant_id: tenantId,
         insumoId,
         type: MovementType.SALE,
-        reason: `invoice:${invoiceId}`,
+        // The entity exposes `reason` as a getter over `sourceDocumentId`,
+        // NOT as a column, so querying `reason` makes TypeORM throw
+        // "Property 'reason' was not found in 'InventoryMovement'". The
+        // legacy compensation path never reached this line, which is why the
+        // defect stayed hidden until the flowType path called it for real.
+        sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoiceId}`,
       },
       order: { id: 'DESC' },
     });
@@ -2070,9 +2374,22 @@ export class InvoicesService {
         tenantId,
         productId,
       );
-      return this.bomExplosionService.explode({
-        snapshotComponents: snapshot.components,
+      if (!hasSubRecipeComponent(snapshot.components)) {
+        return this.bomExplosionService.explode({
+          snapshotComponents: snapshot.components,
+          orderQuantity,
+        });
+      }
+
+      return this.bomExplosionService.explodeWithSubRecipes({
+        rootProductId: productId,
+        rootComponents: snapshot.components,
         orderQuantity,
+        resolveSubRecipeComponents: (subRecipeProductId) =>
+          this.recipeService.getComponentsForActiveProduct(
+            tenantId,
+            subRecipeProductId,
+          ),
       });
     } catch (error) {
       if (error instanceof NotFoundException) {
@@ -2144,7 +2461,10 @@ export class InvoicesService {
     record: SyncBatchRecordDto,
     validatedBinding: ValidatedBindingToApply,
     manager: EntityManager,
-  ): Promise<void> {
+    nextSourceSequence: () => string | null,
+  ): Promise<SaleInventoryDivergenceDetail[]> {
+    // FD-01: the differences declared while applying this binding.
+    const declaredDivergences: SaleInventoryDivergenceDetail[] = [];
     const { item, binding, explodedQuantity } = validatedBinding;
     const invoice = record.invoice;
     const movementType =
@@ -2163,7 +2483,7 @@ export class InvoicesService {
       this.logger.warn(
         `Skipping V1 movement due to unresolved insumo ${binding.insumoId}`,
       );
-      return;
+      return declaredDivergences;
     }
 
     const normalizedQuantity =
@@ -2172,12 +2492,26 @@ export class InvoicesService {
         : -Math.abs(explodedQuantity);
     const previousStock = Number(insumo.stock);
     const newStock = Number((previousStock + normalizedQuantity).toFixed(4));
-    this.assertNegativeStockPolicy(
-      insumo.negativeStockPolicy,
-      newStock,
-      binding.insumoId,
-      movementType,
-    );
+    // FD-01: in the SALE path the negative-stock policy no longer REJECTS.
+    // The sale happened and the goods left, so the movement applies and the
+    // shortfall is declared (a divergence). A cancellation still has to be
+    // exact: it restores stock, and a restore that does not fit is a data
+    // problem, not a business one.
+    const declaredShortfall =
+      movementType === MovementType.SALE
+        ? this.evaluateDeclaredStockShortfall(
+            insumo.negativeStockPolicy,
+            newStock,
+          )
+        : 0;
+    if (movementType !== MovementType.SALE) {
+      this.assertNegativeStockPolicy(
+        insumo.negativeStockPolicy,
+        newStock,
+        binding.insumoId,
+        movementType,
+      );
+    }
     const unitCostNio = round4(Number(insumo.averageCost ?? 0));
     const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
 
@@ -2200,7 +2534,21 @@ export class InvoicesService {
     insumo.existenciaActual = newStock;
     await manager.save(Insumo, insumo);
 
-    await manager.save(
+    // S5 (H4): the flowType branch must carry the link to the write-up it
+    // reverses. appendFohMovements did this from the start, but this branch
+    // never did, so a SALE_CANCEL left compensation_for_kardex_id NULL and the
+    // ledger could not show which entry the reversal compensates.
+    const compensationForKardexId =
+      movementType === MovementType.SALE_CANCEL
+        ? await this.resolveCompensatedMovementId(
+            manager,
+            tenantId,
+            binding.insumoId,
+            invoice.id,
+          )
+        : null;
+
+    const savedMovement = await manager.save(
       this.movementRepository.create({
         tenant_id: tenantId,
         insumoId: binding.insumoId,
@@ -2216,9 +2564,10 @@ export class InvoicesService {
         idempotencyKey: binding.saleCorrelationId,
         saleCorrelationId: binding.saleCorrelationId,
         sourceDeviceId: record.sourceDeviceId,
-        sourceSequence: String(record.sourceSequence),
+        sourceSequence: nextSourceSequence(),
         sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
         sourceDocumentType: movementType,
+        compensationForKardexId,
         originInvoiceItemId:
           movementType === MovementType.SALE ? item.id : null,
         // AG-02: business timestamp of the originating sale invoice.
@@ -2226,6 +2575,165 @@ export class InvoicesService {
         user_id: invoice.userId,
       }),
     );
+
+    // R3 (S6): keep `insumos.stock` and the batch balances in step. A SALE
+    // draws the outflow by FEFO and records the trace; a SALE_CANCEL restores
+    // the SAME lots from the trace of the movement it compensates.
+    if (movementType === MovementType.SALE) {
+      // FD-01: the PARTIAL draw. The lots back what they can and the rest is
+      // declared, instead of the whole outflow being rejected — a rejection
+      // here blocked the fiscal stream and froze the terminal's sequence.
+      const plan = await drawBatchOutflowPartial({
+        manager,
+        tenantId,
+        insumoId: binding.insumoId,
+        quantity: Math.abs(normalizedQuantity),
+        operationDay: toCalendarDay(invoice.createdAt),
+        movementId: String(savedMovement.id),
+      });
+      const divergence = await this.declareSaleDivergence({
+        tenantId,
+        record,
+        invoice,
+        manager,
+        insumoId: binding.insumoId,
+        insumoName: insumo.name ?? binding.insumoId,
+        requiredQuantity: Math.abs(normalizedQuantity),
+        declaredShortfall,
+        lotShortfall: plan.uncovered,
+        hasLots: plan.hasLots,
+        unitCostNio,
+      });
+      if (divergence) {
+        declaredDivergences.push(divergence);
+      }
+    } else if (compensationForKardexId) {
+      await restoreBatchInflow({
+        manager,
+        tenantId,
+        movementId: String(compensationForKardexId),
+      });
+    }
+
+    return declaredDivergences;
+  }
+
+  /**
+   * FD-01: how much of the sale the tenant's own stock declaration could not
+   * cover.
+   *
+   * `ALLOW_TEMPORARY` is the tenant's DECLARED permission to sell beyond the
+   * stock it declared, so it is not a shortfall — it is the policy working as
+   * configured. Under `RESTRICT` the shortfall IS a breach of the tenant's own
+   * rule, and it has to be visible.
+   */
+  private evaluateDeclaredStockShortfall(
+    policy: NegativeStockPolicy | string,
+    newStock: number,
+  ): number {
+    if (policy === NEGATIVE_STOCK_POLICY.ALLOW_TEMPORARY) {
+      return 0;
+    }
+    if (newStock >= 0) {
+      return 0;
+    }
+    return round4(Math.abs(newStock));
+  }
+
+  /**
+   * FD-01: DECLARES the difference of a sale, in the same transaction as the
+   * invoice and the movement.
+   *
+   * The units that nothing backed:
+   * - with lots: the units the lots did not cover (`lotShortfall`);
+   * - without lots: the units the declared stock did not cover.
+   *
+   * When both happen, the units are the SAME units counted from two angles,
+   * so the row carries the bigger number and the detail carries both — the
+   * tenant's work list must not count the same 100 ml twice.
+   *
+   * The value is the CPP (the last purchase cost on the kardex) as a DECLARED
+   * approximation — the same one §5 of `docs/inventario_marco_normativo.md`
+   * declares — and the row carries the flag, so the missing identification
+   * stays visible instead of dissolving into an average (R-01, R-04).
+   */
+  private async declareSaleDivergence(params: {
+    tenantId: string;
+    record: SyncBatchRecordDto;
+    invoice: SyncInvoiceDto;
+    manager: EntityManager;
+    insumoId: string;
+    insumoName: string;
+    requiredQuantity: number;
+    declaredShortfall: number;
+    lotShortfall: number;
+    hasLots: boolean;
+    unitCostNio: number;
+  }): Promise<SaleInventoryDivergenceDetail | null> {
+    const quantity = round4(
+      Math.max(params.declaredShortfall, params.lotShortfall),
+    );
+    if (!(quantity > 0)) {
+      return null;
+    }
+
+    const cause: SaleInventoryDivergenceDetail['cause'] =
+      params.hasLots && params.lotShortfall > 0
+        ? 'LOT_COVERAGE_INSUFFICIENT'
+        : 'DECLARED_STOCK_INSUFFICIENT';
+
+    const amountNio = round4(quantity * params.unitCostNio);
+
+    const repository = params.manager.getRepository(InventoryDivergence);
+    const existing = await repository.findOne({
+      where: {
+        tenant_id: params.tenantId,
+        invoice_id: params.invoice.id,
+        insumo_id: params.insumoId,
+        cause,
+      },
+    });
+    if (!existing) {
+      await repository.save(
+        repository.create({
+          tenant_id: params.tenantId,
+          invoice_id: params.invoice.id,
+          invoice_number: params.invoice.number ?? params.invoice.id,
+          insumo_id: params.insumoId,
+          quantity,
+          unit_cost_nio: params.unitCostNio,
+          amount_nio: amountNio,
+          cause,
+          status: 'OPEN',
+          source_device_id: params.record.sourceDeviceId ?? null,
+          source_sequence:
+            params.record.sourceSequence != null
+              ? String(params.record.sourceSequence)
+              : null,
+          detail: {
+            requiredQuantity: round4(params.requiredQuantity),
+            declaredShortfall: round4(params.declaredShortfall),
+            lotShortfall: round4(params.lotShortfall),
+            unitCostNio: params.unitCostNio,
+          },
+        }),
+      );
+
+      this.logger.warn(
+        `[INVENTORY-DIVERGENCE] tenant=${params.tenantId} ` +
+          `invoice=${params.invoice.number ?? params.invoice.id} ` +
+          `insumo=${params.insumoName} (${params.insumoId}) ` +
+          `quantity=${quantity} amount=${amountNio} cause=${cause}`,
+      );
+    }
+
+    return {
+      insumoId: params.insumoId,
+      insumoName: params.insumoName,
+      quantity,
+      amountNio,
+      cause,
+    };
   }
 
   /// Resolves the Invoice repository bound to [manager] when running
@@ -2587,6 +3095,8 @@ export class InvoicesService {
         })
       : [];
 
+    const nextSourceSequence = this.recordSequenceAllocator(record);
+
     for (const creditItem of invoice.items ?? []) {
       const originItemId = creditItem.originInvoiceItemId;
       if (!originItemId) continue;
@@ -2633,6 +3143,7 @@ export class InvoicesService {
           refundRatio,
           refundReasonPolicy: policy,
           existingCompensations,
+          nextSourceSequence,
         });
       }
     }
@@ -2654,6 +3165,7 @@ export class InvoicesService {
     refundRatio: number;
     refundReasonPolicy: string;
     existingCompensations: InventoryMovement[];
+    nextSourceSequence: () => string | null;
   }): Promise<void> {
     const { tenantId, record, manager, originMovement } = input;
     const invoice = record.invoice;
@@ -2721,7 +3233,7 @@ export class InvoicesService {
         totalCostNio: round4(quantity * unitCostNio),
         idempotencyKey: `${record.idempotencyKey}:${input.originInvoiceItemId}:${originMovement.id}`,
         sourceDeviceId: record.sourceDeviceId,
-        sourceSequence: String(record.sourceSequence),
+        sourceSequence: input.nextSourceSequence(),
         sourceDocumentId: invoice.id,
         sourceDocumentType: 'CREDIT_NOTE',
         compensationForKardexId: originMovement.id,

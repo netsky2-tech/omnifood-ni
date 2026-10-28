@@ -144,4 +144,55 @@ void main() {
       throwsA(anything),
     );
   });
+
+  test(
+      'AuthorityProjectionDao refreshes the LIVE state of an insumo without '
+      'touching its identity', () async {
+    final dao = database.authorityProjectionDao;
+
+    await dao.insertInsumo(const AuthorityInsumoEntity(
+      tenantId: 'tenant-1',
+      id: 'insumo-1',
+      name: 'Leche de Soya',
+      uom: 'ml',
+      isActive: true,
+      negativeStockPolicy: 'RESTRICT',
+    ));
+
+    // The company deactivates the insumo: the delta re-delivers it and the
+    // state must be refreshed in place (insert-if-absent would freeze it).
+    final affected = await dao.updateInsumoState(
+      'tenant-1',
+      'insumo-1',
+      0,
+      'ALLOW_NEGATIVE',
+    );
+
+    expect(affected, 1);
+    final refreshed = await dao.findInsumoById('tenant-1', 'insumo-1');
+    expect(refreshed, isNotNull);
+    expect(refreshed!.isActive, isFalse);
+    expect(refreshed.negativeStockPolicy, 'ALLOW_NEGATIVE');
+    expect(refreshed.name, 'Leche de Soya', reason: 'the identity is append-only');
+    expect(refreshed.uom, 'ml');
+  });
+
+  test('AuthorityProjectionDao does not update an insumo of another tenant',
+      () async {
+    final dao = database.authorityProjectionDao;
+
+    await dao.insertInsumo(const AuthorityInsumoEntity(
+      tenantId: 'tenant-1',
+      id: 'insumo-1',
+      name: 'Leche de Soya',
+      uom: 'ml',
+    ));
+
+    final affected =
+        await dao.updateInsumoState('tenant-2', 'insumo-1', 0, 'RESTRICT');
+
+    expect(affected, 0);
+    final untouched = await dao.findInsumoById('tenant-1', 'insumo-1');
+    expect(untouched!.isActive, isTrue);
+  });
 }

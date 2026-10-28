@@ -12,6 +12,7 @@ import { AuditSummaryController } from './audit-summary.controller';
 import { AuditSummaryService } from './audit-summary.service';
 import { AuditEventsService } from './audit-events.service';
 import { AuditLogsService } from './audit-logs.service';
+import { SupervisionReviewService } from './supervision-review.service';
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
@@ -54,6 +55,7 @@ describe('AuditSummaryController', () => {
   let mockAuditSummaryService: { getExecutiveSummary: jest.Mock };
   let mockAuditEventsService: { getEvents: jest.Mock };
   let mockAuditLogsService: { getLedger: jest.Mock; getIntegrityAlerts: jest.Mock };
+  let mockSupervisionReviewService: { getReview: jest.Mock };
 
   const summaryResponse = {
     criticalCount: 1,
@@ -85,6 +87,20 @@ describe('AuditSummaryController', () => {
       getIntegrityAlerts: jest.fn().mockResolvedValue({
         alerts: [],
         generatedAt: '2026-09-01T12:00:00.000Z',
+      }),
+    };
+
+    mockSupervisionReviewService = {
+      getReview: jest.fn().mockResolvedValue({
+        startDate: null,
+        endDate: null,
+        total: 0,
+        selfAuthorizedTotal: 0,
+        byClass: [],
+        entries: [],
+        limit: 50,
+        truncated: false,
+        generatedAt: new Date().toISOString(),
       }),
     };
 
@@ -120,6 +136,10 @@ describe('AuditSummaryController', () => {
         {
           provide: AuditLogsService,
           useValue: mockAuditLogsService,
+        },
+        {
+          provide: SupervisionReviewService,
+          useValue: mockSupervisionReviewService,
         },
         {
           provide: ConfigService,
@@ -338,6 +358,93 @@ describe('AuditSummaryController', () => {
         .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
         .expect(400);
       expect(mockAuditEventsService.getEvents).not.toHaveBeenCalled();
+    });
+  });
+
+  // The owner's REVIEW QUEUE for the tenant's supervision policy: the same
+  // guard chain and the same roles as the rest of the oversight surfaces.
+  describe('GET /operations/audit/supervision-review', () => {
+    const reviewResponse = {
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+      total: 4,
+      selfAuthorizedTotal: 3,
+      byClass: [
+        { flow: 'CLOSE_BOX', supervised: 0, selfAuthorized: 3 },
+        { flow: 'MANUAL_DISCOUNT', supervised: 1, selfAuthorized: 0 },
+      ],
+      entries: [
+        {
+          occurredAt: '2026-09-24T15:30:00.000Z',
+          actorEmail: 'cashier@example.com',
+          authorizerEmail: 'cashier@example.com',
+          hadSupervisor: false,
+          method: 'PIN',
+          flow: 'CLOSE_BOX',
+          action: 'SELF_AUTHORIZED_CLOSE_SESSION',
+          severity: 'CRITICAL',
+          deviceId: 'POS-1',
+        },
+      ],
+      limit: 50,
+      truncated: false,
+      generatedAt: '2026-09-30T12:00:00.000Z',
+    };
+
+    beforeEach(() => {
+      mockSupervisionReviewService.getReview.mockClear();
+      mockSupervisionReviewService.getReview.mockResolvedValue(reviewResponse);
+    });
+
+    it('requires authentication', async () => {
+      await request(getHttpServer())
+        .get('/operations/audit/supervision-review')
+        .expect(401);
+    });
+
+    it('returns 403 for CASHIER role', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/supervision-review')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.CASHIER)}`)
+        .expect(403);
+    });
+
+    it('returns the review for OWNER with tenant derived from the JWT', async () => {
+      const jwtService = app.get(JwtService);
+      const response = await request(getHttpServer())
+        .get('/operations/audit/supervision-review')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200)
+        .expect('Content-Type', /json/);
+
+      expect(mockSupervisionReviewService.getReview).toHaveBeenCalledWith(
+        'tenant-1',
+        {
+          startDate: undefined,
+          endDate: undefined,
+          limitInput: undefined,
+        },
+      );
+      expect(response.body).toEqual(reviewResponse);
+    });
+
+    it('forwards the reporting period and the page cap', async () => {
+      const jwtService = app.get(JwtService);
+      await request(getHttpServer())
+        .get('/operations/audit/supervision-review')
+        .query({ startDate: '2026-09-01', endDate: '2026-09-30', limit: 25 })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+        .expect(200);
+
+      expect(mockSupervisionReviewService.getReview).toHaveBeenCalledWith(
+        'tenant-1',
+        {
+          startDate: '2026-09-01',
+          endDate: '2026-09-30',
+          limitInput: 25,
+        },
+      );
     });
   });
 

@@ -2,6 +2,7 @@ export * from "./types";
 export * from "./settings-api";
 export * from "./use-settings";
 export * from "./fiscal-setup-form";
+export * from "./company-logo-card";
 export * from "./industry-templates-list";
 export * from "./bulk-import-wizard";
 export * from "./odav32-dataset";

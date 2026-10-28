@@ -71,6 +71,14 @@ export function resolveCheckoutFxMode(raw: unknown): CheckoutFxMode | null {
  */
 export const DGI_AUTHORIZATION_CODE_PATTERN = /^[A-Za-z0-9\-/]*$/;
 
+/**
+ * Company identity parity P1: pragmatic email shape for the contact field —
+ * one '@', no whitespace, and a dot in the domain. The backend owns the
+ * authoritative validation (@IsEmail); this only gives the operator fast,
+ * in-form feedback in Spanish.
+ */
+export const COMPANY_IDENTITY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export const fiscalSetupSchema = z.object({
   regime: z.enum([FiscalRegime.CUOTA_FIJA, FiscalRegime.REGIMEN_GENERAL], {
     errorMap: () => ({ message: "El régimen debe ser CUOTA_FIJA o REGIMEN_GENERAL" }),
@@ -129,6 +137,18 @@ export const fiscalSetupSchema = z.object({
   pricesIncludeTax: z.boolean(),
   phone: z.string().trim().optional(),
   address: z.string().trim().optional(),
+  // Company identity parity P1: contact email. An empty string is the CLEAR
+  // sentinel (the backend stores null — never '') and must stay valid; a
+  // non-empty value must be a plausible email. Mirrors the backend
+  // FiscalSetupDto (@IsEmail + 254-char ceiling).
+  email: z
+    .string()
+    .trim()
+    .max(254, "El correo electrónico no debe exceder 254 caracteres")
+    .refine((value) => value === "" || COMPANY_IDENTITY_EMAIL_PATTERN.test(value), {
+      message: "El correo electrónico no es válido",
+    })
+    .optional(),
   // D-21 (#554): optional DGI authorization letter data. Mirrors the backend
   // FiscalSetupDto: charset + 50-char ceiling only — NO structural mask,
   // because DGI's code format is not officially documented (the operator
@@ -328,6 +348,14 @@ export interface FiscalSetupResponse {
    */
   checkoutFxMode?: CheckoutFxMode | null;
   configuredAt?: string;
+  /**
+   * Company identity parity P1: null = never configured (or cleared) —
+   * absence is declared, never an empty string (S3). Absent is tolerated
+   * for responses predating P1 and treated exactly like null.
+   */
+  phone?: string | null;
+  address?: string | null;
+  email?: string | null;
   /** D-21 (#554): null when no DGI authorization is configured. */
   dgiAuthorizationCode?: string | null;
   dgiAuthorizationIssuedAt?: string | null;

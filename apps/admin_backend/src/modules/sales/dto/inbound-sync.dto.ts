@@ -129,6 +129,16 @@ export interface InboundSyncCatalogValueDto {
   source?: string;
 }
 
+export interface InboundSyncBatchDto {
+  id: string;
+  insumoId: string;
+  batchNumber: string;
+  receivedDate: string | null;
+  expirationDate: string;
+  remainingStock: number;
+  cost: number;
+}
+
 export interface InboundSyncInsumoDto {
   id: string;
   tenantId: string;
@@ -141,6 +151,14 @@ export interface InboundSyncInsumoDto {
   isActive: boolean;
   isPerishable: boolean;
   negativeStockPolicy: string;
+  /**
+   * FD-02: the sum of the remaining stock of this insumo's LOTS — the number
+   * the cloud will actually draw from. Null when the insumo has no lots, and
+   * then the aggregate `stock` is the only truth.
+   */
+  lotAvailableStock: number | null;
+  /** FD-02: whether this insumo is managed by lots. */
+  isBatchManaged: boolean;
   /** Stock alert thresholds (issue #521 S1); null when not configured. */
   parLevel: number | null;
   minStock: number | null;
@@ -353,6 +371,24 @@ export interface InboundSyncModifierOptionDto {
   isDefault: boolean;
   sortOrder: number;
   isActive: boolean;
+  /**
+   * R28 — the option's INVENTORY effect, so the POS can resolve the demand
+   * of the line (an extra shot adds coffee; almond milk replaces the recipe's
+   * whole milk). `NONE` is the default and means "price only", which is what
+   * every option that never declared an effect does.
+   */
+  inventoryEffect: string;
+  /** The insumo the effect acts ON: added (ADD) or substituted in (SWAP). */
+  effectInsumoId: string | null;
+  /** The insumo of the recipe component the effect affects. */
+  effectTargetInsumoId: string | null;
+  /**
+   * The quantity to apply per sold unit, in the affected insumo's own
+   * consumption unit. NULL means INHERIT it from the target component.
+   */
+  effectQuantity: number | null;
+  /** The multiplier of a SCALE (2 = double). */
+  effectFactor: number | null;
 }
 
 /** One reusable modifier group with its FULL option closure. */
@@ -436,6 +472,7 @@ export interface InboundSyncDeltasDto {
    * service always populates it (empty when not requested).
    */
   creditNotes?: InboundSyncCreditNoteDto[];
+  batches?: InboundSyncBatchDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
 

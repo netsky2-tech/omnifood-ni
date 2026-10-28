@@ -39,6 +39,7 @@ describe('InsumoController', () => {
         parLevel: '5000.0000',
         minStock: '1000.0000',
         maxStock: null,
+        ivaRatePct: null,
       },
     ]);
     insumoRepo.findOne.mockResolvedValue(null);
@@ -64,6 +65,7 @@ describe('InsumoController', () => {
         parLevel: 5000,
         minStock: 1000,
         maxStock: null,
+        ivaRatePct: null,
       },
     ]);
     expect(typeof result[0].stock).toBe('number');
@@ -116,7 +118,7 @@ describe('InsumoController', () => {
       name: 'Café Grano',
       purchaseUom: 'LB',
       consumptionUom: 'G',
-      conversionFactor: 454,
+      conversionFactor: 453.59237,
       parLevel: 5000,
       minStock: 1000,
       averageCost: 350,
@@ -132,16 +134,41 @@ describe('InsumoController', () => {
         name: 'Café Grano',
         purchaseUom: 'LB',
         consumptionUom: 'G',
-        conversionFactor: 454,
+        conversionFactor: 453.59237,
         is_active: true,
       });
       expect(insumoRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           tenant_id: 'tenant-A',
           name: 'Café Grano',
-          conversionFactor: 454,
+          conversionFactor: 453.59237,
         }),
       );
+      expect(insumoRepo.save).toHaveBeenCalled();
+    });
+
+    // FD-03: the derived availability NEVER refuses a sale. The tenant's own
+    // policy on the DECLARED aggregate decides (`RESTRICT` refuses,
+    // `ALLOW_TEMPORARY` lets the stock go negative and the difference is
+    // declared for the reconciliation). The lots do not decide — a lot
+    // record can simply be missing, and a POS that refuses a dish the kitchen
+    // can actually cook is worse than one showing a stale count.
+    it('accepts ALLOW_TEMPORARY on a perishable (lot-managed) insumo', async () => {
+      insumoRepo.findOne.mockResolvedValue(null);
+
+      const result = await buildController().create(
+        {
+          ...validDto,
+          is_perishable: true,
+          negativeStockPolicy: 'ALLOW_TEMPORARY',
+        },
+        'tenant-A',
+      );
+
+      expect(result).toMatchObject({
+        is_perishable: true,
+        negativeStockPolicy: 'ALLOW_TEMPORARY',
+      });
       expect(insumoRepo.save).toHaveBeenCalled();
     });
 
@@ -154,6 +181,45 @@ describe('InsumoController', () => {
       await expect(
         buildController().create(validDto, 'tenant-A'),
       ).rejects.toThrow(/Ya existe un insumo con el nombre/);
+
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+    });
+
+    // S3 (H2): the UOM guard exists but had a single caller — the seed. The
+    // live creation route persisted an incoherent conversion in silence.
+    it('rejects an incoherent UOM conversion (different units, untouched factor 1)', async () => {
+      insumoRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        buildController().create(
+          {
+            name: 'Harina a granel',
+            purchaseUom: 'lb',
+            consumptionUom: 'kg',
+            conversionFactor: 1,
+          },
+          'tenant-A',
+        ),
+      ).rejects.toThrow(/Factor inválido/);
+
+      expect(insumoRepo.create).not.toHaveBeenCalled();
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('rejects the same unit carrying a factor other than 1', async () => {
+      insumoRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        buildController().create(
+          {
+            name: 'Arroz unidad',
+            purchaseUom: 'kg',
+            consumptionUom: 'kg',
+            conversionFactor: 2,
+          },
+          'tenant-A',
+        ),
+      ).rejects.toThrow(/la misma unidad/);
 
       expect(insumoRepo.save).not.toHaveBeenCalled();
     });
@@ -207,6 +273,26 @@ describe('InsumoController', () => {
       await expect(
         buildController().update('ins-1', { name: 'Café' }, 'tenant-A'),
       ).rejects.toThrow(/Ya existe otro insumo con el nombre/);
+    });
+
+    // S3 (H2): the guard must also cover a partial update that makes the
+    // EFFECTIVE conversion incoherent (here: kg→kg with the stored factor 1
+    // becomes lb→kg with factor 1 once purchaseUom changes).
+    it('rejects an update that makes the effective conversion incoherent', async () => {
+      insumoRepo.findOne.mockResolvedValue({
+        id: 'ins-1',
+        tenant_id: 'tenant-A',
+        name: 'Harina',
+        purchaseUom: 'kg',
+        consumptionUom: 'kg',
+        conversionFactor: 1,
+      });
+
+      await expect(
+        buildController().update('ins-1', { purchaseUom: 'lb' }, 'tenant-A'),
+      ).rejects.toThrow(/Factor inválido/);
+
+      expect(insumoRepo.save).not.toHaveBeenCalled();
     });
   });
 });

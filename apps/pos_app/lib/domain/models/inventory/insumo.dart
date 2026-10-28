@@ -16,6 +16,8 @@ class Insumo with _$Insumo {
     double? stockMax,
     @JsonKey(name: 'warehouse_id') String? warehouseId,
     @Default(false) @JsonKey(name: 'is_perishable') bool isPerishable,
+    @Default(false) @JsonKey(name: 'is_batch_managed') bool isBatchManaged,
+    @JsonKey(name: 'lot_available_stock') double? lotAvailableStock,
   }) = _Insumo;
 
   factory Insumo.fromJson(Map<String, dynamic> json) => _$InsumoFromJson(json);

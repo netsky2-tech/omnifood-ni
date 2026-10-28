@@ -1,3 +1,5 @@
+import type { ModifierEffect } from "./effect";
+
 /**
  * Types for the modifier-groups administration screen. Mirrors the shapes
  * returned by the backend modifiers endpoints (active groups with their
@@ -10,6 +12,15 @@ export interface ModifierOption {
   price_delta: number;
   is_default: boolean;
   sort_order: number;
+  /**
+   * R28 — the option's optional inventory effect. `NONE` is the default and
+   * means the option is price-only, exactly as before R28.
+   */
+  inventory_effect: ModifierEffect;
+  effect_insumo_id: string | null;
+  effect_target_insumo_id: string | null;
+  effect_quantity: number | null;
+  effect_factor: number | null;
 }
 
 export interface ModifierGroup {
@@ -36,4 +47,10 @@ export interface ModifierOptionInput {
   price_delta: number;
   is_default: boolean;
   sort_order: number;
+  /** R28 — the optional inventory effect of the option. */
+  inventory_effect: ModifierEffect;
+  effect_insumo_id: string | null;
+  effect_target_insumo_id: string | null;
+  effect_quantity: number | null;
+  effect_factor: number | null;
 }

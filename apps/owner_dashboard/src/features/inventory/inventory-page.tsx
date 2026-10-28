@@ -1,4 +1,8 @@
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState, useMemo } from "react";
+import { Search, X, AlertTriangle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { formatLocalDate } from "@/lib/utils";
 import { toFiniteNumber } from "@/lib/numeric";
@@ -15,6 +19,7 @@ import {
   useAlerts,
 } from "./use-inventory-reports";
 import { InsumosTab } from "./insumos-tab";
+import { InventoryDivergencePanel } from "./divergence-panel";
 import { SuppliersTab } from "./suppliers-tab";
 import { PurchasesTab } from "./purchases-tab";
 import type { MovementType, AlertSeverity, KardexFilters } from "./types";
@@ -26,7 +31,8 @@ type TabId =
   | "purchases"
   | "cogs"
   | "kardex"
-  | "alerts";
+  | "alerts"
+  | "conciliacion";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "valuation", label: "Valoración" },
@@ -36,6 +42,9 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "cogs", label: "COGS / Margen" },
   { id: "kardex", label: "Kardex" },
   { id: "alerts", label: "Alertas" },
+  // FD-01: what did not add up between a sale and the inventory that backed
+  // it, and which insumo caused it.
+  { id: "conciliacion", label: "Conciliación" },
 ];
 
 function formatCurrency(amount: number): string {
@@ -60,6 +69,8 @@ const MOVEMENT_LABELS: Record<MovementType, string> = {
   CREDIT_NOTE_RESTOCK: "Nota Crédito",
   ADJUSTMENT: "Ajuste",
   REVERSAL: "Reversión",
+  VALUATION_WRITEDOWN: "Castigo por valuación",
+  INITIAL_STOCK: "Stock inicial",
 };
 
 const SEVERITY_STYLES: Record<AlertSeverity, string> = {
@@ -212,17 +223,90 @@ function CogsTab({ startDate, endDate }: { startDate?: string; endDate?: string 
   );
 }
 
+type KardexSortKey = "date" | "item" | "type" | "qty" | "cost";
+
+const KARDEX_SORT_COLUMNS: { key: KardexSortKey; label: string; align?: "right" }[] = [
+  { key: "date", label: "Fecha" },
+  { key: "item", label: "Ítem" },
+  { key: "type", label: "Tipo" },
+  { key: "qty", label: "Cant.", align: "right" },
+  { key: "cost", label: "Costo Unit.", align: "right" },
+];
+
 function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: string }) {
   const [filters, setFilters] = useState<KardexFilters>({});
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState<KardexSortKey>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
   const activeFilters: KardexFilters = {
     ...filters,
     from: startDate,
     to: endDate,
+    limit: 1000,
   };
   const { data, isLoading } = useKardex(activeFilters);
 
   const handleTypeFilter = (type: MovementType | "") => {
     setFilters((prev) => ({ ...prev, type: type || undefined }));
+    setCurrentPage(1);
+  };
+
+  const term = search.trim().toLowerCase();
+
+  const filteredMovements = useMemo(() => {
+    if (!data?.movements) return [];
+    let items = data.movements;
+
+    if (term) {
+      items = items.filter((m) => {
+        const name = (m.insumoName || "").toLowerCase();
+        const reason = (m.reason || "").toLowerCase();
+        const typeLabel = (MOVEMENT_LABELS[m.type] || "").toLowerCase();
+        return name.includes(term) || reason.includes(term) || typeLabel.includes(term);
+      });
+    }
+
+    const direction = sortDir === "asc" ? 1 : -1;
+    return [...items].sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "date":
+          cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          break;
+        case "item":
+          cmp = (a.insumoName || "").localeCompare(b.insumoName || "");
+          break;
+        case "type":
+          cmp = (MOVEMENT_LABELS[a.type] || "").localeCompare(MOVEMENT_LABELS[b.type] || "");
+          break;
+        case "qty":
+          cmp = (a.quantity || 0) - (b.quantity || 0);
+          break;
+        case "cost":
+          cmp = (a.unitCostNio || 0) - (b.unitCostNio || 0);
+          break;
+      }
+      return cmp * direction;
+    });
+  }, [data?.movements, term, sortKey, sortDir]);
+
+  const totalFiltered = filteredMovements.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * pageSize;
+  const pagedMovements = filteredMovements.slice(startIndex, startIndex + pageSize);
+
+  const toggleSort = (key: KardexSortKey) => {
+    if (key === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "date" ? "desc" : "asc");
+    }
+    setCurrentPage(1);
   };
 
   if (isLoading) return <LoadingState message="Cargando movimientos de kardex..." />;
@@ -230,7 +314,8 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-1.5 sm:gap-2">
+      {/* Type filter chips */}
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
         <button
           type="button"
           onClick={() => handleTypeFilter("")}
@@ -258,69 +343,243 @@ function KardexTab({ startDate, endDate }: { startDate?: string; endDate?: strin
         ))}
       </div>
 
-      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
-        <div className="px-4 py-3 border-b border-border bg-muted/30">
-          <p className="text-xs sm:text-sm font-medium text-muted-foreground">
-            {data.totalCount} movimiento(s)
-          </p>
+      {/* Multiclass search field (§13) */}
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+        <div className="relative max-w-md w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Label htmlFor="kardex-search-input" className="sr-only">
+            Buscar por insumo o motivo
+          </Label>
+          <Input
+            id="kardex-search-input"
+            data-testid="kardex-search-input"
+            placeholder="Buscar por insumo o motivo..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="pl-9 pr-8 text-sm"
+          />
+          {search && (
+            <button
+              type="button"
+              data-testid="kardex-search-clear"
+              aria-label="Limpiar búsqueda"
+              onClick={() => {
+                setSearch("");
+                setCurrentPage(1);
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/60">
-                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                  Fecha
-                </th>
-                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                  Ítem
-                </th>
-                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                  Tipo
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                  Cant.
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                  Antes
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                  Después
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                  Costo Unit.
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.movements.map((m) => (
-                <tr key={m.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
-                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
-                    {new Date(m.createdAt).toLocaleDateString("es-NI")}
-                  </td>
-                  <td className="px-4 py-3 font-medium text-foreground">{m.insumoName}</td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                      {MOVEMENT_LABELS[m.type]}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatNumber(m.quantity)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{formatNumber(m.stockBefore)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">{formatNumber(m.stockAfter)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {m.unitCostNio != null ? formatCurrency(m.unitCostNio) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+        {/* Page size selector (§15) */}
+        <div className="flex items-center gap-2 self-end sm:self-auto">
+          <Label htmlFor="kardex-page-size" className="text-xs text-muted-foreground whitespace-nowrap">
+            Filas por página
+          </Label>
+          <select
+            id="kardex-page-size"
+            aria-label="Filas por página"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer"
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
         </div>
       </div>
+
+      {/* Main data table or Empty State */}
+      {totalFiltered === 0 && term ? (
+        <EmptyState
+          title={`No se encontraron movimientos para “${search}”`}
+          description="Pruebe con otro nombre de insumo o motivo."
+          icon={AlertTriangle}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setSearch("");
+                setCurrentPage(1);
+              }}
+            >
+              Limpiar búsqueda
+            </Button>
+          }
+        />
+      ) : totalFiltered === 0 ? (
+        <EmptyState
+          title="Sin movimientos registrados"
+          description="No hay registros de kardex para el rango y filtros seleccionados."
+        />
+      ) : (
+        <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+          <div className="px-4 py-3 border-b border-border bg-muted/30 flex items-center justify-between">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">
+              Mostrando {startIndex + 1}–{startIndex + pagedMovements.length} de {totalFiltered} movimientos
+            </p>
+          </div>
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/60">
+                  {KARDEX_SORT_COLUMNS.map((col) => (
+                    <Fragment key={col.key}>
+                      <th
+                        className={`px-4 py-3 uppercase text-xs text-muted-foreground font-semibold ${
+                          col.align === "right" ? "text-right" : "text-left"
+                        }`}
+                        aria-sort={
+                          sortKey === col.key
+                            ? sortDir === "asc"
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                        }
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.key)}
+                          className={`inline-flex items-center gap-1 font-semibold hover:text-foreground cursor-pointer ${
+                            sortKey === col.key ? "text-foreground" : "text-muted-foreground"
+                          }`}
+                        >
+                          {col.label}
+                          {sortKey === col.key && (
+                            <span aria-hidden="true">
+                              {sortDir === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </button>
+                      </th>
+                      {col.key === "item" && (
+                        // The unit of measure travels with the amounts: a
+                        // quantity and a unit cost without a unit are not
+                        // reviewable figures (the operator reported exactly
+                        // this). The API already returns it; the sibling
+                        // Valoración and COGS tabs already show it.
+                        <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                          UoM
+                        </th>
+                      )}
+                    </Fragment>
+                  ))}
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Antes
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Después
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {pagedMovements.map((m) => {
+                  const isValuation = m.type === "VALUATION_WRITEDOWN";
+                  return (
+                    <tr
+                      key={m.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                    >
+                      <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                        {new Date(m.createdAt).toLocaleDateString("es-NI")}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        <div>
+                          <span>{m.insumoName}</span>
+                          {m.reason && (
+                            <span className="block text-xs text-muted-foreground font-normal">
+                              {m.reason}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground font-mono text-xs whitespace-nowrap">
+                        {m.consumptionUom || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            isValuation
+                              ? "bg-warning-50 text-warning-700 border border-warning/30"
+                              : "bg-muted text-foreground"
+                          }`}
+                        >
+                          {MOVEMENT_LABELS[m.type] || m.type}
+                        </span>
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-right tabular-nums font-medium ${
+                          m.quantity < 0
+                            ? "text-destructive-700"
+                            : m.quantity === 0
+                            ? "text-muted-foreground"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {formatNumber(m.quantity)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                        {m.unitCostNio != null ? formatCurrency(m.unitCostNio) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {formatNumber(m.stockBefore)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums font-medium text-foreground">
+                        {formatNumber(m.stockAfter)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination controls (§15) */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-card">
+              <span className="text-xs text-muted-foreground">
+                Página {safePage} de {totalPages}
+              </span>
+              <div className="flex gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={safePage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <FreshnessBadge generatedAt={data.generatedAt} />
     </div>
   );
 }
-
 function AlertsTab({ initialSeverity }: { initialSeverity?: string }) {
   const [selectedSeverity, setSelectedSeverity] = useState<string | undefined>(initialSeverity);
   const { data, isLoading } = useAlerts();
@@ -549,6 +808,7 @@ export function InventoryPage() {
           <KardexTab startDate={range.startDate} endDate={range.endDate} />
         )}
         {activeTab === "alerts" && <AlertsTab initialSeverity={severityFilter} />}
+        {activeTab === "conciliacion" && <InventoryDivergencePanel />}
       </div>
     </div>
   );

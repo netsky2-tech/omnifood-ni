@@ -122,6 +122,9 @@ class MockSalesRepository implements SalesRepository {
   }
 
   @override
+  Future<int> getInventoryDivergenceCount() async => 0;
+
+  @override
   Future<void> acknowledgeSaleSync({
     required String invoiceId,
     required String? outcome,
@@ -1845,7 +1848,12 @@ void main() {
                   countedAt: null,
                   disputed: true,
                 ),
-                CountLineEntryDocument(countedQuantity: 10, countedAt: null),
+                CountLineEntryDocument(
+                  countedQuantity: 10,
+                  countedAt: null,
+                  batchId: 'batch-001',
+                  batchNumber: 'LOT-20261021',
+                ),
               ],
             ),
           ],
@@ -1870,10 +1878,14 @@ void main() {
         contains('count-1'),
       );
       expect(mockInventoryRepository.syncedIds, contains('count-1:line-1'));
-      expect(
-        capturedPosts.any((post) => post.path == '/inventory/count-sessions'),
-        true,
-      );
+      final countPost = capturedPosts
+          .firstWhere((post) => post.path == '/inventory/count-sessions');
+      expect(countPost, isNotNull);
+      final payload = countPost.body as Map<String, dynamic>;
+      final lines = payload['lines'] as List<dynamic>;
+      final entries = lines.first['entries'] as List<dynamic>;
+      expect(entries[1]['batchId'], equals('batch-001'));
+      expect(entries[1]['batchNumber'], equals('LOT-20261021'));
     },
   );
 

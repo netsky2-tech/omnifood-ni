@@ -12,7 +12,10 @@ import {
   InventoryMovement,
   MovementType,
 } from './entities/inventory-movement.entity';
-import { BomExplosionService } from './bom-explosion.service';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from './bom-explosion.service';
 import {
   BatchCandidate,
   BatchConsumptionTrace,
@@ -259,13 +262,25 @@ export class ProductionService {
       input.document.recipeVersionId,
       input.tenantId,
     );
-    const exploded = this.bomExplosionService.explode({
-      snapshotComponents: snapshot.components,
-      orderQuantity:
-        input.document.outcome === PRODUCTION_CLOSE_OUTCOME.COMPLETED
-          ? input.document.actualQuantity
-          : input.document.plannedQuantity,
-    });
+    const productionOrderQuantity =
+      input.document.outcome === PRODUCTION_CLOSE_OUTCOME.COMPLETED
+        ? input.document.actualQuantity
+        : input.document.plannedQuantity;
+    const exploded = hasSubRecipeComponent(snapshot.components)
+      ? await this.bomExplosionService.explodeWithSubRecipes({
+          rootProductId: snapshot.recipeVersion.product_id,
+          rootComponents: snapshot.components,
+          orderQuantity: productionOrderQuantity,
+          resolveSubRecipeComponents: (subRecipeProductId) =>
+            this.recipeService.getComponentsForActiveProduct(
+              input.tenantId,
+              subRecipeProductId,
+            ),
+        })
+      : this.bomExplosionService.explode({
+          snapshotComponents: snapshot.components,
+          orderQuantity: productionOrderQuantity,
+        });
     const valuationTraceability: Record<string, BatchConsumptionTrace[]> = {};
     let totalConsumedValueNio = 0;
     const batchRepo = manager.getRepository(Batch);
@@ -415,8 +430,22 @@ export class ProductionService {
     }
 
     const previousStock = round4(Number(insumo.stock));
+    const previousAverageCostNio = round4(Number(insumo.averageCost ?? 0));
     const newStock = round4(previousStock + input.quantity);
-    const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
+    // R5 (S8): an INFLOW (the produced output) joins the CPP pool at its
+    // production unit cost, so the produced insumo stops being valued at 0
+    // while its batch carries the real cost. An OUTFLOW (a source component)
+    // leaves the weighted average untouched, which is weighted-average
+    // consumption semantics.
+    const averageCostAfterNio =
+      input.quantity > 0 && newStock > 0
+        ? round4(
+            (previousStock * previousAverageCostNio +
+              input.quantity * input.unitCostNio) /
+              newStock,
+          )
+        : previousAverageCostNio;
+    insumo.averageCost = averageCostAfterNio;
     insumo.stock = newStock;
     insumo.existenciaActual = newStock;
     await input.manager.save(Insumo, insumo);

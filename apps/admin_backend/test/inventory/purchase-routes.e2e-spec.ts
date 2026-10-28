@@ -388,8 +388,7 @@ describe('Inventory purchase routes (integration)', () => {
     transaction.mockImplementation(
       (
         isolationOrCallback:
-          | string
-          | ((entityManager: typeof manager) => unknown),
+          string | ((entityManager: typeof manager) => unknown),
         maybeCallback?: (entityManager: typeof manager) => unknown,
       ) => {
         const callback =
@@ -799,6 +798,8 @@ describe('Inventory purchase routes (integration)', () => {
         currency: validPurchasePayload.currency,
         bcnRate: validPurchasePayload.bcnRate,
         bcnRateSource: 'Document-provided BCN rate',
+        entryQuantityConsumption: 2,
+        invoiceUnitCostNio: 365,
         unitCostNio: 365,
         previousCppNio: 50,
         projectedCppNio: 102.5,
@@ -1060,8 +1061,9 @@ describe('Inventory purchase routes (integration)', () => {
       return Promise.resolve(null);
     });
 
-    manager.save.mockImplementation((_entity: unknown, payload: Record<string, unknown>) =>
-      Promise.resolve(payload),
+    manager.save.mockImplementation(
+      (_entity: unknown, payload: Record<string, unknown>) =>
+        Promise.resolve(payload),
     );
 
     const response = await request(app.getHttpServer())

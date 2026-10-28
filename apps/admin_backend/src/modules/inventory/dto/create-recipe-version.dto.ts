@@ -27,10 +27,16 @@ export class RecipeVersionComponentDto {
   @IsUUID('4')
   ingredientId: string;
 
+  /**
+   * Optional display name of the ingredient. The server resolves the
+   * authoritative name from the referenced insumo / sub-recipe product, so a
+   * client that sends nothing (or sends the empty string it read back from a
+   * legacy row whose `ingredient_name` is NULL) is still accepted.
+   */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(200)
-  ingredientName: string;
+  ingredientName?: string | null;
 
   @IsIn(Object.values(INGREDIENT_TYPE))
   ingredientType: IngredientType;

@@ -61,6 +61,7 @@ export function FiscalSetupForm() {
       pricesIncludeTax: true,
       phone: "",
       address: "",
+      email: "",
       dgiAuthorizationCode: "",
       dgiAuthorizationIssuedAt: "",
       dgiAuthorizationExpiresAt: "",
@@ -95,8 +96,13 @@ export function FiscalSetupForm() {
         operationMode: resolveTenantOperationMode(initialData.operationMode) ?? "",
         checkoutFxMode: resolveCheckoutFxMode(initialData.checkoutFxMode) ?? "",
         pricesIncludeTax: initialData.pricesIncludeTax ?? true,
-        phone: "",
-        address: "",
+        // Company identity parity P1: the identity fields are persisted on
+        // the tenant now — null/missing maps to "" (an empty input, the
+        // clear sentinel), a real value maps to itself. Never a stray
+        // null/undefined in the UI (S3).
+        phone: initialData.phone ?? "",
+        address: initialData.address ?? "",
+        email: initialData.email ?? "",
         dgiAuthorizationCode: initialData.dgiAuthorizationCode ?? "",
         dgiAuthorizationIssuedAt: toDateInputValue(initialData.dgiAuthorizationIssuedAt),
         dgiAuthorizationExpiresAt: toDateInputValue(initialData.dgiAuthorizationExpiresAt),
@@ -500,39 +506,52 @@ export function FiscalSetupForm() {
               </div>
             </div>
 
-            {/* Teléfono opcional (AC-05: no persistido) */}
+            {/* Company identity parity P1: contact identity — persisted on
+                the tenant and delivered to terminals through the fiscal
+                snapshot. An empty value is a declared absence (S3): it is
+                sent as "" and stored/read as null, never rendered as a
+                stray empty literal. */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="phone">Teléfono de Contacto</Label>
-                <Badge variant="outline" className="text-[10px] text-muted-foreground" data-testid="phone-non-persisted-badge">
-                  No persistido fiscalmente
-                </Badge>
-              </div>
+              <Label htmlFor="phone">Teléfono de Contacto</Label>
               <Input
                 id="phone"
                 placeholder="+505 8888-0000"
                 {...register("phone")}
               />
-              <p className="text-[11px] text-muted-foreground" data-testid="phone-non-persisted-note">
-                Campo informativo local. No se almacena en el perfil fiscal DGI oficial.
+              <p className="text-[11px] text-muted-foreground">
+                Se guarda en el perfil del negocio y viaja a las terminales en el snapshot fiscal (encabezado de facturas y reportes).
               </p>
             </div>
 
-            {/* Dirección opcional (AC-05: no persistido) */}
+            {/* Company identity parity P1: same persisted contract as phone. */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="address">Dirección Fiscal / Local</Label>
-                <Badge variant="outline" className="text-[10px] text-muted-foreground" data-testid="address-non-persisted-badge">
-                  No persistido fiscalmente
-                </Badge>
-              </div>
+              <Label htmlFor="address">Dirección Fiscal / Local</Label>
               <Input
                 id="address"
                 placeholder="Dirección del establecimiento"
                 {...register("address")}
               />
-              <p className="text-[11px] text-muted-foreground" data-testid="address-non-persisted-note">
-                Campo informativo local. No se almacena en el perfil fiscal DGI oficial.
+              <p className="text-[11px] text-muted-foreground">
+                Se guarda en el perfil del negocio y viaja a las terminales en el snapshot fiscal (encabezado de facturas y reportes).
+              </p>
+            </div>
+
+            {/* Company identity parity P1: contact email (no persistence before P1). */}
+            <div className="space-y-2">
+              <Label htmlFor="email">Correo Electrónico de Contacto</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="facturacion@negocio.ni"
+                maxLength={254}
+                {...register("email")}
+                aria-invalid={Boolean(errors.email)}
+              />
+              {errors.email && (
+                <p className="text-xs text-destructive">{errors.email.message}</p>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Opcional. Se guarda en el perfil del negocio y viaja a las terminales en el snapshot fiscal.
               </p>
             </div>
           </div>

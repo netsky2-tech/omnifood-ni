@@ -83,6 +83,7 @@ import 'package:pos_app/domain/models/auth/terminal_linking.dart' as _i4;
 import 'package:pos_app/domain/models/catalog/catalog_type.dart' as _i77;
 import 'package:pos_app/domain/models/catalog/catalog_value.dart' as _i76;
 import 'package:pos_app/domain/models/config/printer_config.dart' as _i58;
+import 'package:pos_app/domain/models/config/supervision_policy.dart' as _i84;
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart'
     as _i62;
 import 'package:pos_app/domain/models/inventory/batch.dart' as _i74;
@@ -111,7 +112,7 @@ import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart'
     as _i65;
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart' as _i2;
 import 'package:pos_app/domain/services/config/printer_config_service.dart'
-    as _i84;
+    as _i85;
 import 'package:sqflite/sqflite.dart' as _i57;
 
 // ignore_for_file: type=lint
@@ -853,6 +854,16 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
   _i56.Future<int> getInventoryEnrichmentPendingCount() => (super.noSuchMethod(
         Invocation.method(
           #getInventoryEnrichmentPendingCount,
+          [],
+        ),
+        returnValue: _i56.Future<int>.value(0),
+        returnValueForMissingStub: _i56.Future<int>.value(0),
+      ) as _i56.Future<int>);
+
+  @override
+  _i56.Future<int> getInventoryDivergenceCount() => (super.noSuchMethod(
+        Invocation.method(
+          #getInventoryDivergenceCount,
           [],
         ),
         returnValue: _i56.Future<int>.value(0),
@@ -1942,6 +1953,29 @@ class MockAuthRepository extends _i1.Mock implements _i83.AuthRepository {
       ) as _i56.Future<bool>);
 
   @override
+  _i56.Future<List<_i83.CredentialMatch>> identifyByCredential({
+    required String? credential,
+    required _i84.SupervisionPolicy? policy,
+    String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #identifyByCredential,
+          [],
+          {
+            #credential: credential,
+            #policy: policy,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i56.Future<List<_i83.CredentialMatch>>.value(
+            <_i83.CredentialMatch>[]),
+        returnValueForMissingStub:
+            _i56.Future<List<_i83.CredentialMatch>>.value(
+                <_i83.CredentialMatch>[]),
+      ) as _i56.Future<List<_i83.CredentialMatch>>);
+
+  @override
   _i56.Future<_i63.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
@@ -2759,7 +2793,7 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
 ///
 /// See the documentation for Mockito's code generation for more information.
 class MockPrinterConfigService extends _i1.Mock
-    implements _i84.PrinterConfigService {
+    implements _i85.PrinterConfigService {
   @override
   _i56.Stream<_i58.PrinterConfig> get onConfigChanged => (super.noSuchMethod(
         Invocation.getter(#onConfigChanged),
@@ -2790,6 +2824,26 @@ class MockPrinterConfigService extends _i1.Mock
             #driverType: driverType,
             #paperWidthMm: paperWidthMm,
           },
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
+  _i56.Future<String?> getCajaLabel() => (super.noSuchMethod(
+        Invocation.method(
+          #getCajaLabel,
+          [],
+        ),
+        returnValue: _i56.Future<String?>.value(),
+        returnValueForMissingStub: _i56.Future<String?>.value(),
+      ) as _i56.Future<String?>);
+
+  @override
+  _i56.Future<void> saveCajaLabel(String? label) => (super.noSuchMethod(
+        Invocation.method(
+          #saveCajaLabel,
+          [label],
         ),
         returnValue: _i56.Future<void>.value(),
         returnValueForMissingStub: _i56.Future<void>.value(),
@@ -2835,6 +2889,17 @@ class MockPrinterConfigService extends _i1.Mock
         Invocation.method(
           #savePrinterConfig,
           [config],
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
+  _i56.Future<void> adoptCompanyLogoRaster(String? base64Raster) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #adoptCompanyLogoRaster,
+          [base64Raster],
         ),
         returnValue: _i56.Future<void>.value(),
         returnValueForMissingStub: _i56.Future<void>.value(),

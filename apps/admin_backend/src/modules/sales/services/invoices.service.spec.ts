@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Batch } from '../../inventory/entities/batch.entity';
+import { BatchOutflowTrace } from '../../inventory/entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from '../../inventory/entities/inventory-divergence.entity';
 import { calculateSyncPayloadHash, InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
@@ -16,7 +18,7 @@ import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-re
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { RecipeService } from '../../inventory/recipe.service';
 import { BomExplosionService } from '../../inventory/bom-explosion.service';
-import { DataSource } from 'typeorm';
+import { DataSource, getMetadataArgsStorage } from 'typeorm';
 import {
   Insumo,
   NEGATIVE_STOCK_POLICY,
@@ -43,8 +45,15 @@ describe('InvoicesService', () => {
     save: jest.Mock;
     delete: jest.Mock;
   };
-  let recipeService: { findActiveVersion: jest.Mock; getSnapshot: jest.Mock };
-  let bomExplosionService: { explode: jest.Mock };
+  let recipeService: {
+    findActiveVersion: jest.Mock;
+    getSnapshot: jest.Mock;
+    getComponentsForActiveProduct: jest.Mock;
+  };
+  let bomExplosionService: {
+    explode: jest.Mock;
+    explodeWithSubRecipes: jest.Mock;
+  };
   let dataSource: { transaction: jest.Mock };
   let txManager: {
     query: jest.Mock<Promise<unknown>, unknown[]>;
@@ -61,6 +70,8 @@ describe('InvoicesService', () => {
     >;
     findOne: jest.Mock<Promise<unknown>, unknown[]>;
     find: jest.Mock<Promise<unknown[]>, unknown[]>;
+    // FD-01: the sale path amends the invoice with the declared divergence.
+    update: jest.Mock<Promise<unknown>, unknown[]>;
   };
 
   beforeEach(async () => {
@@ -102,8 +113,12 @@ describe('InvoicesService', () => {
     recipeService = {
       findActiveVersion: jest.fn(),
       getSnapshot: jest.fn(),
+      getComponentsForActiveProduct: jest.fn(),
     };
-    bomExplosionService = { explode: jest.fn() };
+    bomExplosionService = {
+      explode: jest.fn(),
+      explodeWithSubRecipes: jest.fn(),
+    };
     const qb = {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
@@ -112,7 +127,9 @@ describe('InvoicesService', () => {
     };
     txManager = {
       query: jest.fn<Promise<unknown>, unknown[]>().mockResolvedValue([]),
-      save: jest.fn<Promise<unknown>, unknown[]>(),
+      save: jest.fn<Promise<unknown>, unknown[]>(
+        async (...args: unknown[]) => (args.length >= 2 ? args[1] : args[0]),
+      ),
       // By default, return the injected (standalone) repositories so the
       // existing syncBatch tests that assert on `invoiceRepo.upsert` keep
       // working. Individual tests override this to return distinct
@@ -132,7 +149,24 @@ describe('InvoicesService', () => {
         // `drawBatchOutflow` returns early, and the assertions on the kardex
         // rows stay exactly as they were.
         if (target === Batch) {
-          return { find: jest.fn().mockResolvedValue([]), save: jest.fn() };
+          return {
+            find: jest.fn().mockResolvedValue(batchRows),
+            save: jest.fn(),
+          };
+        }
+        // R3: the sale-cancellation restore reads the outflow trace. Reporting
+        // no traces lets the restore return early, exactly like a pre-R3 sale.
+        if (target === BatchOutflowTrace) {
+          return {
+            find: jest.fn().mockResolvedValue([]),
+            save: jest.fn(),
+            create: jest.fn((dto: unknown) => dto),
+          };
+        }
+        // FD-01: the divergence ledger. The sale path DECLARES the difference
+        // it could not back, in the same transaction as the invoice.
+        if (target === InventoryDivergence) {
+          return divergenceRepo;
         }
         return undefined;
       }),
@@ -149,6 +183,8 @@ describe('InvoicesService', () => {
         .mockReturnValue(qb),
       findOne: jest.fn<Promise<unknown>, unknown[]>(),
       find: jest.fn<Promise<unknown[]>, unknown[]>().mockResolvedValue([]),
+      // FD-01: the sale path amends the invoice with the declared divergence.
+      update: jest.fn<Promise<unknown>, unknown[]>().mockResolvedValue({}),
     };
     dataSource = {
       transaction: jest
@@ -211,6 +247,142 @@ describe('InvoicesService', () => {
   it('should be defined', () => {
     expect(service).toBeDefined();
   });
+
+  describe('appendV1Movement compensation link (H4)', () => {
+    let appendQb: {
+      setLock: jest.Mock;
+      where: jest.Mock;
+      andWhere: jest.Mock;
+      getOne: jest.Mock;
+    };
+    const builtBinding = {
+      item: { id: 'item-1' },
+      binding: {
+        bindingOrdinal: 0,
+        insumoId: 'ins-1',
+        quantityPerSaleUnit: 2,
+        saleCorrelationId: 'corr-cancel',
+      },
+      explodedQuantity: 2,
+    };
+    const cancelRecord = {
+      idempotencyKey: 'sales:RIG-TERMINAL-1:cancel',
+      sourceDeviceId: 'RIG-TERMINAL-1',
+      sourceSequence: 5,
+      flowType: 'sales',
+      documentType: 'SALE_CANCEL',
+      invoice: {
+        id: 'inv-1',
+        createdAt: '2026-10-15T18:00:00.000Z',
+        userId: 'user-1',
+      },
+    };
+    const invokeAppendV1Movement = (
+      record: unknown,
+      manager: unknown,
+    ): Promise<void> =>
+      (
+        service as unknown as {
+          appendV1Movement: (
+            tenantId: string,
+            rec: unknown,
+            validated: unknown,
+            mgr: unknown,
+            nextSourceSequence: () => string | null,
+          ) => Promise<void>;
+        }
+      ).appendV1Movement(
+        'tenant-1',
+        record,
+        builtBinding,
+        manager,
+        () => String((record as { sourceSequence?: number }).sourceSequence ?? 0),
+      );
+
+    beforeEach(() => {
+      appendQb = {
+        setLock: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
+        getOne: jest.fn().mockResolvedValue({
+          id: 'ins-1',
+          tenant_id: 'tenant-1',
+          stock: 6,
+          averageCost: 50,
+          negativeStockPolicy: 'ALLOW_TEMPORARY',
+        }),
+      };
+      txManager.createQueryBuilder.mockReturnValue(appendQb);
+    });
+
+    it('queries the compensation by the sourceDocumentId COLUMN, never the reason getter', () => {
+      // The regression that this pins: `reason` is a getter over
+      // `sourceDocumentId`, not a @Column, so TypeORM rejects a findOne that
+      // filters on `reason`. The mock in the tests above cannot see that, and
+      // the legacy compensation path was unreachable, so only a real query
+      // exposed it. Assert the entity shape directly.
+      const columnProperties = getMetadataArgsStorage()
+        .columns.filter((column) => column.target === InventoryMovement)
+        .map((column) => column.propertyName);
+
+      expect(columnProperties).toContain('sourceDocumentId');
+      expect(columnProperties).not.toContain('reason');
+    });
+
+    it('links a SALE_CANCEL movement to the original SALE movement of the same invoice', async () => {
+      txManager.findOne.mockResolvedValue({ id: 'kardex-sale-1' });
+
+      await invokeAppendV1Movement(cancelRecord, txManager);
+
+      expect(txManager.findOne).toHaveBeenCalledWith(
+        InventoryMovement,
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-1',
+            insumoId: 'ins-1',
+            type: MovementType.SALE,
+            sourceDocumentId: 'invoice:inv-1',
+          }),
+        }),
+      );
+      expect(txManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE_CANCEL,
+          compensationForKardexId: 'kardex-sale-1',
+        }),
+      );
+    });
+
+    it('leaves a SALE movement uncompensated', async () => {
+      await invokeAppendV1Movement(
+        { ...cancelRecord, documentType: 'SALE', sourceSequence: 4 },
+        txManager,
+      );
+
+      const saved = txManager.save.mock.calls.map(
+        ([entity]: [unknown, ...unknown[]]) => entity as Record<string, unknown>,
+      );
+      const movement = saved.find(
+        (entity) => entity?.type === MovementType.SALE,
+      );
+      expect(movement).toBeDefined();
+      expect(movement?.compensationForKardexId).toBeNull();
+      expect(txManager.findOne).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The batch rows the harness reports. Empty by default (the insumo of
+   * this suite is not batch-managed, so `drawBatchOutflow` returns early).
+   * A test that needs the batch discipline sets it.
+   */
+  let batchRows: unknown[] = [];
+  // FD-01: the declared differences (the divergence ledger).
+  let divergenceRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+    create: jest.Mock;
+  };
 
   describe('syncInvoices', () => {
     const creditNoteInvoice: SyncInvoiceDto = {
@@ -611,12 +783,42 @@ describe('InvoicesService', () => {
           name: 'Michelada Extra',
           extraPrice: 30,
           quantity: 2,
+          // R28: a line without identity or deviation carries none, and the
+          // absence is recorded AS absence — never invented.
+          optionId: null,
+          groupId: null,
+          inventoryEffect: null,
+          effectInsumoId: null,
+          effectTargetInsumoId: null,
+          effectQuantity: null,
+          effectFactor: null,
+          // ME-04: the truth of the effect, as absence. A line whose
+          // terminal says nothing about it keeps the absence.
+          effectStatus: null,
+          effectSkipReason: null,
+          effectQuantitySource: null,
+          effectAuthorizedBy: null,
+          effectAuthorizationMethod: null,
+          effectAuthorizationReason: null,
         },
         {
           invoiceItemId: 'item-mod-1',
           name: 'Sin Cebolla',
           extraPrice: 0,
           quantity: 1,
+          optionId: null,
+          groupId: null,
+          inventoryEffect: null,
+          effectInsumoId: null,
+          effectTargetInsumoId: null,
+          effectQuantity: null,
+          effectFactor: null,
+          effectStatus: null,
+          effectSkipReason: null,
+          effectQuantitySource: null,
+          effectAuthorizedBy: null,
+          effectAuthorizationMethod: null,
+          effectAuthorizationReason: null,
         },
       ]);
       // Deterministic mirror: the item's previous modifier lines are
@@ -632,6 +834,73 @@ describe('InvoicesService', () => {
         ]),
         ['id'],
       );
+    });
+
+    it('persists the option identity and its inventory effect on the line (R28)', async () => {
+      // R28: the line's DEVIATION RECORD. Until R28 the cloud stored only
+      // the modifier's NAME (free text), so neither the cloud nor the audit
+      // could tell WHICH option was sold, and a deviation from the recipe
+      // (almond milk instead of the recipe's whole milk) left no trace.
+      const tenantId = 'tenant-1';
+      recipeService.getSnapshot.mockResolvedValue({
+        recipeVersion: { id: 'rv-cap', product_id: 'prod-cap' },
+        components: [],
+      });
+      const dto: SyncInvoiceDto = {
+        id: 'inv-deviation-1',
+        number: '013',
+        createdAt: new Date().toISOString(),
+        userId: 'user-1',
+        subtotal: 80,
+        totalTax: 12,
+        total: 92,
+        paymentStatus: 'PAID',
+        items: [
+          {
+            id: 'item-dev-1',
+            productId: 'prod-cap',
+            productName: 'Capuccino',
+            quantity: 1,
+            unitPrice: 70,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.15,
+            taxAmount: 12,
+            total: 92,
+            discount: 0,
+            modifiers: [
+              {
+                name: 'Leche: Almendras',
+                extraPrice: 10,
+                quantity: 1,
+                optionId: 'opt-almendras',
+                groupId: 'grp-leche',
+                inventoryEffect: 'SWAP',
+                effectTargetInsumoId: 'ins-leche-entera',
+                effectInsumoId: 'ins-leche-almendras',
+              },
+            ],
+          },
+        ],
+        payments: [],
+      };
+
+      await service.syncInvoices(tenantId, [dto]);
+
+      expect(modifierRepo.insert).toHaveBeenCalledWith([
+        expect.objectContaining({
+          invoiceItemId: 'item-dev-1',
+          name: 'Leche: Almendras',
+          quantity: 1,
+          optionId: 'opt-almendras',
+          groupId: 'grp-leche',
+          inventoryEffect: 'SWAP',
+          effectTargetInsumoId: 'ins-leche-entera',
+          effectInsumoId: 'ins-leche-almendras',
+          // No explicit quantity: the resolution INHERITS the recipe's own.
+          effectQuantity: null,
+          effectFactor: null,
+        }),
+      ]);
     });
 
     it('rejects cross-tenant item id collision before persisting any invoice/item', async () => {
@@ -1293,6 +1562,15 @@ describe('InvoicesService', () => {
   });
 
   describe('syncBatch', () => {
+    beforeEach(() => {
+      batchRows = [];
+      divergenceRepo = {
+        findOne: jest.fn().mockResolvedValue(null),
+        save: jest.fn(async (row: unknown) => row),
+        create: jest.fn((dto: unknown) => dto),
+      };
+    });
+
     const baseInvoice: SyncInvoiceDto = {
       id: 'inv-1',
       number: '001',
@@ -1365,6 +1643,74 @@ describe('InvoicesService', () => {
           type: MovementType.SALE,
           unitCostNio: 2,
           averageCostAfterNio: 2,
+        }),
+      );
+    });
+
+    it('DECLARES a batch-balance difference instead of rejecting the sale (FD-01)', async () => {
+      // The insumo's batches cannot cover the outflow. FD-01: that is NOT a
+      // rejection any more — the invoice is applied, the movement is applied,
+      // and the difference is DECLARED as a divergence. The old behaviour
+      // rejected the record, and that rejection blocked the fiscal stream:
+      // every later sale stopped landing in the cloud and the terminal's
+      // fiscal sequence froze.
+      batchRows = [
+        {
+          id: 'batch-1',
+          tenant_id: 'tenant-1',
+          insumo_id: 'ins-1',
+          batch_number: 'LOT-1',
+          remaining_stock: '1',
+          cost: '2',
+          expiration_date: null,
+          received_date: null,
+        },
+      ];
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue(null);
+      txManager.createQueryBuilder().getOne.mockResolvedValue({
+        stock: 10,
+        averageCost: 2,
+        id: 'ins-1',
+        tenant_id: 'tenant-1',
+      });
+      txManager.findOne.mockResolvedValue({ id: '2001' });
+
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'k-batch',
+          sourceDeviceId: 'd1',
+          sourceSequence: 1,
+          documentType: 'SALE',
+          // The v1 path (the one the deployed terminals use): it reports a
+          // per-record rejection with a code, instead of failing the batch.
+          flowType: 'sales',
+          invoice: { ...baseInvoice, id: 'inv-batch' },
+        },
+      ]);
+
+      // The record is ACCEPTED and says what did not add up.
+      const accepted = (result.results ?? []).find(
+        (entry) => entry.status === 'ACCEPTED',
+      );
+      expect(accepted).toBeDefined();
+      expect(accepted?.code).toBe('APPLIED_WITH_DIVERGENCE');
+      expect(accepted?.code).not.toBe('LOYALTY_IDEMPOTENCY_CONFLICT');
+      expect(accepted?.inventoryOutcome).toBe('APPLIED_WITH_DIVERGENCE');
+      expect(accepted?.inventoryOutcomeReason).toEqual(
+        expect.objectContaining({
+          code: 'INVENTORY_DIVERGENCE_DECLARED',
+        }),
+      );
+
+      // The difference is RECORDED (the tenant's work list), with the sale
+      // that caused it.
+      expect(divergenceRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          insumo_id: 'prod-1',
+          cause: 'LOT_COVERAGE_INSUFFICIENT',
+          status: 'OPEN',
         }),
       );
     });
@@ -1728,15 +2074,17 @@ describe('InvoicesService', () => {
 
       const result = await service.syncBatch('tenant-1', [
         {
+          // The failure is a BUSINESS RULE violation (an inbound delta with
+          // no frozen cost). FD-01: a difference in the INVENTORY (the lots
+          // not covering the outflow, the stock going negative) is no longer
+          // a failure — it is declared — so the blocking behaviour is proven
+          // with a failure that really is a failure.
           idempotencyKey: 'bad-1',
           sourceDeviceId: 'd1',
           sourceSequence: 1,
           flowType: 'inventory',
-          documentType: 'SALE',
-          invoice: {
-            ...baseInvoice,
-            items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
-          },
+          documentType: 'PURCHASE',
+          movements: [{ insumoId: 'ins-1', quantity: 2 }],
         },
         {
           idempotencyKey: 'blocked-2',
@@ -2050,6 +2398,65 @@ describe('InvoicesService', () => {
       );
     });
 
+    it('descends through a SUB_RECIPE component to the leaf insumo (R4)', async () => {
+      receiptRepo.findOne.mockResolvedValue(null);
+      recipeService.findActiveVersion.mockResolvedValue({ id: 'rv-sub' });
+      recipeService.getSnapshot.mockResolvedValue({
+        recipeVersion: { id: 'rv-sub' },
+        components: [
+          { insumo_id: 'ins-1', ingredient_type: 'INSUMO', quantity: 2 },
+          {
+            insumo_id: 'prod-sub',
+            ingredient_type: 'SUB_RECIPE',
+            quantity: 1,
+          },
+        ],
+      });
+      recipeService.getComponentsForActiveProduct.mockResolvedValue([
+        { insumo_id: 'ins-leaf', ingredient_type: 'INSUMO', quantity: 3 },
+      ]);
+      bomExplosionService.explodeWithSubRecipes.mockResolvedValue(
+        new Map<string, number>([
+          ['ins-1', 2],
+          ['ins-leaf', 3],
+        ]),
+      );
+      txManager
+        .createQueryBuilder()
+        .getOne.mockResolvedValueOnce({
+          id: 'ins-1',
+          stock: 20,
+          averageCost: 3,
+          tenant_id: 'tenant-1',
+        })
+        .mockResolvedValueOnce({
+          id: 'ins-leaf',
+          stock: 15,
+          averageCost: 2,
+          tenant_id: 'tenant-1',
+        });
+
+      await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'bom-sub-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 3,
+          documentType: 'SALE',
+          invoice: { ...baseInvoice },
+        },
+      ]);
+
+      // A SUB_RECIPE component routes to the recursive path; the flat path is
+      // never taken for it.
+      expect(bomExplosionService.explodeWithSubRecipes).toHaveBeenCalledWith(
+        expect.objectContaining({ rootProductId: 'prod-1' }),
+      );
+      expect(bomExplosionService.explode).not.toHaveBeenCalled();
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ insumoId: 'ins-leaf', quantity: -3 }),
+      );
+    });
+
     it('binds historical recipeVersionId from FOH sync payload when provided', async () => {
       receiptRepo.findOne.mockResolvedValue(null);
       recipeService.getSnapshot.mockResolvedValue({
@@ -2235,7 +2642,12 @@ describe('InvoicesService', () => {
       );
     });
 
-    it('rejects negative stock when insumo policy is restricted', async () => {
+    it('DECLARES the negative stock of a restricted insumo instead of rejecting the sale (FD-01)', async () => {
+      // FD-01: the sale happened and the goods left, so the movement applies
+      // and the breach of the tenant's own RESTRICT rule is DECLARED. The old
+      // behaviour rejected the record — and that rejection blocked the fiscal
+      // stream, which froze the terminal's sequence and the tenant's
+      // invoicing.
       receiptRepo.findOne.mockResolvedValue(null);
       recipeService.findActiveVersion.mockResolvedValue(null);
       txManager.createQueryBuilder().getOne.mockResolvedValue({
@@ -2246,20 +2658,37 @@ describe('InvoicesService', () => {
         tenant_id: 'tenant-1',
       });
 
-      await expect(
-        service.syncBatch('tenant-1', [
-          {
-            idempotencyKey: 'neg-reject-1',
-            sourceDeviceId: 'd1',
-            sourceSequence: 8,
-            documentType: 'SALE',
-            invoice: {
-              ...baseInvoice,
-              items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
-            },
+      const result = await service.syncBatch('tenant-1', [
+        {
+          idempotencyKey: 'neg-reject-1',
+          sourceDeviceId: 'd1',
+          sourceSequence: 8,
+          documentType: 'SALE',
+          invoice: {
+            ...baseInvoice,
+            items: [{ ...baseInvoice.items[0], quantity: 1.5 }],
           },
-        ]),
-      ).rejects.toThrow('Negative stock blocked by policy');
+        },
+      ]);
+
+      // The sale was NOT thrown away: it was applied.
+      expect(result.processed).toBe(1);
+
+      // The movement applies (the goods left) and the shortfall is recorded.
+      expect(movementRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE,
+          quantity: -1.5,
+          newStock: -1.5,
+        }),
+      );
+      expect(divergenceRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-1',
+          cause: 'DECLARED_STOCK_INSUFFICIENT',
+          status: 'OPEN',
+        }),
+      );
     });
 
     it('processes Topology A mixed batch with SALE and PURCHASE/SHRINKAGE/PRODUCTION deltas', async () => {
@@ -2399,9 +2828,10 @@ describe('InvoicesService', () => {
         return undefined;
       });
 
-      // The insumo (== product here) has restricted negative-stock policy
-      // and zero stock, so the SALE movement drives the stock negative and
-      // appendInventoryDeltas throws a BadRequestException.
+      // The failure happens AFTER the invoice was synced, while the movements
+      // are applied: the recipe resolution blows up. (FD-01: the negative
+      // stock is no longer a failure — it is declared — so the atomicity is
+      // proven with a failure that really is a failure.)
       txManager.createQueryBuilder().getOne.mockResolvedValue({
         id: 'prod-1',
         stock: 0,
@@ -2409,6 +2839,9 @@ describe('InvoicesService', () => {
         negativeStockPolicy: NEGATIVE_STOCK_POLICY.RESTRICT,
         tenant_id: 'tenant-1',
       });
+      recipeService.findActiveVersion.mockRejectedValue(
+        new Error('recipe service unavailable'),
+      );
 
       await expect(
         service.syncBatch('tenant-1', [
@@ -2423,7 +2856,7 @@ describe('InvoicesService', () => {
             },
           },
         ]),
-      ).rejects.toThrow('Negative stock blocked by policy');
+      ).rejects.toThrow('recipe service unavailable');
 
       // Invoice + items were routed THROUGH the transaction manager (the
       // tx-scoped repos received the upsert), proving they participate in

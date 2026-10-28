@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCreateInsumo, useUpdateInsumo } from "@/features/recipes/use-recipes";
 import type { Insumo, CreateInsumoInput } from "@/features/recipes/types";
@@ -11,6 +11,9 @@ import { api } from "@/lib/api";
 import { useTenantId } from "@/lib/tenant";
 import { useSafeSearchParams } from "@/lib/safe-search-params";
 import { getApiErrorMessage } from "@/lib/api-error";
+import { formatFactor } from "@/lib/utils";
+import { usePlatformUomCatalog } from "@/features/inventory/use-inventory-reports";
+import type { PlatformUomEntry } from "@/features/inventory/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,6 +90,7 @@ interface InsumoFormState {
   minStock: string;
   is_perishable: boolean;
   negativeStockPolicy: "ALLOW_TEMPORARY" | "RESTRICT";
+  ivaRatePct: string;
 }
 
 const DEFAULT_FORM: InsumoFormState = {
@@ -100,6 +104,7 @@ const DEFAULT_FORM: InsumoFormState = {
   minStock: "",
   is_perishable: false,
   negativeStockPolicy: "RESTRICT",
+  ivaRatePct: "",
 };
 
 const FACTOR_ERROR = "El factor de conversión debe ser mayor que 0.";
@@ -107,48 +112,16 @@ const FACTOR_PRESETS_HINT =
   "Selecciona las unidades para ver factores comunes.";
 
 /**
- * Common conversion-factor presets (founder, 2026-09-30): a fast path next
- * to the numeric input, derived from the purchase→consumption UoM pair.
- *
- * Only pairs with repo-evidenced factors are offered: KG↔G and L↔ML 1000
- * (industry template seeds: CreateIndustryTemplatesAndDefaults.ts — 'KG','G',
- * 1000 / 'L','ML', 1000), LB→G 454 (seed-soho-catalog.ts: libra→gramos,
- * conversionFactor 454) and DOCENA→UN 12 (seed-soho-catalog.ts: docena→
- * unidades, conversionFactor 12). No guessed factors for pairs the data does
- * not support (e.g. LB→OZ, CAJA→UN with inconsistent seed factors).
+ * Normalizes a unit of measure for the platform-catalog lookup: trimmed,
+ * lowercase and accent-free, so the stored uppercase codes ("LB", "G") and
+ * the catalog codes ("lb", "g") meet on the same key.
  */
-const FACTOR_PRESET_UOM_ALIASES: Record<string, string> = {
-  KGS: "KG",
-  KILO: "KG",
-  KILOGRAMO: "KG",
-  GRAMOS: "G",
-  LIBRAS: "LB",
-  LITROS: "L",
-  ML: "ML",
-  MILILITROS: "ML",
-  DOCENA: "DOCENA",
-  DOCENAS: "DOCENA",
-  UNIDADES: "UN",
-};
-
-const normalizeFactorUom = (raw: string): string => {
-  const value = raw.trim().toUpperCase();
-  return FACTOR_PRESET_UOM_ALIASES[value] ?? value;
-};
-
-const FACTOR_PRESETS: ReadonlyArray<{
-  purchaseUom: string;
-  consumptionUom: string;
-  factor: number;
-  testId: string;
-}> = [
-  { purchaseUom: "KG", consumptionUom: "G", factor: 1000, testId: "insumo-form-factor-preset-kg-g" },
-  { purchaseUom: "G", consumptionUom: "KG", factor: 0.001, testId: "insumo-form-factor-preset-g-kg" },
-  { purchaseUom: "LB", consumptionUom: "G", factor: 454, testId: "insumo-form-factor-preset-lb-g" },
-  { purchaseUom: "L", consumptionUom: "ML", factor: 1000, testId: "insumo-form-factor-preset-l-ml" },
-  { purchaseUom: "ML", consumptionUom: "L", factor: 0.001, testId: "insumo-form-factor-preset-ml-l" },
-  { purchaseUom: "DOCENA", consumptionUom: "UN", factor: 12, testId: "insumo-form-factor-preset-docena-un" },
-];
+const normalizeUomText = (raw: string): string =>
+  raw
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 
 function formsEqual(a: InsumoFormState, b: InsumoFormState): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -177,6 +150,7 @@ export function InsumosTab() {
   // UoM comes from the single shared units-of-measure catalog (UOM pool,
   // see admin_backend catalog-type.ts). Seeding populates it on first use.
   const { data: uomCatalog } = useCatalogValues("UOM");
+  const { data: platformUomCatalog } = usePlatformUomCatalog();
   const seedCatalogDefaults = useSeedCatalogDefaults();
   const uomOptions = useMemo(
     () => (uomCatalog ?? []).filter((v) => v.is_active),
@@ -220,6 +194,26 @@ export function InsumosTab() {
     return uomOptions;
   };
 
+  /**
+   * The PLATFORM catalog entry of a unit of measure, by code or alias. The
+   * platform catalog is protocol data (it carries the physical anchor
+   * factors), so it is fetched once and never invalidated.
+   */
+  const platformEntryFor = useCallback(
+    (raw: string): PlatformUomEntry | null => {
+      const value = normalizeUomText(raw);
+      if (!value) return null;
+      return (
+        (platformUomCatalog ?? []).find(
+          (entry) =>
+            normalizeUomText(entry.code) === value ||
+            entry.aliases.some((alias) => normalizeUomText(alias) === value),
+        ) ?? null
+      );
+    },
+    [platformUomCatalog],
+  );
+
   const isDirty = !formsEqual(form, initialForm);
   const saving = createInsumo.isPending || updateInsumo.isPending;
 
@@ -255,7 +249,7 @@ export function InsumosTab() {
       (ins) =>
         ins.name.toLowerCase().includes(term) ||
         (ins.purchaseUom || "").toLowerCase().includes(term) ||
-        (ins.consumptionUom || ins.consumption_uom || "").toLowerCase().includes(term),
+        (ins.consumptionUom || "").toLowerCase().includes(term),
     );
   }, [insumos, searchTerm]);
 
@@ -304,8 +298,8 @@ export function InsumosTab() {
       name: insumo.name,
       // Stored values without a catalog match still load raw; the select adds
       // them as fallback items so editing never loses the stored unit.
-      purchaseUom: insumo.purchaseUom || insumo.consumption_uom || "",
-      consumptionUom: insumo.consumptionUom || insumo.consumption_uom || "",
+      purchaseUom: insumo.purchaseUom || insumo.consumptionUom || "",
+      consumptionUom: insumo.consumptionUom || "",
       conversionFactor: String(insumo.conversionFactor ?? 1),
       averageCost: String(insumo.averageCost ?? 0),
       parLevel: insumo.parLevel != null ? String(insumo.parLevel) : "",
@@ -314,6 +308,7 @@ export function InsumosTab() {
       negativeStockPolicy: (insumo.negativeStockPolicy === "ALLOW_TEMPORARY"
         ? "ALLOW_TEMPORARY"
         : "RESTRICT"),
+      ivaRatePct: insumo.ivaRatePct != null ? String(insumo.ivaRatePct) : "",
     };
     setForm(values);
     setInitialForm(values);
@@ -333,17 +328,33 @@ export function InsumosTab() {
     }
   };
 
-  // Recognized purchase→consumption pair → the common presets for it. Unknown
-  // or blank pairs render the hint instead of a dead-end control (§33.2).
+  // Recognized purchase→consumption pair → the factor the PLATFORM catalog
+  // establishes for it. The factor is DERIVED from the anchor factors
+  // (factor = purchase.factorToAnchor / consumption.factorToAnchor), never
+  // hardcoded here: the previous hardcoded list offered 454 g per pound
+  // while the platform catalog establishes 453.59237, so the form suggested
+  // a value the server rejected on save ("el catálogo establece
+  // 453.59237"). Pairs the platform does not relate (container/serving, or
+  // a unit the tenant declared) render the hint instead of a dead-end
+  // control (§33.2) — their content is business data the operator declares.
   const factorPresets = useMemo(() => {
-    const purchaseUom = normalizeFactorUom(form.purchaseUom);
-    const consumptionUom = normalizeFactorUom(form.consumptionUom);
-    if (!purchaseUom || !consumptionUom) return null;
-    return FACTOR_PRESETS.filter(
-      (p) =>
-        p.purchaseUom === purchaseUom && p.consumptionUom === consumptionUom,
-    );
-  }, [form.purchaseUom, form.consumptionUom]);
+    const purchase = platformEntryFor(form.purchaseUom);
+    const consumption = platformEntryFor(form.consumptionUom);
+    if (!purchase || !consumption) return null;
+    if (purchase.code === consumption.code) return null;
+    if (purchase.factorToAnchor == null || consumption.factorToAnchor == null) {
+      return null;
+    }
+    if (purchase.dimension !== consumption.dimension) return null;
+    return [
+      {
+        purchaseUom: purchase.code.toUpperCase(),
+        consumptionUom: consumption.code.toUpperCase(),
+        factor: purchase.factorToAnchor / consumption.factorToAnchor,
+        testId: `insumo-form-factor-preset-${purchase.code}-${consumption.code}`,
+      },
+    ];
+  }, [form.purchaseUom, form.consumptionUom, platformEntryFor]);
 
   // §40: a preset FILLS the numeric input — the user still sees and edits the
   // value; nothing is applied silently and blur/submit validation is intact.
@@ -388,6 +399,8 @@ export function InsumosTab() {
       minStock: form.minStock.trim() === "" ? undefined : Number(form.minStock),
       is_perishable: form.is_perishable,
       negativeStockPolicy: form.negativeStockPolicy,
+      ivaRatePct:
+        form.ivaRatePct.trim() === "" ? null : Number(form.ivaRatePct),
     };
 
     try {
@@ -397,6 +410,7 @@ export function InsumosTab() {
           input: payload,
         });
         toast({
+          variant: "success",
           title: "Insumo actualizado",
           description: `Se guardaron los cambios de '${name}'.`,
         });
@@ -404,6 +418,7 @@ export function InsumosTab() {
       } else {
         await createInsumo.mutateAsync(payload);
         toast({
+          variant: "success",
           title: "Insumo creado",
           description: `El insumo '${name}' ya está disponible para recetas e inventario.`,
         });
@@ -430,6 +445,7 @@ export function InsumosTab() {
         input: { is_active: false },
       });
       toast({
+        variant: "success",
         title: "Insumo desactivado",
         description: `'${deactivateTarget.name}' ya no está disponible para recetas ni movimientos. Puedes reactivarlo cuando quieras.`,
       });
@@ -450,6 +466,7 @@ export function InsumosTab() {
     try {
       await updateInsumo.mutateAsync({ id: insumo.id, input: { is_active: true } });
       toast({
+        variant: "success",
         title: "Insumo reactivado",
         description: `'${insumo.name}' vuelve a estar disponible para recetas e inventario.`,
       });
@@ -550,7 +567,7 @@ export function InsumosTab() {
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredInsumos.map((ins) => {
-                  const consUom = ins.consumptionUom || ins.consumption_uom || "UN";
+                  const consUom = ins.consumptionUom || "UN";
                   const purchUom = ins.purchaseUom || consUom;
                   const factor = ins.conversionFactor ?? 1;
                   const isLow = ins.parLevel && ins.stock <= ins.parLevel;
@@ -599,6 +616,11 @@ export function InsumosTab() {
                           {ins.is_perishable && (
                             <Badge variant="secondary" className="text-[10px] bg-amber-100 text-amber-800 border-amber-200">
                               Perecedero
+                            </Badge>
+                          )}
+                          {Number(ins.ivaRatePct ?? 0) > 0 && (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border">
+                              IVA {Number(ins.ivaRatePct)}%
                             </Badge>
                           )}
                           {!ins.is_active && (
@@ -823,6 +845,7 @@ export function InsumosTab() {
                         seedCatalogDefaults.mutate(undefined, {
                           onSuccess: (result) => {
                             toast({
+                              variant: "success",
                               title: "Unidades de medida sembradas",
                               description: `Se agregaron ${result.inserted} unidades al catálogo.`,
                             });
@@ -880,7 +903,7 @@ export function InsumosTab() {
                             onClick={() => applyFactorPreset(preset.factor)}
                             className="inline-flex items-center rounded-md border border-border bg-background px-2 py-0.5 text-[10px] text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 cursor-pointer"
                           >
-                            1 {preset.purchaseUom} = {preset.factor} {preset.consumptionUom}
+                            1 {preset.purchaseUom} = {formatFactor(preset.factor)} {preset.consumptionUom}
                           </button>
                         ))}
                       </>
@@ -896,18 +919,24 @@ export function InsumosTab() {
                 </div>
                 <div className="space-y-1">
                   <Label htmlFor="average_cost" className="text-xs">
-                    Costo Promedio (C$)
+                    Costo por unidad de consumo ({form.consumptionUom.trim() ? `C$ por ${form.consumptionUom.trim()}` : "C$"})
                   </Label>
                   <Input
                     id="average_cost"
                     data-testid="insumo-form-cost"
                     type="number"
-                    step="0.01"
+                    step="any"
                     min="0"
                     placeholder="0.00"
                     value={form.averageCost}
                     onChange={(e) => setForm({ ...form, averageCost: e.target.value })}
                   />
+                  {form.purchaseUom.trim() && form.consumptionUom.trim() && Number(form.conversionFactor) > 1 && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Costo por {form.consumptionUom.trim()}: si compra 1 {form.purchaseUom.trim()} a C$100, ingrese{" "}
+                      {(100 / Number(form.conversionFactor)).toFixed(4)} (C$100 ÷ {form.conversionFactor}).
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -948,12 +977,59 @@ export function InsumosTab() {
                   id="is_perishable"
                   data-testid="insumo-form-perishable"
                   checked={form.is_perishable}
-                  onChange={(e) => setForm({ ...form, is_perishable: e.target.checked })}
+                  onChange={(e) => {
+                    // FD-03: marking the insumo as perishable does NOT change
+                    // its stock policy. The tenant decides whether it sells
+                    // without stock; the lots never refuse a sale.
+                    setForm({ ...form, is_perishable: e.target.checked });
+                  }}
                   className="rounded border-border text-primary focus:ring-primary h-4 w-4"
                 />
                 <Label htmlFor="is_perishable" className="text-xs font-normal cursor-pointer">
                   Materia prima perecedera (gestión estricta por lotes FIFO)
                 </Label>
+              </div>
+
+              <div className="space-y-1 pt-1">
+                <Label className="text-xs font-medium">Venta sin existencias</Label>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  {form.negativeStockPolicy === "ALLOW_TEMPORARY"
+                    ? "Permitida: el stock puede quedar negativo. Cada venta que lo haga genera una diferencia de inventario para conciliar en el backoffice."
+                    : "No permitida: si no hay existencias, la venta se rechaza antes de cobrar."}
+                  {form.is_perishable
+                    ? " Este insumo se maneja por lotes: las ventas se controlan por el stock declarado y el sobrante sin lote se concilia con un conteo."
+                    : ""}
+                </p>
+              </div>
+
+              <div className="space-y-1.5 pt-1">
+                <Label htmlFor="iva_rate_pct" className="text-xs font-medium">
+                  Tasa de IVA aplicable (%)
+                </Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="iva_rate_pct"
+                    data-testid="insumo-form-iva-rate"
+                    type="number"
+                    step="any"
+                    min="0"
+                    max="100"
+                    placeholder="Ej: 15"
+                    className="w-32"
+                    value={form.ivaRatePct}
+                    onChange={(e) =>
+                      setForm({ ...form, ivaRatePct: e.target.value })
+                    }
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {form.ivaRatePct.trim() === "" || Number(form.ivaRatePct) === 0
+                      ? "Exento de IVA / Sin tasa declarada"
+                      : `${form.ivaRatePct}% IVA declarado (exigirá costo neto en compras)`}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Declarar una tasa activará la guarda de costo neto en el registro de compras para registrar el inventario libre de impuestos recuperables.
+                </p>
               </div>
             </div>
 

@@ -23,6 +23,7 @@ import { api } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import type { Insumo } from "@/features/recipes/types";
 import type { CatalogValue } from "@/features/catalog/types";
+import type { PlatformUomEntry } from "@/features/inventory/types";
 
 vi.mock("@/features/recipes/use-recipes", () => ({
   useCreateInsumo: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
@@ -32,6 +33,20 @@ vi.mock("@/features/recipes/use-recipes", () => ({
 vi.mock("@/features/catalog/use-catalog", () => ({
   useCatalogValues: vi.fn(() => ({ data: [], isLoading: false })),
   useSeedCatalogDefaults: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+}));
+
+// The PLATFORM UoM catalog (protocol data with the physical anchor factors).
+// The insumo form derives the conversion factor of a purchase→consumption
+// pair from these anchors, so the suggested value can never be one the
+// server rejects.
+vi.mock("@/features/inventory/use-inventory-reports", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/features/inventory/use-inventory-reports")
+  >()),
+  usePlatformUomCatalog: vi.fn(() => ({
+    data: MOCK_PLATFORM_UOM_CATALOG,
+    isLoading: false,
+  })),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -69,6 +84,58 @@ function makeUom(code: string, name: string): CatalogValue {
     updated_at: "2026-01-01T00:00:00.000Z",
   };
 }
+
+const MOCK_PLATFORM_UOM_CATALOG: PlatformUomEntry[] = [
+  {
+    code: "g",
+    name: "gramo",
+    dimension: "mass",
+    factorToAnchor: 1,
+    aliases: ["gramo", "gramos", "g", "gr", "grs"],
+  },
+  {
+    code: "kg",
+    name: "kilogramo",
+    dimension: "mass",
+    factorToAnchor: 1000,
+    aliases: ["kilogramo", "kilogramos", "kg", "kilo", "kilos"],
+  },
+  {
+    code: "lb",
+    name: "libra",
+    dimension: "mass",
+    factorToAnchor: 453.59237,
+    aliases: ["libra", "libras", "lb", "lbs"],
+  },
+  {
+    code: "ml",
+    name: "mililitro",
+    dimension: "volume",
+    factorToAnchor: 1,
+    aliases: ["mililitro", "mililitros", "ml", "cc"],
+  },
+  {
+    code: "l",
+    name: "litro",
+    dimension: "volume",
+    factorToAnchor: 1000,
+    aliases: ["litro", "litros", "l", "lt", "lts"],
+  },
+  {
+    code: "unidad",
+    name: "unidad",
+    dimension: "count",
+    factorToAnchor: 1,
+    aliases: ["unidad", "unidades", "pieza", "piezas", "pieza entera", "u", "un"],
+  },
+  {
+    code: "docena",
+    name: "docena",
+    dimension: "count",
+    factorToAnchor: 12,
+    aliases: ["docena", "docenas", "dz"],
+  },
+];
 
 const MOCK_UOM_CATALOG: CatalogValue[] = [
   makeUom("kg", "Kilogramo"),
@@ -271,7 +338,7 @@ describe("InsumosTab", () => {
     await pickUom(user, "insumo-form-consumption-uom", "Gramo (g)");
     await user.clear(screen.getByTestId("insumo-form-conversion-factor"));
     await user.click(screen.getByTestId("insumo-form-conversion-factor"));
-    await user.keyboard("{Control>}a{/Control}454");
+    await user.keyboard("{Control>}a{/Control}453.59237");
     await user.click(screen.getByTestId("insumo-form-submit"));
 
     await waitFor(() => {
@@ -280,7 +347,7 @@ describe("InsumosTab", () => {
           name: "Azúcar Blanca",
           purchaseUom: "LB",
           consumptionUom: "G",
-          conversionFactor: 454,
+          conversionFactor: 453.59237,
         }),
       );
     });
@@ -649,9 +716,11 @@ describe("InsumosTab", () => {
     // (still visible and editable — nothing is applied silently, §40).
     const preset = await screen.findByTestId("insumo-form-factor-preset-lb-g");
     await user.click(preset);
+    // The PLATFORM anchor for a pound is 453.59237 g — the previous
+    // hardcoded 454 was rejected by the server on save.
     expect(
       screen.getByTestId("insumo-form-conversion-factor"),
-    ).toHaveValue(454);
+    ).toHaveValue(453.59237);
 
     // The filled value is an ordinary editable value: submit parses it.
     await user.type(screen.getByTestId("insumo-form-name"), "Queso Mozarella");
@@ -661,7 +730,7 @@ describe("InsumosTab", () => {
         expect.objectContaining({
           purchaseUom: "LB",
           consumptionUom: "G",
-          conversionFactor: 454,
+          conversionFactor: 453.59237,
         }),
       );
     });

@@ -33,4 +33,105 @@ export class InvoiceItemModifier {
   // (invoice_item_modifier_entity.dart:30).
   @Column('int', { default: 1 })
   quantity: number;
+
+  // --- R28: the IDENTITY of the option and its INVENTORY effect ----------
+  // The line used to carry only the modifier's NAME (free text), so neither
+  // the cloud nor the audit could tell WHICH option was sold, and a
+  // deviation from the recipe was invisible. These columns are the
+  // DEVIATION RECORD of the line: which option, what it did to the stock
+  // and with which quantity. All NULL for a line whose option is
+  // price-only (and for every line written by a terminal that predates
+  // R28), so nothing existing changes.
+
+  /** The backend's option id. NULL for legacy lines. */
+  @Column({ name: 'option_id', type: 'uuid', nullable: true })
+  optionId: string | null;
+
+  /** The group the option belongs to. NULL for legacy lines. */
+  @Column({ name: 'group_id', type: 'uuid', nullable: true })
+  groupId: string | null;
+
+  /** NONE / ADD / REMOVE / SWAP / SCALE. NULL for a price-only line. */
+  @Column({ name: 'inventory_effect', type: 'varchar', length: 16, nullable: true })
+  inventoryEffect: string | null;
+
+  /** The insumo the effect acts ON: added (ADD) or substituted in (SWAP). */
+  @Column({ name: 'effect_insumo_id', type: 'uuid', nullable: true })
+  effectInsumoId: string | null;
+
+  /** The insumo of the recipe component the effect affects. */
+  @Column({ name: 'effect_target_insumo_id', type: 'uuid', nullable: true })
+  effectTargetInsumoId: string | null;
+
+  /** The quantity to apply per sold unit. NULL = inherited from the recipe. */
+  @Column('decimal', {
+    precision: 14,
+    scale: 4,
+    name: 'effect_quantity',
+    nullable: true,
+  })
+  effectQuantity: number | null;
+
+  /** The multiplier of a SCALE. */
+  @Column('decimal', {
+    precision: 10,
+    scale: 4,
+    name: 'effect_factor',
+    nullable: true,
+  })
+  effectFactor: number | null;
+
+  // --- ME-04: the TRUTH of the effect, as the sale resolved it ----------
+  // A line whose effect did not touch the stock is a SALE THAT HAPPENED
+  // WITH A MISSING INVENTORY MOVEMENT. These columns are what makes that
+  // case visible and reconcilable in the cloud (and in the backoffice's
+  // pending list) instead of invisible until somebody reads the stock by
+  // hand.
+  //
+  // All NULLABLE and additive: a line written by a terminal that predates
+  // ME-04 (and a price-only line) keeps its exact shape.
+
+  /** APPLIED (the stock moved) or PENDING (the sale went through, the effect did not). */
+  @Column({ name: 'effect_status', type: 'varchar', length: 16, nullable: true })
+  effectStatus: string | null;
+
+  /** Why the effect did not apply (INCOMPLETE, UNIT_MISMATCH, …). */
+  @Column({
+    name: 'effect_skip_reason',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  effectSkipReason: string | null;
+
+  /** Where the applied quantity came from: DECLARED, INHERITED or OVERRIDE. */
+  @Column({
+    name: 'effect_quantity_source',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
+  effectQuantitySource: string | null;
+
+  /** The supervisor who authorized a quantity override, when one did. */
+  @Column({ name: 'effect_authorized_by', type: 'uuid', nullable: true })
+  effectAuthorizedBy: string | null;
+
+  /** The credential used for that authorization: PIN or TOTP. */
+  @Column({
+    name: 'effect_authorization_method',
+    type: 'varchar',
+    length: 16,
+    nullable: true,
+  })
+  effectAuthorizationMethod: string | null;
+
+  /** The reason given for that override. */
+  @Column({
+    name: 'effect_authorization_reason',
+    type: 'varchar',
+    length: 240,
+    nullable: true,
+  })
+  effectAuthorizationReason: string | null;
 }

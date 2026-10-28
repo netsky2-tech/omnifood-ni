@@ -109,6 +109,20 @@ describe('uom-catalog (platform)', () => {
       );
     });
 
+    it('accepts the four-decimal storage rounding of the anchor (numeric(12,4))', () => {
+      // The operator enters the exact anchor, the column stores four decimals,
+      // and the next write that touches a UOM field re-validates the STORED
+      // value. That round trip must not reject the value the catalog asked for.
+      expect(() => validateInsumoConversion('lb', 'kg', 0.4536)).not.toThrow();
+      expect(() =>
+        validateInsumoConversion('oz', 'g', 28.3495),
+      ).not.toThrow();
+      // A materially different factor is still rejected.
+      expect(() => validateInsumoConversion('lb', 'kg', 0.45)).toThrow(
+        /el catálogo establece/,
+      );
+    });
+
     it('rejects cross-dimension universal pairs (mass vs volume needs per-insumo density)', () => {
       expect(() => validateInsumoConversion('litro', 'gramos', 1000)).toThrow(
         /No existe conversión universal/,
@@ -131,6 +145,56 @@ describe('uom-catalog (platform)', () => {
       expect(() => validateInsumoConversion('kg', 'kg', 2)).toThrow(
         /misma unidad/,
       );
+    });
+  });
+
+  describe('tenant-declared units', () => {
+    // The operator owns the units of his own business ("arroba", "cajilla").
+    // The guard used to reject every one of them while its own message
+    // promised "Regístrala en el catálogo" — the only catalog it consulted
+    // was the platform one.
+    const tenantUomCodes = ['arroba', 'cajilla'];
+
+    it('resolves a unit the tenant registered in its own UOM catalog', () => {
+      expect(
+        resolveUom('arroba', tenantUomCodes)?.dimension,
+      ).toBe('tenant');
+      expect(resolveUom('arroba')?.dimension).toBeUndefined();
+    });
+
+    it('accepts a tenant unit paired with a platform unit as a content declaration', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'gramos', 15587.772, {
+          tenantUomCodes,
+        }),
+      ).not.toThrow();
+      expect(() =>
+        validateInsumoConversion('cajilla', 'unidad', 20, {
+          tenantUomCodes,
+        }),
+      ).not.toThrow();
+    });
+
+    it('still rejects the untouched factor-1 default for a tenant unit', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'gramos', 1, {
+          tenantUomCodes,
+        }),
+      ).toThrow(/Conversión no configurada/);
+    });
+
+    it('still rejects a unit that is in neither the platform nor the tenant catalog', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'gramos', 15587.772),
+      ).toThrow(/no está en el catálogo/);
+    });
+
+    it('rejects a factor other than 1 when both sides are the same tenant unit', () => {
+      expect(() =>
+        validateInsumoConversion('arroba', 'arroba', 2, {
+          tenantUomCodes,
+        }),
+      ).toThrow(/misma unidad/);
     });
   });
 });

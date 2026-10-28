@@ -27,6 +27,7 @@ import {
 import { FiscalConfigRevision } from '../../src/modules/onboarding/entities/fiscal-config-revision.entity';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../src/modules/tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -119,6 +120,9 @@ const ALL_TOUCHED_TABLES = [
 
 const entities = [
   Tenant,
+  // Company-identity parity P1: the activation path reads the tenant's brand
+  // assets through CompanyIdentityService, so the entity must be registered.
+  TenantBrandAsset,
   SystemParametersConfig,
   SystemParametersConfigActiveView,
   Product,

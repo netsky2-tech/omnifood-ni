@@ -8,6 +8,7 @@ import { ChangeLogService } from './change-log.service';
 import { AuditSummaryService } from './audit-summary.service';
 import { AuditEventsService } from './audit-events.service';
 import { AuditLogsService } from './audit-logs.service';
+import { SupervisionReviewService } from './supervision-review.service';
 import { AuditSummaryController } from './audit-summary.controller';
 
 /**
@@ -35,12 +36,14 @@ import { AuditSummaryController } from './audit-summary.controller';
     AuditSummaryService,
     AuditEventsService,
     AuditLogsService,
+    SupervisionReviewService,
   ],
   exports: [
     ChangeLogService,
     AuditSummaryService,
     AuditEventsService,
     AuditLogsService,
+    SupervisionReviewService,
     TypeOrmModule,
   ],
 })

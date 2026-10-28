@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecipesPage } from '@/features/recipes/recipes-page';
 import { RecipeForm } from '@/features/recipes/RecipeForm';
 import { useProducts } from '@/features/catalog/use-product';
-import { useActiveRecipe, useInsumos, useCreateRecipeVersion } from '@/features/recipes/use-recipes';
+import { useActiveRecipe, useActiveRecipes, useInsumos, useCreateRecipeVersion } from '@/features/recipes/use-recipes';
 import { toast } from '@/hooks/use-toast';
 import type { Product } from '@/features/catalog/product-types';
 import type { Insumo, RecipeSnapshot } from '@/features/recipes/types';
@@ -22,6 +22,11 @@ vi.mock('@/features/catalog/use-product', () => ({
 vi.mock('@/features/recipes/use-recipes', () => ({
   useActiveRecipe: vi.fn(() => ({
     data: null,
+    isLoading: false,
+    refetch: vi.fn(),
+  })),
+  useActiveRecipes: vi.fn(() => ({
+    data: [],
     isLoading: false,
     refetch: vi.fn(),
   })),
@@ -98,9 +103,9 @@ const MOCK_COMPOUND_PRODUCTS: Product[] = [
 ];
 
 const MOCK_INSUMOS: Insumo[] = [
-  { id: 'i1', tenant_id: 't1', name: 'Arroz', consumption_uom: 'kg', stock: 100, averageCost: 15, is_active: true },
-  { id: 'i2', tenant_id: 't1', name: 'Frijol', consumption_uom: 'kg', stock: 50, averageCost: 20, is_active: true },
-  { id: 'i3', tenant_id: 't1', name: 'Plátano', consumption_uom: 'un', stock: 200, averageCost: 5, is_active: true },
+  { id: 'i1', tenant_id: 't1', name: 'Arroz', consumptionUom: 'kg', stock: 100, averageCost: 15, is_active: true },
+  { id: 'i2', tenant_id: 't1', name: 'Frijol', consumptionUom: 'kg', stock: 50, averageCost: 20, is_active: true },
+  { id: 'i3', tenant_id: 't1', name: 'Plátano', consumptionUom: 'un', stock: 200, averageCost: 5, is_active: true },
 ];
 
 const MOCK_ACTIVE_RECIPE: RecipeSnapshot = {
@@ -153,6 +158,7 @@ beforeEach(() => {
   vi.mocked(useProducts).mockReturnValue({ data: [], isLoading: false, error: null, refetch: vi.fn() } as any);
   vi.mocked(useInsumos).mockReturnValue({ data: [], isLoading: false } as any);
   vi.mocked(useActiveRecipe).mockReturnValue({ data: null, isLoading: false, refetch: vi.fn() } as any);
+  vi.mocked(useActiveRecipes).mockReturnValue({ data: [], isLoading: false, refetch: vi.fn() } as any);
   vi.mocked(useCreateRecipeVersion).mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false } as any);
 });
 
@@ -188,6 +194,34 @@ describe('W7 — RecipesPage', () => {
     expect(screen.getAllByText('Inactivo').length).toBe(1);
   });
 
+  it('treats INACTIVE as a neutral lifecycle state, not an exception (Nhilos §26)', () => {
+    mockProducts();
+    render(<RecipesPage />, { wrapper: TestWrapper });
+
+    // A destructive badge misreports a quiet state as a problem; the
+    // inactive product carries the neutral badge, like the Insumos table.
+    const inactive = screen.getByText('Inactivo');
+    expect(inactive).toBeInTheDocument();
+    expect(inactive.className).toContain('bg-muted');
+    expect(inactive.className).not.toContain('destructive');
+  });
+
+  it('never claims "Sin receta vigente" while the recipe list is still loading (AP-02)', () => {
+    mockProducts();
+    vi.mocked(useActiveRecipes).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      refetch: vi.fn(),
+    } as any);
+
+    render(<RecipesPage />, { wrapper: TestWrapper });
+
+    // Unknown is not "no recipe": while the list is in flight the verdict is
+    // absent, and the create action is not offered on a guess.
+    expect(screen.queryByText('Sin receta vigente')).not.toBeInTheDocument();
+    expect(screen.queryByText('Crear Receta')).not.toBeInTheDocument();
+  });
+
   it('shows "Crear Receta" for all compound products without recipe', () => {
     mockProducts();
     render(<RecipesPage />, { wrapper: TestWrapper });
@@ -196,24 +230,46 @@ describe('W7 — RecipesPage', () => {
 
   it('shows active recipe info and "Editar Receta" button when recipe exists', async () => {
     mockProducts();
-    let callCount = 0;
-    vi.mocked(useActiveRecipe).mockImplementation(() => {
-      callCount++;
-      if (callCount <= 1) return { data: null, isLoading: false, refetch: vi.fn() } as any;
-      return { data: MOCK_ACTIVE_RECIPE, isLoading: false, refetch: vi.fn() } as any;
-    });
+    // The grid reads the RECIPE's own figures from the active-recipes list
+    // (one call for the whole grid), not from the selected product's
+    // snapshot.
+    vi.mocked(useActiveRecipes).mockReturnValue({
+      data: [
+        {
+          productId: 'p1',
+          productName: 'Gallopinto',
+          productUom: 'un',
+          recipeVersionId: 'rv1',
+          versionNumber: 1,
+          componentCount: 2,
+          yieldQuantity: 10,
+          technicalShrinkPct: 5,
+          versionNote: 'Receta original',
+          effectiveAt: '2026-01-01T00:00:00Z',
+          estimatedCostNio: 12.5,
+          costUnavailableReason: null,
+        },
+      ],
+      isLoading: false,
+      refetch: vi.fn(),
+    } as any);
 
-    const user = userEvent.setup();
     render(<RecipesPage />, { wrapper: TestWrapper });
-
-    await user.click(screen.getByText('Gallopinto'));
 
     await waitFor(() => {
       expect(screen.getByText(/Receta v1 activa/)).toBeInTheDocument();
     });
     expect(screen.getByText(/2 ingrediente/)).toBeInTheDocument();
-    expect(screen.getByText(/Rendimiento: 10/)).toBeInTheDocument();
+    // The card shows the RECIPE's figures: its cost and its yield — not the
+    // product's catalog price/stock, which never change with the recipe.
+    // Money uses the module's currency format — the same one the
+    // "Costo por plato" report uses for the very same figure.
+    expect(screen.getByText('C$12.50')).toBeInTheDocument();
+    expect(screen.getByText('10 un')).toBeInTheDocument();
     expect(screen.getByText('Editar Receta')).toBeInTheDocument();
+    // Only the product WITH a recipe offers "Editar"; the other two still
+    // offer "Crear".
+    expect(screen.getAllByText('Crear Receta').length).toBe(2);
   });
 
   it('filters products by search query', async () => {
@@ -305,6 +361,16 @@ describe('W7 — RecipeForm', () => {
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     expect(screen.getAllByDisplayValue('5').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByDisplayValue('Receta original')).toBeInTheDocument();
+  });
+
+  it('states the scope of the edit: a new version, the previous one kept as history (Nhilos §22)', () => {
+    render(
+      <RecipeForm {...defaultProps} existingRecipe={MOCK_ACTIVE_RECIPE} />,
+      { wrapper: TestWrapper },
+    );
+    const scope = screen.getByTestId('recipe-form-edit-scope');
+    expect(scope).toHaveTextContent(/se publica la versión 2/i);
+    expect(scope).toHaveTextContent(/historial/i);
   });
 
   it('calls onCancel when cancel is clicked', async () => {

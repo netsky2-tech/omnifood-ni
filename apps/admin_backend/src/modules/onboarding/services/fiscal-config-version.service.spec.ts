@@ -11,6 +11,7 @@ import {
 } from '../../../core/database/tenant-transaction';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -29,6 +30,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
   let revisionRepo: jest.Mocked<Repository<FiscalConfigRevision>>;
   let tenantRepo: jest.Mocked<Repository<Tenant>>;
   let sysParamRepo: jest.Mocked<Repository<SystemParametersConfigActiveView>>;
+  // P3 slice 1: the snapshot reads the logo REFERENCE from the brand-asset
+  // table; the mock resolves it to "no logo" unless a test seeds a row.
+  let brandAssetRepo: jest.Mocked<Repository<TenantBrandAsset>>;
   let dataSource: jest.Mocked<DataSource>;
   let mockManager: jest.Mocked<EntityManager>;
 
@@ -39,6 +43,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
     name: 'Restaurante El Volcán',
     slug: normalizeTenantSlug('Restaurante El Volcán'),
     ruc: 'J0310000000001',
+    phone: '+505 2255-0000',
+    email: 'facturacion@elvolcan.ni',
+    address: 'Km 12 Carretera Sur, Managua',
     is_active: true,
     created_at: new Date('2026-01-01'),
     updated_at: new Date('2026-01-01'),
@@ -117,6 +124,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       find: jest.fn().mockResolvedValue(mockParams),
     } as unknown as jest.Mocked<Repository<SystemParametersConfigActiveView>>;
 
+    brandAssetRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    } as unknown as jest.Mocked<Repository<TenantBrandAsset>>;
+
     mockManager = {
       query: jest.fn().mockResolvedValue(undefined),
       getRepository: jest.fn((target: unknown) => {
@@ -124,6 +135,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         // Issue #377: configuration reads resolve through the
         // active-configuration view instead of the append-only table.
         if (target === SystemParametersConfigActiveView) return sysParamRepo;
+        if (target === TenantBrandAsset) return brandAssetRepo;
         if (target === FiscalConfigRevision) return revisionRepo;
         throw new Error(
           `Unexpected repository target: ${(target as { name?: string }).name ?? '<anonymous>'}`,
@@ -162,6 +174,11 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         tenantId,
         businessName: 'Restaurante El Volcán',
         ruc: 'J0310000000001',
+        // Company identity parity P1: the contact identity rides the
+        // fingerprinted payload; absence would read as null (S3).
+        phone: '+505 2255-0000',
+        address: 'Km 12 Carretera Sur, Managua',
+        email: 'facturacion@elvolcan.ni',
         fiscalRegime: FiscalRegime.REGIMEN_GENERAL,
         taxRate: 0.15,
         pricesIncludeTax: true,
@@ -180,6 +197,13 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         // the fingerprinted payload as null, same school as D-4.
         maxDiscountAmount: null,
         maxDiscountPercent: null,
+        // P3 slice 1: no brand asset seeded in this mock — the logo
+        // REFERENCE rides as null (never the bytes).
+        logoSha256: null,
+        // The tenant's supervision policy rides the same fingerprinted
+        // payload: unconfigured reads as null (the terminal keeps the
+        // default for its operation mode).
+        supervisionPolicy: null,
       });
 
       const fingerprint = service.computeCanonicalFingerprint(payload);
@@ -255,20 +279,49 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       expect(snapshot.dgiAuthorizationExpiresAt).toBe('2026-01-15');
     });
 
+    it('exposes the company identity (phone, address, email) in the config snapshot for cloud sync (P1, S2 — the existing versioned channel)', async () => {
+      revisionRepo.findOne.mockResolvedValue(null);
+
+      const snapshot = await service.getFiscalConfigSnapshot(tenantId);
+
+      expect(snapshot.phone).toBe('+505 2255-0000');
+      expect(snapshot.address).toBe('Km 12 Carretera Sur, Managua');
+      expect(snapshot.email).toBe('facturacion@elvolcan.ni');
+    });
+
+    it('reads unconfigured identity fields as null in the payload (S3 — absence is declared, never "")', async () => {
+      tenantRepo.findOne.mockResolvedValueOnce({
+        ...mockTenant,
+        phone: null,
+        address: null,
+        email: null,
+      });
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+
+      expect(payload.phone).toBeNull();
+      expect(payload.address).toBeNull();
+      expect(payload.email).toBeNull();
+    });
+
     it('covers the DGI authorization fields in the fingerprint: configuring a code changes it', async () => {
-      const payloadWithoutDgi = await service.getEffectiveFiscalPayload(tenantId);
-      const fingerprintWithoutDgi = service.computeCanonicalFingerprint(payloadWithoutDgi);
+      const payloadWithoutDgi =
+        await service.getEffectiveFiscalPayload(tenantId);
+      const fingerprintWithoutDgi =
+        service.computeCanonicalFingerprint(payloadWithoutDgi);
 
       sysParamRepo.find.mockResolvedValueOnce(paramsWithDgi);
       const payloadWithDgi = await service.getEffectiveFiscalPayload(tenantId);
-      const fingerprintWithDgi = service.computeCanonicalFingerprint(payloadWithDgi);
+      const fingerprintWithDgi =
+        service.computeCanonicalFingerprint(payloadWithDgi);
 
       expect(fingerprintWithDgi).not.toBe(fingerprintWithoutDgi);
     });
 
     it('records a strictly higher revision when the DGI authorization code changes', async () => {
       const baselinePayload = await service.getEffectiveFiscalPayload(tenantId);
-      const baselineFingerprint = service.computeCanonicalFingerprint(baselinePayload);
+      const baselineFingerprint =
+        service.computeCanonicalFingerprint(baselinePayload);
 
       const existingRevision: FiscalConfigRevision = {
         id: 'rev-1-id',
@@ -517,10 +570,9 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
       expect(Object.keys(oldShape)).not.toContain('maxDiscountAmount');
 
       const newShapeFingerprint = service.computeCanonicalFingerprint(newShape);
-      const oldShapeFingerprint =
-        service.computeCanonicalFingerprint(
-          oldShape as unknown as EffectiveFiscalPayload,
-        );
+      const oldShapeFingerprint = service.computeCanonicalFingerprint(
+        oldShape as unknown as EffectiveFiscalPayload,
+      );
 
       // The shape change alone (no configuration change) alters the
       // fingerprint — the documented re-fingerprint wave.
@@ -593,6 +645,10 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         tenantId,
         businessName: 'Old Business Name',
         ruc: 'J0310000000001',
+        phone: null,
+        address: null,
+        email: null,
+        logoSha256: null,
         fiscalRegime: FiscalRegime.CUOTA_FIJA,
         taxRate: 0.0,
         pricesIncludeTax: true,
@@ -604,6 +660,7 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         dgiAuthorizationExpiresAt: null,
         maxDiscountAmount: null,
         maxDiscountPercent: null,
+        supervisionPolicy: null,
       };
       const oldFingerprint = service.computeCanonicalFingerprint(oldPayload);
 

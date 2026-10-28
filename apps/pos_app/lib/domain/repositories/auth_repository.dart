@@ -1,5 +1,31 @@
 import '../models/auth/terminal_linking.dart';
+import '../models/config/supervision_policy.dart';
 import '../models/user.dart';
+
+/// One person whose credential matches the one the operator typed.
+class CredentialMatch {
+  final String userId;
+  final String userName;
+  final String userRole;
+
+  /// The person counts as a supervisor under the tenant's policy.
+  final bool isAuthorizingRole;
+
+  const CredentialMatch({
+    required this.userId,
+    required this.userName,
+    required this.userRole,
+    required this.isAuthorizingRole,
+  });
+
+  factory CredentialMatch.of(User user, {required bool isAuthorizingRole}) =>
+      CredentialMatch(
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role.name,
+        isAuthorizingRole: isAuthorizingRole,
+      );
+}
 
 abstract class AuthRepository {
   bool get isPendingSync;
@@ -20,6 +46,25 @@ abstract class AuthRepository {
   Future<void> syncStaff();
   Future<User?> loginOffline(String userId, String pin);
   Future<bool> authorizeOverride({required String supervisorId, String? pin, String? totpCode});
+
+  /// Identifies WHO a credential belongs to, without anybody typing an
+  /// identifier.
+  ///
+  /// The credential is the PIN (or the TOTP) of the person: the terminal
+  /// verifies it against the LOCAL staff template and says who it is. That
+  /// is the whole point of the change: nobody memorizes a uuid, and the
+  /// operator at the till only knows their own PIN.
+  ///
+  /// It returns EVERY match, because the same PIN can be shared by more than
+  /// one member of the staff: the caller then asks which one, by name.
+  ///
+  /// The answer is computed OFFLINE: the terminal must be able to authorize
+  /// a shift close with the WiFi down.
+  Future<List<CredentialMatch>> identifyByCredential({
+    required String credential,
+    required SupervisionPolicy policy,
+    String? userId,
+  });
   Future<User?> getCurrentUser();
   Future<String?> getAccessToken();
   Future<void> logout();

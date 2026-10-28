@@ -10,6 +10,19 @@ export interface ExplodeBomInput {
   orderQuantity: number;
 }
 
+/**
+ * R4 (S7): whether a recipe actually needs the recursive explosion. Keeping
+ * the single-level path for a recipe with no SUB_RECIPE component preserves
+ * the exact existing behaviour (and its tests); the recursion only runs where
+ * it can add ingredients.
+ */
+export const hasSubRecipeComponent = (
+  components: RecipeDetail[],
+): boolean =>
+  components.some(
+    (component) => component.ingredient_type === 'SUB_RECIPE',
+  );
+
 export interface ExplodeRecursiveBomInput {
   rootProductId: string;
   orderQuantity: number;
@@ -61,6 +74,34 @@ export class BomExplosionService {
     return new Map(
       [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)),
     );
+  }
+
+  /**
+   * R4 (S7): the explosion the live consumption paths use. It is
+   * `explodeRecursive` with the root's components already in hand, so the root
+   * is not fetched twice, and every SUB_RECIPE component is resolved through
+   * `resolveSubRecipeComponents`. For a recipe with no SUB_RECIPE component it
+   * is exactly `explode`, which is what keeps the existing single-level
+   * behaviour intact.
+   */
+  async explodeWithSubRecipes(input: {
+    rootProductId: string;
+    orderQuantity: number;
+    rootComponents: RecipeDetail[];
+    resolveSubRecipeComponents: (
+      productId: string,
+    ) => Promise<RecipeDetail[]> | RecipeDetail[];
+    maxDepth?: number;
+  }): Promise<Map<string, number>> {
+    return this.explodeRecursive({
+      rootProductId: input.rootProductId,
+      orderQuantity: input.orderQuantity,
+      maxDepth: input.maxDepth,
+      getRecipeComponents: (productId) =>
+        productId === input.rootProductId
+          ? input.rootComponents
+          : input.resolveSubRecipeComponents(productId),
+    });
   }
 
   private async _explodeInternal(

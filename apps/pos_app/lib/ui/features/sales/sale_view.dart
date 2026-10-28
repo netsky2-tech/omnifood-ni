@@ -1,7 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/inventory/product.dart';
+import '../../../domain/usecases/inventory/authority_sale_time.dart';
+import '../../../domain/usecases/inventory/modifier_effect_preview.dart';
+import '../../../domain/models/config/supervision_policy.dart';
+import '../../../domain/services/config/tenant_config_service.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../domain/services/config/discount_policy_service.dart';
 import '../../../domain/services/printer/kitchen_modifier_lines.dart';
@@ -17,6 +23,7 @@ import '../../../core/localization/label_map.dart';
 import '../../../core/navigation/route_observer.dart';
 import '../../widgets/app_drawer.dart';
 import '../../features/identity/supervisor_override_modal.dart';
+import '../../features/identity/supervisor_authorization.dart';
 import '../../design_system/design_system.dart';
 import '../cash/cash_shift_view_model.dart';
 import '../cash/widgets/close_shift_dialog.dart' show showCloseShiftFlow;
@@ -26,11 +33,14 @@ import 'widgets/product_card.dart';
 import 'widgets/product_card_thumbnail.dart';
 import 'widgets/product_grid_geometry.dart';
 import 'widgets/multi_currency_checkout_dialog.dart';
+import 'widgets/modifier_quantity_override_content.dart';
+import 'widgets/modifier_quantity_dialog.dart';
 import 'widgets/tip_dialog.dart';
 import 'widgets/split_bill_dialog.dart';
 import 'widgets/cloud_sync_status_badge.dart';
 import 'widgets/fx_rate_block_banner.dart';
 import 'widgets/inventory_enrichment_warning_banner.dart';
+import 'widgets/inventory_divergence_banner.dart';
 import 'tables/table_layout_view.dart';
 import '../../../presentation/features/sales/widgets/customer_select_dialog.dart';
 import '../config/business_profile/fiscal_authorization_expiry_notice_widget.dart';
@@ -253,6 +263,11 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
       if (mounted) {
         context.read<SaleViewModel>().setSearchQuery('');
         context.read<SaleViewModel>().checkActiveSession();
+        // The operator can change (the offline operator switch) while this
+        // screen's view model survives: the role-gated operations must use
+        // the operator who is ACTUALLY at the till, not the one who was
+        // there when the app started.
+        context.read<SaleViewModel>().reloadOperatorContext();
       }
     });
   }
@@ -498,7 +513,9 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                         dense: true,
                       ),
                     ),
-                    if (hasActiveSession && viewModel.canManageCashDrawer)
+                    if (hasActiveSession &&
+                        (viewModel.canManageCashDrawer ||
+                            viewModel.canCloseOwnShift))
                       const PopupMenuItem(
                         value: 'manual_drawer',
                         child: ListTile(
@@ -508,7 +525,9 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                           dense: true,
                         ),
                       ),
-                    if (hasActiveSession && viewModel.canManageCashDrawer)
+                    if (hasActiveSession &&
+                        (viewModel.canManageCashDrawer ||
+                            viewModel.canCloseOwnShift))
                       const PopupMenuItem(
                         value: 'close_box',
                         child: ListTile(
@@ -555,13 +574,15 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
                   tooltip: 'Poner en Espera',
                 ),
                 const CloudSyncStatusBadge(),
-                if (hasActiveSession && viewModel.canManageCashDrawer)
+                if (hasActiveSession &&
+                    (viewModel.canManageCashDrawer || viewModel.canCloseOwnShift))
                   IconButton(
                     icon: const Icon(Icons.point_of_sale),
                     onPressed: () => _requestSupervisorOverrideForManualDrawer(),
                     tooltip: 'Abrir Gaveta Manual',
                   ),
-                if (hasActiveSession && viewModel.canManageCashDrawer)
+                if (hasActiveSession &&
+                    (viewModel.canManageCashDrawer || viewModel.canCloseOwnShift))
                   IconButton(
                     icon: const Icon(Icons.lock_open),
                     onPressed: () => _requestSupervisorOverrideForCloseBox(),
@@ -583,6 +604,10 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
           ? Column(
               children: [
                 const InventoryEnrichmentWarningBanner(),
+                // FD-01: the sales the cloud applied while declaring that
+                // part of the stock was not backed. Informational only — it
+                // never blocks a sale, a shift close or the DGI numbering.
+                const InventoryDivergenceBanner(),
                 if (catalogCategories.isNotEmpty)
                   CategoryFilterBar(
                     categories: catalogCategories,
@@ -811,46 +836,16 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
   // TODO: Implementar funcionalidad de devoluciones/notas de crédito
   // void _showReturnsDialog(BuildContext context) { ... }
 
+  /// The Corte Z close.
+  ///
+  /// The credential gate and the forensic record live in the SHARED close
+  /// flow (`showCloseShiftFlow`), so both doors of the same fiscal act —
+  /// this one and the Control de Caja button — behave identically: the
+  /// operator who is not an owner/manager identifies with their credential,
+  /// the tenant's policy decides whether they may sign it alone, and the
+  /// act is always recorded. Asking here as well would ask twice.
   Future<void> _requestSupervisorOverrideForCloseBox() async {
-    final authRepo = context.read<AuthRepository>();
-    final currentUser = await authRepo.getCurrentUser();
-
-    // Si el usuario ya es Owner o Manager, abrir directamente el corte Z
-    if (currentUser?.role == UserRole.owner || currentUser?.role == UserRole.manager) {
-      if (mounted) await _openUnifiedZClose();
-      return;
-    }
-
-    final auditRepo = context.read<AuditRepository>();
-
-    final authorized = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => SupervisorOverrideModal(
-        onAuthorize: (request) {
-          final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          final method = request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
-          return auditRepo.logForensic(
-            'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: '{"action":"close_box"}',
-          );
-        },
-      ),
-    );
-
-    if (!mounted) return;
-    if (authorized == true) {
-      await _openUnifiedZClose();
-    }
+    if (mounted) await _openUnifiedZClose();
   }
 
   /// T7 (unified close): the weak parallel close (CloseBoxDialog /
@@ -868,37 +863,43 @@ class _SaleViewState extends State<SaleView> with WidgetsBindingObserver, RouteA
 
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
+    final policy = await tenantSupervisionPolicy(context);
 
-    final authorized = await showDialog<bool>(
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
-        onAuthorize: (request) {
-          final pin = request.method == SupervisorAuthorizationMethod.pin ? request.credential : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp ? request.credential : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          final method = request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
-          return auditRepo.logForensic(
-            'DRAWER_OPENED_MANUALLY',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: '{"action":"manual_drawer_open","justification":"$justification"}',
-          );
-        },
+        onAuthorize: (request) => authorizeWithPolicy(
+          authRepository: authRepo,
+          policy: policy,
+          request: request,
+          selfAuthorizationAllowed: policy.selfAuthorizationAllowedCashDrawer,
+        ),
       ),
     );
 
-    if (!mounted) return;
-    if (authorized == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Apertura manual de gaveta autorizada y auditada.')),
-      );
-    }
+    if (!mounted || outcome == null || !outcome.authorized) return;
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'DRAWER_OPENED_MANUALLY'
+          : 'SELF_AUTHORIZED_DRAWER_OPENED',
+      metodoAutorizacion: outcome.method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'manual_drawer_open',
+        'justification': justification,
+        'self_authorized': !outcome.isAuthorizingRole,
+      }),
+    );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          outcome.isAuthorizingRole
+              ? 'Apertura manual de gaveta autorizada y auditada.'
+              : 'Apertura manual de gaveta sin supervisor: queda auditada '
+                  'para su revisión.',
+        ),
+      ),
+    );
   }
 
   Future<String?> _promptJustification(BuildContext context) async {
@@ -1267,10 +1268,96 @@ class ProductGrid extends StatelessWidget {
 
 class ProductOptionsDialog extends StatefulWidget {
   final Product product;
-  const ProductOptionsDialog({super.key, required this.product});
+
+  /// The instant the dialog resolves the ACTIVE recipe version against.
+  ///
+  /// Injectable so a test can pin the instant — and the timezone — it
+  /// asserts on. The authority stores `effective_from` in UTC; a LOCAL
+  /// wall-clock string compared against it makes the dialog believe a
+  /// version published minutes ago is not yet in force (the rig showed
+  /// exactly that: the inherited quantity never reached the operator in
+  /// Nicaragua's UTC-6).
+  final DateTime? now;
+
+  const ProductOptionsDialog({
+    super.key,
+    required this.product,
+    this.now,
+  });
 
   @override
   State<ProductOptionsDialog> createState() => _ProductOptionsDialogState();
+}
+
+/// What the dialog needs to know about a RECIPE COMPONENT: the quantity it
+/// consumes per sold unit (the quantity an effect INHERITS) and its unit.
+class _RecipeComponentFact {
+  const _RecipeComponentFact({
+    required this.insumoId,
+    required this.quantityPerSaleUnit,
+    required this.unit,
+  });
+
+  final String insumoId;
+  final double quantityPerSaleUnit;
+  final String? unit;
+}
+
+/// What the dialog needs to know about an INSUMO: its name and the unit its
+/// stock is kept in.
+class _InsumoFact {
+  const _InsumoFact({required this.name, required this.unit});
+
+  final String name;
+  final String? unit;
+}
+
+/// The affordance that opens the supervisor override for an option whose
+/// effect has no quantity of its own.
+///
+/// A verb and its object (§39.1): the operator reads what the button does.
+class _QuantityOverrideAction extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _QuantityOverrideAction({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton(
+        key: const Key('modifier_override_action'),
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          // The target tactile size (§18.3): the button is a control the
+          // operator uses with a wet finger, not a caption.
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+        child: const Text('AJUSTAR CANTIDAD'),
+      ),
+    );
+  }
+}
+
+/// A quantity a SUPERVISOR authorized for an option whose effect had no
+/// quantity of its own.
+///
+/// The override is the only way the cashier can put a number on an extra, and
+/// it is never the cashier's decision alone: it needs a supervisor, a reason,
+/// and a forensic trace.
+class _EffectOverride {
+  const _EffectOverride({
+    required this.quantity,
+    required this.supervisorId,
+    required this.method,
+    required this.reason,
+  });
+
+  final double quantity;
+  final String supervisorId;
+  final String method;
+  final String reason;
 }
 
 class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
@@ -1283,8 +1370,374 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
   final Map<String, String> _selectedRadioOption = {};
   final Map<String, bool> _checkedOptions = {};
   final Map<String, int> _optionQuantities = {};
+  // R28 (decisión del owner: "el backoffice manda"): el cajero NO escribe
+  // cantidades de extras. La cantidad la configura el backoffice
+  // (`effectQuantity` de la opción) y, cuando no hay ninguna, la hereda del
+  // componente de la receta. El ÚNICO caso en el que alguien pone un número
+  // es un override de supervisor, con motivo y autorización.
+  final Map<String, _EffectOverride> _effectOverrides = {};
+  // R28: the facts the dialog needs to tell the operator what the option
+  // does to the stock: the live recipe's components (the inherited
+  // quantity) and the insumos' names and units.
+  Map<String, _RecipeComponentFact> _recipeComponents = {};
+  Map<String, _InsumoFact> _insumoFacts = {};
   // Inline error shows only while the required group is still unsatisfied.
   bool _showMissingGroupError = false;
+
+  /// R28: reads the facts the effect needs — the live recipe's components
+  /// (the quantity an effect inherits) and the insumos' names and units.
+  ///
+  /// It NEVER blocks the dialog: a terminal whose authority is not hydrated
+  /// yet simply shows the effect without the inherited number, and the
+  /// quantity is inherited at sale time anyway. Failing to read the facts
+  /// must not stop the cashier from selling (§39.3, and the SOHO
+  /// guarantee: a failure of this feature degrades the inventory, never the
+  /// sale).
+  Future<void> _loadEffectFacts() async {
+    final options = <EffectiveModifierOption>[
+      for (final group in widget.product.availableModifierGroups) ...group.options,
+    ];
+    if (options.every((o) => o.inventoryEffect == 'NONE')) {
+      return;
+    }
+    try {
+      final database = context.read<AppDatabase>();
+      final tenantId =
+          (await database.localConfigDao.getConfigByKey('tenant_id'))?.value ??
+              '';
+      if (tenantId.isEmpty) return;
+
+      // The INSUMO facts (name and unit) do NOT depend on the recipe: they
+      // are read first, and ALWAYS. A product without a recipe still has to
+      // say WHAT the extra takes out of the stock ("Saca 30 ml de jarabe"),
+      // not the vague "el insumo" — and the pending case (no recipe) is
+      // exactly where the operator most needs the name.
+      final insumoFacts = <String, _InsumoFact>{};
+      final referenced = <String>{};
+      for (final option in options) {
+        if (option.effectInsumoId != null) referenced.add(option.effectInsumoId!);
+        if (option.effectTargetInsumoId != null) {
+          referenced.add(option.effectTargetInsumoId!);
+        }
+      }
+      for (final insumoId in referenced) {
+        final insumo =
+            await database.authorityProjectionDao.findInsumoById(tenantId, insumoId);
+        if (insumo == null) continue;
+        insumoFacts[insumoId] = _InsumoFact(
+          name: insumo.name,
+          unit: insumo.uom.isEmpty ? null : insumo.uom,
+        );
+      }
+      if (insumoFacts.isNotEmpty && mounted) {
+        setState(() => _insumoFacts = insumoFacts);
+      }
+
+      final versions =
+          await database.authorityProjectionDao.findActivePublishedVersions(
+        tenantId,
+        widget.product.id,
+        // The authority keeps `effective_from` in UTC and the checkout path
+        // compares in UTC (`invoice.createdAt.toUtc()`). The dialog must
+        // compare in the same frame: a LOCAL wall-clock string made a
+        // version published minutes ago look "not yet in force" in every
+        // timezone behind UTC — the operator lost the inherited quantity
+        // (and the names that come with it) exactly where they needed it.
+        authoritySaleTime(widget.now ?? DateTime.now()),
+      );
+      if (versions.isEmpty) return;
+      final version = versions.first;
+      final components = await database.authorityProjectionDao.findComponentsByVersion(
+        tenantId,
+        version.id,
+      );
+
+      final yieldQuantity = version.yieldQuantity > 0 ? version.yieldQuantity : 1;
+      final facts = <String, _RecipeComponentFact>{};
+      for (final component in components) {
+        if (component.ingredientType != 'INSUMO') continue;
+        facts[component.insumoId] = _RecipeComponentFact(
+          insumoId: component.insumoId,
+          // The SAME formula the explosion uses: the gross quantity, less the
+          // technical shrink, spread over the yield (the per-sold-unit
+          // consumption).
+          quantityPerSaleUnit:
+              (component.grossQuantity *
+                      (1 - component.technicalShrinkPct / 100)) /
+                  yieldQuantity,
+          unit: component.componentUom,
+        );
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _recipeComponents = facts;
+      });
+    } catch (_) {
+      // The facts are a convenience for the operator, never a gate.
+    } finally {
+      // Nada que limpiar: mientras los hechos no llegan, el número heredado
+      // simplemente no se muestra.
+    }
+  }
+
+  /// R28: the line under an option that declares an inventory effect — what
+  /// it does to the stock, and how much.
+  ///
+  /// A price-only option shows nothing: the overwhelming majority of the
+  /// options in a food park are just a price, and a line under every one of
+  /// them would be noise (the restraint filter).
+  ///
+  /// The number announced is ALWAYS the one that will be applied: the one the
+  /// backoffice configured, or — when it configured none — the one the recipe
+  /// component consumes. The cashier never writes a quantity: the field that
+  /// used to live here is gone, and what remains is a sentence about the stock
+  /// and, when the effect has no quantity of its own, a supervisor's way to
+  /// authorize one.
+  Widget? _effectSubtitle(EffectiveModifierOption option) {
+    final preview = _previewOf(option);
+    if (preview == null) return null;
+    final theme = Theme.of(context);
+    final override = _effectOverrides[option.id];
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            preview.explanation,
+            style: theme.textTheme.bodySmall,
+          ),
+          if (override != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Cantidad ajustada a ${_trimQuantity(override.quantity)}'
+                '${_effectUnitOf(option) == null ? '' : ' ${_effectUnitOf(option)}'} '
+                'con autorización de supervisor.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: NhilosColors.brandTealLight,
+                ),
+              ),
+            ),
+          if (preview.isPending && override == null) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                preview.pendingNote,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: NhilosColors.warning,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            _QuantityOverrideAction(
+              onPressed: () => _requestQuantityOverride(option),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Asks a supervisor to authorize the quantity of an option that has none.
+  ///
+  /// The override needs three things and the product does not give it up
+  /// without them: the AMOUNT, the REASON and the SUPERVISOR. The amount and
+  /// the reason travel with the authorization dialog; the supervisor's
+  /// credentials are checked by the auth repository, and the whole act leaves
+  /// a forensic trace.
+  ///
+  /// It never blocks the sale: the extra sells with its effect pending, and
+  /// this is the way to make the stock move NOW.
+  Future<void> _requestQuantityOverride(EffectiveModifierOption option) async {
+    final preview = _previewOf(option);
+    if (preview == null) return;
+    final authRepo = context.read<AuthRepository>();
+    final auditRepo = context.read<AuditRepository>();
+    final policy = await tenantSupervisionPolicy(context);
+    final insumoLabel = _insumoFacts[option.effectInsumoId]?.name ??
+        _insumoFacts[option.effectTargetInsumoId]?.name ??
+        'la opción';
+
+    // The quantity of an extra is a DATA question, not a control one: the
+    // operator knows their own numbers, and the reason is what makes the
+    // adjustment explainable later. The tenant can still require a
+    // supervisor for it (its policy), and then the credential is asked for.
+    if (!policy.supervisorRequiredForModifierQuantity) {
+      final result = await showDialog<ModifierQuantityResult>(
+        context: context,
+        builder: (dialogContext) => ModifierQuantityDialog(
+          unit: preview.markingUnit,
+          insumoLabel: insumoLabel,
+        ),
+      );
+      if (!mounted || result == null) return;
+      await auditRepo.logForensic(
+        'MODIFIER_EFFECT_QUANTITY_ADJUSTED',
+        usuarioAutorizadorId: null,
+        metadata: jsonEncode({
+          'action': 'modifier_effect_quantity_adjusted',
+          'option_id': option.id,
+          'quantity': result.quantity,
+          'unit': preview.markingUnit,
+          'reason': result.reason,
+          'supervisor_required': false,
+        }),
+      );
+      if (!mounted) return;
+      setState(() {
+        _effectOverrides[option.id] = _EffectOverride(
+          quantity: result.quantity,
+          supervisorId: '',
+          method: '',
+          reason: result.reason,
+        );
+      });
+      return;
+    }
+
+    var draft = const ModifierQuantityOverrideDraft();
+    String supervisorId = '';
+    String method = '';
+    // The submit button follows the extra fields: it stays disabled until the
+    // amount AND the reason are there (the modal rebuilds on this notifier).
+    final extraValid = ValueNotifier<bool>(false);
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
+      context: context,
+      builder: (dialogContext) => SupervisorOverrideModal(
+        title: 'Cantidad autorizada para este extra',
+        submitLabel: 'AUTORIZAR',
+        content: ModifierQuantityOverrideContent(
+          unit: preview.markingUnit,
+          insumoLabel: insumoLabel,
+          onChanged: (value) {
+            draft = value;
+            extraValid.value = value.isComplete;
+          },
+        ),
+        extraValid: extraValid,
+        onAuthorize: (request) async {
+          supervisorId = request.supervisorId;
+          method = request.method == SupervisorAuthorizationMethod.pin
+              ? 'PIN'
+              : 'TOTP';
+          return authorizeWithPolicy(
+            authRepository: authRepo,
+            policy: policy,
+            request: request,
+            selfAuthorizationAllowed: true,
+          );
+        },
+      ),
+    );
+    extraValid.dispose();
+    if (!mounted || outcome == null || !outcome.authorized) return;
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'MODIFIER_EFFECT_QUANTITY_OVERRIDE'
+          : 'SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY',
+      metodoAutorizacion: method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'modifier_effect_quantity_override',
+        'option_id': option.id,
+        'quantity': draft.quantity,
+        'unit': preview.markingUnit,
+        'reason': draft.reason,
+        'self_authorized': !outcome.isAuthorizingRole,
+      }),
+    );
+    if (!mounted) return;
+    setState(() {
+      _effectOverrides[option.id] = _EffectOverride(
+        quantity: draft.quantity!,
+        supervisorId: supervisorId,
+        method: method,
+        reason: draft.reason.trim(),
+      );
+    });
+  }
+
+
+  static String _trimQuantity(double value) {
+    final rounded = (value * 10000).roundToDouble() / 10000;
+    return rounded == rounded.truncateToDouble()
+        ? rounded.toStringAsFixed(0)
+        : rounded.toString();
+  }
+
+  /// The preview of an option's effect, or null when the option declares
+  /// none (the overwhelmingly common case: a price-only option).
+  /// The unit the insumo the effect acts on keeps its stock in.
+  String? _effectUnitOf(EffectiveModifierOption option) =>
+      option.effectInsumoId == null
+          ? null
+          : _insumoFacts[option.effectInsumoId]?.unit;
+
+  /// ME-04: the wire name of where the effective quantity comes from:
+  /// DECLARED (the backoffice configured it), INHERITED (the recipe's
+  /// component) or OVERRIDE (a supervisor marked it).
+  ///
+  /// It is read from the SAME preview the screen announces, so the line and
+  /// the screen can never tell different stories about the number.
+  String? _effectQuantitySourceOf(EffectiveModifierOption option) {
+    if (option.inventoryEffect == 'NONE') return null;
+    final preview = _previewOf(option);
+    if (preview == null) return null;
+    return switch (preview.quantitySource) {
+      ModifierEffectQuantitySource.override => 'OVERRIDE',
+      ModifierEffectQuantitySource.declared => 'DECLARED',
+      ModifierEffectQuantitySource.inherited => 'INHERITED',
+      // NONE: no quantity could be resolved. The line says nothing about a
+      // source it does not have; the status (PENDING) is the resolver's
+      // verdict, not this one's.
+      ModifierEffectQuantitySource.none => null,
+    };
+  }
+
+  ModifierEffectPreview? _previewOf(EffectiveModifierOption option) {
+    if (option.inventoryEffect == 'NONE') return null;
+    final target = option.effectTargetInsumoId == null
+        ? null
+        : _recipeComponents[option.effectTargetInsumoId];
+    // The unit the affected insumo keeps its stock in, and the unit of the
+    // recipe component the effect targets.
+    final affectedUnit = option.effectInsumoId == null
+        ? null
+        : _insumoFacts[option.effectInsumoId]?.unit;
+    final targetUnit = option.effectTargetInsumoId == null
+        ? null
+        : (_insumoFacts[option.effectTargetInsumoId]?.unit ??
+            _recipeComponents[option.effectTargetInsumoId]?.unit);
+    // The resolver refuses to inherit the recipe's number when the two
+    // units differ (`UNIT_MISMATCH`): the inherited number means something
+    // else in the affected insumo's unit. The dialog must say so instead
+    // of announcing a quantity the stock movement will never carry.
+    final unitsMismatch = affectedUnit != null &&
+        targetUnit != null &&
+        affectedUnit.toUpperCase() != targetUnit.toUpperCase();
+    return buildModifierEffectPreview(
+      option: option,
+      insumoName: option.effectInsumoId == null
+          ? null
+          : _insumoFacts[option.effectInsumoId]?.name,
+      targetName: option.effectTargetInsumoId == null
+          ? null
+          : (_insumoFacts[option.effectTargetInsumoId]?.name ??
+              _recipeComponents[option.effectTargetInsumoId]?.insumoId),
+      unit: affectedUnit,
+      inheritedQuantity: target?.quantityPerSaleUnit,
+      inheritedUnit: target?.unit,
+      // A supervisor's authorized quantity wins over everything: it is the
+      // one that will be applied, and it is expressed in the affected
+      // insumo's own unit.
+      quantityIsMarked: _effectOverrides.containsKey(option.id),
+      markedQuantity: _effectOverrides[option.id]?.quantity,
+      unitsMismatch: unitsMismatch,
+    );
+  }
 
   @override
   void initState() {
@@ -1292,6 +1745,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
     if (widget.product.variants.isNotEmpty) {
       _selectedVariantId = widget.product.variants.first.id;
     }
+    _loadEffectFacts();
     // Radio groups preselect the option flagged as default, when present.
     for (final group in widget.product.availableModifierGroups) {
       if (group.maxSelected == 1) {
@@ -1304,6 +1758,18 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
       }
     }
   }
+
+  /// The width the dialog's content may take.
+  ///
+  /// It follows the DEVICE instead of a fixed number: the same dialog has to
+  /// work on the handheld terminal (360-411 dp) and on the food park's
+  /// tablet (800 dp), and it must not overflow in either.
+  double get _dialogContentWidth => ResponsiveBreakpoints.value(
+        context,
+        mobile: 400,
+        tablet: 520,
+        desktop: 600,
+      );
 
   /// Whole-price display for deltas ('+C$ 5'), consistent with the variant
   /// idiom but without the trailing '.0' doubles would print.
@@ -1361,9 +1827,15 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
         _showMissingGroupError ? _firstUnsatisfiedGroupName() : null;
     return AlertDialog(
       title: Text(widget.product.name),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: BorderSide(color: colorScheme.outline, width: 2)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(NhilosRadii.modal),
+        side: BorderSide(color: colorScheme.outline, width: 2),
+      ),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
+        // El ancho sigue al dispositivo (§48): la tableta del food park
+        // aprovecha el room que tiene, el terminal de mano conserva su
+        // columna cómoda, y en ninguno de los dos hay desbordamiento.
+        constraints: BoxConstraints(maxWidth: _dialogContentWidth),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1415,10 +1887,19 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                 const SizedBox(height: 8),
               ],
               for (final group in widget.product.availableModifierGroups) ...[
-                Text(group.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  group.name,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
                 Text(
                   _groupHint(group),
-                  style: TextStyle(fontSize: 12, color: colorScheme.onSurfaceVariant),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 4),
                 if (group.maxSelected == 1)
@@ -1436,10 +1917,12 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                       children: group.options
                           .map(
                             (option) => RadioListTile<String>(
-                              dense: true,
+                              // Sin `dense`: la fila completa es el target
+                              // táctil (§18.3), no una línea comprimida de 32.
                               title: Text(
                                 '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                               ),
+                              subtitle: _effectSubtitle(option),
                               value: option.id,
                             ),
                           )
@@ -1450,11 +1933,21 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                   Column(
                     children: [
                       for (final option in group.options)
-                        Row(
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 48),
+                          child: Row(
                           children: [
                             Expanded(
-                              child: Text(
-                                '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
+                                  ),
+                                  if (_effectSubtitle(option) != null)
+                                    _effectSubtitle(option)!,
+                                ],
                               ),
                             ),
                             IconButton(
@@ -1481,6 +1974,7 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                               onPressed: () => _incrementQuantity(group, option),
                             ),
                           ],
+                          ),
                         ),
                     ],
                   )
@@ -1489,10 +1983,10 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                     children: group.options
                         .map(
                           (option) => CheckboxListTile(
-                            dense: true,
                             title: Text(
                               '${option.name} (+C\$ ${_formatDelta(option.priceDelta)})',
                             ),
+                            subtitle: _effectSubtitle(option),
                             value: _checkedOptions[option.id] ?? false,
                             onChanged: (selected) => setState(() {
                               if (selected != true) {
@@ -1547,40 +2041,58 @@ class _ProductOptionsDialogState extends State<ProductOptionsDialog> {
                     !groupName.toLowerCase().startsWith('extra');
                 final displayName = hasGroupContext ? '$groupName: $optionName' : optionName;
 
+                // R28: the option's IDENTITY (the backend's option and
+                // group ids) and its INVENTORY EFFECT travel with the line.
+                // Until now the line carried only a display NAME, so neither
+                // the terminal nor the cloud could tell WHICH option was
+                // sold, and the effect of the option was invisible.
+                Modifier buildModifier(int quantity) => Modifier(
+                      id: option.id,
+                      name: displayName,
+                      extraPrice: option.priceDelta,
+                      quantity: quantity,
+                      optionId: option.id,
+                      groupId: group.id,
+                      inventoryEffect: option.inventoryEffect,
+                      effectInsumoId: option.effectInsumoId,
+                      effectTargetInsumoId: option.effectTargetInsumoId,
+                      // R28 (decisión del owner): la cantidad la manda el
+                      // backoffice. La del supervisor (override autorizado)
+                      // gana; sin ella, la que configuró el backoffice; sin
+                      // ninguna, la que se hereda del componente de la
+                      // receta — y esa última la resuelve el resolver, no
+                      // el cajero.
+                      effectQuantity:
+                          _effectOverrides[option.id]?.quantity ??
+                              option.effectQuantity,
+                      effectFactor: option.effectFactor,
+                      // ME-04: WHERE the quantity came from, and WHO
+                      // authorized it when a supervisor had to. The
+                      // STATUS (applied / pending) is NOT written here:
+                      // only the resolver knows it, so it is stamped at
+                      // sale time — a line must never claim an effect
+                      // that the stock did not carry.
+                      effectQuantitySource: _effectQuantitySourceOf(option),
+                      effectAuthorizedBy: _effectOverrides[option.id]?.supervisorId,
+                      effectAuthorizationMethod:
+                          _effectOverrides[option.id]?.method,
+                      effectAuthorizationReason:
+                          _effectOverrides[option.id]?.reason,
+                    );
+
                 if (group.maxSelected == 1) {
                   if (_selectedRadioOption[group.id] == option.id) {
-                    selectedModifiers.add(
-                      Modifier(
-                        id: option.id,
-                        name: displayName,
-                        extraPrice: option.priceDelta,
-                        quantity: 1,
-                      ),
-                    );
+                    selectedModifiers.add(buildModifier(1));
                   }
                 } else if (group.allowQuantities) {
                   final quantity = _optionQuantities[option.id] ?? 0;
                   if (quantity > 0) {
-                    selectedModifiers.add(
-                      Modifier(
-                        id: option.id,
-                        name: displayName,
-                        // Precio POR UNIDAD: la cantidad viaja en su campo
-                        // propio para que totales y comanda sepan cuántas.
-                        extraPrice: option.priceDelta,
-                        quantity: quantity,
-                      ),
-                    );
+                    // Precio POR UNIDAD: la cantidad viaja en su campo
+                    // propio para que totales y comanda sepan cuántas.
+                    selectedModifiers.add(buildModifier(quantity));
                   }
                 } else if (_checkedOptions[option.id] == true) {
-                  selectedModifiers.add(
-                    Modifier(
-                      id: option.id,
-                      name: displayName,
-                      extraPrice: option.priceDelta,
-                      quantity: 1,
-                    ),
-                  );
+                  selectedModifiers.add(buildModifier(1));
                 }
               }
             }
@@ -2345,37 +2857,34 @@ class CartSummary extends StatelessWidget {
 
     final authRepo = context.read<AuthRepository>();
     final auditRepo = context.read<AuditRepository>();
+    final policy = await tenantSupervisionPolicy(context);
 
-    final authorized = await showDialog<bool>(
+    final outcome = await showDialog<SupervisorOverrideOutcome>(
       context: context,
       builder: (dialogContext) => SupervisorOverrideModal(
-        onAuthorize: (request) {
-          final pin = request.method == SupervisorAuthorizationMethod.pin
-              ? request.credential
-              : null;
-          final totp = request.method == SupervisorAuthorizationMethod.totp
-              ? request.credential
-              : null;
-          return authRepo.authorizeOverride(
-            supervisorId: request.supervisorId,
-            pin: pin,
-            totpCode: totp,
-          );
-        },
-        onAuditSuccess: (request) {
-          final method =
-              request.method == SupervisorAuthorizationMethod.pin ? 'PIN' : 'TOTP';
-          return auditRepo.logForensic(
-            'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
-            metodoAutorizacion: method,
-            usuarioAutorizadorId: request.supervisorId,
-            metadata: '{"action":"manual_discount"}',
-          );
-        },
+        onAuthorize: (request) => authorizeWithPolicy(
+          authRepository: authRepo,
+          policy: policy,
+          request: request,
+          selfAuthorizationAllowed:
+              policy.selfAuthorizationAllowedManualDiscount,
+        ),
       ),
     );
 
-    if (!context.mounted || authorized != true) return;
+    if (!context.mounted || outcome == null || !outcome.authorized) return;
+
+    await auditRepo.logForensic(
+      outcome.isAuthorizingRole
+          ? 'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT'
+          : 'SELF_AUTHORIZED_MANUAL_DISCOUNT',
+      metodoAutorizacion: outcome.method,
+      usuarioAutorizadorId: outcome.userId,
+      metadata: jsonEncode({
+        'action': 'manual_discount',
+        'self_authorized': !outcome.isAuthorizingRole,
+      }),
+    );
 
     viewModel.grantSupervisorOverride();
     viewModel.applyManualDiscount(amount);

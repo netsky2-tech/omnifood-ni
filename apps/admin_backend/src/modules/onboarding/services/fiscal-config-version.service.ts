@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { FiscalConfigRevision } from '../entities/fiscal-config-revision.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { TenantBrandAsset } from '../../tenant/entities/tenant-brand-asset.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -32,6 +33,10 @@ import {
   FiscalConfigVersion,
 } from '../dto/fiscal-config-version.dto';
 import { computeJcsSha256 } from '../utils/canonical-jcs';
+import {
+  parseSupervisionPolicy,
+  SUPERVISION_POLICY_PARAM_KEY,
+} from '../../supervision/contracts/supervision-policy.contract';
 
 /**
  * D-21 (#554): resolves a DGI authorization string parameter. A governing
@@ -186,10 +191,36 @@ export class FiscalConfigVersionService {
       FISCAL_PARAM_KEYS.MAX_DISCOUNT_PERCENT,
     );
 
+    // The tenant's supervision policy: null when it never configured one.
+    // Absence is meaningful and must stay distinguishable from a corrupt
+    // row (both read as null) so the terminal falls back to the default
+    // for its operation mode instead of enforcing a half-read rule.
+    const supervisionPolicy = parseSupervisionPolicy(
+      paramMap.get(SUPERVISION_POLICY_PARAM_KEY),
+    );
+
     return {
       tenantId: tenant.id,
       businessName: tenant.name,
       ruc: tenant.ruc || null,
+      // Company identity parity P1: the contact identity rides the
+      // fingerprinted payload (null = never configured — S3). See the
+      // EffectiveFiscalPayload doc for the S6 local-override exception.
+      phone: tenant.phone || null,
+      address: tenant.address || null,
+      email: tenant.email || null,
+      // Company identity parity P3, slice 1 (S5): the logo REFERENCE rides
+      // the fingerprinted payload — the sha256 only, never the bytes (the
+      // payload is stored whole per revision). Read from the brand-asset
+      // table directly, the same way the tenant row is read here; absence
+      // (no logo) rides as null like every other unconfigured field.
+      logoSha256:
+        (
+          await manager.getRepository(TenantBrandAsset).findOne({
+            where: { tenant_id: trimmedTenantId },
+            select: ['sha256'],
+          })
+        )?.sha256 ?? null,
       fiscalRegime,
       taxRate,
       pricesIncludeTax,
@@ -201,6 +232,7 @@ export class FiscalConfigVersionService {
       dgiAuthorizationExpiresAt,
       maxDiscountAmount,
       maxDiscountPercent,
+      supervisionPolicy,
     };
   }
 
@@ -328,6 +360,10 @@ export class FiscalConfigVersionService {
         tenantId: payload.tenantId,
         businessName: payload.businessName,
         ruc: payload.ruc,
+        phone: payload.phone,
+        address: payload.address,
+        email: payload.email,
+        logoSha256: payload.logoSha256,
         fiscalRegime: payload.fiscalRegime,
         taxRate: payload.taxRate,
         pricesIncludeTax: payload.pricesIncludeTax,
@@ -339,6 +375,7 @@ export class FiscalConfigVersionService {
         dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
         maxDiscountAmount: payload.maxDiscountAmount,
         maxDiscountPercent: payload.maxDiscountPercent,
+        supervisionPolicy: payload.supervisionPolicy,
         configVersion: version,
         generatedAt: new Date().toISOString(),
       };
@@ -348,6 +385,10 @@ export class FiscalConfigVersionService {
       tenantId: payload.tenantId,
       businessName: payload.businessName,
       ruc: payload.ruc,
+      phone: payload.phone,
+      address: payload.address,
+      email: payload.email,
+      logoSha256: payload.logoSha256,
       fiscalRegime: payload.fiscalRegime,
       taxRate: payload.taxRate,
       pricesIncludeTax: payload.pricesIncludeTax,
@@ -359,6 +400,7 @@ export class FiscalConfigVersionService {
       dgiAuthorizationExpiresAt: payload.dgiAuthorizationExpiresAt,
       maxDiscountAmount: payload.maxDiscountAmount,
       maxDiscountPercent: payload.maxDiscountPercent,
+      supervisionPolicy: payload.supervisionPolicy,
       configVersion: {
         revision: latest.revision,
         fingerprint: latest.fingerprint,

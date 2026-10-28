@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 import 'package:pos_app/data/services/fiscal_inbox_handler.dart'
     show FiscalProjectionKeys;
 import 'package:pos_app/domain/usecases/inventory/checkout_inventory_preparation_service.dart';
+import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../../domain/models/config/tax_regime.dart';
@@ -1152,9 +1153,28 @@ class SaleViewModel extends ChangeNotifier {
 
   UserRole? _currentUserRole;
   UserRole? get currentUserRole => _currentUserRole;
+  String? _currentUserId;
+  String? get currentUserId => _currentUserId;
   bool get canManageCashDrawer =>
       _currentUserRole == UserRole.owner ||
       _currentUserRole == UserRole.manager;
+
+  /// Whether this operator may close THEIR OWN cash shift.
+  ///
+  /// The CAPABILITY is not the AUTHORIZATION. Whoever opened the shift may
+  /// close it: a food park has one person selling and preparing, and there
+  /// is no manager on the floor to come and sign. Whether that closure needs
+  /// somebody else's sign-off is the TENANT's policy (the supervision
+  /// policy), not a role check baked into the code.
+  ///
+  /// Closing somebody ELSE's shift is a different matter: that stays with
+  /// the owner and the manager ([canManageCashDrawer]).
+  bool get canCloseOwnShift {
+    final session = _activeSession;
+    final userId = _currentUserId;
+    if (session == null || userId == null) return false;
+    return session.userId == userId;
+  }
 
   /// D-15: the void gate is permission-based (SalesPermission resolver),
   /// never a role-label check. Owner/manager hold sales.void.any, cashier
@@ -1314,7 +1334,29 @@ class SaleViewModel extends ChangeNotifier {
   Future<void> _loadCurrentUserRole() async {
     final user = await _authRepository.getCurrentUser();
     _currentUserRole = user?.role;
+    _currentUserId = user?.id;
     notifyListeners();
+  }
+
+  /// Reloads the operator's identity (role and id) from the session.
+  ///
+  /// WHY IT IS NOT JUST A CONSTRUCTOR TASK: the view model is created ONCE
+  /// per app run, but the operator can change (the food park's offline
+  /// operator switch, "Cambiar operador"). The role-gated operations
+  /// (the manual discount's supervisor requirement, the reprint, the credit
+  /// note) would then keep using the PREVIOUS operator's role: a cashier
+  /// could apply a manual discount with no signature AND no forensic
+  /// record, because the gate still believed the operator was the owner.
+  ///
+  /// The sale screen calls this when it is entered, so the identity that
+  /// the gates use is always the operator who is actually at the till.
+  Future<void> reloadOperatorContext() async {
+    try {
+      await _loadCurrentUserRole();
+    } catch (_) {
+      // Refreshing the identity must NEVER break the sale screen: if the
+      // session cannot be read, the previous identity simply stands.
+    }
   }
 
   static const _fiscalCalculator = InvoiceFiscalCalculator();
@@ -1623,10 +1665,18 @@ class SaleViewModel extends ChangeNotifier {
   static bool _foldContains(String? source, String foldedQuery) =>
       source != null && _foldSearchTerm(source).contains(foldedQuery);
 
+  /// Products available for retail checkout on the cash register.
+  /// R21 / S18: internal kitchen preparations / sub-recipes (sellPrice <= 0)
+  /// are not retail items and must not clutter the cashier's catalog grid
+  /// (Nhilos Backoffice & POS Experience Standards §12.2, §39.4).
+  List<Product> get _sellableProducts =>
+      _products.where((p) => p.sellPrice > 0).toList(growable: false);
+
   List<Product> get filteredProducts {
-    if (_searchQuery.isEmpty) return _products;
+    final base = _sellableProducts;
+    if (_searchQuery.isEmpty) return base;
     final q = _foldSearchTerm(_searchQuery);
-    return _products
+    return base
         .where(
           (p) =>
               _foldContains(p.name, q) ||
@@ -2581,6 +2631,38 @@ class SaleViewModel extends ChangeNotifier {
         // #67/T2a: same directive-message contract — the operator acts on
         // the configuration state, verbatim.
         _errorMessage = e.message;
+      } else if (e is CheckoutAuthorityException) {
+        switch (e.reason) {
+          case CheckoutAuthorityFailureReason.negativeStockBlocked:
+            final prodPart = e.productName != null ? 'el producto «${e.productName}»' : 'este producto';
+            final insumoPart = e.insumoName != null ? 'el insumo «${e.insumoName}»' : 'un insumo';
+            final reqStr = e.requiredQuantity != null ? e.requiredQuantity!.toStringAsFixed(2) : '?';
+            final availStr = e.availableQuantity != null ? e.availableQuantity!.toStringAsFixed(2) : '?';
+            _errorMessage =
+                'No se puede vender $prodPart: $insumoPart no tiene stock suficiente (requerido: $reqStr, disponible: $availStr) y la política no permite existencias negativas. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.missingRecipe:
+            final prod = e.productName ?? 'un producto compuesto';
+            _errorMessage =
+                'No se puede vender «$prod»: no tiene receta publicada. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.circularRecipe:
+            final prod = e.productName ?? 'el producto';
+            _errorMessage =
+                'No se puede vender «$prod»: se detectó una dependencia circular en su receta. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.maxDepthExceeded:
+            final prod = e.productName ?? 'el producto';
+            _errorMessage =
+                'No se puede vender «$prod»: la receta supera el límite de 5 niveles de sub-recetas. Avisá al encargado.';
+            break;
+          case CheckoutAuthorityFailureReason.unresolvedInsumo:
+          case CheckoutAuthorityFailureReason.invalidContext:
+          case CheckoutAuthorityFailureReason.invalidFact:
+            _errorMessage =
+                'No se pudo autorizar el inventario para la venta. Verificá la configuración del producto o avisá al encargado.';
+            break;
+        }
       } else {
         // Go-live fix (NHILOS §4.1): user-facing copy never carries raw
         // errors, UUIDs or English data-layer text. The repository's

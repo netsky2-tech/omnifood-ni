@@ -6,6 +6,7 @@ import {
   fetchAuditEvents,
   fetchAuditIntegrity,
   fetchAuditLedger,
+  fetchSupervisionReview,
 } from "./audit-api";
 import type { AuditSeverity } from "./types";
 
@@ -108,6 +109,29 @@ export function useAuditActors(enabled: boolean) {
   return useQuery({
     queryKey: ["users", tenantId],
     queryFn: ({ signal }) => fetchUsers({ signal }),
+    staleTime: 60 * 1000,
+    enabled,
+  });
+}
+
+/**
+ * The owner's REVIEW QUEUE for the tenant's supervision policy
+ * (GET /operations/audit/supervision-review).
+ *
+ * It is only fetched while the supervision view is active, so the platform
+ * and ledger views never pay for it (the same partial-failure isolation the
+ * other views use).
+ */
+export function useSupervisionReview(
+  filters: { startDate?: string; endDate?: string },
+  limit: number,
+  enabled = true,
+) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ["audit", tenantId, "supervision-review", filters, limit],
+    queryFn: ({ signal }) =>
+      fetchSupervisionReview({ ...filters, limit }, { signal }),
     staleTime: 60 * 1000,
     enabled,
   });

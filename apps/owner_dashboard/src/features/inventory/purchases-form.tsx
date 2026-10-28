@@ -27,7 +27,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
-import { AlertTriangle, Plus } from "lucide-react";
+import { cn, formatFactor } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle, Plus, ShieldCheck } from "lucide-react";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -43,6 +45,7 @@ interface PurchaseFormState {
   lotCode: string;
   receivedDate: string;
   expirationDate: string;
+  costIncludesIva: boolean | null;
 }
 
 const defaultForm = (): PurchaseFormState => ({
@@ -57,6 +60,7 @@ const defaultForm = (): PurchaseFormState => ({
   lotCode: "",
   receivedDate: "",
   expirationDate: "",
+  costIncludesIva: null,
 });
 
 /**
@@ -100,6 +104,8 @@ export function PurchasesForm({
   const selectedInsumo = insumoList.find((i) => i.id === form.insumoId);
   const isPerishable = Boolean(selectedInsumo?.is_perishable);
   const isUsd = form.currency === "USD";
+  const insumoIvaRate = Number(selectedInsumo?.ivaRatePct ?? 0);
+  const hasIvaRate = insumoIvaRate > 0;
 
   useEffect(() => {
     if (formError && errorRef.current) {
@@ -139,8 +145,14 @@ export function PurchasesForm({
       if (!form.expirationDate)
         return "Los insumos perecederos requieren la fecha de vencimiento.";
     }
+    if (hasIvaRate) {
+      if (form.costIncludesIva === null)
+        return `El insumo declara IVA (${insumoIvaRate}%). Debe confirmar si el costo ingresado es neto o incluye IVA.`;
+      if (form.costIncludesIva === true)
+        return `El costo debe ser neto de IVA. Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`;
+    }
     return null;
-  }, [form, quantity, unitCost, bcnRate, isUsd, isPerishable]);
+  }, [form, quantity, unitCost, bcnRate, isUsd, isPerishable, hasIvaRate, insumoIvaRate]);
 
   /** Payload for the live CPP preview (no batch fields needed for preview). */
   const previewPayload = useMemo((): ManualPurchaseInput | null => {
@@ -230,7 +242,7 @@ export function PurchasesForm({
    *  or an explicit acknowledgement when the preview is unavailable. */
   const canSubmit = !validationError && !previewLoading && (preview !== null || previewAcked);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (mode: "close" | "createAnother" = "close") => {
     setFormError(null);
     if (validationError) {
       setFormError(validationError);
@@ -244,17 +256,21 @@ export function PurchasesForm({
         lotCode: isPerishable ? form.lotCode.trim() : undefined,
         receivedDate: isPerishable ? form.receivedDate : undefined,
         expirationDate: isPerishable ? form.expirationDate : undefined,
+        costIncludesIva: hasIvaRate ? (form.costIncludesIva ?? undefined) : undefined,
       });
       toast({
+        variant: "success",
         title: "Compra registrada",
         description: "La compra aparece en el historial con su costo proyectado.",
       });
-      // §19.3: multiple purchases are common — reset for the next one but
-      // keep the panel open.
-      setForm(defaultForm());
-      setPreview(null);
-      setPreviewError(null);
-      setPreviewAcked(false);
+      if (mode === "close") {
+        closeDialog(false);
+      } else {
+        setForm(defaultForm());
+        setPreview(null);
+        setPreviewError(null);
+        setPreviewAcked(false);
+      }
     } catch (err: unknown) {
       setFormError(
         getApiErrorMessage(err, "No se pudo registrar la compra. Intenta de nuevo."),
@@ -273,6 +289,7 @@ export function PurchasesForm({
         name: newSupplierName.trim(),
       });
       toast({
+        variant: "success",
         title: "Proveedor creado",
         description: `'${created.name}' ya está disponible para registrar compras.`,
       });
@@ -458,17 +475,45 @@ export function PurchasesForm({
                   {insumoList.map((i) => (
                     <SelectItem key={i.id} value={i.id} className="text-xs">
                       {i.name}
+                      {i.purchaseUom ? ` (${i.purchaseUom})` : ""}
                       {i.is_perishable ? " (perecedero)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {selectedInsumo?.purchaseUom && (
+                // The unit of measure is the piece of information the operator
+                // most often lacks: the quantity and the unit cost are typed
+                // in the PURCHASE unit, while the stock and the CPP the
+                // system keeps are expressed in the CONSUMPTION unit.
+                <p
+                  className="text-[10px] text-muted-foreground"
+                  data-testid="purchases-form-uom-hint"
+                >
+                  Cantidad y costo en{" "}
+                  <span className="font-semibold text-foreground">
+                    {selectedInsumo.purchaseUom}
+                  </span>
+                  {selectedInsumo.consumptionUom &&
+                    selectedInsumo.consumptionUom !== selectedInsumo.purchaseUom && (
+                      <>
+                        {" "}
+                        · 1 {selectedInsumo.purchaseUom} ={" "}
+                        {formatFactor(
+                          Number(selectedInsumo.conversionFactor ?? 1),
+                        )}{" "}
+                        {selectedInsumo.consumptionUom} (el inventario se
+                        registra en {selectedInsumo.consumptionUom})
+                      </>
+                    )}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="purchase_quantity" className="text-xs">
-                  Cantidad *
+                  Cantidad{selectedInsumo?.purchaseUom ? ` (${selectedInsumo.purchaseUom})` : ""} *
                 </Label>
                 <Input
                   id="purchase_quantity"
@@ -483,7 +528,11 @@ export function PurchasesForm({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="purchase_unit_cost" className="text-xs">
-                  Costo unitario *
+                  Costo unitario
+                  {selectedInsumo?.purchaseUom
+                    ? ` (C$ por ${selectedInsumo.purchaseUom})`
+                    : ""}{" "}
+                  *
                 </Label>
                 <Input
                   id="purchase_unit_cost"
@@ -496,6 +545,127 @@ export function PurchasesForm({
                   onChange={(e) => setForm({ ...form, unitCost: e.target.value })}
                 />
               </div>
+
+              {hasIvaRate && (
+                <div
+                  className="col-span-2 space-y-3 rounded-lg border border-border bg-card p-3.5 shadow-2xs"
+                  data-testid="purchases-form-iva-guard-box"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 text-secondary-700" />
+                      Control fiscal de IVA
+                    </span>
+                    <span className="inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground tabular-nums">
+                      Tasa declarada: {insumoIvaRate}%
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Este control NO calcula el IVA: declara de dónde viene el
+                    número que usted ingresa. El inventario se valúa al costo
+                    neto (sin impuestos recuperables), por eso la única
+                    opción aceptable es el costo neto. Si la factura de su
+                    proveedor trae IVA incluido, divida el precio entre{" "}
+                    <span className="font-semibold text-foreground">
+                      {(1 + insumoIvaRate / 100).toFixed(4)}
+                    </span>{" "}
+                    antes de escribirlo.
+                  </p>
+
+                  {form.costIncludesIva === false && unitCost > 0 && (
+                    <p
+                      className="text-[11px] leading-relaxed text-muted-foreground"
+                      data-testid="purchases-form-iva-net-readout"
+                    >
+                      Costo neto que se registrará:{" "}
+                      <span className="font-semibold text-foreground tabular-nums">
+                        C${unitCost.toFixed(4)}
+                      </span>{" "}
+                      por {selectedInsumo?.purchaseUom ?? "unidad"}. Si su
+                      factura trae el {insumoIvaRate}% incluido, el costo
+                      neto equivalente es{" "}
+                      <span className="font-semibold text-foreground tabular-nums">
+                        C${(unitCost / (1 + insumoIvaRate / 100)).toFixed(4)}
+                      </span>
+                      .
+                    </p>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                    <label
+                      className={cn(
+                        "flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer transition-all",
+                        form.costIncludesIva === false
+                          ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                          : "border-border hover:bg-muted/40 text-muted-foreground"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="purchase_cost_iva_mode"
+                        data-testid="purchases-form-cost-net"
+                        checked={form.costIncludesIva === false}
+                        onChange={() => {
+                          setForm((prev) => ({ ...prev, costIncludesIva: false }));
+                          setFormError(null);
+                        }}
+                        className="mt-0.5 h-4 w-4 text-primary focus:ring-primary"
+                      />
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-foreground">
+                          Ingreso NETO (sin IVA)
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          El costo que escribo ya está sin IVA — opción
+                          aceptada
+                        </p>
+                      </div>
+                    </label>
+
+                    <label
+                      className={cn(
+                        "flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer transition-all",
+                        form.costIncludesIva === true
+                          ? "border-destructive bg-destructive/5 text-destructive ring-1 ring-destructive"
+                          : "border-border hover:bg-muted/40 text-muted-foreground"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="purchase_cost_iva_mode"
+                        data-testid="purchases-form-cost-gross"
+                        checked={form.costIncludesIva === true}
+                        onChange={() => {
+                          setForm((prev) => ({ ...prev, costIncludesIva: true }));
+                          setFormError(
+                            `El costo debe ser neto de IVA. Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`
+                          );
+                        }}
+                        className="mt-0.5 h-4 w-4 text-destructive focus:ring-destructive"
+                      />
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-foreground">
+                          Ingreso con IVA incluido
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          No se puede registrar: el inventario se valúa neto
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {form.costIncludesIva === true && (
+                    <Alert variant="destructive" className="py-2.5 px-3 text-xs">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle className="text-xs font-semibold">Costo con IVA no admitido</AlertTitle>
+                      <AlertDescription className="text-[11px] leading-relaxed">
+                        Cargar el costo con IVA sobrevalúa las existencias en un {insumoIvaRate}%. El costo de inventario debe registrarse neto de impuestos recuperables. Ingrese el costo neto antes de guardar.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -665,8 +835,10 @@ export function PurchasesForm({
                     </span>
                   </p>
                   <p className="text-muted-foreground">
-                    Stock: {preview.previousStock} → {preview.projectedStock} ·
-                    Tasa BCN: {preview.bcnRate} ({preview.bcnRateSource})
+                    Stock: {preview.previousStock} → {preview.projectedStock}
+                    {preview.currency === "USD"
+                      ? ` · Tasa BCN: C$${preview.bcnRate.toFixed(4)}`
+                      : ""}
                   </p>
                 </div>
               )}
@@ -705,19 +877,29 @@ export function PurchasesForm({
               onClick={() => closeDialog(false)}
               className="text-xs h-8"
             >
-              Cerrar
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              data-testid="purchases-form-save-another"
+              disabled={!canSubmit || submitting}
+              onClick={() => handleSubmit("createAnother")}
+              className="text-xs h-8"
+            >
+              Guardar y registrar otra
             </Button>
             <Button
               type="submit"
               data-testid="purchases-form-submit"
               disabled={!canSubmit || submitting}
-              className="text-xs h-8 min-w-[10rem]"
+              className="text-xs h-8 min-w-[8rem]"
             >
               {submitting
                 ? "Registrando..."
                 : previewLoading
-                  ? "Calculando preview..."
-                  : "Registrar compra"}
+                  ? "Calculando..."
+                  : "Guardar"}
             </Button>
           </DialogFooter>
         </form>

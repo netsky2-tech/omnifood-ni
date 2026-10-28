@@ -1,4 +1,5 @@
 import { SaleInventoryOutcomeService } from './sale-inventory-outcome.service';
+import { BomExplosionService } from '../../inventory/bom-explosion.service';
 import { SyncInvoiceDto } from '../dto/sync-invoice.dto';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import {
@@ -7,6 +8,8 @@ import {
 } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Product } from '../../inventory/entities/product.entity';
+import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
 import { EntityManager } from 'typeorm';
 
 describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
@@ -19,7 +22,7 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
   const componentAId = '44444444-4444-4444-4444-444444444444';
 
   beforeEach(() => {
-    service = new SaleInventoryOutcomeService();
+    service = new SaleInventoryOutcomeService(new BomExplosionService());
   });
 
   const createMockManager = (
@@ -123,6 +126,13 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
                     (!where.id || i.id === where.id) &&
                     (!where.tenant_id || i.tenant_id === where.tenant_id),
                 ) ?? null
+              );
+            }),
+            // R28 / M4: the deviation verification reads the tenant's
+            // insumos (the SOHO rule and the unit rule).
+            find: jest.fn(async ({ where }: any) => {
+              return insumos.filter(
+                (i) => !where.tenant_id || i.tenant_id === where.tenant_id,
               );
             }),
           };
@@ -267,6 +277,198 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
       'corr-sha256-recipe-1',
     ]);
     expect(result.bindingsToApply[0].explodedQuantity).toBe(7.5); // 3 * 2.5
+  });
+
+  describe('R28 / M4: the cloud recomputes and compares the declared deviation', () => {
+    const almondMilkId = '55555555-5555-5555-5555-555555555555';
+    const wholeMilkId = '66666666-6666-6666-6666-666666666666';
+    const wholeMilkComponentId = '77777777-7777-7777-7777-777777777777';
+
+    const swapInvoice = (bindings: Array<Record<string, unknown>>) =>
+      ({
+        id: 'inv-swap',
+        items: [
+          {
+            id: 'item-swap',
+            productId: 'prod-prepared-recipe',
+            quantity: 1,
+            inventorySnapshotVersion: 'SALE_TIME_V1',
+            modifiers: [
+              {
+                name: 'Leche: Almendras',
+                extraPrice: 10,
+                quantity: 1,
+                optionId: 'opt-almendras',
+                groupId: 'grp-leche',
+                inventoryEffect: 'SWAP',
+                effectTargetInsumoId: wholeMilkId,
+                effectInsumoId: almondMilkId,
+              },
+            ],
+            inventorySnapshot: {
+              classification: 'PREPARED',
+              disposition: 'RECIPE',
+              reasonCode: null,
+              catalogRevision: 'rev-1',
+              mappingVersionId: null,
+              recipeVersionId: recipeVerAId,
+              bindings,
+            },
+          },
+        ],
+      }) as unknown as SyncInvoiceDto;
+
+    it('accepts a deviation whose demand the cloud recomputes the same way', async () => {
+      // The recipe has 150 ml of whole milk and the line swapped it for
+      // almond milk: the cloud expects the whole milk GONE and the
+      // substitute in its place.
+      const manager = createMockManager({
+        recipeDetails: [
+          {
+            id: wholeMilkComponentId,
+            recipe_version_id: recipeVerAId,
+            tenant_id: tenantId,
+            insumo_id: wholeMilkId,
+            gross_quantity: 150,
+            quantity: 150,
+            ingredient_type: 'INSUMO',
+          },
+        ],
+        insumos: [
+          {
+            id: wholeMilkId,
+            tenant_id: tenantId,
+            consumptionUom: 'ML',
+            stock: 20,
+            averageCost: 4,
+          },
+          {
+            id: almondMilkId,
+            tenant_id: tenantId,
+            consumptionUom: 'ML',
+            stock: 20,
+            averageCost: 5,
+          },
+        ],
+      });
+
+      const result = await service.validateSaleTimeSnapshot(
+        tenantId,
+        swapInvoice([
+          {
+            bindingOrdinal: 0,
+            insumoId: almondMilkId,
+            recipeComponentId: null,
+            quantityPerSaleUnit: 150,
+            saleCorrelationId: 'corr-swap-1',
+          },
+        ]),
+        manager,
+      );
+
+      expect(result?.outcome).toBe('APPLIED');
+      expect(result?.bindingsToApply).toHaveLength(1);
+    });
+
+    it('degrades a line whose demand contradicts the declared deviation', async () => {
+      // The terminal declared the swap but sent the ORIGINAL component: the
+      // cloud recomputed the expected demand and they do not match. The
+      // line is NOT applied (fail-closed, like the negative-stock guard),
+      // the fiscal document is persisted and the stream sequence advances.
+      const manager = createMockManager({
+        recipeDetails: [
+          {
+            id: wholeMilkComponentId,
+            recipe_version_id: recipeVerAId,
+            tenant_id: tenantId,
+            insumo_id: wholeMilkId,
+            gross_quantity: 150,
+            quantity: 150,
+            ingredient_type: 'INSUMO',
+          },
+        ],
+        insumos: [
+          {
+            id: wholeMilkId,
+            tenant_id: tenantId,
+            consumptionUom: 'ML',
+            stock: 20,
+            averageCost: 4,
+          },
+          {
+            id: almondMilkId,
+            tenant_id: tenantId,
+            consumptionUom: 'ML',
+            stock: 20,
+            averageCost: 5,
+          },
+        ],
+      });
+
+      const result = await service.validateSaleTimeSnapshot(
+        tenantId,
+        swapInvoice([
+          {
+            bindingOrdinal: 0,
+            insumoId: wholeMilkId,
+            recipeComponentId: wholeMilkComponentId,
+            quantityPerSaleUnit: 150,
+            saleCorrelationId: 'corr-swap-2',
+          },
+        ]),
+        manager,
+      );
+
+      expect(result?.outcome).toBe('APPLIED_INVENTORY_PENDING');
+      expect(result?.reason?.code).toBe('RECIPE_DEVIATION_MISMATCH');
+      expect(result?.reason?.lines).toEqual(['item-swap']);
+      // Zero movements: the line waits.
+      expect(result?.bindingsToApply).toHaveLength(0);
+      expect(result?.acknowledgedMovementCorrelationIds).toHaveLength(0);
+    });
+
+    it('does NOT verify what the terminal did not declare (a stale terminal is not punished)', async () => {
+      // The terminal sent no deviation at all (an APK that predates R28).
+      // There is nothing to compare, so the line applies as it always did.
+      const manager = createMockManager();
+      const invoice = {
+        id: 'inv-stale',
+        items: [
+          {
+            id: 'item-stale',
+            productId: 'prod-prepared-recipe',
+            quantity: 1,
+            inventorySnapshotVersion: 'SALE_TIME_V1',
+            inventorySnapshot: {
+              classification: 'PREPARED',
+              disposition: 'RECIPE',
+              reasonCode: null,
+              catalogRevision: 'rev-1',
+              mappingVersionId: null,
+              recipeVersionId: recipeVerAId,
+              bindings: [
+                {
+                  bindingOrdinal: 0,
+                  insumoId: insumoAId,
+                  recipeComponentId: componentAId,
+                  quantityPerSaleUnit: 2.5,
+                  saleCorrelationId: 'corr-stale-1',
+                },
+              ],
+            },
+          },
+        ],
+      } as SyncInvoiceDto;
+
+      const result = await service.validateSaleTimeSnapshot(
+        tenantId,
+        invoice,
+        manager,
+      );
+
+      expect(result?.outcome).toBe('APPLIED');
+      expect(result?.bindingsToApply).toHaveLength(1);
+    });
   });
 
   it('validates NO_IMPACT disposition with zero movements and APPLIED_NO_INVENTORY_IMPACT', async () => {
@@ -535,5 +737,119 @@ describe('SaleInventoryOutcomeService (SALE_TIME_V1)', () => {
     await expect(
       service.validateSaleTimeSnapshot(tenantId, invoice, createMockManager()),
     ).rejects.toThrow(/Snapshot outcome mismatch/);
+  });
+});
+
+describe('SaleInventoryOutcomeService (LEGACY_SYNC_TIME_V1 sub-recipes, R11)', () => {
+  const tenant = 'tenant-r11';
+  let subService: SaleInventoryOutcomeService;
+
+  beforeEach(() => {
+    subService = new SaleInventoryOutcomeService(new BomExplosionService());
+  });
+
+  const makeManager = (): EntityManager => {
+    const products: Record<string, any> = {
+      'prod-parent': { id: 'prod-parent', tenant_id: tenant, product_type: 'COMPOUND' },
+      'prod-sub': { id: 'prod-sub', tenant_id: tenant, product_type: 'COMPOUND' },
+    };
+    const versions: Record<string, any> = {
+      'prod-parent': { id: 'rv-parent', product_id: 'prod-parent', tenant_id: tenant, publication_state: RecipePublicationState.PUBLISHED, version_number: 1 },
+      'prod-sub': { id: 'rv-sub', product_id: 'prod-sub', tenant_id: tenant, publication_state: RecipePublicationState.PUBLISHED, version_number: 1 },
+    };
+    const detailsByVersion: Record<string, any[]> = {
+      'rv-parent': [
+        { id: 'rd-sub', insumo_id: 'prod-sub', quantity: 2, ingredient_type: 'SUB_RECIPE' },
+      ],
+      'rv-sub': [
+        { id: 'rd-leaf', insumo_id: 'ins-leaf', quantity: 3, ingredient_type: 'INSUMO' },
+      ],
+    };
+
+    return {
+      getRepository: (entity: any) => {
+        if (entity === Product) {
+          return {
+            findOne: jest.fn(async ({ where }: any) => products[where.id] ?? null),
+          };
+        }
+        if (entity === Insumo) {
+          return {
+            findOne: jest.fn(async ({ where }: any) =>
+              where.id === 'ins-leaf' ? { id: 'ins-leaf', tenant_id: tenant } : null,
+            ),
+          };
+        }
+        if (entity === RecipeVersion) {
+          return {
+            createQueryBuilder: jest.fn(() => {
+              let requestedProductId = '';
+              const qb: any = {
+                where: jest.fn((_sql: string, params: any) => {
+                  if (params?.productId) requestedProductId = params.productId;
+                  return qb;
+                }),
+                andWhere: jest.fn(() => qb),
+                orderBy: jest.fn(() => qb),
+                addOrderBy: jest.fn(() => qb),
+                getOne: jest.fn(async () => versions[requestedProductId] ?? null),
+              };
+              return qb;
+            }),
+          };
+        }
+        if (entity === RecipeDetail) {
+          return {
+            find: jest.fn(async ({ where }: any) =>
+              detailsByVersion[where.recipe_version_id] ?? [],
+            ),
+          };
+        }
+        if (entity === ProductInventoryMappingVersion) {
+          return {
+            createQueryBuilder: jest.fn(() => {
+              const qb: any = {
+                where: jest.fn(() => qb),
+                andWhere: jest.fn(() => qb),
+                orderBy: jest.fn(() => qb),
+                getOne: jest.fn(async () => null),
+              };
+              return qb;
+            }),
+          };
+        }
+        throw new Error(`Unexpected getRepository for ${entity?.name}`);
+      },
+    } as unknown as EntityManager;
+  };
+
+  it('expands a SUB_RECIPE component to its leaf insumos instead of rejecting the sale', async () => {
+    const record = {
+      idempotencyKey: 'k-r11',
+      sourceDeviceId: 'dev-r11',
+      sourceSequence: 1,
+      documentType: 'SALE',
+      invoice: {
+        id: 'inv-r11',
+        items: [{ id: 'item-r11', productId: 'prod-parent', quantity: 1 }],
+      },
+    } as unknown as SyncBatchRecordDto;
+
+    const result = await subService.classifyLegacySyncTime(
+      tenant,
+      record,
+      makeManager(),
+      new Date('2026-10-15T12:00:00.000Z'),
+    );
+
+    expect(result?.outcome).toBe('APPLIED');
+    const bindings = (result?.bindingsToApply ?? []).map((entry) => entry.binding);
+    expect(bindings).toHaveLength(1);
+    // parent SUB_RECIPE(2) -> sub-recipe leaf(3) => 6 per sale unit.
+    expect(bindings[0]).toMatchObject({
+      insumoId: 'ins-leaf',
+      quantityPerSaleUnit: 6,
+    });
+    expect((result?.bindingsToApply ?? [])[0]?.explodedQuantity).toBe(6);
   });
 });

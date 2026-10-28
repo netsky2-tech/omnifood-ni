@@ -20,6 +20,7 @@ import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Batch } from '../../inventory/entities/batch.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import {
   RecipeOrigin,
@@ -45,6 +46,7 @@ import {
   InboundSyncProductDto,
   InboundSyncCatalogValueDto,
   InboundSyncInsumoDto,
+  InboundSyncBatchDto,
   InboundSyncRecipeDto,
   InboundSyncRecipeVersionDto,
   InboundSyncUserDto,
@@ -240,6 +242,9 @@ export class InboundSyncService {
         requestedTypes.has('creditnotes') || requestedTypes.has('credit_notes')
           ? await this.fetchCreditNoteDeltas(tenantId, sinceDate, entityManager)
           : [],
+      batches: requestedTypes.has('batches')
+        ? await this.fetchBatchDeltas(tenantId, sinceDate, entityManager)
+        : [],
       fiscalConfig,
     };
 
@@ -533,6 +538,7 @@ export class InboundSyncService {
         'alerts',
         'creditnotes',
         'credit_notes',
+        'batches',
         'fiscal',
         'fiscal_config',
         'fiscalconfig',
@@ -760,6 +766,26 @@ export class InboundSyncService {
     }
 
     const items = await qb.getMany();
+
+    // FD-02 (openspec/changes/lo-vendible-es-lo-registrable): the LOT
+    // availability travels with the insumo delta.
+    //
+    // WHY: the terminal decides what it can sell, and the cloud decides what
+    // it can record — and they were reading two different numbers (the
+    // aggregate here, the lots there). The terminal sold what the aggregate
+    // promised and the cloud rejected what the lots could not back, which
+    // froze the fiscal stream (FD-01). So the cloud publishes the number it
+    // will actually draw from, and the terminal applies the SAME rule.
+    //
+    // An insumo WITHOUT lots keeps the aggregate as its only truth (that is
+    // the rule `drawBatchOutflow` already follows), so its lot availability
+    // is null and the terminal keeps using the aggregate.
+    const lotAvailability = await this.fetchLotAvailability(
+      tenantId,
+      items.map((i) => i.id),
+      entityManager,
+    );
+
     return items.map((i) => ({
       id: i.id,
       name: i.name,
@@ -771,6 +797,9 @@ export class InboundSyncService {
       isActive: i.is_active,
       isPerishable: i.is_perishable,
       negativeStockPolicy: i.negativeStockPolicy,
+      // The lot availability (null when the insumo has no lots).
+      lotAvailableStock: lotAvailability.get(i.id) ?? null,
+      isBatchManaged: lotAvailability.has(i.id),
       // Issue #521 S1: stock alert thresholds ride the incremental insumos
       // delta so the POS can fire low/high stock alerts.
       parLevel: i.parLevel ?? null,
@@ -780,6 +809,70 @@ export class InboundSyncService {
       createdAt: i.created_at,
       updatedAt: i.updated_at,
     }));
+  }
+
+  private async fetchBatchDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncBatchDto[]> {
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound batch sync requires a tenant-bound transaction manager',
+      );
+    }
+    const batchRepository = entityManager.getRepository(Batch);
+    const qb = batchRepository
+      .createQueryBuilder('batch')
+      .where('batch.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      qb.andWhere('batch.updated_at > :sinceDate', { sinceDate });
+    }
+
+    qb.orderBy('batch.expiration_date', 'ASC').addOrderBy('batch.created_at', 'ASC');
+
+    const items = await qb.getMany();
+    return items.map((b) => ({
+      id: b.id,
+      insumoId: b.insumo_id,
+      batchNumber: b.batch_number,
+      receivedDate: b.received_date || null,
+      expirationDate: b.expiration_date,
+      remainingStock: Number(b.remaining_stock),
+      cost: Number(b.cost),
+    }));
+  }
+
+  /**
+   * The lot availability per insumo: the sum of the remaining stock of its
+   * lots. An insumo that HAS no lot is not in the map — its aggregate is the
+   * only truth.
+   */
+  private async fetchLotAvailability(
+    tenantId: string,
+    insumoIds: string[],
+    entityManager: EntityManager,
+  ): Promise<Map<string, number>> {
+    if (insumoIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = await entityManager.query(
+      `
+      SELECT insumo_id, SUM(remaining_stock) AS lot_stock
+      FROM batches
+      WHERE tenant_id = $1 AND insumo_id = ANY($2::uuid[])
+      GROUP BY insumo_id
+      `,
+      [tenantId, insumoIds],
+    );
+
+    const availability = new Map<string, number>();
+    for (const row of rows as Array<{ insumo_id: string; lot_stock: string }>) {
+      availability.set(row.insumo_id, Number(row.lot_stock));
+    }
+    return availability;
   }
 
   private async fetchRecipeDeltas(
@@ -901,8 +994,13 @@ export class InboundSyncService {
       componentsByVersionId.set(component.recipe_version_id, matching);
     }
 
+    // R21 / S18: components with ingredient_type === 'SUB_RECIPE' reference
+    // a PRODUCT id (the sub-recipe), not an insumo id. Only components of type
+    // 'INSUMO' (or untyped legacy rows) are checked against the insumos table.
+    const isSubRecipeComponent = (c: RecipeDetail) => c.ingredient_type === 'SUB_RECIPE';
+    const insumoComponents = components.filter((c) => !isSubRecipeComponent(c));
     const componentInsumoIds = [
-      ...new Set(components.map((component) => component.insumo_id)),
+      ...new Set(insumoComponents.map((component) => component.insumo_id)),
     ];
     // Issue #519 U1: these fetched rows are not only the eligibility gate —
     // they are the authority facts the POS hydration needs for every
@@ -946,7 +1044,11 @@ export class InboundSyncService {
         (left, right) => left.id.localeCompare(right.id),
       );
       const versionInsumoIds = [
-        ...new Set(versionComponents.map((detail) => detail.insumo_id)),
+        ...new Set(
+          versionComponents
+            .filter((detail) => detail.ingredient_type !== 'SUB_RECIPE')
+            .map((detail) => detail.insumo_id),
+        ),
       ].sort((left, right) => left.localeCompare(right));
       return {
         id: rv.id,
@@ -994,11 +1096,20 @@ export class InboundSyncService {
           }
           // Identity facts only: stock, averageCost and par levels stay in
           // the incremental `insumos` delta.
+          //
+          // R28 (M4.1): the LIVE state travels with the closure too. The
+          // terminal resolves an effect against these rows, and an effect
+          // that points at a DEACTIVATED insumo must not apply (the SOHO
+          // guarantee, D6). Without the state the terminal sees every
+          // insumo as active and applies an effect the cloud refuses — a
+          // divergence the sale carries as RECIPE_DEVIATION_MISMATCH.
           return {
             id: insumo.id,
             tenantId: insumo.tenant_id,
             name: insumo.name,
             uom: insumo.consumptionUom,
+            isActive: insumo.is_active,
+            negativeStockPolicy: insumo.negativeStockPolicy,
           };
         }),
       };
@@ -1380,6 +1491,21 @@ export class InboundSyncService {
         isDefault: option.is_default,
         sortOrder: option.sort_order,
         isActive: option.is_active,
+        // R28: the inventory effect travels with the option so the POS can
+        // resolve the demand of the line. `NONE` (the default) means the
+        // option is price-only, exactly as before R28 — an old terminal
+        // simply ignores these fields.
+        inventoryEffect: option.inventory_effect ?? 'NONE',
+        effectInsumoId: option.effect_insumo_id ?? null,
+        effectTargetInsumoId: option.effect_target_insumo_id ?? null,
+        effectQuantity:
+          option.effect_quantity === null || option.effect_quantity === undefined
+            ? null
+            : Number(option.effect_quantity),
+        effectFactor:
+          option.effect_factor === null || option.effect_factor === undefined
+            ? null
+            : Number(option.effect_factor),
       });
       optionsByGroupId.set(option.group_id, list);
     }

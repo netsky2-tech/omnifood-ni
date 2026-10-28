@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   fetchFiscalSetup,
   updateFiscalSetup,
+  fetchCompanyLogo,
+  uploadCompanyLogo,
   fetchIndustryTemplates,
   getIndustryTemplate,
   applyIndustryTemplate,
@@ -26,6 +28,7 @@ import { getApiErrorMessage } from "@/lib/api-error";
 
 export const SETTINGS_QUERY_KEYS = {
   fiscalSetup: (tenantId?: string | null) => ["settings", tenantId ?? "unknown", "fiscal-setup"] as const,
+  companyLogo: (tenantId?: string | null) => ["settings", tenantId ?? "unknown", "company-logo"] as const,
   templates: ["settings", "industry-templates"] as const,
   templateDetail: (code: string) => ["settings", "industry-templates", code] as const,
   importErrors: (token: string) => ["settings", "import-errors", token] as const,
@@ -61,6 +64,43 @@ export function useUpdateFiscalSetup() {
         variant: "destructive",
         title: "Error al guardar configuración fiscal",
         description: getApiErrorMessage(err, "No se pudo guardar la configuración fiscal"),
+      });
+    },
+  });
+}
+
+// --- Company logo (company identity parity P3, slice 1) ---
+
+export function useCompanyLogo() {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: SETTINGS_QUERY_KEYS.companyLogo(tenantId),
+    queryFn: ({ signal }) => fetchCompanyLogo({ signal }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useUploadCompanyLogo() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: (payload: { content_type: string; data: string }) =>
+      uploadCompanyLogo(payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(SETTINGS_QUERY_KEYS.companyLogo(tenantId), data);
+      toast({
+        variant: "success",
+        title: "Logo de la empresa actualizado",
+        description: "El logo se usará en los documentos formales (listas de conteo). Los terminales lo recibirán en su próxima sincronización.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Error al subir el logo",
+        description: getApiErrorMessage(err, "No se pudo subir el logo. El logo anterior permanece intacto."),
       });
     },
   });

@@ -17,8 +17,13 @@ import type {
  * declares it as `number`. Everything else is an `integer`/`boolean`/`uuid`
  * column, which node-postgres returns with its declared type already.
  */
-export type RawModifierOption = Omit<ModifierOption, "price_delta"> & {
+export type RawModifierOption = Omit<
+  ModifierOption,
+  "price_delta" | "effect_quantity" | "effect_factor"
+> & {
   price_delta: unknown;
+  effect_quantity: unknown;
+  effect_factor: unknown;
 };
 
 export type RawModifierGroup = Omit<ModifierGroup, "options"> & {
@@ -40,12 +45,26 @@ export type RawEffectiveModifierGroup = Omit<
 };
 
 /** Mirrors the backend response boundary in `apps/admin_backend/src/modules/modifiers/modifier-response.ts`. */
+/**
+ * A decimal that is NULL must stay NULL: `0` would be a quantity (the
+ * operator applied nothing) instead of "not declared" (the quantity is
+ * inherited from the recipe component). Same doctrine as the backend
+ * response boundary.
+ */
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function normalizeModifierOption(
   raw: RawModifierOption,
 ): ModifierOption {
   return {
     ...raw,
     price_delta: toFiniteNumber(raw.price_delta),
+    effect_quantity: toNullableNumber(raw.effect_quantity),
+    effect_factor: toNullableNumber(raw.effect_factor),
   };
 }
 
@@ -100,6 +119,87 @@ export function fetchModifierGroups(
   return api
     .get<RawModifierGroup[]>(`/modifier-groups${qs ? `?${qs}` : ""}`, opts)
     .then<ModifierGroup[], never>(normalizeModifierGroupList);
+}
+
+/**
+ * The options whose inventory effect cannot be applied as they stand.
+ *
+ * The backoffice's half of the owner's decision ("the backoffice owns the
+ * quantity"): the terminal never asks the cashier for a number, so the
+ * missing number has to be visible HERE, with the reason and the product
+ * where it bites.
+ */
+export interface PendingModifierProduct {
+  product_id: string;
+  product_name: string;
+  reason: string;
+}
+
+export interface PendingModifierConfiguration {
+  option_id: string;
+  option_name: string;
+  group_id: string;
+  group_name: string;
+  inventory_effect: string;
+  effect_insumo_id: string | null;
+  effect_target_insumo_id: string | null;
+  products: PendingModifierProduct[];
+}
+
+export function fetchPendingConfiguration(
+  opts?: ApiClientMethodOptions,
+): Promise<PendingModifierConfiguration[]> {
+  return api.get<PendingModifierConfiguration[]>(
+    "/modifier-groups/pending-configuration",
+    opts,
+  );
+}
+
+/**
+ * ME-04: the SOLD lines whose inventory effect never touched the stock.
+ *
+ * The pending-configuration list says what the tenant still OWES; this one
+ * says what already HAPPENED — a real sale with a missing inventory
+ * movement, which is the only thing that can be reconciled against the
+ * stock.
+ */
+export interface PendingModifierEffectLine {
+  invoice_id: string;
+  invoice_number: string | null;
+  sold_at: string;
+  product_id: string;
+  product_name: string;
+  option_id: string | null;
+  option_name: string;
+  reason: string;
+  quantity: number;
+}
+
+export interface PendingModifierEffectReport {
+  lines: PendingModifierEffectLine[];
+  truncated: boolean;
+  limit: number;
+}
+
+export function fetchPendingEffects(
+  opts?: ApiClientMethodOptions,
+): Promise<PendingModifierEffectReport> {
+  return api
+    .get<unknown>("/modifier-groups/pending-effects", opts)
+    .then((raw) => {
+      const body = (typeof raw === "object" && raw !== null
+        ? raw
+        : {}) as Record<string, unknown>;
+      const rows = Array.isArray(body.lines) ? body.lines : [];
+      return {
+        lines: rows.filter(
+          (line): line is PendingModifierEffectLine =>
+            typeof line === "object" && line !== null,
+        ),
+        truncated: body.truncated === true,
+        limit: typeof body.limit === "number" ? body.limit : 0,
+      };
+    });
 }
 
 export function fetchEffectiveGroups(

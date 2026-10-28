@@ -9,6 +9,8 @@ import { Supplier } from './entities/supplier.entity';
 import { Warehouse } from './entities/warehouse.entity';
 import { UomConversion } from './entities/uom-conversion.entity';
 import { Batch } from './entities/batch.entity';
+import { BatchOutflowTrace } from './entities/batch-outflow-trace.entity';
+import { InventoryDivergence } from './entities/inventory-divergence.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { RecipeVersion } from './entities/recipe-version.entity';
 import { RecipeDetail } from './entities/recipe-detail.entity';
@@ -17,6 +19,8 @@ import { ProductionOrderLine } from './entities/production-order-line.entity';
 import { ProductionBatchHistory } from './entities/production-batch-history.entity';
 import { Shrinkage } from './entities/shrinkage.entity';
 import { ShrinkageDetail } from './entities/shrinkage-detail.entity';
+import { CountSession } from './entities/count-session.entity';
+import { CountSessionEntry } from './entities/count-session-entry.entity';
 import { InventorySyncOutbox } from './entities/inventory-sync-outbox.entity';
 import { InventorySyncReceipt } from './entities/inventory-sync-receipt.entity';
 import { BcnFxRate } from './entities/bcn-fx-rate.entity';
@@ -48,23 +52,37 @@ import {
   ForensicAlertService,
 } from './forensic-alert.service';
 import { UomConversionCalculator } from './uom-conversion-calculator';
+import { ForensicAlertEmailDispatcher } from './forensic-alert-email.dispatcher';
 import { IdentityModule } from '../identity/identity.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
+import { TenantModule } from '../tenant/tenant.module';
 import { CountSessionService } from './count-session.service';
+import { CountSessionPrintableService } from './services/count-session-printable.service';
 import { GovernanceApprovalService } from './services/governance-approval.service';
 import { KardexRegularizationService } from './services/kardex-regularization.service';
 import { RegularizationController } from './controllers/regularization.controller';
 import { RemediationController } from './controllers/remediation.controller';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { TheoreticalCostService } from './services/theoretical-cost.service';
 import { InventoryValuationService } from './inventory-valuation.service';
 import { InventoryReportsController } from './controllers/inventory-reports.controller';
+import { UomCatalogController } from './controllers/uom-catalog.controller';
+import { CatalogValue } from '../catalog/entities/catalog-value.entity';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { InventoryDivergenceService } from './services/inventory-divergence.service';
+import { InventoryDivergenceController } from './controllers/inventory-divergence.controller';
 
 @Module({
   imports: [
     IdentityModule,
     AuditModule,
+    NotificationsModule,
     DeviceSyncModule,
+    // R19 T3: the printable count list consumes the RESOLVED company
+    // identity from where the tenant data lives (S4); the renderer itself
+    // never reads the tenant row.
+    TenantModule,
     TypeOrmModule.forFeature([
       Insumo,
       // S9 (L33) / R-01: the client's own market price, with its date. Without
@@ -78,6 +96,11 @@ import { AuditModule } from '../audit/audit.module';
       Warehouse,
       UomConversion,
       Batch,
+      // R3: the outflow trace a sale records and a cancellation reads back.
+      // Without forFeature the draw dies on EntityMetadataNotFoundError.
+      BatchOutflowTrace,
+      // FD-01: the divergence ledger (the differences a sale declared).
+      InventoryDivergence,
       PurchaseDocument,
       RecipeVersion,
       RecipeDetail,
@@ -86,6 +109,11 @@ import { AuditModule } from '../audit/audit.module';
       ProductionBatchHistory,
       Shrinkage,
       ShrinkageDetail,
+      // R19: the count session document and its append-only counted entries;
+      // without forFeature the first real count dies on
+      // EntityMetadataNotFoundError.
+      CountSession,
+      CountSessionEntry,
       InventorySyncOutbox,
       InventorySyncReceipt,
       BcnFxRate,
@@ -94,6 +122,10 @@ import { AuditModule } from '../audit/audit.module';
       KardexCorrection,
       ProductInventoryMappingVersion,
       InventoryRemediationReceipt,
+      // The tenant's own units-of-measure registry. The insumo conversion
+      // guard honours a unit the operator registered in Catálogos, so it
+      // must read that catalog.
+      CatalogValue,
     ]),
   ],
   controllers: [
@@ -101,12 +133,15 @@ import { AuditModule } from '../audit/audit.module';
     RegularizationController,
     RemediationController,
     InventoryReportsController,
+    InventoryDivergenceController,
     ProductController,
     RecipeController,
     InsumoController,
+    UomCatalogController,
   ],
   providers: [
     InventoryPurchaseService,
+    InventoryDivergenceService,
     RecipeService,
     BomExplosionService,
     BatchCostingService,
@@ -114,10 +149,12 @@ import { AuditModule } from '../audit/audit.module';
     ShrinkageService,
     CostCalculatorService,
     CountSessionService,
+    CountSessionPrintableService,
     ForensicAlertService,
     GovernanceApprovalService,
     KardexRegularizationService,
     InventoryReportsService,
+    TheoreticalCostService,
     // S9 (L33) / R-01: lower-of-cost-or-market writedowns.
     InventoryValuationService,
     UomConversionCalculator,
@@ -127,9 +164,7 @@ import { AuditModule } from '../audit/audit.module';
     SaleInventoryRemediationService,
     {
       provide: FORENSIC_ALERT_DISPATCHER,
-      useValue: {
-        dispatchToAdmins: async () => Promise.resolve(),
-      },
+      useClass: ForensicAlertEmailDispatcher,
     },
     {
       provide: FX_RATE_RESOLVER,

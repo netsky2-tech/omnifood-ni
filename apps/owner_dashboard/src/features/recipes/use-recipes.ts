@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTenantId } from '@/lib/tenant';
 import {
   fetchActiveRecipe,
+  fetchActiveRecipes,
   fetchRecipeSnapshot,
   fetchRecipeVersions,
   createRecipeVersion,
@@ -25,6 +26,21 @@ export function useActiveRecipe(productId: string, enabled = true) {
     queryKey: ['recipes', tenantId, 'active', productId],
     queryFn: ({ signal }) => fetchActiveRecipe(productId, { signal }),
     enabled: enabled && !!productId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Every product with an active published recipe, with the recipe's own
+ * figures. The Recetas grid renders one card per product, so the recipe
+ * data has to cover the whole grid — asking for the SELECTED product's
+ * recipe only made every other card claim it had no recipe.
+ */
+export function useActiveRecipes() {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: ['recipes', tenantId, 'active-list'],
+    queryFn: ({ signal }) => fetchActiveRecipes({ signal }),
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -61,6 +77,7 @@ export function useCreateRecipeVersion() {
       createRecipeVersion(productId, input),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['recipes', tenantId, 'active', variables.productId] });
+      queryClient.invalidateQueries({ queryKey: ['recipes', tenantId, 'active-list'] });
       queryClient.invalidateQueries({ queryKey: ['products', tenantId] });
     },
   });

@@ -14,6 +14,7 @@ import { CategoryModifierGroup } from '../../src/modules/modifiers/entities/cate
 import { ProductModifierGroup } from '../../src/modules/modifiers/entities/product-modifier-group.entity';
 import { ModifiersService } from '../../src/modules/modifiers/services/modifiers.service';
 import { ModifiersController } from '../../src/modules/modifiers/controllers/modifiers.controller';
+import { ModifierPendingConfigurationService } from '../../src/modules/modifiers/services/modifier-pending-configuration.service';
 import { AuthGuard } from '../../src/modules/identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../../src/modules/identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
@@ -158,6 +159,10 @@ async function withIsolatedSchema(
           useValue: { authorize: jest.fn((token: unknown) => token) },
         },
         { provide: ModifiersService, useValue: modifiersService },
+        {
+          provide: ModifierPendingConfigurationService,
+          useValue: { listPendingDeviations: jest.fn().mockResolvedValue([]) },
+        },
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),

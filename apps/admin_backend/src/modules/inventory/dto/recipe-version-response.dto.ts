@@ -61,6 +61,41 @@ export class RecipeVersionSnapshotResponseDto {
 }
 
 /**
+ * One row of the Recetas grid: a product with an ACTIVE PUBLISHED recipe.
+ *
+ * `estimatedCostNio` is the THEORETICAL unit cost of the recipe (the batch
+ * cost of the components priced at their current CPP, divided by the
+ * yield) — the same number the "Costo por plato" report shows. It is null
+ * when the recipe cannot be priced, and `costUnavailableReason` then carries
+ * the operator-facing explanation (never a raw id or a wire error).
+ */
+export class ActiveRecipeSummaryResponseDto {
+  productId: string;
+
+  productName: string;
+
+  productUom: string | null;
+
+  recipeVersionId: string;
+
+  versionNumber: number;
+
+  componentCount: number;
+
+  yieldQuantity: number;
+
+  technicalShrinkPct: number;
+
+  versionNote: string | null;
+
+  effectiveAt: Date | null;
+
+  estimatedCostNio: number | null;
+
+  costUnavailableReason: string | null;
+}
+
+/**
  * #523 T4 — one row of the pending-suggestion list: a recipe version created
  * by an industry template that is still DRAFT and needs human review.
  */

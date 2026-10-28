@@ -1,12 +1,18 @@
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
 } from 'class-validator';
+import {
+  MODIFIER_INVENTORY_EFFECT,
+  MODIFIER_INVENTORY_EFFECTS,
+} from '../modifier-inventory-effect';
 
 /**
  * A client that read a Postgres decimal and sent the same value back must
@@ -29,6 +35,10 @@ const numericStringToNumber = ({ value }: { value: unknown }): unknown => {
  * Partial update of a modifier option. Setting `is_default=true` triggers
  * the single-default invariant in the service: all sibling options of the
  * same group lose their default in the same transaction.
+ *
+ * R28 — the inventory effect is part of the update. Declaring
+ * `inventory_effect: 'NONE'` (or clearing the insumo/quantity/factor) takes
+ * the option back to price-only.
  */
 export class UpdateModifierOptionDto {
   @IsOptional()
@@ -53,4 +63,28 @@ export class UpdateModifierOptionDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  // --- R28: the optional inventory effect -------------------------------
+
+  @IsOptional()
+  @IsIn(MODIFIER_INVENTORY_EFFECTS)
+  inventory_effect?: (typeof MODIFIER_INVENTORY_EFFECT)[keyof typeof MODIFIER_INVENTORY_EFFECT];
+
+  @IsOptional()
+  @IsUUID('4')
+  effect_insumo_id?: string;
+
+  @IsOptional()
+  @IsUUID('4')
+  effect_target_insumo_id?: string;
+
+  @Transform(numericStringToNumber)
+  @IsOptional()
+  @IsNumber()
+  effect_quantity?: number;
+
+  @Transform(numericStringToNumber)
+  @IsOptional()
+  @IsNumber()
+  effect_factor?: number;
 }

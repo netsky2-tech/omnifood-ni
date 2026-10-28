@@ -38,6 +38,9 @@ vi.mock("@/features/inventory/use-inventory-reports", () => ({
   useSuppliers: vi.fn(),
   useCreateSupplier: vi.fn(),
   useCreateManualPurchase: vi.fn(),
+  // The insumo form derives its conversion-factor presets from the PLATFORM
+  // UoM catalog (protocol data with the physical anchor factors).
+  usePlatformUomCatalog: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 
 vi.mock("@/features/recipes/use-recipes", () => ({
@@ -244,7 +247,7 @@ describe("PurchasesTab", () => {
     expect(notice).toHaveTextContent("puede haber más en el rango");
     // §42.1/§62: an exception the owner must see wears the semantic warning
     // palette (border + tinted background), not a near-white tint.
-    expect(notice).toHaveClass("border-amber-200", "bg-amber-50", "text-amber-800");
+    expect(notice).toHaveClass("border-warning/30", "bg-warning-50", "text-warning-700");
   });
 
   it("does not show the truncation notice when the page is not full", () => {
@@ -289,7 +292,7 @@ describe("PurchasesTab", () => {
       /No se pudo cargar el historial de compras/i,
     );
     // Destructive treatment for a failure state (§42.1), with icon + text.
-    expect(alert).toHaveClass("bg-destructive/10", "text-destructive");
+    expect(alert).toHaveClass("bg-destructive-50", "text-destructive-700");
 
     const user = userEvent.setup();
     await user.click(screen.getByTestId("purchases-retry-btn"));
@@ -543,17 +546,17 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
   });
 
-  it("submits through the manual route, toasts, resets and keeps the panel open (§19.3)", async () => {
+  it("submits through the manual route, toasts and closes, or resets on save-another", async () => {
     const mutateAsync = mockCreatePurchase();
     const user = userEvent.setup();
     render(<PurchasesTab />, { wrapper: TestWrapper });
 
     await openAndFillForm(user);
     await waitFor(() => {
-      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+      expect(screen.getByTestId("purchases-form-save-another")).toBeEnabled();
     });
 
-    await user.click(screen.getByTestId("purchases-form-submit"));
+    await user.click(screen.getByTestId("purchases-form-save-another"));
 
     await waitFor(() => {
       expect(mutateAsync).toHaveBeenCalledWith(
@@ -570,8 +573,7 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     expect(toast).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Compra registrada" }),
     );
-    // Multiple purchases are common: form resets for the next entry but the
-    // dialog stays open.
+    // On save-another: form resets for the next entry and dialog stays open.
     expect(screen.getByTestId("purchases-form-quantity")).toHaveValue(null);
     expect(screen.getByTestId("purchases-form-supplier")).toHaveTextContent(
       "Seleccione proveedor",
@@ -800,7 +802,8 @@ describe("InventoryPage tab bar (AT-08 / BX-013)", () => {
 
     const tablist = screen.getByRole("tablist", { name: "Secciones de inventario" });
     const tabs = within(tablist).getAllByRole("tab");
-    expect(tabs).toHaveLength(7);
+    // 7 sections + the reconciliation tab (FD-01: what did not add up).
+    expect(tabs).toHaveLength(8);
     expect(tabs[0]).toHaveAttribute("aria-selected", "true");
     expect(tabs[1]).toHaveAttribute("aria-selected", "false");
     expect(screen.getByRole("tabpanel")).toBeInTheDocument();
@@ -822,7 +825,7 @@ describe("InventoryPage tab bar (AT-08 / BX-013)", () => {
 
     await user.keyboard("{End}");
     await waitFor(() => {
-      expect(tabs[6]).toHaveAttribute("aria-selected", "true");
+      expect(tabs[7]).toHaveAttribute("aria-selected", "true");
     });
 
     await user.keyboard("{Home}");

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:mockito/mockito.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
+import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
@@ -198,6 +199,19 @@ void main() {
       fakeTenantConfigService,
       fakeKitchenOrderService,
     );
+  });
+
+
+  test('filteredProducts excludes products with sellPrice <= 0 (sub-recipes / kitchen preps) (R21 / S18)', () async {
+    when(mockInventoryRepo.getActiveProducts()).thenAnswer((_) async => [
+      const Product(id: 'p1', name: 'Tacos Especiales', uom: 'UN', stock: 10, averageCost: 40, sellPrice: 180),
+      const Product(id: 'p2', name: 'Relleno de Carne Criolla', uom: 'UN', stock: 5, averageCost: 20, sellPrice: 0),
+    ]);
+
+    await viewModel.loadProducts();
+
+    expect(viewModel.filteredProducts.map((p) => p.name), contains('Tacos Especiales'));
+    expect(viewModel.filteredProducts.map((p) => p.name), isNot(contains('Relleno de Carne Criolla')));
   });
 
   test('processSale fails when there is no authenticated user', () async {
@@ -1874,6 +1888,55 @@ void main() {
           viewModel.errorMessage,
           'Configure el consecutivo inicial DGI antes de facturar.',
         );
+      },
+    );
+
+    test(
+      'CheckoutAuthorityException with negativeStockBlocked surfaces friendly Spanish directive naming product and insumo',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          const CheckoutAuthorityException(
+            reason: CheckoutAuthorityFailureReason.negativeStockBlocked,
+            productName: 'Pescado Frito',
+            insumoName: 'Pargo Rojo',
+            requiredQuantity: 1.0,
+            availableQuantity: 0.0,
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<CheckoutAuthorityException>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, contains('Pescado Frito'));
+        expect(message, contains('Pargo Rojo'));
+        expect(message, contains('stock suficiente'));
+        expect(message, contains('no permite existencias negativas'));
+      },
+    );
+
+    test(
+      'CheckoutAuthorityException with circularRecipe surfaces friendly Spanish directive naming circular dependency',
+      () async {
+        viewModel.addToCart(noRecipeProduct);
+        stubSaveSaleToThrow(
+          const CheckoutAuthorityException(
+            reason: CheckoutAuthorityFailureReason.circularRecipe,
+            productName: 'Enchilada Suprema',
+          ),
+        );
+
+        await expectLater(
+          viewModel.processSale([PaymentMethod.cash]),
+          throwsA(isA<CheckoutAuthorityException>()),
+        );
+
+        final message = viewModel.errorMessage!;
+        expect(message, contains('Enchilada Suprema'));
+        expect(message, contains('dependencia circular'));
       },
     );
 

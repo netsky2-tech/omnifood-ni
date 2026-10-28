@@ -9,11 +9,23 @@ class AuthorityInsumoEntity {
   final String name;
   final String uom;
 
+  /// R28: whether the insumo is still ACTIVE in the catalog. The delta
+  /// already carries it; the projection did not map it, so a deactivated
+  /// insumo looked available to the terminal. An effect that points at a
+  /// deactivated insumo must NOT apply (the SOHO guarantee, D6): the
+  /// terminal would demand a stock that is not for sale.
+  final bool isActive;
+
+  @ColumnInfo(name: 'negative_stock_policy')
+  final String negativeStockPolicy;
+
   const AuthorityInsumoEntity({
     required this.tenantId,
     required this.id,
     required this.name,
     required this.uom,
+    this.isActive = true,
+    this.negativeStockPolicy = 'RESTRICT',
   });
 }
 
@@ -77,18 +89,17 @@ class AuthorityRecipeVersionEntity {
 @Entity(
   tableName: 'authority_recipe_version_components',
   primaryKeys: ['tenant_id', 'id'],
+  // R21 / S18: the insumo_id FK is deliberately absent. A component of type
+  // 'SUB_RECIPE' names a PRODUCT id (the sub-recipe), which never has an
+  // authority_insumos row — the backend excludes SUB_RECIPE components from
+  // the insumo closure it delivers. ingredient_type is what distinguishes the
+  // two reference kinds; only INSUMO components must resolve to an insumo.
   foreignKeys: [
     ForeignKey(
       childColumns: ['tenant_id', 'version_id'],
       parentColumns: ['tenant_id', 'id'],
       entity: AuthorityRecipeVersionEntity,
       onDelete: ForeignKeyAction.cascade,
-    ),
-    ForeignKey(
-      childColumns: ['tenant_id', 'insumo_id'],
-      parentColumns: ['tenant_id', 'id'],
-      entity: AuthorityInsumoEntity,
-      onDelete: ForeignKeyAction.restrict,
     ),
   ],
   indices: [

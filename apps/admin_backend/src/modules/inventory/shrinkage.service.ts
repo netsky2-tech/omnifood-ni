@@ -23,7 +23,10 @@ import {
   shouldCreateHighValueInventoryAlert,
 } from './forensic-alert.service';
 import { RecipeService } from './recipe.service';
-import { BomExplosionService } from './bom-explosion.service';
+import {
+  BomExplosionService,
+  hasSubRecipeComponent,
+} from './bom-explosion.service';
 import {
   MERMA_REASONS,
   normalizeMermaReason,
@@ -228,10 +231,21 @@ export class ShrinkageService {
           product.tenant_id,
           product.id,
         );
-        const exploded = this.bomExplosionService.explode({
-          snapshotComponents: snapshot.components,
-          orderQuantity: normalizedQuantity,
-        });
+        const exploded = hasSubRecipeComponent(snapshot.components)
+          ? await this.bomExplosionService.explodeWithSubRecipes({
+              rootProductId: product.id,
+              rootComponents: snapshot.components,
+              orderQuantity: normalizedQuantity,
+              resolveSubRecipeComponents: (subRecipeProductId) =>
+                this.recipeService.getComponentsForActiveProduct(
+                  product.tenant_id,
+                  subRecipeProductId,
+                ),
+            })
+          : this.bomExplosionService.explode({
+              snapshotComponents: snapshot.components,
+              orderQuantity: normalizedQuantity,
+            });
 
         // R20: the document is created ONCE, before the loop, and every
         // component movement below points at it. This is deliberately NOT a

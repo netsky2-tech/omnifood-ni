@@ -22,8 +22,18 @@ import type {
  * in `modules/inventory/product-response.ts`; no column transformer, on
  * purpose, so `change_log` from-values keep the driver's raw shape.
  */
-export type ModifierOptionResponse = Omit<ModifierOption, 'price_delta'> & {
+export type ModifierOptionResponse = Omit<
+  ModifierOption,
+  'price_delta' | 'effect_quantity' | 'effect_factor'
+> & {
   price_delta: number;
+  /**
+   * R28: the effect's own decimals reach Node as strings too
+   * (`effect_quantity numeric(14,4)`, `effect_factor numeric(10,4)`), so the
+   * response boundary coerces them exactly like `price_delta`.
+   */
+  effect_quantity: number | null;
+  effect_factor: number | null;
 };
 
 export type ModifierGroupResponse = Omit<
@@ -35,9 +45,11 @@ export type ModifierGroupResponse = Omit<
 
 export type EffectiveModifierOptionResponse = Omit<
   EffectiveModifierOption,
-  'price_delta'
+  'price_delta' | 'effect_quantity' | 'effect_factor'
 > & {
   price_delta: number;
+  effect_quantity: number | null;
+  effect_factor: number | null;
 };
 
 export type EffectiveModifierGroupResponse = Omit<
@@ -52,12 +64,25 @@ function toFiniteNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * A decimal that is NULL must stay NULL in the response: `0` would be a
+ * quantity (the operator applied nothing) instead of "not declared" (the
+ * quantity is inherited from the recipe component).
+ */
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function serializeModifierOption(
   option: ModifierOption,
 ): ModifierOptionResponse {
   return {
     ...option,
     price_delta: toFiniteNumber(option.price_delta),
+    effect_quantity: toNullableNumber(option.effect_quantity),
+    effect_factor: toNullableNumber(option.effect_factor),
   };
 }
 
@@ -85,6 +110,8 @@ export function serializeEffectiveGroups(
       (option): EffectiveModifierOptionResponse => ({
         ...option,
         price_delta: toFiniteNumber(option.price_delta),
+        effect_quantity: toNullableNumber(option.effect_quantity),
+        effect_factor: toNullableNumber(option.effect_factor),
       }),
     ),
   }));

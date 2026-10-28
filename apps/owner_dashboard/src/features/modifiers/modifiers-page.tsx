@@ -24,6 +24,7 @@ import {
   ModifierGroupForm,
 } from "./modifier-group-form";
 import { CategoryAttachments } from "./category-attachments";
+import { PendingConfigurationPanel } from "./pending-configuration-panel";
 import { ProductExceptions } from "./product-exceptions";
 import {
   useModifierGroups,
@@ -37,12 +38,15 @@ import { toast } from "@/hooks/use-toast";
 import { useRbac } from "@/lib/rbac";
 import { cn } from "@/lib/utils";
 
-type ModifiersTab = "grupos" | "categoria" | "producto";
+type ModifiersTab = "grupos" | "categoria" | "producto" | "pendientes";
 
 const TABS: { id: ModifiersTab; label: string }[] = [
   { id: "grupos", label: "Grupos" },
   { id: "categoria", label: "Por categoría" },
   { id: "producto", label: "Por producto" },
+  // The configuration the catalogue still owes (owner's decision: the
+  // backoffice owns the quantity of an extra).
+  { id: "pendientes", label: "Pendientes de configurar" },
 ];
 
 const STATUS_FILTERS: { id: ModifierGroupStatus; label: string }[] = [
@@ -53,6 +57,12 @@ const STATUS_FILTERS: { id: ModifierGroupStatus; label: string }[] = [
 
 export function ModifiersPage() {
   const [activeTab, setActiveTab] = useState<ModifiersTab>("grupos");
+  // The pending list is the owner's work (the backend allows OWNER and
+  // MANAGER): a cashier has nothing to configure and must not see a screen
+  // that only complains.
+  const { canPerformAction } = useRbac();
+  const canConfigure = canPerformAction("modifiers.write");
+  const visibleTabs = canConfigure ? TABS : TABS.filter((tab) => tab.id !== "pendientes");
   return (
     <div className="space-y-6">
       <div>
@@ -68,7 +78,7 @@ export function ModifiersPage() {
         aria-label="Secciones de modificadores"
         className="flex gap-1 border-b"
       >
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             role="tab"
@@ -87,6 +97,7 @@ export function ModifiersPage() {
       </div>
 
       {activeTab === "grupos" && <GroupsTab />}
+      {activeTab === "pendientes" && <PendingConfigurationPanel />}
       {activeTab === "categoria" && <CategoryAttachments />}
       {activeTab === "producto" && <ProductExceptions />}
     </div>

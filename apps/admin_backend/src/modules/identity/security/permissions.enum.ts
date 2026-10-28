@@ -27,6 +27,15 @@ export enum AppPermission {
   ONBOARDING_SUPPORT_ASSIST = 'onboarding:support:assist',
   INVENTORY_REMEDIATION_EXECUTE = 'inventory.remediation.execute',
   DEVICE_SYNC_REVOKE = 'device_sync:revoke',
+  /**
+   * Configuring the tenant's SUPERVISION policy (who may authorize a
+   * sensitive operation here, and which flows accept a self-authorization).
+   *
+   * It is a control configuration, so it is gated like one: the OWNER and
+   * the MANAGER hold it by default, and the granular matrix may grant it to
+   * whoever the tenant trusts with that decision.
+   */
+  SUPERVISION_CONFIGURE = 'supervision:configure',
 }
 
 export type Permission = `${AppPermission}` | AppPermission;
@@ -59,6 +68,7 @@ export const APP_PERMISSIONS = {
   ONBOARDING_SUPPORT_ASSIST: AppPermission.ONBOARDING_SUPPORT_ASSIST,
   INVENTORY_REMEDIATION_EXECUTE: AppPermission.INVENTORY_REMEDIATION_EXECUTE,
   DEVICE_SYNC_REVOKE: AppPermission.DEVICE_SYNC_REVOKE,
+  SUPERVISION_CONFIGURE: AppPermission.SUPERVISION_CONFIGURE,
 } as const;
 
 export const ALL_APP_PERMISSIONS = Object.values(AppPermission);
@@ -95,6 +105,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.ONBOARDING_ACTIVATION_MANAGE,
     AppPermission.INVENTORY_REMEDIATION_EXECUTE,
     AppPermission.DEVICE_SYNC_REVOKE,
+    AppPermission.SUPERVISION_CONFIGURE,
   ],
   [UserRole.MANAGER]: [
     AppPermission.SALES_VOID_INVOICE,
@@ -111,6 +122,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     AppPermission.LOYALTY_HISTORY_READ,
     AppPermission.ONBOARDING_READ,
     AppPermission.INVENTORY_REMEDIATION_EXECUTE,
+    AppPermission.SUPERVISION_CONFIGURE,
   ],
   [UserRole.CASHIER]: [],
   [UserRole.WAITER]: [],

@@ -107,6 +107,7 @@ export const kardexMovementTypeLabels: Record<string, string> = {
   CREDIT_NOTE_RESTOCK: "Nota de crédito",
   ADJUSTMENT: "Ajuste",
   REVERSAL: "Reversión",
+  VALUATION_WRITEDOWN: "Castigo por valuación",
   INITIAL_STOCK: "Stock inicial",
 };
 
@@ -182,6 +183,16 @@ export const auditLedgerActionLabels: Record<string, string> = {
   SUPERVISOR_OVERRIDE_CLOSE_SESSION: "Cierre de sesión autorizado",
   SUPERVISOR_OVERRIDE_APPROVED: "Autorización de supervisor aprobada",
   SUPERVISOR_OVERRIDE_REJECTED: "Autorización de supervisor rechazada",
+  // The tenant's supervision policy made the supervisor optional, so the
+  // terminal records the self-authorization instead of the override. These
+  // are the tenant's own operations, signed by the operator: the record is
+  // what the owner reviews afterwards.
+  SELF_AUTHORIZED_CLOSE_SESSION: "Cierre de turno firmado por el operador",
+  SELF_AUTHORIZED_MANUAL_DISCOUNT: "Descuento manual firmado por el operador",
+  SELF_AUTHORIZED_DRAWER_OPENED: "Gaveta abierta por el operador",
+  MODIFIER_EFFECT_QUANTITY_ADJUSTED: "Cantidad de un extra ajustada",
+  MODIFIER_EFFECT_QUANTITY_OVERRIDE: "Cantidad de un extra ajustada con supervisor",
+  SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY: "Cantidad de un extra ajustada por el operador",
   DRAWER_OPENED_MANUALLY: "Apertura manual de gaveta",
   REPRINT_REQUESTED: "Reimpresión solicitada",
   PRINT_PAYLOAD_CORRUPT: "Impresión detenida por datos corruptos",
@@ -199,6 +210,23 @@ export const auditLedgerActionLabels: Record<string, string> = {
  * SUPERVISOR_OVERRIDE, USER). Unknown values pass through untouched via
  * `localize`.
  */
+/**
+ * The operations the tenant's supervision policy governs, in the owner's
+ * words. The codes travel on the wire; the screen never shows them raw.
+ */
+export const supervisionFlowLabels: Record<string, string> = {
+  CLOSE_BOX: "Cierre de turno (Corte Z)",
+  MANUAL_DISCOUNT: "Descuento manual",
+  CASH_DRAWER: "Apertura de gaveta",
+  MODIFIER_QUANTITY: "Cantidad de un extra",
+};
+
+/** The credential a signature was made with. */
+export const credentialMethodLabels: Record<string, string> = {
+  PIN: "PIN del operador",
+  TOTP: "Código TOTP",
+};
+
 export const auditLedgerTargetTypeLabels: Record<string, string> = {
   // Round-2 F-4a's derivation (audit-target-derivation.ts) writes the type
   // UPPERCASE at ingestion; the pre-existing lowercase key stays for rows

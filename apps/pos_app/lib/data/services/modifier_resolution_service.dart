@@ -65,6 +65,14 @@ class ModifierResolutionService {
               name: option.name,
               priceDelta: option.priceDelta,
               isDefault: option.isDefault,
+              // R28: the option's INVENTORY effect travels with the
+              // catalogue, so the terminal can resolve the demand of a line
+              // (M3) and the sale can carry the deviation (M2).
+              inventoryEffect: option.inventoryEffect,
+              effectInsumoId: option.effectInsumoId,
+              effectTargetInsumoId: option.effectTargetInsumoId,
+              effectQuantity: option.effectQuantity,
+              effectFactor: option.effectFactor,
             ),
           );
     }

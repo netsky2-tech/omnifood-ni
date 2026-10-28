@@ -5,6 +5,7 @@ import {
   fetchCogs,
   fetchKardex,
   fetchAlerts,
+  fetchPlatformUomCatalog,
   fetchPurchases,
   fetchSuppliers,
   createSupplier,
@@ -53,6 +54,18 @@ export function useAlerts() {
     queryKey: ["inventory", tenantId, "alerts"],
     queryFn: ({ signal }) => fetchAlerts({ signal }),
     staleTime: 2 * 60 * 1000,
+  });
+}
+
+/**
+ * The platform UoM catalog with its anchor factors. Protocol data (never
+ * tenant-scoped), so it is cached globally and never invalidated.
+ */
+export function usePlatformUomCatalog() {
+  return useQuery({
+    queryKey: ["inventory", "uom-catalog"],
+    queryFn: ({ signal }) => fetchPlatformUomCatalog({ signal }),
+    staleTime: 60 * 60 * 1000,
   });
 }
 

@@ -49,4 +49,21 @@ abstract class InvoiceDao {
     "SELECT COUNT(*) FROM invoices WHERE inventory_outcome = 'APPLIED_INVENTORY_PENDING'",
   )
   Future<int?> getInventoryEnrichmentPendingCount();
+
+  /// FD-01: the sales the cloud applied while DECLARING that part of the
+  /// stock was not backed. The terminal does not block them (the invoice is
+  /// in the cloud and the difference is reconciled in the backoffice) — it
+  /// only shows the operator that there is something to reconcile.
+  @Query(
+    "SELECT COUNT(*) FROM invoices WHERE cloud_inventory_outcome = 'APPLIED_WITH_DIVERGENCE'",
+  )
+  Future<int?> getInventoryDivergenceCount();
+
+  @Query(
+    'UPDATE invoices SET cloud_inventory_outcome = :outcome WHERE id = :invoiceId',
+  )
+  Future<void> updateCloudInventoryOutcome(
+    String invoiceId,
+    String outcome,
+  );
 }

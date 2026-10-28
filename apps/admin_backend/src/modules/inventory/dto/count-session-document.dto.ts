@@ -32,6 +32,28 @@ export class CountLineEntryDocumentDto {
   @IsNumber()
   countedQuantity: number;
 
+  /**
+   * A-01: the LOT this observation was made in.
+   *
+   * The entry is the OBSERVATION ("LOTE-20261021-001: 30 ml"), so the lot
+   * belongs to the entry, not to the line: one line can carry several
+   * entries, one per lot.
+   *
+   * WHY IT MATTERS: a positive variance is stock that APPEARS. Without a lot
+   * it would enter the aggregate with no lot behind it, and the next sale
+   * would draw from the lots and find the aggregate and the lots
+   * disagreeing — the exact divergence this system now declares. With the
+   * lot, the physical truth enters ITS lot and the parity is restored.
+   */
+  @IsOptional()
+  @IsString()
+  batchId?: string;
+
+  /** The lot's number, as it was seen on the shelf (the evidence). */
+  @IsOptional()
+  @IsString()
+  batchNumber?: string;
+
   @IsOptional()
   @IsDateString()
   countedAt?: string;

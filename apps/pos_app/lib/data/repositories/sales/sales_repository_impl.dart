@@ -81,11 +81,28 @@ class SalesRepositoryImpl implements SalesRepository {
       'synced',
       MovementDeliveryState.cloudAcknowledged,
     );
+
+    // FD-01: what the cloud declared about the inventory of this sale. The
+    // local `inventory_outcome` is untouched on purpose: it is what THIS
+    // terminal computed, and the cloud's answer is a different truth (the
+    // difference it could not back).
+    if (effectiveOutcome != null) {
+      await invoiceDao.updateCloudInventoryOutcome(
+        invoiceId,
+        effectiveOutcome,
+      );
+    }
   }
 
   @override
   Future<int> getInventoryEnrichmentPendingCount() async {
     final count = await invoiceDao.getInventoryEnrichmentPendingCount();
+    return count ?? 0;
+  }
+
+  @override
+  Future<int> getInventoryDivergenceCount() async {
+    final count = await invoiceDao.getInventoryDivergenceCount();
     return count ?? 0;
   }
 
@@ -642,6 +659,10 @@ class SalesRepositoryImpl implements SalesRepository {
       inventoryPolicyVersion: entity.inventoryPolicyVersion,
       inventoryOutcome: entity.inventoryOutcome,
       inventoryOutcomeReason: entity.inventoryOutcomeReason,
+      // FD-01: what the cloud declared about the inventory of this sale. A
+      // rewrite (void, markAsFailed) must NOT erase it: it is part of the
+      // record of what the cloud applied.
+      cloudInventoryOutcome: entity.cloudInventoryOutcome,
       bcnOfficialRate: entity.bcnOfficialRate,
       commercialRate: entity.commercialRate,
       totalUsd: entity.totalUsd,

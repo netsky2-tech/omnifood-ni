@@ -24,6 +24,7 @@ import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
 import '../models/inventory/authority_projection_entities.dart';
 import '../models/inventory/insumo_entity.dart';
+import '../models/inventory/batch_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
 import '../models/security_profile_entity.dart';
@@ -1145,6 +1146,17 @@ class SyncService {
 
           final result = resultsByKey[idempotencyKey];
           if (result != null && result.shouldMarkSalesSynced(record)) {
+            // FD-01: the cloud APPLIED the sale and DECLARED the difference
+            // that the inventory could not back. This is NOT a failure and it
+            // does not hold the sale: it is a difference to reconcile in the
+            // backoffice. It is logged so the trail says so out loud.
+            if (result.inventoryOutcome == 'APPLIED_WITH_DIVERGENCE') {
+              developer.log(
+                '[SYNC_SALES_DIVERGENCE] sale $invoiceId was applied with an '
+                'inventory difference to reconcile (${result.message ?? 'sin detalle'})',
+                name: 'SyncService',
+              );
+            }
             if (result.acknowledgedMovementCorrelationIds != null ||
                 result.inventoryOutcome != null) {
               try {
@@ -2477,6 +2489,9 @@ class SyncService {
                   .map(
                     (entry) => {
                       'countedQuantity': entry.countedQuantity,
+                      if (entry.batchId != null) 'batchId': entry.batchId,
+                      if (entry.batchNumber != null)
+                        'batchNumber': entry.batchNumber,
                       'countedAt': entry.countedAt?.toIso8601String(),
                       'notes': entry.notes,
                       'actorLabel': entry.actorLabel,
@@ -3985,6 +4000,12 @@ class SyncService {
                 averageCost: asDouble(map['averageCost']) ?? 0.0,
                 isActive: map['isActive'] as bool? ?? true,
                 isPerishable: map['isPerishable'] as bool? ?? false,
+                // FD-02: the LOT availability the cloud published. It is the
+                // number the cloud will actually draw from, so the terminal
+                // can apply the SAME availability rule (see
+                // `availableQuantityFor`).
+                lotAvailableStock: asDouble(map['lotAvailableStock']),
+                isBatchManaged: map['isBatchManaged'] as bool? ?? false,
                 // Issue #521 S1: stock alert thresholds from the backend
                 // delta; coerced safely via asDouble (numeric/decimal columns
                 // are serialized as strings by TypeORM/pg driver).
@@ -4029,6 +4050,18 @@ class SyncService {
             if (tenantId.isEmpty || id.isEmpty || name.isEmpty || uom.isEmpty) {
               continue;
             }
+            // R28 (M4.1): the delta carries the LIVE state of the insumo.
+            // A deactivated insumo must be visible as deactivated, or an
+            // effect pointing at it would be applied by the terminal while
+            // the cloud refuses it (a divergence the sale would carry as
+            // RECIPE_DEVIATION_MISMATCH).
+            final isActive = map['isActive'] as bool? ?? true;
+            final negativeStockPolicy =
+                (map['negativeStockPolicy'] as String?)?.trim();
+            final effectivePolicy =
+                (negativeStockPolicy != null && negativeStockPolicy.isNotEmpty)
+                    ? negativeStockPolicy
+                    : 'RESTRICT';
             final existing = await authorityDao.findInsumoById(tenantId, id);
             if (existing == null) {
               await authorityDao.insertInsumo(
@@ -4037,7 +4070,18 @@ class SyncService {
                   id: id,
                   name: name,
                   uom: uom,
+                  isActive: isActive,
+                  negativeStockPolicy: effectivePolicy,
                 ),
+              );
+            } else if (existing.isActive != isActive ||
+                existing.negativeStockPolicy != effectivePolicy) {
+              // The identity stays append-only; only the state is refreshed.
+              await authorityDao.updateInsumoState(
+                tenantId,
+                id,
+                isActive ? 1 : 0,
+                effectivePolicy,
               );
             }
           }
@@ -4047,6 +4091,32 @@ class SyncService {
             name: 'SyncService',
             error: e,
             stackTrace: st,
+          );
+        }
+
+        // 3c. Batches (A-01: lot traceability synchronization)
+        final rawBatches = rawDeltas['batches'] as List<dynamic>? ?? const [];
+        for (final b in rawBatches) {
+          if (b is! Map) continue;
+          final map = Map<String, dynamic>.from(b);
+          final id = (map['id'] as String?)?.trim() ?? '';
+          final insumoId = (map['insumoId'] as String?)?.trim() ?? '';
+          final batchNumber = (map['batchNumber'] as String?)?.trim() ?? '';
+          final expirationDate = (map['expirationDate'] as String?)?.trim() ?? '';
+          if (id.isEmpty || insumoId.isEmpty || batchNumber.isEmpty || expirationDate.isEmpty) {
+            continue;
+          }
+          await _database!.batchDao.insertBatch(
+            BatchEntity(
+              id: id,
+              insumoId: insumoId,
+              batchNumber: batchNumber,
+              receivedDate: map['receivedDate'] as String?,
+              expirationDate: expirationDate,
+              remainingStock: asDouble(map['remainingStock']) ?? 0.0,
+              cost: asDouble(map['cost']) ?? 0.0,
+              isSynced: true,
+            ),
           );
         }
 
@@ -4786,6 +4856,16 @@ class SyncService {
                   isDefault: optionMap['isDefault'] as bool? ?? false,
                   sortOrder: asInt(optionMap['sortOrder']) ?? 0,
                   isActive: optionMap['isActive'] as bool? ?? true,
+                  // R28: the option's INVENTORY effect. A backend that
+                  // predates R28 sends no effect at all, and the option
+                  // then reads as 'NONE' — price-only, exactly as before.
+                  inventoryEffect:
+                      optionMap['inventoryEffect']?.toString() ?? 'NONE',
+                  effectInsumoId: optionMap['effectInsumoId']?.toString(),
+                  effectTargetInsumoId:
+                      optionMap['effectTargetInsumoId']?.toString(),
+                  effectQuantity: asDouble(optionMap['effectQuantity']),
+                  effectFactor: asDouble(optionMap['effectFactor']),
                 ),
               );
             }

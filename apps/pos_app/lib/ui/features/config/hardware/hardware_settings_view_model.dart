@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import '../../../../data/services/company_logo_adoption_service.dart';
 import '../../../../domain/models/config/printer_config.dart';
 import '../../../../domain/models/config/tax_regime.dart';
 import '../../../../domain/models/sales/cashier_session.dart';
@@ -15,6 +16,7 @@ import '../../../../domain/services/printer/thermal_logo_processor.dart';
 class HardwareSettingsViewModel extends ChangeNotifier {
   final PrinterConfigService _configService;
   final PrinterPort? _injectedPrinterPort;
+  final CompanyLogoAdoptionService? _companyLogoAdoption;
   late PrinterPort _printerPort;
 
   PrinterConfig _config = const PrinterConfig();
@@ -32,13 +34,22 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   PrinterDriverType? _pendingDriverType;
   int? _pendingPaperWidth;
 
+  /// Company identity parity P4 (S7/L4): the sha256 REFERENCE of the
+  /// company logo the cloud holds, read from the latest stored fiscal
+  /// snapshot. Null means "the company has no cloud logo (or it cannot be
+  /// read)" — and then the adoption affordance NEVER appears and NOTHING is
+  /// written: inert by default.
+  String? _cloudLogoSha256;
+
   HardwareSettingsViewModel({
     required PrinterConfigService configService,
     PrinterPort? printerPort,
-  }) : _configService = configService,
-       _injectedPrinterPort = printerPort,
-       _printerPort =
-           printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
+    CompanyLogoAdoptionService? companyLogoAdoption,
+  })  : _configService = configService,
+        _injectedPrinterPort = printerPort,
+        _companyLogoAdoption = companyLogoAdoption,
+        _printerPort =
+            printerPort ?? PrinterResolver.resolve(const PrinterConfig()) {
     loadConfig();
   }
 
@@ -49,6 +60,19 @@ class HardwareSettingsViewModel extends ChangeNotifier {
   bool get isTesting => _isTesting;
   String? get statusMessage => _statusMessage;
   bool get isProfileConfigured => _isProfileConfigured;
+
+  /// The cloud logo's sha256 REFERENCE from the latest fiscal snapshot, or
+  /// null when the company has no cloud logo. Read-only fact; never written
+  /// to `printer_logo_*` by itself (S7).
+  String? get cloudLogoSha256 => _cloudLogoSha256;
+
+  /// Whether the "adopt the company logo" affordance may be offered: the
+  /// adoption service must be wired AND the company must have a cloud logo.
+  /// A terminal without a wired adoption service (unwired build) or without
+  /// a cloud logo shows nothing new and prints exactly what it printed
+  /// before this feature existed.
+  bool get canAdoptCompanyLogo =>
+      _companyLogoAdoption != null && _cloudLogoSha256 != null;
 
   /// #70 T1: the persisted profile selected a driver that is no longer
   /// offered in the selector ('Red TCP/IP'). The screen must render it as
@@ -71,12 +95,62 @@ class HardwareSettingsViewModel extends ChangeNotifier {
       _isProfileConfigured = await _configService.isPrinterProfileConfigured();
       _pendingDriverType = null;
       _pendingPaperWidth = null;
+      await _refreshCloudLogoReference();
       if (_injectedPrinterPort == null) {
         _printerPort = PrinterResolver.resolve(_config);
       }
       await refreshHardwareStatus();
     } catch (e) {
       _statusMessage = 'Error al cargar configuración: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Company identity parity P4: re-reads the cloud logo REFERENCE from the
+  /// stored fiscal snapshot. Read-only; a failed read keeps the previous
+  /// value and never blocks the screen (absence looks like absence, S3).
+  Future<void> _refreshCloudLogoReference() async {
+    final adoption = _companyLogoAdoption;
+    if (adoption == null) return;
+    try {
+      _cloudLogoSha256 = await adoption.readCloudLogoSha256();
+    } catch (_) {
+      // Keep the previously loaded reference; the affordance simply stays
+      // as it was. Nothing is written either way.
+    }
+  }
+
+  /// Explicit human adoption (L4): fetch the cloud original, verify it,
+  /// derive the thermal raster with the existing processor, and persist ONLY
+  /// the raster — the operator's width/height/enabled tuning is untouched.
+  /// Any failure leaves the previous local raster byte-identical (S7).
+  Future<bool> adoptCompanyLogo() async {
+    final adoption = _companyLogoAdoption;
+    if (adoption == null) return false;
+    _isLoading = true;
+    _statusMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await adoption.adoptCompanyLogo();
+      if (result.success) {
+        // Reload so the screen shows the adopted raster from the source of
+        // truth; width/height/enabled come back exactly as the operator had
+        // them (adoption never touched those keys).
+        await loadConfig();
+        _statusMessage =
+            'Logo de la empresa aplicado. El ancho, alto y habilitado locales se conservaron.';
+        return true;
+      } else {
+        _statusMessage = result.errorMessage;
+        _cloudLogoSha256 = await adoption.readCloudLogoSha256();
+        return false;
+      }
+    } catch (e) {
+      _statusMessage = 'Error al aplicar el logo de la empresa: $e';
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();

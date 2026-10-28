@@ -29,6 +29,8 @@ class CountLineEntity {
   final int? approvedEntryIndex;
   @ColumnInfo(name: 'entries_json')
   final String entriesJson;
+  @ColumnInfo(name: 'is_batch_managed')
+  final bool isBatchManaged;
 
   const CountLineEntity({
     required this.id,
@@ -39,5 +41,6 @@ class CountLineEntity {
     required this.theoreticalQuantity,
     required this.entriesJson,
     this.approvedEntryIndex,
+    this.isBatchManaged = false,
   });
 }

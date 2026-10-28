@@ -9,8 +9,9 @@ import 'dart:ui' as _i23;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i13;
 import 'package:pos_app/data/services/sync_service.dart' as _i10;
-import 'package:pos_app/domain/models/audit_log.dart' as _i26;
+import 'package:pos_app/domain/models/audit_log.dart' as _i27;
 import 'package:pos_app/domain/models/auth/terminal_linking.dart' as _i8;
+import 'package:pos_app/domain/models/config/supervision_policy.dart' as _i26;
 import 'package:pos_app/domain/models/config/tax_regime.dart' as _i19;
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart'
     as _i12;
@@ -385,6 +386,13 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
   @override
   bool get canManageCashDrawer => (super.noSuchMethod(
         Invocation.getter(#canManageCashDrawer),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  bool get canCloseOwnShift => (super.noSuchMethod(
+        Invocation.getter(#canCloseOwnShift),
         returnValue: false,
         returnValueForMissingStub: false,
       ) as bool);
@@ -809,6 +817,16 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
       ) as _i18.Future<void>);
 
   @override
+  _i18.Future<void> refreshTerminalCajaLabel() => (super.noSuchMethod(
+        Invocation.method(
+          #refreshTerminalCajaLabel,
+          [],
+        ),
+        returnValue: _i18.Future<void>.value(),
+        returnValueForMissingStub: _i18.Future<void>.value(),
+      ) as _i18.Future<void>);
+
+  @override
   void setCompanyTaxRegime(_i19.TaxRegime? regime) => super.noSuchMethod(
         Invocation.method(
           #setCompanyTaxRegime,
@@ -872,6 +890,16 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
         ),
         returnValueForMissingStub: null,
       );
+
+  @override
+  _i18.Future<void> reloadOperatorContext() => (super.noSuchMethod(
+        Invocation.method(
+          #reloadOperatorContext,
+          [],
+        ),
+        returnValue: _i18.Future<void>.value(),
+        returnValueForMissingStub: _i18.Future<void>.value(),
+      ) as _i18.Future<void>);
 
   @override
   double getCartItemLineAmount(_i14.CartItem? item) => (super.noSuchMethod(
@@ -1443,6 +1471,29 @@ class MockAuthRepository extends _i1.Mock implements _i24.AuthRepository {
       ) as _i18.Future<bool>);
 
   @override
+  _i18.Future<List<_i24.CredentialMatch>> identifyByCredential({
+    required String? credential,
+    required _i26.SupervisionPolicy? policy,
+    String? userId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #identifyByCredential,
+          [],
+          {
+            #credential: credential,
+            #policy: policy,
+            #userId: userId,
+          },
+        ),
+        returnValue: _i18.Future<List<_i24.CredentialMatch>>.value(
+            <_i24.CredentialMatch>[]),
+        returnValueForMissingStub:
+            _i18.Future<List<_i24.CredentialMatch>>.value(
+                <_i24.CredentialMatch>[]),
+      ) as _i18.Future<List<_i24.CredentialMatch>>);
+
+  @override
   _i18.Future<_i25.User?> getCurrentUser() => (super.noSuchMethod(
         Invocation.method(
           #getCurrentUser,
@@ -1542,7 +1593,7 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
       ) as _i18.Future<void>);
 
   @override
-  _i18.Future<_i26.AuditLog?> prepareLog(
+  _i18.Future<_i27.AuditLog?> prepareLog(
     String? action, {
     String? metadata,
   }) =>
@@ -1552,9 +1603,9 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
           [action],
           {#metadata: metadata},
         ),
-        returnValue: _i18.Future<_i26.AuditLog?>.value(),
-        returnValueForMissingStub: _i18.Future<_i26.AuditLog?>.value(),
-      ) as _i18.Future<_i26.AuditLog?>);
+        returnValue: _i18.Future<_i27.AuditLog?>.value(),
+        returnValueForMissingStub: _i18.Future<_i27.AuditLog?>.value(),
+      ) as _i18.Future<_i27.AuditLog?>);
 
   @override
   _i18.Future<void> logForensic(
@@ -1602,7 +1653,7 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
       ) as _i18.Future<_i9.AuditSyncOutcome>);
 
   @override
-  _i18.Future<List<_i26.AuditLog>> getLocalLogs({
+  _i18.Future<List<_i27.AuditLog>> getLocalLogs({
     DateTime? start,
     DateTime? end,
     String? userId,
@@ -1617,10 +1668,10 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
             #userId: userId,
           },
         ),
-        returnValue: _i18.Future<List<_i26.AuditLog>>.value(<_i26.AuditLog>[]),
+        returnValue: _i18.Future<List<_i27.AuditLog>>.value(<_i27.AuditLog>[]),
         returnValueForMissingStub:
-            _i18.Future<List<_i26.AuditLog>>.value(<_i26.AuditLog>[]),
-      ) as _i18.Future<List<_i26.AuditLog>>);
+            _i18.Future<List<_i27.AuditLog>>.value(<_i27.AuditLog>[]),
+      ) as _i18.Future<List<_i27.AuditLog>>);
 }
 
 /// A class which mocks [SyncService].

@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
 
+import 'modifier_deviation_resolver.dart';
 import 'sale_inventory_outcome_planner.dart';
+import 'sub_recipe_bom_explosion.dart';
 import 'validated_sale_inventory_authority.dart';
 
 class SaleTimeInventorySnapshotBuildException implements Exception {
@@ -12,9 +14,22 @@ class SaleTimeInventorySnapshotBuildException implements Exception {
 }
 
 class SaleInventorySnapshotLine {
-  SaleInventorySnapshotLine({required this.lineId, required this.snapshot});
+  SaleInventorySnapshotLine({
+    required this.lineId,
+    required this.snapshot,
+    this.effects = const <AppliedModifierEffect>[],
+  });
   final String lineId;
   final SaleTimeInventorySnapshot snapshot;
+
+  /// ME-04: what happened to each declared effect of THIS line (applied, or
+  /// skipped with a reason). The resolution already decided it — this only
+  /// carries the verdict OUT, so the line can record the truth of its own
+  /// effect instead of the cloud having to guess it.
+  ///
+  /// It travels beside the snapshot, never inside it: the snapshot is a
+  /// frozen, hashed document and its canonical payload must not change.
+  final List<AppliedModifierEffect> effects;
 }
 
 /// Frozen inventory portion of a sale; it is input to, never, the final hash.
@@ -62,21 +77,27 @@ class SaleTimeInventorySnapshotBuilder {
         !_nonEmpty(movementKind)) {
       throw const SaleTimeInventorySnapshotBuildException();
     }
-    final lines = plan.lines
-        .map(
-          (line) => SaleInventorySnapshotLine(
-            lineId: line.line.id,
-            snapshot: _snapshot(
-              line,
-              authority,
-              terminalId,
-              invoiceId,
-              catalogRevision,
-              movementKind,
-            ),
-          ),
-        )
-        .toList();
+    final lines = plan.lines.map((line) {
+      // ME-04: the resolution is computed ONCE per line. The bindings and
+      // the line's own truth of the effect therefore come from the SAME
+      // verdict — they can never disagree.
+      final resolution = _resolutionOf(line, authority);
+      return SaleInventorySnapshotLine(
+        lineId: line.line.id,
+        snapshot: _snapshot(
+          line,
+          authority,
+          terminalId,
+          invoiceId,
+          catalogRevision,
+          movementKind,
+          resolution: resolution,
+        ),
+        // The verdict leaves the builder with the line, so the line can
+        // record the truth of its own effect.
+        effects: resolution?.effects ?? const <AppliedModifierEffect>[],
+      );
+    }).toList();
     final correlations = lines
         .expand((line) => line.snapshot.bindings)
         .map((binding) => binding.saleCorrelationId)
@@ -98,8 +119,9 @@ class SaleTimeInventorySnapshotBuilder {
     String terminalId,
     String invoiceId,
     String catalogRevision,
-    String movementKind,
-  ) {
+    String movementKind, {
+    DeviationResolution? resolution,
+  }) {
     final classification = switch (line.classification) {
       SaleLineClassification.simple => SaleInventoryClassification.simple,
       SaleLineClassification.prepared => SaleInventoryClassification.prepared,
@@ -119,6 +141,7 @@ class SaleTimeInventorySnapshotBuilder {
         terminalId,
         invoiceId,
         movementKind,
+        resolution: resolution ?? _resolutionOf(line, authority),
       ),
       SaleLineDisposition.noImpact ||
       SaleLineDisposition.pendingRecipe => const <SaleTimeInventoryBinding>[],
@@ -161,30 +184,97 @@ class SaleTimeInventorySnapshotBuilder {
     ];
   }
 
+  /// The resolution of the line's deviations over its recipe's leaves, or
+  /// null when the line has no recipe to correct (a direct or a
+  /// no-impact line). Pure and deterministic: the resolver reads no clock
+  /// and no database.
+  DeviationResolution? _resolutionOf(
+    SaleInventoryLinePlan line,
+    ValidatedSaleInventoryAuthority authority,
+  ) {
+    if (line.disposition != SaleLineDisposition.recipe) return null;
+    final recipe = authority.recipesByProductId[line.line.productId];
+    if (recipe == null) return null;
+    final leaves = const SubRecipeBomExplosion()
+        .explode(
+          authority: authority,
+          recipeId: recipe.id,
+          rootProductId: line.line.productId,
+        )
+        .values
+        .toList(growable: false);
+    return const ModifierDeviationResolver().resolve(
+      leaves: leaves,
+      rootComponents: authority.componentsById.values
+          .where((component) => component.recipeId == recipe.id)
+          .toList(growable: false),
+      modifiers: line.line.modifiers,
+      insumosById: authority.insumosById,
+    );
+  }
+
   List<SaleTimeInventoryBinding> _recipeBindings(
     SaleInventoryLinePlan line,
     ValidatedSaleInventoryAuthority authority,
     String terminalId,
     String invoiceId,
-    String movementKind,
-  ) {
+    String movementKind, {
+    DeviationResolution? resolution,
+  }) {
     final recipe = authority.recipesByProductId[line.line.productId]!;
-    final components =
-        authority.componentsById.values
-            .where((item) => item.recipeId == recipe.id)
-            .toList()
-          ..sort(
-            (a, b) => a.insumoId != b.insumoId
-                ? a.insumoId.compareTo(b.insumoId)
-                : a.id.compareTo(b.id),
-          );
+    // R21 / S18: one binding per LEAF insumo, not per root component. A
+    // SUB_RECIPE component is expanded recursively (the POS mirror of the
+    // backend's BomExplosionService, R11) and its leaves travel with
+    // `recipeComponentId: null`, because the backend validates that id
+    // against the ROOT recipe's details only.
+    final leaves = const SubRecipeBomExplosion()
+        .explode(
+          authority: authority,
+          recipeId: recipe.id,
+          rootProductId: line.line.productId,
+        )
+        .values
+        .toList(growable: false);
+
+    // R28: the line's modifiers CORRECT the recipe's consumption. The
+    // resolution is fail-soft by construction: an effect the company cannot
+    // apply (an insumo it has not registered, a quantity whose unit does not
+    // match) simply does not touch the stock, and the sale goes through.
+    //
+    // ME-04: the resolution is computed ONCE per line and handed down, so
+    // the bindings and the line's own truth of the effect can never come
+    // from two different verdicts.
+    final effectiveResolution = resolution ??
+        const ModifierDeviationResolver().resolve(
+          leaves: leaves,
+          rootComponents: authority.componentsById.values
+              .where((component) => component.recipeId == recipe.id)
+              .toList(growable: false),
+          modifiers: line.line.modifiers,
+          insumosById: authority.insumosById,
+        );
+
+    // The snapshot's CANONICAL ORDER is by insumo id (then by component
+    // id): the cloud compares the demand by key, and the frozen document
+    // must be stable. The recipe's leaves arrive sorted, but a deviation
+    // that REPLACES a component appends the substitute at the end — which
+    // broke the order and made the snapshot invalid ("Invalid sale-time
+    // inventory snapshot"), so the sale was refused for a substitution the
+    // operator had just chosen.
+    final resolved = [...effectiveResolution.leaves]
+      ..sort((a, b) {
+        final insumo = a.insumoId.compareTo(b.insumoId);
+        return insumo != 0
+            ? insumo
+            : (a.rootComponentId ?? '').compareTo(b.rootComponentId ?? '');
+      });
     return [
-      for (var i = 0; i < components.length; i++)
+      for (var i = 0; i < resolved.length; i++)
         _binding(
           i,
-          components[i].insumoId,
-          components[i].id,
-          components[i].quantityPerSaleUnit,
+          resolved[i].insumoId,
+          resolved[i].rootComponentId,
+          resolved[i].quantityPerSaleUnit,
           line.line.id,
           authority.context.provisionedTenantId,
           terminalId,

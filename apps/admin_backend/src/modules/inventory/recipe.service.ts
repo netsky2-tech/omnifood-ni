@@ -49,6 +49,43 @@ export interface RecipeComponentInput {
   insumoId: string;
   grossQuantity: number;
   technicalShrinkPct: number;
+  /**
+   * R6 (H3): the dashboard sends the component's type, unit and sub-recipe
+   * reference; the route used to drop all three, so every component was
+   * persisted as INSUMO with a NULL component_uom and a sub-recipe became an
+   * insumo that the live sale path could not consume.
+   */
+  ingredientType?: 'INSUMO' | 'SUB_RECIPE';
+  componentUom?: string | null;
+  referenceVersionId?: string | null;
+  /**
+   * Display name of the ingredient at publish time. OPTIONAL and only a
+   * fallback: the server resolves the authoritative name from the referenced
+   * insumo/product (see `resolveComponentIdentities`). The dashboard used to
+   * be the only writer of this snapshot, and it never wrote it — the column
+   * stayed NULL and the next edit round-tripped NULL as "" into a
+   * `@IsNotEmpty` DTO (400 `components.N.ingredientName should not be
+   * empty`). The name is a SNAPSHOT of business data, so the server is its
+   * only trustworthy source.
+   */
+  ingredientName?: string | null;
+}
+
+/**
+ * One row of the Recetas grid: a product that has an ACTIVE PUBLISHED
+ * recipe, with the figures the card renders.
+ */
+export interface ActiveRecipeSummary {
+  productId: string;
+  productName: string;
+  productUom: string | null;
+  recipeVersionId: string;
+  versionNumber: number;
+  componentCount: number;
+  yieldQuantity: number;
+  technicalShrinkPct: number;
+  versionNote: string | null;
+  effectiveAt: Date | null;
 }
 
 export interface IngestPosVersionInput {
@@ -61,8 +98,7 @@ export interface IngestPosVersionResult {
   replaced: boolean;
 }
 
-interface ResolvedRecipeComponent {
-  ingredientId: string;
+interface ResolvedRecipeComponent {  ingredientId: string;
   ingredientName: string;
   ingredientType: string;
   grossQuantity: number;
@@ -131,6 +167,21 @@ export class RecipeService {
           input.productId,
         );
 
+        // R14 (V3): the cycle guard lived only in the POS ingest path, so the
+        // dashboard route persisted A -> B -> A (2x 201) and the failure only
+        // surfaced at consumption time. Same guard, same transaction, before
+        // any write.
+        for (const component of input.components) {
+          if (component.ingredientType === 'SUB_RECIPE') {
+            await this.assertNoCircularDependency(
+              manager,
+              input.tenantId,
+              input.productId,
+              component.insumoId,
+            );
+          }
+        }
+
         const activeVersion = await recipeVersionRepo.findOne({
           where: {
             tenant_id: input.tenantId,
@@ -163,6 +214,15 @@ export class RecipeService {
 
         const savedVersion = await recipeVersionRepo.save(version);
 
+        // The ingredient name and the default unit are RESOLVED server-side
+        // from the referenced insumo / sub-recipe product. The client copy is
+        // only a fallback (see `RecipeComponentInput.ingredientName`).
+        const identities = await this.resolveComponentIdentities(
+          manager,
+          input.tenantId,
+          input.components,
+        );
+
         const details = input.components.map((component) => {
           // RecipeDetail.quantity is consumption for one sold unit, not one batch.
           const netUsableQuantity = round4(
@@ -171,13 +231,37 @@ export class RecipeService {
               yieldQuantity,
           );
 
+          const identity = identities.get(component.insumoId);
+          const ingredientName =
+            identity?.name ?? component.ingredientName?.trim() ?? '';
+
+          if (!ingredientName) {
+            // The referenced insumo/product is gone AND the client sent no
+            // name: the snapshot would be a nameless row, which the next edit
+            // cannot render and the DTO cannot accept. Fail loudly instead.
+            throw new BadRequestException(
+              `El ingrediente ${component.insumoId} no existe en este tenant o no tiene nombre; no se puede guardar la receta.`,
+            );
+          }
+
           return recipeDetailRepo.create({
             tenant_id: input.tenantId,
             recipe_version_id: savedVersion.id,
             insumo_id: component.insumoId,
+            ingredient_name: ingredientName,
             gross_quantity: round4(component.grossQuantity),
             technical_shrink_pct: round4(component.technicalShrinkPct),
             quantity: netUsableQuantity,
+            ingredient_type: component.ingredientType ?? 'INSUMO',
+            // A NULL component_uom on a legacy row is filled from the insumo's
+            // own consumption unit, so the row is complete even when the
+            // client sends nothing.
+            component_uom:
+              component.componentUom ??
+              (component.ingredientType === 'SUB_RECIPE'
+                ? null
+                : identity?.consumptionUom ?? null),
+            reference_version_id: component.referenceVersionId ?? null,
           });
         });
 
@@ -186,6 +270,129 @@ export class RecipeService {
         return savedVersion;
       },
     );
+  }
+
+  /**
+   * Resolve the authoritative display identity of every component:
+   * the referenced insumo (or, for a sub-recipe, the referenced product) and
+   * the insumo's own consumption unit.
+   *
+   * Runs inside the tenant-bound transaction of `createNewVersion`, so the
+   * reads are authorized by the same RLS context as the writes and a
+   * cross-tenant reference resolves to nothing.
+   */
+  private async resolveComponentIdentities(
+    manager: EntityManager,
+    tenantId: string,
+    components: RecipeComponentInput[],
+  ): Promise<Map<string, { name: string; consumptionUom: string | null }>> {
+    const identities = new Map<
+      string,
+      { name: string; consumptionUom: string | null }
+    >();
+
+    const insumoIds = components
+      .filter((c) => c.ingredientType !== 'SUB_RECIPE')
+      .map((c) => c.insumoId);
+    const productIds = components
+      .filter((c) => c.ingredientType === 'SUB_RECIPE')
+      .map((c) => c.insumoId);
+
+    const [insumos, products] = await Promise.all([
+      insumoIds.length > 0
+        ? manager.getRepository(Insumo).find({
+            where: { tenant_id: tenantId, id: In(insumoIds) },
+          })
+        : Promise.resolve([] as Insumo[]),
+      productIds.length > 0
+        ? manager.getRepository(Product).find({
+            where: { tenant_id: tenantId, id: In(productIds) },
+          })
+        : Promise.resolve([] as Product[]),
+    ]);
+
+    for (const insumo of insumos) {
+      identities.set(insumo.id, {
+        name: insumo.name,
+        consumptionUom: insumo.consumptionUom ?? null,
+      });
+    }
+    for (const product of products) {
+      identities.set(product.id, {
+        name: product.name,
+        consumptionUom: null,
+      });
+    }
+
+    return identities;
+  }
+
+  /**
+   * Every product that has an ACTIVE PUBLISHED recipe version, with the
+   * figures the Recetas grid needs: version number, ingredient count, yield
+   * and the product's own UoM.
+   *
+   * The grid used to ask for the active recipe of the SELECTED product only,
+   * so every other card claimed "no recipe" (and offered "Crear Receta" for a
+   * product that already had one). One query for the whole tenant replaces
+   * that per-card guess.
+   */
+  async listActiveRecipeSummaries(
+    tenantId: string,
+  ): Promise<ActiveRecipeSummary[]> {
+    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
+      const versions = await manager.getRepository(RecipeVersion).find({
+        where: {
+          tenant_id: tenantId,
+          is_active: true,
+          publication_state: RecipePublicationState.PUBLISHED,
+        },
+        order: { product_id: 'ASC' },
+      });
+
+      if (versions.length === 0) {
+        return [];
+      }
+
+      const versionIds = versions.map((v) => v.id);
+      const details = await manager.getRepository(RecipeDetail).find({
+        where: { tenant_id: tenantId, recipe_version_id: In(versionIds) },
+        select: { recipe_version_id: true },
+      });
+      const componentCountByVersion = new Map<string, number>();
+      for (const detail of details) {
+        componentCountByVersion.set(
+          detail.recipe_version_id,
+          (componentCountByVersion.get(detail.recipe_version_id) ?? 0) + 1,
+        );
+      }
+
+      const products = await manager.getRepository(Product).find({
+        where: {
+          tenant_id: tenantId,
+          id: In(versions.map((v) => v.product_id)),
+        },
+        select: { id: true, name: true, uom: true },
+      });
+      const productById = new Map(products.map((p) => [p.id, p]));
+
+      return versions.map((version) => {
+        const product = productById.get(version.product_id);
+        return {
+          productId: version.product_id,
+          productName:
+            product?.name ?? version.product_name ?? version.product_id,
+          productUom: product?.uom ?? null,
+          recipeVersionId: version.id,
+          versionNumber: version.version_number,
+          componentCount: componentCountByVersion.get(version.id) ?? 0,
+          yieldQuantity: Number(version.yield_quantity ?? 1),
+          technicalShrinkPct: Number(version.technical_shrink_pct ?? 0),
+          versionNote: version.version_note ?? null,
+          effectiveAt: version.fecha_inicio_vigencia ?? null,
+        };
+      });
+    });
   }
 
   async findActiveVersion(
@@ -421,6 +628,35 @@ export class RecipeService {
         return { recipeVersion, components };
       },
     );
+  }
+
+  /**
+   * R4 (S7): the components of a product's active PUBLISHED recipe, which is
+   * what the recursive BOM explosion needs to descend through a SUB_RECIPE
+   * component (a component whose `insumo_id` is another product's id).
+   *
+   * A missing active recipe is a DATA error, not an empty recipe: the parent
+   * recipe references a product that cannot be consumed. Throwing names it
+   * instead of silently dropping the sub-recipe's ingredients.
+   */
+  async getComponentsForActiveProduct(
+    tenantId: string,
+    productId: string,
+  ): Promise<RecipeDetail[]> {
+    const version = await this.findActiveVersion(tenantId, productId);
+    if (!version) {
+      throw new NotFoundException(
+        `Product ${productId} does not have an active published recipe required by a SUB_RECIPE component`,
+      );
+    }
+
+    const { components } = await this.getSnapshot(
+      version.id,
+      tenantId,
+      productId,
+    );
+
+    return components;
   }
 
   /**

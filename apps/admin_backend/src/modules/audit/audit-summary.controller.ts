@@ -15,6 +15,7 @@ import { UserRole } from '../identity/entities/user.entity';
 import { AuditSummaryService } from './audit-summary.service';
 import { AuditEventsService } from './audit-events.service';
 import { AuditLogsService } from './audit-logs.service';
+import { SupervisionReviewService } from './supervision-review.service';
 import { AuditExecutiveSummaryDto } from './audit-executive-summary.dto';
 import { AuditEventsResponseDto } from './audit-events.dto';
 import { AuditEventsQueryDto } from './audit-events-query.dto';
@@ -23,6 +24,10 @@ import {
   AuditLedgerQueryDto,
   AuditLedgerResponseDto,
 } from './audit-logs.dto';
+import {
+  SupervisionReviewQueryDto,
+  SupervisionReviewResponseDto,
+} from './supervision-review.dto';
 
 /**
  * Owner Dashboard V2 — audit/security executive summary read
@@ -52,6 +57,9 @@ export class AuditSummaryController {
     // the nightly integrity alert surface live in their own service too —
     // the change_log reads above are never repointed.
     private readonly auditLogsService: AuditLogsService,
+    // The owner's review queue for the tenant's supervision policy: what
+    // was signed, by whom and with which credential.
+    private readonly supervisionReviewService: SupervisionReviewService,
   ) {}
 
   @Get('summary')
@@ -113,6 +121,27 @@ export class AuditSummaryController {
       targetType: query.targetType,
       targetId: query.targetId,
       action: query.action,
+      limitInput: query.limit,
+    });
+  }
+
+  /**
+   * The owner's REVIEW QUEUE for the tenant's supervision policy.
+   *
+   * It answers the question the whole policy exists for: "what happened,
+   * who signed it, and was a supervisor involved?" — the record that
+   * replaces the lock. Same guard chain, roles and JWT-derived tenant as
+   * the routes above; the period is the same inclusive-calendar contract.
+   */
+  @Get('supervision-review')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getSupervisionReview(
+    @GetTenantId() tenantId: string,
+    @Query() query: SupervisionReviewQueryDto,
+  ): Promise<SupervisionReviewResponseDto> {
+    return this.supervisionReviewService.getReview(tenantId, {
+      startDate: query.startDate,
+      endDate: query.endDate,
       limitInput: query.limit,
     });
   }

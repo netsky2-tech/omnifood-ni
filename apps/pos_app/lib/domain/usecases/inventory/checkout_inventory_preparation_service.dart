@@ -1,17 +1,49 @@
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/daos/inventory/authority_projection_dao.dart';
+import 'package:pos_app/domain/models/inventory/product.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
+import 'package:pos_app/domain/models/sales/sale_time_inventory_snapshot.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/usecases/inventory/modifier_deviation_resolver.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_inventory_outcome_planner.dart';
 import 'package:pos_app/domain/usecases/inventory/sale_time_inventory_snapshot_builder.dart';
+import 'package:pos_app/domain/usecases/inventory/sub_recipe_bom_explosion.dart';
 import 'package:pos_app/domain/usecases/inventory/validated_sale_inventory_authority.dart';
+
+/// An insumo whose LOTS did not cover what the sale consumed.
+///
+/// FD-03: ADVISORY. It never refuses the sale — the declared aggregate (and
+/// the tenant's own `negative_stock_policy`) decide that. It travels with the
+/// sale so the cloud can DECLARE the difference (FD-01) and the owner can
+/// reconcile it with a count that says in which lot the stock is (A-1).
+class InsumoLotShortage {
+  final String insumoId;
+  final String insumoName;
+  final double requiredQuantity;
+  final double lotAvailableQuantity;
+
+  const InsumoLotShortage({
+    required this.insumoId,
+    required this.insumoName,
+    required this.requiredQuantity,
+    required this.lotAvailableQuantity,
+  });
+
+  /// The units the lots did not back.
+  double get uncoveredQuantity => requiredQuantity - lotAvailableQuantity;
+}
 
 class PreparedSaleInventoryResult {
   final Invoice invoice;
   final List<InvoiceItem> items;
 
+  /// FD-03: the lot shortages of this sale (empty when the lots covered it).
+  final List<InsumoLotShortage> lotShortages;
+
   const PreparedSaleInventoryResult({
     required this.invoice,
     required this.items,
+    this.lotShortages = const <InsumoLotShortage>[],
   });
 }
 
@@ -65,12 +97,7 @@ class CheckoutInventoryPreparationService {
       final productEntity = await _database.productDao.findProductById(
         item.productId,
       );
-      final productType = productEntity?.productType ?? 'SIMPLE';
-      final kind = switch (productType) {
-        'PREPARED' => AuthorityInventoryKind.prepared,
-        'COMPOUND' => AuthorityInventoryKind.compound,
-        _ => AuthorityInventoryKind.simple,
-      };
+      final kind = _inventoryKindOf(productEntity?.productType);
 
       authorityProductsById.putIfAbsent(
         item.productId,
@@ -110,6 +137,14 @@ class CheckoutInventoryPreparationService {
             authorityInsumosById[directInsumo.id] = AuthorityInsumo(
               id: directInsumo.id,
               tenantId: tenantId,
+              // R28: the consumption unit travels into the authority so a
+              // deviation can tell whether an inherited quantity means the
+              // same thing in the insumo it applies to.
+              consumptionUom: directInsumo.uom,
+              // R28 (M4.1): the live state travels too, or a deactivated
+              // insumo would look available and an effect pointing at it
+              // would apply on the terminal while the cloud refuses it.
+              isActive: directInsumo.isActive,
             );
           }
         }
@@ -141,6 +176,7 @@ class CheckoutInventoryPreparationService {
         );
 
         for (final c in components) {
+          final ingredientType = parseAuthorityIngredientType(c.ingredientType);
           authorityComponentsById.putIfAbsent(
             c.id,
             () => AuthorityComponent(
@@ -148,23 +184,93 @@ class CheckoutInventoryPreparationService {
               tenantId: tenantId,
               recipeId: active.id,
               insumoId: c.insumoId,
-              quantityPerSaleUnit: c.grossQuantity,
+              quantityPerSaleUnit: _netQuantityPerSaleUnit(
+                grossQuantity: c.grossQuantity,
+                technicalShrinkPct: c.technicalShrinkPct,
+                yieldQuantity: active.yieldQuantity,
+              ),
+              ingredientType: ingredientType,
+              referenceVersionId: c.referenceVersionId,
             ),
           );
 
-          final insumo = await authorityDao.findInsumoById(
-            tenantId,
-            c.insumoId,
-          );
-          if (insumo != null) {
-            authorityInsumosById.putIfAbsent(
-              insumo.id,
-              () => AuthorityInsumo(id: insumo.id, tenantId: tenantId),
+          if (ingredientType == AuthorityIngredientType.subRecipe) {
+            // R21 / S18: this component names a PRODUCT (the sub-recipe),
+            // never an insumo. Descend into the sub-recipe's own published
+            // version so the authority carries every leaf insumo the sale
+            // will actually consume — the POS mirror of the backend's
+            // BomExplosionService (R11).
+            await _hydrateSubRecipeClosure(
+              authorityDao: authorityDao,
+              tenantId: tenantId,
+              nowIso: nowIso,
+              subRecipeProductId: c.insumoId,
+              ancestors: <String>[item.productId],
+              productsById: authorityProductsById,
+              recipesById: authorityRecipesById,
+              componentsById: authorityComponentsById,
+              insumosById: authorityInsumosById,
             );
+          } else {
+            final insumo = await authorityDao.findInsumoById(
+              tenantId,
+              c.insumoId,
+            );
+            if (insumo != null) {
+              authorityInsumosById.putIfAbsent(
+                insumo.id,
+                () => AuthorityInsumo(
+                  id: insumo.id,
+                  tenantId: tenantId,
+                  consumptionUom: insumo.uom,
+                  // R28 (M4.1): the live state travels with the closure.
+                  isActive: insumo.isActive,
+                ),
+              );
+            }
           }
         }
       }
     }
+
+    // R28: the insumos a line's modifier effect acts on must resolve in
+    // the authority. The SUBSTITUTE is not a component of the recipe, so
+    // the recipe's closure never carries it: without this the deviation
+    // resolver cannot resolve the effect and skips it as "insumo not in
+    // catalog" — the line would consume the RECIPE AS WRITTEN (the whole
+    // milk would be downloaded and the almond milk never would). The
+    // target is resolved too: it names the component the effect replaces.
+    //
+    // An insumo the projection does not carry is left unresolved on
+    // purpose: the effect then stays NO_IMPACT (the SOHO guarantee, D6)
+    // instead of being applied against a fact nobody can verify.
+    for (final item in items) {
+      final effectInsumoIds = <String>{
+        for (final modifier in item.selectedModifiers) ...[
+          if (modifier.effectInsumoId != null) modifier.effectInsumoId!,
+          if (modifier.effectTargetInsumoId != null)
+            modifier.effectTargetInsumoId!,
+        ],
+      };
+      for (final insumoId in effectInsumoIds) {
+        if (authorityInsumosById.containsKey(insumoId)) continue;
+        final insumo = await authorityDao.findInsumoById(tenantId, insumoId);
+        if (insumo == null) continue;
+        authorityInsumosById[insumo.id] = AuthorityInsumo(
+          id: insumo.id,
+          tenantId: tenantId,
+          // R28: the consumption unit travels into the authority so a
+          // deviation can tell whether an inherited quantity means the
+          // same thing in the insumo the effect applies to.
+          consumptionUom: insumo.uom,
+          // R28 (M4.1): the live state travels too, or a deactivated
+          // insumo would look available and an effect pointing at it
+          // would apply on the terminal while the cloud refuses it.
+          isActive: insumo.isActive,
+        );
+      }
+    }
+
 
     final authority = ValidatedSaleInventoryAuthority.validate(
       context: CheckoutAuthorityContext(
@@ -188,6 +294,10 @@ class CheckoutInventoryPreparationService {
               id: i.id,
               productId: i.productId,
               quantity: i.quantity,
+              // R28: the line's modifiers carry the inventory effects, so
+              // the snapshot builder can resolve the demand the line
+              // really consumes (recipe + deviations).
+              modifiers: i.selectedModifiers,
             ),
           )
           .toList(),
@@ -204,15 +314,115 @@ class CheckoutInventoryPreparationService {
       movementKind: 'SALE',
     );
 
+    // R23: Evaluate negative_stock_policy fail-closed in checkout before committing.
+    // If an insumo's resulting stock is negative and its policy is not ALLOW_TEMPORARY
+    // (default RESTRICT), the checkout must abort with a typed exception naming the failing
+    // product, insumo and quantities, rather than selling offline and wedging cloud sync.
+    final totalRequiredByInsumo = <String, double>{};
+    // FD-03: the lot shortages of this sale (advisory: they do NOT refuse the
+    // sale, they travel with it so the cloud can declare the difference).
+    final lotShortages = <InsumoLotShortage>[];
+    final insumoContributingProducts = <String, String>{};
+    for (final line in buildResult.lines) {
+      final item = items.firstWhere(
+        (it) => it.id == line.lineId,
+        orElse: () => items.first,
+      );
+      for (final binding in line.snapshot.bindings) {
+        totalRequiredByInsumo[binding.insumoId] =
+            (totalRequiredByInsumo[binding.insumoId] ?? 0.0) +
+            (binding.quantityPerSaleUnit * item.quantity);
+        insumoContributingProducts.putIfAbsent(
+          binding.insumoId,
+          () => item.productName,
+        );
+      }
+    }
+
+    for (final entry in totalRequiredByInsumo.entries) {
+      final insumoId = entry.key;
+      final requiredQty = entry.value;
+      if (requiredQty <= 0) continue;
+
+      final insumoRow = await _database.insumoDao.findInsumoById(insumoId);
+      if (insumoRow == null) continue;
+
+      final authInsumo = await authorityDao.findInsumoById(tenantId, insumoId);
+      final policy = authInsumo?.negativeStockPolicy ??
+          insumoRow.negativeStockPolicy;
+
+      // The availability that DECIDES is the declared aggregate, with the
+      // tenant's own policy on top of it (`RESTRICT` refuses, `ALLOW_TEMPORARY`
+      // lets the stock go negative and the difference is reconciled later).
+      //
+      // The LOTS do NOT decide (FD-03): they are the traceability truth, and
+      // a derived number must never refuse a sale — "a POS that refuses a
+      // dish the kitchen can actually cook is worse than one showing a stale
+      // count" (and a lot record can simply be missing: the milk IS in the
+      // fridge, the bookkeeping is behind). So the lot coverage is ADVISORY:
+      // it is measured, it is reported to the operator, and the difference
+      // travels to the cloud, which DECLARES it (FD-01) for the
+      // reconciliation to close.
+      final availableStock = insumoRow.stock;
+      final resultingStock = availableStock - requiredQty;
+      if (
+        insumoRow.isBatchManaged &&
+        insumoRow.lotAvailableStock != null &&
+        insumoRow.lotAvailableStock! < requiredQty
+      ) {
+        lotShortages.add(
+          InsumoLotShortage(
+            insumoId: insumoId,
+            insumoName: insumoRow.name,
+            requiredQuantity: requiredQty,
+            lotAvailableQuantity: insumoRow.lotAvailableStock!,
+          ),
+        );
+      }
+
+      if (policy != 'ALLOW_TEMPORARY' && resultingStock < 0) {
+        final insumoName = authInsumo?.name ?? insumoRow.name;
+        final productName =
+            insumoContributingProducts[insumoId] ?? 'Producto';
+        throw CheckoutAuthorityException(
+          reason: CheckoutAuthorityFailureReason.negativeStockBlocked,
+          productName: productName,
+          insumoName: insumoName,
+          requiredQuantity: requiredQty,
+          availableQuantity: availableStock,
+        );
+      }
+    }
+
     final snapshotsByLineId = {
       for (final l in buildResult.lines) l.lineId: l.snapshot,
     };
 
+    // ME-04: the TRUTH of each modifier's effect, as this sale resolved it.
+    // The resolver is the only place that knows (it needs the authority
+    // facts: the catalog and the recipe), so the line is stamped HERE, at
+    // sale time — never guessed in the dialog. A line that said APPLIED
+    // when the stock did not move would be a lie in the cloud.
+    final effectsByLineId = {
+      for (final l in buildResult.lines) l.lineId: l.effects,
+    };
+
     final frozenItems = items.map((item) {
       final snapshot = snapshotsByLineId[item.id];
+      final effects = effectsByLineId[item.id] ?? const <AppliedModifierEffect>[];
       return item.copyWith(
         inventorySnapshotVersion: 'SALE_TIME_V1',
         inventorySnapshot: snapshot,
+        selectedModifiers: item.selectedModifiers
+            .map(
+              (modifier) => _stampEffectTruth(
+                modifier,
+                effects,
+                hasRecipe:
+                    snapshot?.disposition == SaleInventoryDisposition.recipe,
+              ),
+            )
+            .toList(growable: false),
       );
     }).toList();
 
@@ -242,6 +452,212 @@ class CheckoutInventoryPreparationService {
     return PreparedSaleInventoryResult(
       invoice: updatedInvoice,
       items: frozenItems,
+      lotShortages: lotShortages,
     );
   }
+
+  /// Stamps the resolved truth of ONE modifier's effect onto it.
+  ///
+  /// A modifier with no inventory effect (a price-only option) keeps its
+  /// absence: there is nothing to say about it.
+  ///
+  /// A modifier whose effect the resolver DID judge takes that verdict: it
+  /// applied, or it did not (with the reason).
+  ///
+  /// A modifier whose effect was NEVER JUDGED is not left silent: the line
+  /// says PENDING, because the effect demonstrably did not touch the stock
+  /// (there was no recipe to correct it). The reason says which case it
+  /// was — a product without a recipe, or a verdict the resolver could not
+  /// produce (fail-safe, never a silent absence).
+  static Modifier _stampEffectTruth(
+    Modifier modifier,
+    List<AppliedModifierEffect> effects, {
+    required bool hasRecipe,
+  }) {
+    if (!modifier.hasInventoryEffect) return modifier;
+    final optionId = modifier.optionId ?? modifier.id;
+    AppliedModifierEffect? match;
+    for (final effect in effects) {
+      if (effect.optionId == optionId) {
+        match = effect;
+        break;
+      }
+    }
+    if (match == null) {
+      // The effect was declared and the stock did not move for it.
+      return modifier.copyWith(
+        effectStatus: 'PENDING',
+        effectSkipReason: hasRecipe
+            ? ModifierEffectSkipReason.incomplete.wireName
+            : ModifierEffectSkipReason.productWithoutRecipe.wireName,
+      );
+    }
+    return modifier.copyWith(
+      effectStatus: match.applied ? 'APPLIED' : 'PENDING',
+      effectSkipReason: match.skipReason?.wireName,
+    );
+  }
+
+  /// R21 / S18 — hydrates everything a SUB_RECIPE component needs for the
+  /// explosion to reach its leaf insumos: the sub-recipe's product fact, its
+  /// active published version, that version's components and their insumo
+  /// facts, recursively.
+  ///
+  /// Fail closed on every gap the backend would reject as a DATA error
+  /// (R11's `resolveActiveRecipeComponents` throws instead of silently
+  /// dropping a sub-recipe's ingredients): unknown product, no active
+  /// published version, a published version with no components, a leaf
+  /// insumo the projection never received, a cycle or nesting beyond
+  /// [SubRecipeBomExplosion.maxDepth]. The sale is blocked by the same
+  /// `CheckoutAuthorityException` the flat-structure guard raises, so the
+  /// operator sees the existing "no tiene receta publicada" directive.
+  Future<void> _hydrateSubRecipeClosure({
+    required AuthorityProjectionDao authorityDao,
+    required String tenantId,
+    required String nowIso,
+    required String subRecipeProductId,
+    required List<String> ancestors,
+    required Map<String, AuthorityProduct> productsById,
+    required Map<String, AuthorityRecipe> recipesById,
+    required Map<String, AuthorityComponent> componentsById,
+    required Map<String, AuthorityInsumo> insumosById,
+  }) async {
+    // `ancestors` holds the root product plus every product on the path down
+    // to (but not including) this one, so its length is this node's nesting
+    // level and its contents are the cycle guard (the backend's
+    // `visitedStack`, which pops on the way out so a diamond — the same
+    // sub-recipe reached from two branches — stays legal).
+    final subProduct = await _database.productDao.findProductById(
+      subRecipeProductId,
+    );
+    if (ancestors.length > SubRecipeBomExplosion.maxDepth) {
+      throw CheckoutAuthorityException(
+        reason: CheckoutAuthorityFailureReason.maxDepthExceeded,
+        productName: subProduct?.name ?? subRecipeProductId,
+      );
+    }
+    if (ancestors.contains(subRecipeProductId)) {
+      throw CheckoutAuthorityException(
+        reason: CheckoutAuthorityFailureReason.circularRecipe,
+        productName: subProduct?.name ?? subRecipeProductId,
+      );
+    }
+
+    if (subProduct == null) {
+      throw const CheckoutAuthorityException(
+        reason: CheckoutAuthorityFailureReason.unresolvedInsumo,
+      );
+    }
+    productsById.putIfAbsent(
+      subRecipeProductId,
+      () => AuthorityProduct(
+        id: subRecipeProductId,
+        tenantId: tenantId,
+        inventoryKind: _inventoryKindOf(subProduct.productType),
+      ),
+    );
+
+    final versions = await authorityDao.findActivePublishedVersions(
+      tenantId,
+      subRecipeProductId,
+      nowIso,
+    );
+    if (versions.isEmpty) {
+      throw const CheckoutAuthorityException();
+    }
+    final version = versions.first;
+    recipesById.putIfAbsent(
+      version.id,
+      () => AuthorityRecipe(
+        id: version.id,
+        tenantId: tenantId,
+        productId: subRecipeProductId,
+        isPublished: version.publicationState == 'PUBLISHED',
+      ),
+    );
+
+    final subComponents = await authorityDao.findComponentsByVersion(
+      tenantId,
+      version.id,
+    );
+    if (subComponents.isEmpty) {
+      throw const CheckoutAuthorityException();
+    }
+
+    final nextAncestors = <String>[...ancestors, subRecipeProductId];
+    for (final c in subComponents) {
+      final ingredientType = parseAuthorityIngredientType(c.ingredientType);
+      componentsById.putIfAbsent(
+        c.id,
+        () => AuthorityComponent(
+          id: c.id,
+          tenantId: tenantId,
+          recipeId: version.id,
+          insumoId: c.insumoId,
+          quantityPerSaleUnit: _netQuantityPerSaleUnit(
+            grossQuantity: c.grossQuantity,
+            technicalShrinkPct: c.technicalShrinkPct,
+            yieldQuantity: version.yieldQuantity,
+          ),
+          ingredientType: ingredientType,
+          referenceVersionId: c.referenceVersionId,
+        ),
+      );
+
+      if (ingredientType == AuthorityIngredientType.subRecipe) {
+        await _hydrateSubRecipeClosure(
+          authorityDao: authorityDao,
+          tenantId: tenantId,
+          nowIso: nowIso,
+          subRecipeProductId: c.insumoId,
+          ancestors: nextAncestors,
+          productsById: productsById,
+          recipesById: recipesById,
+          componentsById: componentsById,
+          insumosById: insumosById,
+        );
+      } else {
+        final leaf = await authorityDao.findInsumoById(tenantId, c.insumoId);
+        if (leaf == null) {
+          throw const CheckoutAuthorityException();
+        }
+        insumosById.putIfAbsent(
+          leaf.id,
+          () => AuthorityInsumo(
+            id: leaf.id,
+            tenantId: tenantId,
+            consumptionUom: leaf.uom,
+            // R28 (M4.1): the live state travels with the closure.
+            isActive: leaf.isActive,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Backend parity with `recipe.service.ts` createNewVersion:
+  /// `recipe_details.quantity` (consumption for ONE sold unit) is
+  /// `gross × (1 − componentShrink/100) ÷ yieldQuantity`. Hydrating the
+  /// authority from `grossQuantity` alone made every lote recipe
+  /// (yield > 1) deduct the whole batch per sold unit — a silent
+  /// over-deduction the V1 freeze then froze into the kardex.
+  /// A non-positive yield fails closed like any other authority gap.
+  static double _netQuantityPerSaleUnit({
+    required double grossQuantity,
+    required double technicalShrinkPct,
+    required double yieldQuantity,
+  }) {
+    if (yieldQuantity <= 0) throw const CheckoutAuthorityException();
+    return double.parse(
+      (grossQuantity * (1 - technicalShrinkPct / 100) / yieldQuantity)
+          .toStringAsFixed(4),
+    );
+  }
+
+  static AuthorityInventoryKind _inventoryKindOf(String? productType) =>
+      switch (productType) {
+        'PREPARED' => AuthorityInventoryKind.prepared,
+        'COMPOUND' => AuthorityInventoryKind.compound,
+        _ => AuthorityInventoryKind.simple,
+      };
 }

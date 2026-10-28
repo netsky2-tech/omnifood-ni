@@ -1,7 +1,35 @@
 import 'dart:collection';
 
+enum CheckoutAuthorityFailureReason {
+  invalidContext,
+  missingRecipe,
+  circularRecipe,
+  maxDepthExceeded,
+  negativeStockBlocked,
+  unresolvedInsumo,
+  invalidFact,
+}
+
 class CheckoutAuthorityException implements Exception {
-  const CheckoutAuthorityException();
+  final CheckoutAuthorityFailureReason reason;
+  final String? productName;
+  final String? insumoName;
+  final double? requiredQuantity;
+  final double? availableQuantity;
+  final String? message;
+
+  const CheckoutAuthorityException({
+    this.reason = CheckoutAuthorityFailureReason.invalidFact,
+    this.productName,
+    this.insumoName,
+    this.requiredQuantity,
+    this.availableQuantity,
+    this.message,
+  });
+
+  @override
+  String toString() =>
+      'CheckoutAuthorityException(reason: $reason, product: $productName, insumo: $insumoName, required: $requiredQuantity, available: $availableQuantity, message: $message)';
 }
 
 class CheckoutAuthorityContext {
@@ -23,8 +51,28 @@ class AuthorityProduct {
 }
 
 class AuthorityInsumo {
-  const AuthorityInsumo({required this.id, required this.tenantId});
-  final String id, tenantId;
+  const AuthorityInsumo({
+    required this.id,
+    required this.tenantId,
+    this.name = '',
+    this.negativeStockPolicy = 'RESTRICT',
+    // R28: the insumo's consumption unit. The deviation resolver needs it
+    // to know whether a quantity INHERITED from a recipe component means
+    // the same thing in the insumo the effect applies to (a number in
+    // millilitres is not a number in litres).
+    this.consumptionUom = '',
+    // R28: whether the insumo is still ACTIVE. An effect that points at a
+    // deactivated insumo does NOT apply (the SOHO guarantee, D6): the
+    // terminal would demand a stock that is not for sale.
+    this.isActive = true,
+  });
+  final String id, tenantId, name, negativeStockPolicy;
+
+  /// The unit the stock of this insumo is kept in.
+  final String consumptionUom;
+
+  /// Whether the insumo is still active in the catalog.
+  final bool isActive;
 }
 
 class AuthorityMapping {
@@ -48,6 +96,20 @@ class AuthorityRecipe {
   final bool isPublished;
 }
 
+/// R21 / S18: what a recipe component references. An `insumo` component
+/// names an insumo; a `subRecipe` component names a PRODUCT whose own
+/// published recipe is expanded recursively at sale time (the POS mirror of
+/// the backend's `BomExplosionService`, R11).
+enum AuthorityIngredientType { insumo, subRecipe }
+
+/// Any recorded value that is not the literal `SUB_RECIPE` (`INSUMO`, the
+/// legacy `DIRECT`, an unknown string) is an insumo reference: that is the
+/// historical behaviour and it must not change.
+AuthorityIngredientType parseAuthorityIngredientType(String raw) =>
+    raw.trim().toUpperCase() == 'SUB_RECIPE'
+        ? AuthorityIngredientType.subRecipe
+        : AuthorityIngredientType.insumo;
+
 class AuthorityComponent {
   const AuthorityComponent({
     required this.id,
@@ -55,9 +117,17 @@ class AuthorityComponent {
     required this.recipeId,
     required this.insumoId,
     required this.quantityPerSaleUnit,
+    this.ingredientType = AuthorityIngredientType.insumo,
+    this.referenceVersionId,
   });
-  final String id, tenantId, recipeId, insumoId;
+  final String id, tenantId, recipeId;
+
+  /// Insumo id for [AuthorityIngredientType.insumo] components; product id of
+  /// the sub-recipe for [AuthorityIngredientType.subRecipe] ones.
+  final String insumoId;
   final double quantityPerSaleUnit;
+  final AuthorityIngredientType ingredientType;
+  final String? referenceVersionId;
 }
 
 class ValidatedSaleInventoryAuthority {
@@ -104,9 +174,17 @@ class ValidatedSaleInventoryAuthority {
     }
     final componentLinks = <String>{};
     for (final component in components) {
+      // R21 / S18: a SUB_RECIPE component names a PRODUCT (the sub-recipe),
+      // which never has an authority insumo row — the backend excludes it
+      // from the insumo closure. It must resolve against the product map; an
+      // insumo component keeps resolving against the insumo map.
+      final targetResolves =
+          component.ingredientType == AuthorityIngredientType.subRecipe
+          ? productMap.containsKey(component.insumoId)
+          : insumoMap.containsKey(component.insumoId);
       _require(
         recipeMap.values.any((recipe) => recipe.id == component.recipeId) &&
-            insumoMap.containsKey(component.insumoId) &&
+            targetResolves &&
             component.quantityPerSaleUnit.isFinite &&
             component.quantityPerSaleUnit > 0 &&
             componentLinks.add('${component.recipeId}\u0000${component.insumoId}'),

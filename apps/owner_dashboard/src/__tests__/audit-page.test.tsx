@@ -608,13 +608,13 @@ describe("Audit page — POS ledger surface (S4b)", () => {
       .closest("tr");
     expect(criticalRow).not.toBeNull();
     const criticalBadge = within(criticalRow as HTMLElement).getByText("Crítico");
-    expect(criticalBadge.className).toContain("bg-red-50");
+    expect(criticalBadge.className).toContain("bg-destructive-50");
 
     const warningRow = screen
       .getByText("Apertura manual de gaveta")
       .closest("tr");
     expect(warningRow).not.toBeNull();
     const warningBadge = within(warningRow as HTMLElement).getByText("Advertencia");
-    expect(warningBadge.className).toContain("bg-amber-50");
+    expect(warningBadge.className).toContain("bg-warning-50");
   });
 });

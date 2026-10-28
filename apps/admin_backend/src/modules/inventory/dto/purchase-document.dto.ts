@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsIn,
   IsNotEmpty,
@@ -85,6 +86,15 @@ export class PurchaseDocumentDto {
 
   @IsDateString()
   entryTimestamp: string;
+
+  /**
+   * R9 (S11): the operator's declaration of whether `unitCost` carries IVA.
+   * When the insumo declares a rate, the purchase is rejected unless this is
+   * explicitly false (net); a true declaration is always rejected.
+   */
+  @IsOptional()
+  @IsBoolean()
+  costIncludesIva?: boolean;
 
   @IsOptional()
   @IsIn(Object.values(PURCHASE_FX_RATE_MODE))

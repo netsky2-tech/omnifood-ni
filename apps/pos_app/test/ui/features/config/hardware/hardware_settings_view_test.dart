@@ -55,6 +55,10 @@ class _PrinterConfigServiceSpy implements PrinterConfigService {
   Future<void> saveCajaLabel(String? label) => _delegate.saveCajaLabel(label);
 
   @override
+  Future<void> adoptCompanyLogoRaster(String base64Raster) =>
+      _delegate.adoptCompanyLogoRaster(base64Raster);
+
+  @override
   Future<void> confirmPrinterProfile({
     required PrinterDriverType driverType,
     required int paperWidthMm,
