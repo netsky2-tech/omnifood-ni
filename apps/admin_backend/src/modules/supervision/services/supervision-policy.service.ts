@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { DataSource, EntityManager } from 'typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
@@ -92,7 +88,8 @@ export class SupervisionPolicyService {
       // Food Park / QSR has no manager on the floor. An unconfigured tenant
       // reads as the POS's own default mode (food park).
       const defaultPolicy = defaultSupervisionPolicy(
-        operationMode === null || operationMode === TenantOperationMode.FOODPARK_QSR,
+        operationMode === null ||
+          operationMode === TenantOperationMode.FOODPARK_QSR,
       );
       const policy = parseSupervisionPolicy(
         paramMap.get(SUPERVISION_POLICY_PARAM_KEY),

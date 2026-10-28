@@ -24,9 +24,7 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  * PostgreSQL cannot use a value added in the same transaction (TypeORM runs
  * migrations inside one), so the write path is application code.
  */
-export class AddValuationWritedownMovementType1809920000000
-  implements MigrationInterface
-{
+export class AddValuationWritedownMovementType1809920000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       DO $$ BEGIN

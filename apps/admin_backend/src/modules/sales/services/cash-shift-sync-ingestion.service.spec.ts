@@ -336,7 +336,9 @@ describe('CashShiftSyncIngestionService', () => {
 
     expect(result.failed).toBe(0);
     // Resolution is tenant-scoped.
-    expect(users.find).toHaveBeenCalledWith({ where: { tenant_id: 'tenant-1' } });
+    expect(users.find).toHaveBeenCalledWith({
+      where: { tenant_id: 'tenant-1' },
+    });
     // A device that cannot resolve the name never persists its UUID.
     expect(shifts.insert.mock.calls[0][0]).toMatchObject({
       cashier_id: 'user-1',

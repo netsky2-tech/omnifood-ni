@@ -150,9 +150,7 @@ export class PaymentReconciliationSyncIngestionService {
             });
           } catch (error: unknown) {
             failed += 1;
-            results.push(
-              this.toFailure(tenantId, record.paymentId, error),
-            );
+            results.push(this.toFailure(tenantId, record.paymentId, error));
           }
         }
 

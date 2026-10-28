@@ -39,20 +39,22 @@ describe('Customers Module (E2E / Integration)', () => {
           currentTenant = params.tenantId;
           return qb;
         }),
-        andWhere: jest.fn((clause: string, params?: { s?: string; customerType?: string }) => {
-          if (clause === 'c.is_active = false') {
-            statusFilter = 'inactive';
-          } else if (clause === 'c.is_active = true') {
-            statusFilter = 'active';
-          }
-          if (params?.customerType) {
-            typeFilter = params.customerType;
-          }
-          if (params?.s) {
-            searchStr = params.s.replace(/%/g, '').toLowerCase();
-          }
-          return qb;
-        }),
+        andWhere: jest.fn(
+          (clause: string, params?: { s?: string; customerType?: string }) => {
+            if (clause === 'c.is_active = false') {
+              statusFilter = 'inactive';
+            } else if (clause === 'c.is_active = true') {
+              statusFilter = 'active';
+            }
+            if (params?.customerType) {
+              typeFilter = params.customerType;
+            }
+            if (params?.s) {
+              searchStr = params.s.replace(/%/g, '').toLowerCase();
+            }
+            return qb;
+          },
+        ),
         orderBy: jest.fn().mockReturnThis(),
         take: jest.fn((limit: number) => {
           limitVal = limit;
@@ -63,7 +65,9 @@ describe('Customers Module (E2E / Integration)', () => {
           return qb;
         }),
         getManyAndCount: jest.fn(() => {
-          let filtered = dbCustomers.filter((c) => c.tenant_id === currentTenant);
+          let filtered = dbCustomers.filter(
+            (c) => c.tenant_id === currentTenant,
+          );
           if (statusFilter === 'active') {
             filtered = filtered.filter((c) => c.is_active);
           } else if (statusFilter === 'inactive') {

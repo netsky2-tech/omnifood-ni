@@ -27,7 +27,10 @@ import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
  *   policies created here and removes FORCE while leaving ENABLE in place.
  *   It never drops tables, truncates, or deletes rows.
  */
-const TABLES = ['onboarding_sessions', 'onboarding_idempotency_records'] as const;
+const TABLES = [
+  'onboarding_sessions',
+  'onboarding_idempotency_records',
+] as const;
 
 const quoteIdentifier = (identifier: string): string =>
   `"${identifier.replace(/"/g, '""')}"`;

@@ -423,9 +423,7 @@ describe('ShrinkageService kardex write contract (Real PostgreSQL DB, migration-
     expect(movement.movement_type).toBe('SHRINKAGE');
     expect(Number(movement.quantity)).toBe(-expectedConsumed);
     expect(Number(movement.stock_before)).toBe(INSUMO_STOCK);
-    expect(Number(movement.stock_after)).toBe(
-      INSUMO_STOCK - expectedConsumed,
-    );
+    expect(Number(movement.stock_after)).toBe(INSUMO_STOCK - expectedConsumed);
     expect(Number(movement.total_cost_nio)).toBe(
       expectedConsumed * INSUMO_CPP_NIO,
     );

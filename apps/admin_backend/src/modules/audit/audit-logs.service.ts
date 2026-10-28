@@ -2,12 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
-import {
-  resolveReportingBounds,
-} from '../../core/reporting/reporting-period';
-import {
-  classifyAuditSeverity,
-} from './audit-risk-classifier';
+import { resolveReportingBounds } from '../../core/reporting/reporting-period';
+import { classifyAuditSeverity } from './audit-risk-classifier';
 import { AuditLog } from '../identity/entities/audit-log.entity';
 import { AuditIntegrityAlert } from '../identity/entities/audit-integrity-alert.entity';
 import {

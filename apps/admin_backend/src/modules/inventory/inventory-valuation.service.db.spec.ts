@@ -117,7 +117,7 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
     // the sequence assign it and read it back with RETURNING. Supplying a uuid
     // fails with `invalid input syntax for type bigint` — inside the seed,
     // where it masks the behaviour under test instead of testing it.
-    const inserted = (await admin.query(
+    const inserted = await admin.query(
       `INSERT INTO inventory_kardex
          (tenant_id, insumo_id, movement_type, quantity, unit_cost_nio,
           total_cost_nio, stock_before, stock_after, source_document_type,
@@ -132,7 +132,7 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
         input.lastPurchaseUnitCostNio,
         input.stock * input.lastPurchaseUnitCostNio,
       ],
-    )) as Array<{ id: string }>;
+    );
 
     return { insumoId, purchaseMovementId: String(inserted[0].id) };
   };
@@ -170,11 +170,14 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
     return insumoId;
   };
 
-  const readCpp = async (tenantId: string, insumoId: string): Promise<number> => {
-    const rows = (await admin.query(
+  const readCpp = async (
+    tenantId: string,
+    insumoId: string,
+  ): Promise<number> => {
+    const rows = await admin.query(
       `SELECT costo_promedio_nio FROM insumos WHERE tenant_id = $1 AND id = $2`,
       [tenantId, insumoId],
-    )) as Array<{ costo_promedio_nio: string }>;
+    );
     return Number(rows[0].costo_promedio_nio);
   };
 
@@ -182,7 +185,7 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
     tenantId: string,
     insumoId: string,
   ): Promise<KardexRow[]> =>
-    (await admin.query(
+    await admin.query(
       `SELECT movement_type, quantity, unit_cost_nio, total_cost_nio,
               stock_before, stock_after, source_document_id, valuation_basis,
               occurred_at
@@ -191,7 +194,7 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
           AND movement_type = 'VALUATION_WRITEDOWN'
         ORDER BY id`,
       [tenantId, insumoId],
-    )) as KardexRow[];
+    );
 
   beforeAll(async () => {
     fixture = await createMigrationBuiltSchemaFixture();
@@ -310,7 +313,7 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
       `valuation-writedown:${CLOSING_DAY}:${insumoId}`,
     );
 
-    const basis = JSON.parse(rows[0].valuation_basis as string);
+    const basis = JSON.parse(rows[0].valuation_basis);
     expect(basis.variant).toBe('MARKET_PRICE');
     expect(basis.referenceDate).toBe('2026-10-15');
     expect(basis.originId).toBe(priceInForce.id);
@@ -338,7 +341,7 @@ describe('InventoryValuationService lower-of-cost-or-market (Real PostgreSQL DB,
 
     const rows = await readWritedownRows(tenantId, insumoId);
     expect(rows).toHaveLength(1);
-    const basis = JSON.parse(rows[0].valuation_basis as string);
+    const basis = JSON.parse(rows[0].valuation_basis);
     // The approximation is DECLARED, so no report can present it as a market
     // price.
     expect(basis.variant).toBe('LAST_PURCHASE_COST_FALLBACK');

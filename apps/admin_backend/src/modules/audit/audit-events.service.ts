@@ -1,7 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  resolveReportingBounds,
-} from '../../core/reporting/reporting-period';
+import { resolveReportingBounds } from '../../core/reporting/reporting-period';
 import { resolveAuditSeverity, AuditSeverity } from './audit-risk-classifier';
 import { AuditEventDto, AuditEventsResponseDto } from './audit-events.dto';
 import { ChangeLogService } from './change-log.service';
@@ -44,10 +42,7 @@ export class AuditEventsService {
     const limit =
       limitInput === undefined || limitInput === null
         ? AuditEventsService.DEFAULT_EVENTS_LIMIT
-        : Math.min(
-            Math.trunc(limitInput),
-            AuditEventsService.MAX_EVENTS_LIMIT,
-          );
+        : Math.min(Math.trunc(limitInput), AuditEventsService.MAX_EVENTS_LIMIT);
 
     const rows = await this.changeLogService.findEvents(tenantId, {
       startInclusiveUtc,

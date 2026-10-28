@@ -248,7 +248,6 @@ export class ProductionService {
     }
   }
 
-
   private async postProductionClose(
     input: ReplayProductionCloseInput,
     documentId: string,

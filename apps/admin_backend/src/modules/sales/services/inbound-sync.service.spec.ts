@@ -1881,18 +1881,29 @@ describe('InboundSyncService', () => {
     });
   });
 
-    it('delivers recipe versions with SUB_RECIPE components without throwing insumo eligibility error (R21 / S18)', async () => {
+  it('delivers recipe versions with SUB_RECIPE components without throwing insumo eligibility error (R21 / S18)', async () => {
     // A recipe whose component is a SUB_RECIPE names a product id in insumo_id,
     // not an insumo row. The inbound sync must not look it up in the insumos table.
-    const productRepo = { find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() };
-    const catalogRepo = { find: jest.fn().mockResolvedValue([]), createQueryBuilder: jest.fn() };
+    const productRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn(),
+    };
+    const catalogRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn(),
+    };
     const userRepo = { find: jest.fn().mockResolvedValue([]) };
     const insumoRepo = {
       createQueryBuilder: jest.fn().mockReturnValue({
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
         getMany: jest.fn().mockResolvedValue([
-          { id: 'ins-leaf', tenant_id: 'tenant-1', name: 'Queso', consumptionUom: 'g' },
+          {
+            id: 'ins-leaf',
+            tenant_id: 'tenant-1',
+            name: 'Queso',
+            consumptionUom: 'g',
+          },
         ]),
       }),
     };
@@ -1939,12 +1950,19 @@ describe('InboundSyncService', () => {
       ]),
     };
 
-    const recipeQb = { where: jest.fn().mockReturnThis(), andWhere: jest.fn().mockReturnThis(), getMany: jest.fn().mockResolvedValue([]) };
+    const recipeQb = {
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getMany: jest.fn().mockResolvedValue([]),
+    };
     const mockManager: any = {
       getRepository: (entity: any) => {
-        if (entity.name === 'Recipe') return { createQueryBuilder: () => recipeQb };
-        if (entity.name === 'RecipeVersion') return { createQueryBuilder: () => rvQb };
-        if (entity.name === 'RecipeDetail') return { createQueryBuilder: () => detailQb };
+        if (entity.name === 'Recipe')
+          return { createQueryBuilder: () => recipeQb };
+        if (entity.name === 'RecipeVersion')
+          return { createQueryBuilder: () => rvQb };
+        if (entity.name === 'RecipeDetail')
+          return { createQueryBuilder: () => detailQb };
         if (entity.name === 'Insumo') return insumoRepo;
         if (entity.name === 'Product') return productRepo;
         if (entity.name === 'CatalogValue') return catalogRepo;
@@ -1967,7 +1985,7 @@ describe('InboundSyncService', () => {
     ]);
   });
 
-describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
+  describe('slice 5d inbound deltas: loyaltyPrograms, promotions, customers', () => {
     it('includes the three new keys by default and reads them through the bound manager', async () => {
       loyaltyProgramQb.getMany.mockResolvedValue([]);
       loyaltyRewardQb.getMany.mockResolvedValue([]);

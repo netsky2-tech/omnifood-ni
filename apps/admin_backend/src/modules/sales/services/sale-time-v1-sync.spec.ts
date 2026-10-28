@@ -652,7 +652,9 @@ describe('InvoicesService SALE_TIME_V1 syncBatch integration', () => {
 
     // Fiscal invoices: BOTH invoices were saved in database (DGI compliance!)
     expect(savedInvoices.map((inv) => inv.id)).toContain('inv-v1-restrict-neg');
-    expect(savedInvoices.map((inv) => inv.id)).toContain('inv-v1-subsequent-66');
+    expect(savedInvoices.map((inv) => inv.id)).toContain(
+      'inv-v1-subsequent-66',
+    );
 
     // The movement IS created (the goods left the business) and the stock
     // goes negative: the cloud mirrors the terminal instead of freezing.

@@ -9,7 +9,7 @@ import {
   usePrograms,
   useAdjustPoints,
 } from './use-loyalty';
-import type { Customer, CustomerPointTransaction, AdjustPointsInput } from './types';
+import type { Customer, CustomerPointTransaction, AdjustPointsInput, LoyaltyProgram } from './types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -25,15 +25,18 @@ import { getApiErrorMessage } from '@/lib/api-error';
 
 function AdjustDialog({
   customer,
+  programs,
   onSuccess,
   onCancel,
 }: {
   customer: Customer;
+  programs?: LoyaltyProgram[];
   onSuccess: () => void;
   onCancel: () => void;
 }) {
   const [delta, setDelta] = useState<number>(0);
   const [reason, setReason] = useState('');
+  const [selectedProgramId, setSelectedProgramId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const adjustMutation = useAdjustPoints();
 
@@ -52,7 +55,11 @@ function AdjustDialog({
     }
 
     try {
-      const input: AdjustPointsInput = { points_delta: delta, reason: reason.trim() };
+      const input: AdjustPointsInput = {
+        points_delta: delta,
+        reason: reason.trim(),
+        loyalty_program_id: selectedProgramId.trim() ? selectedProgramId.trim() : undefined,
+      };
       await adjustMutation.mutateAsync({ customerId: customer.id, input });
       toast({
         variant: "success",
@@ -83,6 +90,30 @@ function AdjustDialog({
         <p className="font-medium">{customer.name}</p>
         <p className="text-muted-foreground">Saldo actual: {customer.points_balance} pts</p>
       </div>
+
+      {programs && programs.length > 0 && (
+        <div>
+          <label htmlFor="adjust-program" className="block text-sm font-medium mb-1">
+            Programa de lealtad (opcional)
+          </label>
+          <select
+            id="adjust-program"
+            value={selectedProgramId}
+            onChange={(e) => setSelectedProgramId(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+          >
+            <option value="">Balance general / Legacy</option>
+            {programs.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground mt-1">
+            Seleccione el programa para reflejar el ajuste en la proyección del POS.
+          </p>
+        </div>
+      )}
 
       <div>
         <label htmlFor="adjust-delta" className="block text-sm font-medium mb-1">
@@ -363,6 +394,7 @@ export function CustomerLoyaltyProfile() {
           {selectedCustomer && (
             <AdjustDialog
               customer={selectedCustomer}
+              programs={programs}
               onSuccess={() => setShowAdjust(false)}
               onCancel={() => setShowAdjust(false)}
             />

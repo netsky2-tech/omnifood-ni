@@ -7,7 +7,9 @@ import {
   type SupervisionPolicy,
 } from './supervision-policy.contract';
 
-const completePolicy = (overrides: Partial<SupervisionPolicy> = {}): SupervisionPolicy => ({
+const completePolicy = (
+  overrides: Partial<SupervisionPolicy> = {},
+): SupervisionPolicy => ({
   authorizingRoles: [UserRole.OWNER, UserRole.MANAGER],
   selfAuthorizationAllowedCloseBox: true,
   selfAuthorizationAllowedCashDrawer: false,
@@ -98,13 +100,16 @@ describe('SupervisionPolicy contract', () => {
       ['a non-object', 'OWNER'],
       ['an unknown role', { authorizingRoles: ['SUPERVISOR'] }],
       ['a missing boolean', { authorizingRoles: ['OWNER'] }],
-      ['a non-boolean flag', {
-        authorizingRoles: ['OWNER'],
-        selfAuthorizationAllowedCloseBox: 'yes',
-        selfAuthorizationAllowedCashDrawer: true,
-        selfAuthorizationAllowedManualDiscount: true,
-        supervisorRequiredForModifierQuantity: false,
-      }],
+      [
+        'a non-boolean flag',
+        {
+          authorizingRoles: ['OWNER'],
+          selfAuthorizationAllowedCloseBox: 'yes',
+          selfAuthorizationAllowedCashDrawer: true,
+          selfAuthorizationAllowedManualDiscount: true,
+          supervisorRequiredForModifierQuantity: false,
+        },
+      ],
     ])('reads %s as "never configured" (null)', (_label, raw) => {
       expect(parseSupervisionPolicy(raw)).toBeNull();
     });

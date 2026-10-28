@@ -30,7 +30,9 @@ import type { PaymentReconciliationSyncItemDto } from '../dto/payment-reconcilia
 
 const TEST_TIMEOUT_MS = 180000;
 
-function reconciliation(overrides: Partial<PaymentReconciliationSyncItemDto> = {}) {
+function reconciliation(
+  overrides: Partial<PaymentReconciliationSyncItemDto> = {},
+) {
   return {
     paymentId: randomUUID(),
     invoiceId: randomUUID(),
@@ -253,9 +255,7 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
         received: 1,
         processed: 1,
         failed: 0,
-        results: [
-          { paymentId: payA1Id, status: 'ACCEPTED' },
-        ],
+        results: [{ paymentId: payA1Id, status: 'ACCEPTED' }],
       });
 
       const after = await snapshotPayment(payA1Id);
@@ -499,9 +499,7 @@ describe('PaymentReconciliationSyncIngestionService (db - Real PostgreSQL, migra
       expect((await snapshotPayment(payB1Id)).reconciliation_status).toBe(
         'CONCILIADO',
       );
-      expect((await snapshotPayment(payB1Id)).voucher_code).toBe(
-        'VCH-TB-0001',
-      );
+      expect((await snapshotPayment(payB1Id)).voucher_code).toBe('VCH-TB-0001');
     },
     TEST_TIMEOUT_MS,
   );

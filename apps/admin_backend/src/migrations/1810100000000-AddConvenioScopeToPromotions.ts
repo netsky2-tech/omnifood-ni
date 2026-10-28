@@ -200,12 +200,8 @@ export class AddConvenioScopeToPromotions1810100000000 implements MigrationInter
       await queryRunner.query(
         `ALTER TABLE promotions DROP CONSTRAINT IF EXISTS ${FK_NAME}`,
       );
-      await queryRunner.query(
-        `DROP INDEX IF EXISTS ${CODE_INDEX_NAME}`,
-      );
-      await queryRunner.query(
-        `DROP INDEX IF EXISTS ${CUSTOMER_INDEX_NAME}`,
-      );
+      await queryRunner.query(`DROP INDEX IF EXISTS ${CODE_INDEX_NAME}`);
+      await queryRunner.query(`DROP INDEX IF EXISTS ${CUSTOMER_INDEX_NAME}`);
 
       // The agreement scope is lost here (the columns carry it); the
       // promotion ROWS themselves are never deleted or deactivated.

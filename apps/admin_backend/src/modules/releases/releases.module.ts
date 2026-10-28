@@ -7,10 +7,7 @@ import { ReleasesService } from './services/releases.service';
 import { R2StorageService } from './services/r2-storage.service';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([AppRelease]),
-    ConfigModule,
-  ],
+  imports: [TypeOrmModule.forFeature([AppRelease]), ConfigModule],
   controllers: [ReleasesController],
   providers: [ReleasesService, R2StorageService],
   exports: [ReleasesService, R2StorageService],

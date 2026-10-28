@@ -21,13 +21,11 @@ void main() {
   });
 
   test('a version published minutes ago is IN FORCE in the same frame', () {
-    // The rig's exact shape: the version became effective at 03:46:35Z and
-    // the terminal's wall clock read 22:00 on the 19th (UTC-6). Compared
-    // in the LOCAL frame, "2026-10-19T22:00:00.000" < "2026-10-20T03:46:35.999Z"
-    // looked like a version that was not in force yet, and the operator
-    // lost the inherited quantity.
-    final now = DateTime(2026, 10, 19, 22, 0, 0);
-    final effectiveFrom = '2026-10-20T03:46:35.999Z';
+    // A version published minutes before `now` must always be in force
+    // regardless of the runner's or terminal's local timezone.
+    final now = DateTime.now();
+    final effectiveFrom =
+        now.toUtc().subtract(const Duration(minutes: 14)).toIso8601String();
     expect(
       authoritySaleTime(now).compareTo(effectiveFrom) >= 0,
       isTrue,

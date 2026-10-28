@@ -25,16 +25,16 @@ async function isForceRowLevelSecurity(
  * already in flight. New attempts get V2 as the column default, so the
  * invoice-free contract is the only one the finalizer will accept from now on.
  */
-export class AddContractVersionToActivationAttempts1810300000000
-  implements MigrationInterface
-{
+export class AddContractVersionToActivationAttempts1810300000000 implements MigrationInterface {
   name = 'AddContractVersionToActivationAttempts1810300000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     const wasForced = await isForceRowLevelSecurity(queryRunner, TABLE);
     try {
       if (wasForced) {
-        await queryRunner.query(`ALTER TABLE "${TABLE}" NO FORCE ROW LEVEL SECURITY`);
+        await queryRunner.query(
+          `ALTER TABLE "${TABLE}" NO FORCE ROW LEVEL SECURITY`,
+        );
       }
 
       await queryRunner.query(
@@ -54,7 +54,9 @@ export class AddContractVersionToActivationAttempts1810300000000
       );
     } finally {
       if (wasForced) {
-        await queryRunner.query(`ALTER TABLE "${TABLE}" FORCE ROW LEVEL SECURITY`);
+        await queryRunner.query(
+          `ALTER TABLE "${TABLE}" FORCE ROW LEVEL SECURITY`,
+        );
       }
     }
   }
@@ -63,14 +65,18 @@ export class AddContractVersionToActivationAttempts1810300000000
     const wasForced = await isForceRowLevelSecurity(queryRunner, TABLE);
     try {
       if (wasForced) {
-        await queryRunner.query(`ALTER TABLE "${TABLE}" NO FORCE ROW LEVEL SECURITY`);
+        await queryRunner.query(
+          `ALTER TABLE "${TABLE}" NO FORCE ROW LEVEL SECURITY`,
+        );
       }
       await queryRunner.query(
         `ALTER TABLE "${TABLE}" DROP COLUMN IF EXISTS "contract_version"`,
       );
     } finally {
       if (wasForced) {
-        await queryRunner.query(`ALTER TABLE "${TABLE}" FORCE ROW LEVEL SECURITY`);
+        await queryRunner.query(
+          `ALTER TABLE "${TABLE}" FORCE ROW LEVEL SECURITY`,
+        );
       }
     }
   }

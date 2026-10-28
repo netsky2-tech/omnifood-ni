@@ -189,7 +189,7 @@ describe('InventoryReportsService', () => {
       const invoiceQb: any = {
         where: jest.fn().mockReturnThis(),
         andWhere: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(invoices as Invoice[]),
+        getMany: jest.fn().mockResolvedValue(invoices),
       };
       invoiceRepo.createQueryBuilder.mockReturnValue(invoiceQb);
     };
@@ -433,8 +433,7 @@ describe('InventoryReportsService', () => {
 
       await service.getCogsReport('tenant-42', '2026-08-01', '2026-08-31');
 
-      const invoiceQb = (invoiceRepo.createQueryBuilder as jest.Mock).mock.results[0]
-        .value as any;
+      const invoiceQb = invoiceRepo.createQueryBuilder.mock.results[0].value;
       const predicates = [
         ...invoiceQb.where.mock.calls.map((c: any[]) => String(c[0])),
         ...invoiceQb.andWhere.mock.calls.map((c: any[]) => String(c[0])),
@@ -442,7 +441,9 @@ describe('InventoryReportsService', () => {
       expect(predicates).toContain('inv.tenant_id = :tenantId');
       expect(predicates).toContain('inv.created_at BETWEEN :from AND :to');
       expect(predicates).toContain('inv.is_canceled = FALSE');
-      expect(invoiceQb.where.mock.calls[0][1]).toEqual({ tenantId: 'tenant-42' });
+      expect(invoiceQb.where.mock.calls[0][1]).toEqual({
+        tenantId: 'tenant-42',
+      });
     });
 
     it('labels an APPLIED_NO_INVENTORY_IMPACT sale with NO recorded reason as MISSING_COST_BASIS, not as a mapping gap (finding D6)', async () => {
@@ -488,7 +489,10 @@ describe('InventoryReportsService', () => {
           type: 'regular',
           isCanceled: false,
           inventoryOutcome: 'APPLIED_NO_INVENTORY_IMPACT',
-          inventoryOutcomeReason: { code: 'NO_EXPLICIT_INSUMO_MAPPING', lines: ['line-1'] },
+          inventoryOutcomeReason: {
+            code: 'NO_EXPLICIT_INSUMO_MAPPING',
+            lines: ['line-1'],
+          },
         },
       ]);
       const emptyMovements: any = {
@@ -500,7 +504,9 @@ describe('InventoryReportsService', () => {
 
       const report = await service.getCogsReport('tenant-1');
 
-      expect(report.inventoryCoverage?.reasonCodes).toEqual(['NO_EXPLICIT_INSUMO_MAPPING']);
+      expect(report.inventoryCoverage?.reasonCodes).toEqual([
+        'NO_EXPLICIT_INSUMO_MAPPING',
+      ]);
     });
 
     it('reports PARTIAL inventoryCoverage mixing costed APPLIED sales and unmapped APPLIED_NO_INVENTORY_IMPACT sales without moving the money fields (WU11)', async () => {
@@ -751,8 +757,8 @@ describe('InventoryReportsService', () => {
           insumoId: 'ins-milk',
           type: MovementType.SALE,
           quantity: -1,
-          unitCostNio: null as unknown as number,
-          totalCostNio: null as unknown as number,
+          unitCostNio: null,
+          totalCostNio: null,
           sourceDocumentId: 'invoice:inv-2',
         },
       ];
@@ -962,7 +968,7 @@ describe('InventoryReportsService', () => {
           type: MovementType.SALE,
           quantity: -2,
           unitCostNio: 0,
-          totalCostNio: null as unknown as number,
+          totalCostNio: null,
           sourceDocumentId: 'invoice:inv-1',
         },
       ];
@@ -1054,7 +1060,8 @@ describe('InventoryReportsService', () => {
           cb({
             query: jest.fn().mockResolvedValue(undefined),
             getRepository: (entity: any) => {
-              if (entity.name === 'InventoryMovement') return { createQueryBuilder: () => qb };
+              if (entity.name === 'InventoryMovement')
+                return { createQueryBuilder: () => qb };
               return { find: jest.fn().mockResolvedValue([]) };
             },
           }),
@@ -1068,7 +1075,9 @@ describe('InventoryReportsService', () => {
 
       // The 'to' clause must pass the last local millisecond of the day
       // (23:59:59.999 America/Managua = 05:59:59.999Z of the next day).
-      const toCall = qb.andWhere.mock.calls.find(([sql]: [string]) => sql.includes('mov.timestamp <= :to'));
+      const toCall = qb.andWhere.mock.calls.find(([sql]: [string]) =>
+        sql.includes('mov.timestamp <= :to'),
+      );
       expect(toCall).toBeDefined();
       const boundTo: Date = toCall[1].to;
       expect(boundTo.toISOString()).toBe('2026-10-17T05:59:59.999Z');
@@ -1078,7 +1087,9 @@ describe('InventoryReportsService', () => {
       // `new Date('2026-10-16')` = UTC midnight = 18:00 of the PREVIOUS
       // local day, so the "Hoy" shortcut leaked yesterday's evening
       // movements into the result and dropped today's evening trade.
-      const fromCall = qb.andWhere.mock.calls.find(([sql]: [string]) => sql.includes('mov.timestamp >= :from'));
+      const fromCall = qb.andWhere.mock.calls.find(([sql]: [string]) =>
+        sql.includes('mov.timestamp >= :from'),
+      );
       expect(fromCall).toBeDefined();
       const boundFrom: Date = fromCall[1].from;
       expect(boundFrom.toISOString()).toBe('2026-10-16T06:00:00.000Z');

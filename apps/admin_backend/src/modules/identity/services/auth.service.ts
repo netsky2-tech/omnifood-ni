@@ -13,10 +13,7 @@ import {
   type IdentityJwtConfig,
 } from '../config/identity-jwt.config';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
-import {
-  AuthAuditService,
-  LoginAuditReason,
-} from './auth-audit.service';
+import { AuthAuditService, LoginAuditReason } from './auth-audit.service';
 import {
   JWT_TOKEN_TYPES,
   isRefreshTokenPayloadForSubject,
@@ -24,7 +21,10 @@ import {
   type JwtSignPayload,
 } from '../security/jwt-token.types';
 import * as refreshTokenVerifier from '../security/refresh-token-verifier';
-import { PASSWORD_BCRYPT_COST, needsCostUpgrade } from '../security/password.config';
+import {
+  PASSWORD_BCRYPT_COST,
+  needsCostUpgrade,
+} from '../security/password.config';
 
 const SYNC_SCOPE = {
   POS_AUTH_CONTINUITY: 'pos-auth-continuity',
@@ -460,7 +460,11 @@ export class AuthService {
     refreshToken: string,
     tenantSlug: string,
   ): Promise<
-    | { tenantId: string; tokens: Awaited<ReturnType<AuthService['getTokens']>>; failureReason?: undefined }
+    | {
+        tenantId: string;
+        tokens: Awaited<ReturnType<AuthService['getTokens']>>;
+        failureReason?: undefined;
+      }
     | { tenantId: string; tokens: null; failureReason: string }
   > {
     const resolvedTenantId =
@@ -515,7 +519,10 @@ export class AuthService {
     refreshToken: string,
     expectedTenantId: string,
   ): Promise<
-    | { tokens: Awaited<ReturnType<AuthService['getTokens']>>; failureReason?: undefined }
+    | {
+        tokens: Awaited<ReturnType<AuthService['getTokens']>>;
+        failureReason?: undefined;
+      }
     | { tokens: null; failureReason: string }
   > {
     const repository = manager.getRepository(User);
@@ -732,51 +739,49 @@ export class AuthService {
       },
     );
 
-    const staff = users.map(
-      (user): StaffSyncItem => ({
-        id: user.id,
-        name: user.name,
-        role: user.role,
-        is_active: user.is_active,
-        email: user.email,
-        tenant_id: user.tenant_id,
-        permissions: resolveInventoryBohPermissions(user.role),
-        security_profile: user.security_profile
-          ? (() => {
-              const isSelf = scopedContinuityAllowed && user.id === requesterId;
-              const isAuthorizerRole =
-                user.role === UserRole.OWNER || user.role === UserRole.MANAGER;
-              const canReadScopedPin =
-                canReadSensitiveProfile || isSelf || isAuthorizerRole;
-              const canReadScopedTotp =
-                canReadSensitiveProfile ||
-                (scopedContinuityAllowed && isAuthorizerRole);
-              const scope = scopedContinuityAllowed
-                ? isSelf
-                  ? 'self'
-                  : isAuthorizerRole
-                    ? 'authorizer'
-                    : 'masked'
-                : canReadSensitiveProfile
-                  ? 'full'
-                  : 'masked';
+    const staff = users.map((user): StaffSyncItem => ({
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      is_active: user.is_active,
+      email: user.email,
+      tenant_id: user.tenant_id,
+      permissions: resolveInventoryBohPermissions(user.role),
+      security_profile: user.security_profile
+        ? (() => {
+            const isSelf = scopedContinuityAllowed && user.id === requesterId;
+            const isAuthorizerRole =
+              user.role === UserRole.OWNER || user.role === UserRole.MANAGER;
+            const canReadScopedPin =
+              canReadSensitiveProfile || isSelf || isAuthorizerRole;
+            const canReadScopedTotp =
+              canReadSensitiveProfile ||
+              (scopedContinuityAllowed && isAuthorizerRole);
+            const scope = scopedContinuityAllowed
+              ? isSelf
+                ? 'self'
+                : isAuthorizerRole
+                  ? 'authorizer'
+                  : 'masked'
+              : canReadSensitiveProfile
+                ? 'full'
+                : 'masked';
 
-              return {
-                user_id: user.security_profile.user_id,
-                pin_hash: canReadScopedPin
-                  ? user.security_profile.pin_hash
-                  : null,
-                totp_secret_seed: canReadScopedTotp
-                  ? user.security_profile.totp_secret_seed
-                  : null,
-                is_totp_enabled: user.security_profile.is_totp_enabled,
-                is_pin_enabled: user.security_profile.is_pin_enabled,
-                scope,
-              };
-            })()
-          : null,
-      }),
-    );
+            return {
+              user_id: user.security_profile.user_id,
+              pin_hash: canReadScopedPin
+                ? user.security_profile.pin_hash
+                : null,
+              totp_secret_seed: canReadScopedTotp
+                ? user.security_profile.totp_secret_seed
+                : null,
+              is_totp_enabled: user.security_profile.is_totp_enabled,
+              is_pin_enabled: user.security_profile.is_pin_enabled,
+              scope,
+            };
+          })()
+        : null,
+    }));
 
     if (continuityScopeRequested) {
       return {

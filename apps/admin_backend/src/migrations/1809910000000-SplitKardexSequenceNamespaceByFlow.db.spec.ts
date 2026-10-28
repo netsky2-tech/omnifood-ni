@@ -127,9 +127,7 @@ describe('SplitKardexSequenceNamespaceByFlow1809910000000 (db)', () => {
   const buildSchema = async (queryRunner: QueryRunner): Promise<void> => {
     await new BohInventoryLedgerFoundation1766000000000().up(queryRunner);
     await new EnforceInventoryKardexImmutability1773000000000().up(queryRunner);
-    await new SplitKardexSequenceNamespaceByFlow1809910000000().up(
-      queryRunner,
-    );
+    await new SplitKardexSequenceNamespaceByFlow1809910000000().up(queryRunner);
   };
 
   it(

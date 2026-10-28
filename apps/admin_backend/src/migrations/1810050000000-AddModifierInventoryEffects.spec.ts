@@ -90,9 +90,13 @@ describe('AddModifierInventoryEffects1810050000000', () => {
       const { sql } = await collectSql('up');
 
       expect(sql).toContain('chk_modifier_options_effect_quantity_positive');
-      expect(sql).toContain('CHECK (effect_quantity IS NULL OR effect_quantity > 0)');
+      expect(sql).toContain(
+        'CHECK (effect_quantity IS NULL OR effect_quantity > 0)',
+      );
       expect(sql).toContain('chk_modifier_options_effect_factor_positive');
-      expect(sql).toContain('CHECK (effect_factor IS NULL OR effect_factor > 0)');
+      expect(sql).toContain(
+        'CHECK (effect_factor IS NULL OR effect_factor > 0)',
+      );
     });
   });
 

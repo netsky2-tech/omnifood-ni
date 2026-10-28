@@ -9,8 +9,6 @@ import { Product } from '../../inventory/entities/product.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
-import { Invoice } from '../../sales/entities/invoice.entity';
-import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
 import { InvoiceItemModifier } from '../../sales/entities/invoice-item-modifier.entity';
 
 /**
@@ -50,9 +48,7 @@ describe('ModifierPendingConfigurationService', () => {
     return builder;
   };
 
-  const option = (
-    overrides: Partial<ModifierOption> = {},
-  ): ModifierOption =>
+  const option = (overrides: Partial<ModifierOption> = {}): ModifierOption =>
     ({
       id: 'opt-1',
       tenant_id: 'tenant-1',
@@ -130,9 +126,9 @@ describe('ModifierPendingConfigurationService', () => {
     });
     repos.set(ModifierGroup, { find: jest.fn().mockResolvedValue([group]) });
     repos.set(ProductModifierGroup, {
-      find: jest.fn().mockResolvedValue([
-        { group_id: 'group-1', product_id: 'prod-1' },
-      ]),
+      find: jest
+        .fn()
+        .mockResolvedValue([{ group_id: 'group-1', product_id: 'prod-1' }]),
     });
     repos.set(CategoryModifierGroup, { find: jest.fn().mockResolvedValue([]) });
     repos.set(Product, {
@@ -151,7 +147,8 @@ describe('ModifierPendingConfigurationService', () => {
 
     manager.getRepository.mockImplementation((entity: unknown) => {
       const repo = repos.get(entity);
-      if (!repo) throw new Error(`unexpected repository: ${String(entity)}`);
+      const name = (entity as { name?: string })?.name ?? 'unknown';
+      if (!repo) throw new Error(`unexpected repository: ${name}`);
       return repo;
     });
 
@@ -162,14 +159,16 @@ describe('ModifierPendingConfigurationService', () => {
   });
 
   const optionsQuery = (options: ModifierOption[]) => {
-    (repos.get(ModifierOption) as { createQueryBuilder: jest.Mock })
-      .createQueryBuilder.mockReturnValue(queryBuilder(options));
+    (
+      repos.get(ModifierOption) as { createQueryBuilder: jest.Mock }
+    ).createQueryBuilder.mockReturnValue(queryBuilder(options));
   };
 
   it('lists an option whose effect has no quantity and no recipe behind it', async () => {
     optionsQuery([option()]);
-    (repos.get(RecipeVersion) as { createQueryBuilder: jest.Mock })
-      .createQueryBuilder.mockReturnValue(queryBuilder(null));
+    (
+      repos.get(RecipeVersion) as { createQueryBuilder: jest.Mock }
+    ).createQueryBuilder.mockReturnValue(queryBuilder(null));
 
     const pending = await service.findPendingConfiguration('tenant-1');
 
@@ -255,12 +254,9 @@ describe('ModifierPendingConfigurationService · efectos pendientes vendidos', (
   } as unknown as DataSource;
 
   const makeService = () =>
-    new ModifierPendingConfigurationService(
-      dataSource,
-      {} as never,
-    );
+    new ModifierPendingConfigurationService(dataSource, {} as never);
 
-  const pendingModifier = {
+  const _pendingModifier = {
     id: 'mod-1',
     invoiceItemId: 'item-1',
     name: 'Leche: Almendras',
@@ -339,9 +335,7 @@ describe('ModifierPendingConfigurationService · efectos pendientes vendidos', (
     ]) {
       qb[method] = jest.fn(() => qb);
     }
-    qb.getRawMany = jest
-      .fn()
-      .mockResolvedValue([rawPendingRow, rawPendingRow]);
+    qb.getRawMany = jest.fn().mockResolvedValue([rawPendingRow, rawPendingRow]);
 
     manager.getRepository.mockImplementation((entity: unknown) => {
       if (entity === InvoiceItemModifier) {

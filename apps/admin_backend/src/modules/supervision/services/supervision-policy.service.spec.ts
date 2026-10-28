@@ -102,7 +102,9 @@ describe('SupervisionPolicyService', () => {
       expect(result.operationMode).toBe('FOODPARK_QSR');
       // The default the terminals will apply: a food park has no manager on
       // the floor, so the operator may sign their own drawer/discount.
-      expect(result.defaultPolicy.selfAuthorizationAllowedCashDrawer).toBe(true);
+      expect(result.defaultPolicy.selfAuthorizationAllowedCashDrawer).toBe(
+        true,
+      );
       expect(result.defaultPolicy.selfAuthorizationAllowedCloseBox).toBe(true);
     });
 
@@ -124,11 +126,15 @@ describe('SupervisionPolicyService', () => {
       expect(result.policy?.authorizingRoles).toEqual([UserRole.OWNER]);
       expect(result.validation.errors).toEqual([]);
       // A restaurant keeps the stricter default.
-      expect(result.defaultPolicy.selfAuthorizationAllowedCashDrawer).toBe(false);
+      expect(result.defaultPolicy.selfAuthorizationAllowedCashDrawer).toBe(
+        false,
+      );
     });
 
     it('rejects a blank tenant id before touching the database', async () => {
-      await expect(service.getPolicy('  ')).rejects.toThrow(BadRequestException);
+      await expect(service.getPolicy('  ')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(dataSource.transaction).not.toHaveBeenCalled();
     });
   });

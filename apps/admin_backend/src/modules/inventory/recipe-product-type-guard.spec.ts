@@ -38,9 +38,11 @@ describe('Recipe product-type guard (#611)', () => {
   const productRepo = { findOne: jest.fn(), find: jest.fn() };
   const insumoRepo = {
     findOne: jest.fn(),
-    find: jest.fn().mockResolvedValue([
-      { id: 'ins-1', name: 'Café en Grano', consumptionUom: 'g' },
-    ]),
+    find: jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'ins-1', name: 'Café en Grano', consumptionUom: 'g' },
+      ]),
   };
   const recipeVersionRepo = {
     findOne: jest.fn(),

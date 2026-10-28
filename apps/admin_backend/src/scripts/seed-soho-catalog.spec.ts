@@ -23,10 +23,7 @@ jest.mock('@nestjs/core', () => ({
 const TENANT_ID = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
 
 type EntityClass =
-  | typeof Insumo
-  | typeof Product
-  | typeof RecipeVersion
-  | typeof RecipeDetail;
+  typeof Insumo | typeof Product | typeof RecipeVersion | typeof RecipeDetail;
 
 interface FakeManager {
   find: jest.Mock;

@@ -85,7 +85,7 @@ describe('serializeCashShiftSession — real PostgreSQL wire shape', () => {
   const TEST_TIMEOUT_MS = 30000;
 
   it(
-    'coerces the driver-returned numeric strings of the shift money fields into numbers and keeps an open shift\'s nulls null',
+    "coerces the driver-returned numeric strings of the shift money fields into numbers and keeps an open shift's nulls null",
     async () => {
       await withIsolatedSchema('cash_shift_wire', async ({ dataSource }) => {
         const tenantId = randomUUID();
@@ -134,7 +134,7 @@ describe('serializeCashShiftSession — real PostgreSQL wire shape', () => {
   );
 
   it(
-    'coerces a closed shift\'s final counts and differences, and a movement\'s amounts, into numbers',
+    "coerces a closed shift's final counts and differences, and a movement's amounts, into numbers",
     async () => {
       await withIsolatedSchema('cash_shift_closed', async ({ dataSource }) => {
         const tenantId = randomUUID();

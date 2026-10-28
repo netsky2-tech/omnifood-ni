@@ -102,20 +102,17 @@ export class CashShiftService {
     query: ListShiftsDto = {},
   ): Promise<CashShiftSession[]> {
     const limit = query.limit ?? 50;
-    return runInTenantTransaction(
-      this.dataSource,
-      tenantId,
-      (manager) =>
-        manager.getRepository(CashShiftSession).find({
-          where: {
-            tenant_id: tenantId,
-            ...(query.status ? { status: query.status } : {}),
-          },
-          order: {
-            opened_at: 'DESC',
-          },
-          take: limit,
-        }),
+    return runInTenantTransaction(this.dataSource, tenantId, (manager) =>
+      manager.getRepository(CashShiftSession).find({
+        where: {
+          tenant_id: tenantId,
+          ...(query.status ? { status: query.status } : {}),
+        },
+        order: {
+          opened_at: 'DESC',
+        },
+        take: limit,
+      }),
     );
   }
 

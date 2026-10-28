@@ -37,7 +37,16 @@ export class ExpandIndustryTemplateMenu1809620000000 implements MigrationInterfa
   > = [
     // CAFETERIA — new insumos for the owner-approved menu.
     ['CAFETERIA', 'Hielo en Cubos', 'kg', 'g', 1000, 20000, 5000, false],
-    ['CAFETERIA', 'Fruta de Estación Picada', 'kg', 'g', 1000, 8000, 2000, true],
+    [
+      'CAFETERIA',
+      'Fruta de Estación Picada',
+      'kg',
+      'g',
+      1000,
+      8000,
+      2000,
+      true,
+    ],
     ['CAFETERIA', 'Pan de Sándwich', 'unidad', 'unidad', 1, 100, 20, true],
     ['CAFETERIA', 'Jamón', 'kg', 'g', 1000, 3000, 500, true],
     ['CAFETERIA', 'Queso Amarillo', 'kg', 'g', 1000, 3000, 500, true],
@@ -49,7 +58,16 @@ export class ExpandIndustryTemplateMenu1809620000000 implements MigrationInterfa
     ['BAR_RESTAURANTE', 'Pollo Entero', 'kg', 'g', 1000, 15000, 3000, true],
     ['BAR_RESTAURANTE', 'Repollo', 'kg', 'g', 1000, 6000, 1500, true],
     ['BAR_RESTAURANTE', 'Zanahoria', 'kg', 'g', 1000, 4000, 1000, true],
-    ['BAR_RESTAURANTE', 'Tortilla de Maíz', 'unidad', 'unidad', 1, 200, 50, true],
+    [
+      'BAR_RESTAURANTE',
+      'Tortilla de Maíz',
+      'unidad',
+      'unidad',
+      1,
+      200,
+      50,
+      true,
+    ],
     [
       'BAR_RESTAURANTE',
       'Carne de Res para Desmenuzar',
@@ -138,12 +156,24 @@ export class ExpandIndustryTemplateMenu1809620000000 implements MigrationInterfa
     ['CAFETERIA', 'Frappé de Café 12oz', 'Granos de Café Especial', 18, 'g'],
     ['CAFETERIA', 'Frappé de Café 12oz', 'Leche Entera', 200, 'ml'],
     ['CAFETERIA', 'Frappé de Café 12oz', 'Hielo en Cubos', 100, 'g'],
-    ['CAFETERIA', 'Frappé de Café 12oz', 'Vaso Descartable 12oz con Tapa', 1, 'unidad'],
+    [
+      'CAFETERIA',
+      'Frappé de Café 12oz',
+      'Vaso Descartable 12oz con Tapa',
+      1,
+      'unidad',
+    ],
     // CAFETERIA — Jugo Natural 12oz
     ['CAFETERIA', 'Jugo Natural 12oz', 'Fruta de Estación Picada', 150, 'g'],
     ['CAFETERIA', 'Jugo Natural 12oz', 'Azúcar Blanca', 20, 'g'],
     ['CAFETERIA', 'Jugo Natural 12oz', 'Hielo en Cubos', 100, 'g'],
-    ['CAFETERIA', 'Jugo Natural 12oz', 'Vaso Descartable 12oz con Tapa', 1, 'unidad'],
+    [
+      'CAFETERIA',
+      'Jugo Natural 12oz',
+      'Vaso Descartable 12oz con Tapa',
+      1,
+      'unidad',
+    ],
     // CAFETERIA — Sándwich Jamón y Queso
     ['CAFETERIA', 'Sándwich Jamón y Queso', 'Pan de Sándwich', 1, 'unidad'],
     ['CAFETERIA', 'Sándwich Jamón y Queso', 'Jamón', 40, 'g'],
@@ -157,11 +187,23 @@ export class ExpandIndustryTemplateMenu1809620000000 implements MigrationInterfa
     ['BAR_RESTAURANTE', 'Pollo Asado con Ensalada', 'Zanahoria', 20, 'g'],
     // BAR_RESTAURANTE — Tacos Nicas 3u
     ['BAR_RESTAURANTE', 'Tacos Nicas 3u', 'Tortilla de Maíz', 3, 'unidad'],
-    ['BAR_RESTAURANTE', 'Tacos Nicas 3u', 'Carne de Res para Desmenuzar', 150, 'g'],
+    [
+      'BAR_RESTAURANTE',
+      'Tacos Nicas 3u',
+      'Carne de Res para Desmenuzar',
+      150,
+      'g',
+    ],
     ['BAR_RESTAURANTE', 'Tacos Nicas 3u', 'Repollo', 40, 'g'],
     ['BAR_RESTAURANTE', 'Tacos Nicas 3u', 'Crema Ácida', 30, 'ml'],
     // BAR_RESTAURANTE — Quesillo con Tortilla
-    ['BAR_RESTAURANTE', 'Quesillo con Tortilla', 'Tortilla de Maíz', 2, 'unidad'],
+    [
+      'BAR_RESTAURANTE',
+      'Quesillo con Tortilla',
+      'Tortilla de Maíz',
+      2,
+      'unidad',
+    ],
     ['BAR_RESTAURANTE', 'Quesillo con Tortilla', 'Queso Cuajada', 60, 'g'],
     ['BAR_RESTAURANTE', 'Quesillo con Tortilla', 'Crema Ácida', 20, 'ml'],
     ['BAR_RESTAURANTE', 'Quesillo con Tortilla', 'Cebolla', 15, 'g'],
@@ -175,9 +217,21 @@ export class ExpandIndustryTemplateMenu1809620000000 implements MigrationInterfa
     ['BAR_RESTAURANTE', 'Desayuno Nica Completo', 'Frijoles Rojos', 80, 'g'],
     ['BAR_RESTAURANTE', 'Desayuno Nica Completo', 'Huevo', 2, 'unidad'],
     ['BAR_RESTAURANTE', 'Desayuno Nica Completo', 'Queso Fresco', 50, 'g'],
-    ['BAR_RESTAURANTE', 'Desayuno Nica Completo', 'Plátano Maduro', 1, 'unidad'],
+    [
+      'BAR_RESTAURANTE',
+      'Desayuno Nica Completo',
+      'Plátano Maduro',
+      1,
+      'unidad',
+    ],
     // BAR_RESTAURANTE — Refresco Natural 12oz
-    ['BAR_RESTAURANTE', 'Refresco Natural 12oz', 'Fruta de Estación Picada', 120, 'g'],
+    [
+      'BAR_RESTAURANTE',
+      'Refresco Natural 12oz',
+      'Fruta de Estación Picada',
+      120,
+      'g',
+    ],
     ['BAR_RESTAURANTE', 'Refresco Natural 12oz', 'Azúcar Blanca', 25, 'g'],
     ['BAR_RESTAURANTE', 'Refresco Natural 12oz', 'Hielo en Cubos', 100, 'g'],
     [
@@ -213,11 +267,10 @@ export class ExpandIndustryTemplateMenu1809620000000 implements MigrationInterfa
       );
     `);
 
-    const productValues =
-      ExpandIndustryTemplateMenu1809620000000.PRODUCTS.map(
-        ([tid, name, category, price]) =>
-          `('${tid}', '${name}', '${category}', 'unidad', ${price})`,
-      ).join(',\n        ');
+    const productValues = ExpandIndustryTemplateMenu1809620000000.PRODUCTS.map(
+      ([tid, name, category, price]) =>
+        `('${tid}', '${name}', '${category}', 'unidad', ${price})`,
+    ).join(',\n        ');
 
     // Packaged goods are plain products: NO product_type is written — the
     // apply resolves it automatically (no recipe items → SIMPLE; the recipe

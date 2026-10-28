@@ -707,7 +707,6 @@ describe('AuthService', () => {
     );
   });
 
-
   it('transparently re-hashes a legacy low-cost digest on successful login (S1)', async () => {
     useResolvedTenant();
     mockUserRepository.findOne.mockResolvedValue({
@@ -2072,6 +2071,4 @@ describe('AuthService slug-path timing equalization (F1 regression, issue #556)'
       DUMMY_PASSWORD_HASH,
     );
   });
-
-
 });

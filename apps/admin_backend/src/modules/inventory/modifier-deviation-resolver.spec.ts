@@ -11,34 +11,37 @@ import type { CreateModifierDto } from '../sales/dto/sync-invoice.dto';
  */
 describe('resolveDeviations (cloud mirror, R28/M4)', () => {
   const leaves = [
-    { insumoId: 'ins-cafe', quantityPerSaleUnit: 18, rootComponentId: 'cmp-cafe' },
-    { insumoId: 'ins-leche', quantityPerSaleUnit: 150, rootComponentId: 'cmp-leche' },
+    {
+      insumoId: 'ins-cafe',
+      quantityPerSaleUnit: 18,
+      rootComponentId: 'cmp-cafe',
+    },
+    {
+      insumoId: 'ins-leche',
+      quantityPerSaleUnit: 150,
+      rootComponentId: 'cmp-leche',
+    },
   ];
   const rootComponents = [
     { id: 'cmp-cafe', insumoId: 'ins-cafe', quantityPerSaleUnit: 18 },
     { id: 'cmp-leche', insumoId: 'ins-leche', quantityPerSaleUnit: 150 },
   ];
   const tenantInsumosById = new Map([
-    [
-      'ins-cafe',
-      { id: 'ins-cafe', consumptionUom: 'G', isActive: true },
-    ],
-    [
-      'ins-leche',
-      { id: 'ins-leche', consumptionUom: 'ML', isActive: true },
-    ],
+    ['ins-cafe', { id: 'ins-cafe', consumptionUom: 'G', isActive: true }],
+    ['ins-leche', { id: 'ins-leche', consumptionUom: 'ML', isActive: true }],
     [
       'ins-almendras',
       { id: 'ins-almendras', consumptionUom: 'ML', isActive: true },
     ],
   ]);
 
-  const modifier = (overrides: Partial<CreateModifierDto>): CreateModifierDto =>
-    ({
-      name: 'Extra',
-      extraPrice: 10,
-      ...overrides,
-    }) as CreateModifierDto;
+  const modifier = (
+    overrides: Partial<CreateModifierDto>,
+  ): CreateModifierDto => ({
+    name: 'Extra',
+    extraPrice: 10,
+    ...overrides,
+  });
 
   it('herits the recipe quantity for an ADD (D2)', () => {
     const resolution = resolveDeviations({
@@ -60,7 +63,7 @@ describe('resolveDeviations (cloud mirror, R28/M4)', () => {
     expect(resolution.outcomes[0].applied).toBe(true);
   });
 
-  it('takes the operator\'s marked quantity over the inherited one', () => {
+  it("takes the operator's marked quantity over the inherited one", () => {
     const resolution = resolveDeviations({
       leaves,
       rootComponents,

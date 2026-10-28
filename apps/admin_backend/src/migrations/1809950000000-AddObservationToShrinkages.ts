@@ -20,9 +20,7 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  * This is the schema half of the fix. The service that PERSISTS the document —
  * with its type, its reason and this observation — arrives with it.
  */
-export class AddObservationToShrinkages1809950000000
-  implements MigrationInterface
-{
+export class AddObservationToShrinkages1809950000000 implements MigrationInterface {
   name = 'AddObservationToShrinkages1809950000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

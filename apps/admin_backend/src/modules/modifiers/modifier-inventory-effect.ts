@@ -132,8 +132,7 @@ export function assertValidModifierInventoryEffect(
   const hasInsumo = !isBlank(spec.effect_insumo_id);
   const hasTarget = !isBlank(spec.effect_target_insumo_id);
   const hasQuantity =
-    spec.effect_quantity !== null &&
-    spec.effect_quantity !== undefined;
+    spec.effect_quantity !== null && spec.effect_quantity !== undefined;
   const hasFactor =
     spec.effect_factor !== null && spec.effect_factor !== undefined;
 

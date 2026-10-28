@@ -12,7 +12,6 @@ import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 import { assertSeedOutcome } from './provision-seed-guard';
 
-
 /**
  * MASS PROVISIONING SCRIPT
  *

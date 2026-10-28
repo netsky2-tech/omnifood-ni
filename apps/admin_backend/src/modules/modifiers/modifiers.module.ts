@@ -41,6 +41,10 @@ import { ModifierPendingConfigurationService } from './services/modifier-pending
   ],
   controllers: [ModifiersController],
   providers: [ModifiersService, ModifierPendingConfigurationService],
-  exports: [ModifiersService, ModifierPendingConfigurationService, TypeOrmModule],
+  exports: [
+    ModifiersService,
+    ModifierPendingConfigurationService,
+    TypeOrmModule,
+  ],
 })
 export class ModifiersModule {}

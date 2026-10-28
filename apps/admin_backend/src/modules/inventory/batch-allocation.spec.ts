@@ -77,12 +77,12 @@ describe('batch-allocation outflow trace (R3)', () => {
     });
 
     // FEFO: the soonest-expiring batch leaves first.
-    expect(batches.find((batch) => batch.id === 'b-soon')?.remaining_stock).toBe(
-      0,
-    );
-    expect(batches.find((batch) => batch.id === 'b-late')?.remaining_stock).toBe(
-      5,
-    );
+    expect(
+      batches.find((batch) => batch.id === 'b-soon')?.remaining_stock,
+    ).toBe(0);
+    expect(
+      batches.find((batch) => batch.id === 'b-late')?.remaining_stock,
+    ).toBe(5);
     expect(traceSave).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: 't1',
@@ -170,12 +170,12 @@ describe('batch-allocation outflow trace (R3)', () => {
     expect(traceFind).toHaveBeenCalledWith({
       where: { tenant_id: 't1', movement_id: 'mov-1' },
     });
-    expect(batches.find((batch) => batch.id === 'b-soon')?.remaining_stock).toBe(
-      10,
-    );
-    expect(batches.find((batch) => batch.id === 'b-late')?.remaining_stock).toBe(
-      10,
-    );
+    expect(
+      batches.find((batch) => batch.id === 'b-soon')?.remaining_stock,
+    ).toBe(10);
+    expect(
+      batches.find((batch) => batch.id === 'b-late')?.remaining_stock,
+    ).toBe(10);
     expect(batchSave).toHaveBeenCalledTimes(2);
   });
 

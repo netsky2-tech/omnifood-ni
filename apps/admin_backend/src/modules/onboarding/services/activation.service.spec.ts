@@ -610,7 +610,9 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         transactionalManager.query.mockImplementation((sql: string) => {
           if (typeof sql === 'string' && sql.includes('FROM invoices')) {
             if (throws) return Promise.reject(new Error('invoices unreadable'));
-            return Promise.resolve([{ maxSeq: highest === null ? null : String(highest) }]);
+            return Promise.resolve([
+              { maxSeq: highest === null ? null : String(highest) },
+            ]);
           }
           return Promise.resolve(undefined);
         });
@@ -622,7 +624,11 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         checkRepo.find.mockResolvedValueOnce(buildV2Checks(8));
         mockWatermark(7);
 
-        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+        const result = await service.finalizeActivation(
+          tenantId,
+          attemptId,
+          userId,
+        );
 
         expect(result.status).toBe(ActivationAttemptStatus.PASS);
         expect(invoiceRepo.findOne).not.toHaveBeenCalled();
@@ -635,7 +641,11 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         // The cloud already issued 8: the terminal's claimed next folio is taken.
         mockWatermark(8);
 
-        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+        const result = await service.finalizeActivation(
+          tenantId,
+          attemptId,
+          userId,
+        );
 
         expect(result.status).toBe(ActivationAttemptStatus.FAIL);
         expect(result.failureCode).toBe('FISCAL_SEQUENCE_RECOVERY_REQUIRED');
@@ -647,7 +657,11 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         checkRepo.find.mockResolvedValueOnce(buildV2Checks(8));
         mockWatermark(0, true);
 
-        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+        const result = await service.finalizeActivation(
+          tenantId,
+          attemptId,
+          userId,
+        );
 
         expect(result.status).toBe(ActivationAttemptStatus.FAIL);
         expect(result.failureCode).toBe('FISCAL_SEQUENCE_RECOVERY_REQUIRED');
@@ -660,10 +674,16 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         checkRepo.find.mockResolvedValueOnce(checks);
         mockWatermark(3);
 
-        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+        const result = await service.finalizeActivation(
+          tenantId,
+          attemptId,
+          userId,
+        );
 
         expect(result.status).toBe(ActivationAttemptStatus.FAIL);
-        expect(result.failureCode).toBe('VERIFICATION_SEQUENCE_DRY_RUN_INVALID');
+        expect(result.failureCode).toBe(
+          'VERIFICATION_SEQUENCE_DRY_RUN_INVALID',
+        );
       });
 
       it('names the contract drift when a V2 attempt only carries legacy V1 evidence', async () => {
@@ -671,7 +691,11 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         sessionRepo.findOne.mockResolvedValueOnce(buildSession());
         checkRepo.find.mockResolvedValueOnce(allChecksPass);
 
-        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+        const result = await service.finalizeActivation(
+          tenantId,
+          attemptId,
+          userId,
+        );
 
         expect(result.status).toBe(ActivationAttemptStatus.FAIL);
         expect(result.failureCode).toBe('ACTIVATION_CONTRACT_MISMATCH');
@@ -693,7 +717,11 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         checkRepo.find.mockResolvedValueOnce(allChecksPass);
         mockWatermark(99);
 
-        const result = await service.finalizeActivation(tenantId, attemptId, userId);
+        const result = await service.finalizeActivation(
+          tenantId,
+          attemptId,
+          userId,
+        );
 
         expect(result.status).toBe(ActivationAttemptStatus.PASS);
       });
@@ -704,7 +732,14 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         await expect(
           service.syncVerificationSale(
             attemptId,
-            { documentType: 'SALE', flowType: 'sales', invoiceId: 'inv-1', invoice: { id: 'inv-1' }, sourceDeviceId: 'pos-term-01', terminalId: 'pos-term-01' } as any,
+            {
+              documentType: 'SALE',
+              flowType: 'sales',
+              invoiceId: 'inv-1',
+              invoice: { id: 'inv-1' },
+              sourceDeviceId: 'pos-term-01',
+              terminalId: 'pos-term-01',
+            } as any,
             { tenantId, terminalId: 'pos-term-01' },
           ),
         ).rejects.toThrow(BadRequestException);

@@ -2,9 +2,7 @@ import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transa
 import { AuditLog } from '../identity/entities/audit-log.entity';
 import { User } from '../identity/entities/user.entity';
 import { SupervisionReviewService } from './supervision-review.service';
-import {
-  SUPERVISION_REVIEW_ACTIONS,
-} from '../supervision/contracts/supervision-policy.contract';
+import { SUPERVISION_REVIEW_ACTIONS } from '../supervision/contracts/supervision-policy.contract';
 
 /**
  * The owner's REVIEW QUEUE for the tenant's supervision policy.
@@ -121,10 +119,10 @@ describe('SupervisionReviewService', () => {
       ),
     };
     const harnessRef: { value: Harness } = {
-      value: undefined as unknown as Harness,
+      value: undefined,
     };
     const harness: Harness = {
-      service: undefined as unknown as SupervisionReviewService,
+      service: undefined,
       dataSource,
       setConfigCalls: [],
       userFind,
@@ -162,7 +160,10 @@ describe('SupervisionReviewService', () => {
       ]);
       const actionClause = qb.calls
         .filter(([m]) => m === 'andWhere')
-        .find(([, args]) => String(args[0]).includes('action IN'));
+        .find(
+          ([, args]) =>
+            typeof args[0] === 'string' && args[0].includes('action IN'),
+        );
       expect(actionClause?.[1]).toEqual([
         'audit.action IN (:...actions)',
         { actions: SUPERVISION_REVIEW_ACTIONS },

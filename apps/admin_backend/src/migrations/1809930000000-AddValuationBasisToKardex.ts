@@ -29,9 +29,7 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
  *   - the origin of the reference (the market-price row's id, or the purchase
  *     movement's id), so the approximation is auditable backwards.
  */
-export class AddValuationBasisToKardex1809930000000
-  implements MigrationInterface
-{
+export class AddValuationBasisToKardex1809930000000 implements MigrationInterface {
   name = 'AddValuationBasisToKardex1809930000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -1,5 +1,4 @@
 import type { QueryRunner } from 'typeorm';
-import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
 
 /**
  * A-01 — the count says IN WHICH LOT the stock it found is.
@@ -62,7 +61,9 @@ export class AddCountSessionEntryLot1810090000000 {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query('DROP INDEX IF EXISTS idx_count_session_entries_batch');
+    await queryRunner.query(
+      'DROP INDEX IF EXISTS idx_count_session_entries_batch',
+    );
     await queryRunner.query(
       'ALTER TABLE count_session_entries ' +
         'DROP CONSTRAINT IF EXISTS fk_count_session_entries_batch',

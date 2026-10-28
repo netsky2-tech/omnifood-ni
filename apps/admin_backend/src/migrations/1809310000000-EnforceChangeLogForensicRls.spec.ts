@@ -90,8 +90,7 @@ describe('EnforceChangeLogForensicRls1809310000000', () => {
           expect(sql).toContain(`CREATE POLICY "${policyName}" ON "${table}"`);
           expect(sql).toContain(`FOR ${command.toUpperCase()}`);
           createCount +=
-            sql.split(`CREATE POLICY "${policyName}" ON "${table}"`).length -
-            1;
+            sql.split(`CREATE POLICY "${policyName}" ON "${table}"`).length - 1;
         }
       }
       // 2 tables x 4 commands = exactly 8 policies, no extras.

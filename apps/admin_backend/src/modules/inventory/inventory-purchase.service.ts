@@ -235,62 +235,66 @@ export class InventoryPurchaseService {
       throw new BadRequestException('El ID del proveedor es obligatorio.');
     }
 
-    return runInTenantTransaction(this.dataSource, tenantId, async (manager) => {
-      const supplier = await manager.findOne(Supplier, {
-        where: { id, tenant_id: tenantId },
-      });
+    return runInTenantTransaction(
+      this.dataSource,
+      tenantId,
+      async (manager) => {
+        const supplier = await manager.findOne(Supplier, {
+          where: { id, tenant_id: tenantId },
+        });
 
-      if (!supplier) {
-        throw new NotFoundException('Proveedor no encontrado.');
-      }
-
-      if (input.name !== undefined) {
-        const rawName = input.name as unknown;
-        const trimmedName = typeof rawName === 'string' ? rawName.trim() : '';
-        if (!trimmedName) {
-          throw new BadRequestException(
-            'El nombre del proveedor no puede estar vacío.',
-          );
+        if (!supplier) {
+          throw new NotFoundException('Proveedor no encontrado.');
         }
 
-        if (trimmedName !== supplier.name) {
-          const duplicate = await manager.findOne(Supplier, {
-            where: { tenant_id: tenantId, name: trimmedName },
-          });
-          if (duplicate && duplicate.id !== supplier.id) {
-            throw new ConflictException(
-              `Ya existe otro proveedor con el nombre '${trimmedName}'.`,
+        if (input.name !== undefined) {
+          const rawName = input.name as unknown;
+          const trimmedName = typeof rawName === 'string' ? rawName.trim() : '';
+          if (!trimmedName) {
+            throw new BadRequestException(
+              'El nombre del proveedor no puede estar vacío.',
             );
           }
+
+          if (trimmedName !== supplier.name) {
+            const duplicate = await manager.findOne(Supplier, {
+              where: { tenant_id: tenantId, name: trimmedName },
+            });
+            if (duplicate && duplicate.id !== supplier.id) {
+              throw new ConflictException(
+                `Ya existe otro proveedor con el nombre '${trimmedName}'.`,
+              );
+            }
+          }
+          supplier.name = trimmedName;
         }
-        supplier.name = trimmedName;
-      }
 
-      if (input.phone !== undefined) {
-        supplier.phone =
-          typeof input.phone === 'string' ? input.phone.trim() || null : null;
-      }
+        if (input.phone !== undefined) {
+          supplier.phone =
+            typeof input.phone === 'string' ? input.phone.trim() || null : null;
+        }
 
-      if (input.contactPerson !== undefined) {
-        supplier.contact_person =
-          typeof input.contactPerson === 'string'
-            ? input.contactPerson.trim() || null
-            : null;
-      }
+        if (input.contactPerson !== undefined) {
+          supplier.contact_person =
+            typeof input.contactPerson === 'string'
+              ? input.contactPerson.trim() || null
+              : null;
+        }
 
-      if (input.creditTerms !== undefined) {
-        supplier.credit_terms =
-          typeof input.creditTerms === 'string'
-            ? input.creditTerms.trim() || null
-            : null;
-      }
+        if (input.creditTerms !== undefined) {
+          supplier.credit_terms =
+            typeof input.creditTerms === 'string'
+              ? input.creditTerms.trim() || null
+              : null;
+        }
 
-      if (input.isActive !== undefined) {
-        supplier.is_active = input.isActive;
-      }
+        if (input.isActive !== undefined) {
+          supplier.is_active = input.isActive;
+        }
 
-      return manager.save(Supplier, supplier);
-    });
+        return manager.save(Supplier, supplier);
+      },
+    );
   }
 
   async previewPurchase(input: {
@@ -415,9 +419,7 @@ export class InventoryPurchaseService {
             // say so in business language instead of exposing the id.
             throw messagesInSpanish
               ? new NotFoundException('El proveedor seleccionado no existe.')
-              : new NotFoundException(
-                  `Supplier ${input.supplierId} not found`,
-                );
+              : new NotFoundException(`Supplier ${input.supplierId} not found`);
           }
 
           const existingDocument = await manager.findOne(PurchaseDocument, {
@@ -778,9 +780,7 @@ export class InventoryPurchaseService {
         `Insumo ${insumo.id} has an invalid conversion factor (${insumo.conversionFactor}); expected a positive number of consumption units per purchase unit`,
       );
     }
-    const entryQuantityConsumption = round4(
-      input.quantity * conversionFactor,
-    );
+    const entryQuantityConsumption = round4(input.quantity * conversionFactor);
     const entryUnitCostConsumption = input.unitCost / conversionFactor;
     const invoiceUnitCostNio = round4(
       input.currency === CURRENCY.NIO

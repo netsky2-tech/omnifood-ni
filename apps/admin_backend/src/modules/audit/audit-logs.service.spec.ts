@@ -51,7 +51,7 @@ describe('AuditLogsService', () => {
     service: AuditLogsService;
     pooledAuditLog: { find: jest.Mock; createQueryBuilder: jest.Mock };
     pooledAlert: { find: jest.Mock; createQueryBuilder: jest.Mock };
-    boundManager: { query: jest.Mock; getRepository: jest.Mock },
+    boundManager: { query: jest.Mock; getRepository: jest.Mock };
     alertFind: jest.Mock;
     dataSource: { transaction: jest.Mock };
     setConfigCalls: Array<[string, string[]]>;
@@ -74,7 +74,7 @@ describe('AuditLogsService', () => {
     const alertFind = jest.fn().mockResolvedValue([]);
     const boundManager = {
       query: jest.fn(async (sql: string, params: string[]) => {
-        (harnessRef.value as Harness).setConfigCalls.push([sql, params]);
+        harnessRef.value.setConfigCalls.push([sql, params]);
         return [];
       }),
       getRepository: jest.fn((entity: unknown) => {
@@ -98,7 +98,7 @@ describe('AuditLogsService', () => {
 
     const harnessRef: { value: Harness | undefined } = { value: undefined };
     const harness: Harness = {
-      service: undefined as unknown as AuditLogsService,
+      service: undefined,
       pooledAuditLog,
       pooledAlert,
       boundManager,
@@ -259,13 +259,17 @@ describe('AuditLogsService', () => {
 
     it('reports truncation honestly when the cap was hit, and not otherwise', async () => {
       const h = makeHarness();
-      h.setBoundQb(Array.from({ length: 51 }, (_, i) => makeRow({ id: `log-${i}` })));
+      h.setBoundQb(
+        Array.from({ length: 51 }, (_, i) => makeRow({ id: `log-${i}` })),
+      );
       const hit = await h.service.getLedger(TENANT_ID, {});
       expect(hit.entries).toHaveLength(50);
       expect(hit.truncated).toBe(true);
 
       const h2 = makeHarness();
-      h2.setBoundQb(Array.from({ length: 50 }, (_, i) => makeRow({ id: `log-${i}` })));
+      h2.setBoundQb(
+        Array.from({ length: 50 }, (_, i) => makeRow({ id: `log-${i}` })),
+      );
       const exact = await h2.service.getLedger(TENANT_ID, {});
       expect(exact.entries).toHaveLength(50);
       expect(exact.truncated).toBe(false);

@@ -39,9 +39,7 @@ import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
  * makes a cross-tenant row impossible; insumos already carries
  * uq_insumos_tenant_insumo_id.
  */
-export class CreateInsumoMarketPrices1809940000000
-  implements MigrationInterface
-{
+export class CreateInsumoMarketPrices1809940000000 implements MigrationInterface {
   name = 'CreateInsumoMarketPrices1809940000000';
 
   private static readonly TABLE = 'insumo_market_prices';
@@ -74,12 +72,8 @@ export class CreateInsumoMarketPrices1809940000000
     // with a full per-command policy set. The predicate form is resolved
     // through the shared seam, so a later column-type change emits the form
     // that matches the column AS IT IS.
-    await queryRunner.query(
-      `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`,
-    );
-    await queryRunner.query(
-      `ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`,
-    );
+    await queryRunner.query(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY`);
+    await queryRunner.query(`ALTER TABLE ${table} FORCE ROW LEVEL SECURITY`);
 
     const tenantPredicate = await resolveTenantRlsPredicate(queryRunner, table);
 

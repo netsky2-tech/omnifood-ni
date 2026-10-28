@@ -21,9 +21,7 @@ import { resolveTenantRlsPredicate } from '../core/database/tenant-rls-policy';
  * `direct:SIU` in scripts/schema-rls-coverage-manifest.txt; the entry MUST
  * exist or scripts/verify-schema-build.sh fails.
  */
-export class CreateInventoryDivergences1810080000000
-  implements MigrationInterface
-{
+export class CreateInventoryDivergences1810080000000 implements MigrationInterface {
   name = 'CreateInventoryDivergences1810080000000';
 
   private static readonly TABLE = 'inventory_divergences';

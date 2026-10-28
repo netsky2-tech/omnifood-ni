@@ -83,7 +83,11 @@ describe('OnboardingSessionController (Unit)', () => {
           ownerCanAuthenticate: true,
           tenantContextValid: true,
         },
-        fiscal: { minimumConfigurationValid: false, operationMode: null, commercialFxSpreadConfigured: false },
+        fiscal: {
+          minimumConfigurationValid: false,
+          operationMode: null,
+          commercialFxSpreadConfigured: false,
+        },
         catalog: { sellableProductCount: 0, hasSellableProduct: false },
         inventoryReady: false,
         costingReady: false,
@@ -123,7 +127,11 @@ describe('OnboardingSessionController (Unit)', () => {
           ownerCanAuthenticate: true,
           tenantContextValid: true,
         },
-        fiscal: { minimumConfigurationValid: true, operationMode: null, commercialFxSpreadConfigured: false },
+        fiscal: {
+          minimumConfigurationValid: true,
+          operationMode: null,
+          commercialFxSpreadConfigured: false,
+        },
         catalog: { sellableProductCount: 3, hasSellableProduct: true },
         inventoryReady: false,
         costingReady: false,
@@ -159,7 +167,11 @@ describe('OnboardingSessionController (Unit)', () => {
           ownerCanAuthenticate: true,
           tenantContextValid: true,
         },
-        fiscal: { minimumConfigurationValid: true, operationMode: null, commercialFxSpreadConfigured: false },
+        fiscal: {
+          minimumConfigurationValid: true,
+          operationMode: null,
+          commercialFxSpreadConfigured: false,
+        },
         catalog: { sellableProductCount: 1, hasSellableProduct: true },
         inventoryReady: false,
         costingReady: false,
@@ -187,14 +199,20 @@ describe('OnboardingSessionController (Unit)', () => {
         decision: LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
       });
 
-      const req: any = { user: { tenantId: 'tenant-123', sub: 'user-admin-1' } };
-      const receipt = await controller.reconcileLegacyBaseline(req, 'tenant-123');
-
-      expect(receipt.decision).toBe(LegacyMigrationDecision.LEGACY_BASELINE_CLOSED);
-      expect(integrityService.reconcileLegacyBaselineSession).toHaveBeenCalledWith(
+      const req: any = {
+        user: { tenantId: 'tenant-123', sub: 'user-admin-1' },
+      };
+      const receipt = await controller.reconcileLegacyBaseline(
+        req,
         'tenant-123',
-        'user-admin-1',
       );
+
+      expect(receipt.decision).toBe(
+        LegacyMigrationDecision.LEGACY_BASELINE_CLOSED,
+      );
+      expect(
+        integrityService.reconcileLegacyBaselineSession,
+      ).toHaveBeenCalledWith('tenant-123', 'user-admin-1');
     });
   });
 });

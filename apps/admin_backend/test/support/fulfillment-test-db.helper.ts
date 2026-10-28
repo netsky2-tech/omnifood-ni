@@ -16,12 +16,18 @@ export async function ensurePublicAuthTables(
       name varchar(255) NOT NULL,
       slug varchar NOT NULL,
       ruc varchar(32),
+      phone varchar,
+      email varchar,
+      address varchar,
       is_active boolean NOT NULL DEFAULT true,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
 
     ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS slug varchar;
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS phone varchar;
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS email varchar;
+    ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS address varchar;
     CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON public.tenants (slug);
     ALTER TABLE public.tenants ALTER COLUMN slug SET NOT NULL;
 
