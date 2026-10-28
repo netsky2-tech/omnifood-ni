@@ -158,6 +158,7 @@ export interface AdjustPointsInput {
   points_delta: number;
   reason: string;
   invoice_id?: string;
+  loyalty_program_id?: string;
 }
 
 // --- Profit-aware Reward Metrics (LV1.6) ---
@@ -228,7 +229,8 @@ export const programFormSchema = z
   .object({
     name: z.string().min(1, 'El nombre del programa es obligatorio'),
     programType: z.enum(['SPEND_POINTS', 'PRODUCT_STAMPS', 'VISIT_STAMPS']),
-    useCustomJson: z.boolean(),
+    startsAt: z.string().optional(),
+    endsAt: z.string().optional(),
     // Base object never fails on the conditional fields: an inactive branch's
     // value (even invalid) must not block the submit, so the type and range
     // checks happen in the refinement for the ACTIVE branch only.
@@ -255,7 +257,14 @@ export const programFormSchema = z
       else if (value < 1) issue(field, belowMinimum);
     };
 
-    if (values.useCustomJson) return;
+    if (values.startsAt && values.endsAt && values.startsAt.trim() && values.endsAt.trim()) {
+      const start = new Date(values.startsAt).getTime();
+      const end = new Date(values.endsAt).getTime();
+      if (!Number.isNaN(start) && !Number.isNaN(end) && start >= end) {
+        issue('endsAt', 'La fecha de fin debe ser posterior a la fecha de inicio');
+      }
+    }
+
     if (values.programType === 'SPEND_POINTS') {
       guardNumber(
         'spendBlockNio',
@@ -310,7 +319,6 @@ export const rewardFormSchema = z
     name: z.string().min(1, 'El nombre de la recompensa es obligatorio'),
     description: z.string(),
     rewardType: z.enum(['DISCOUNT_AMOUNT', 'FREE_PRODUCT']),
-    useCustomJson: z.boolean(),
     // The cost input renders in EVERY mode and branch, so unlike the
     // conditional fields it is validated at object level, exactly where the
     // native attributes always applied.
@@ -324,7 +332,6 @@ export const rewardFormSchema = z
     const issue = (field: string, message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
 
-    if (values.useCustomJson) return;
     if (values.rewardType === 'DISCOUNT_AMOUNT') {
       if (!finiteNumber(values.amountNio))
         issue('amountNio', 'El monto de descuento debe ser un número');

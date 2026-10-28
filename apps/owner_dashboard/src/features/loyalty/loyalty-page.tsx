@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight, TrendingUp } from 'lucide-react';
+import { Plus, Search, Star, Trophy, Tag, Edit, ToggleLeft, ToggleRight, TrendingUp, Users } from 'lucide-react';
+import { useAuthStore } from '@/features/auth/auth-store';
 import { RewardProfitAwareDialog } from './reward-profit-aware-dialog';
 import {
   usePrograms,
@@ -64,8 +66,29 @@ const STATUS_LABELS: Record<
 > = {
   DRAFT: { label: 'Borrador', variant: 'secondary' },
   ACTIVE: { label: 'Activo', variant: 'success' },
-  INACTIVE: { label: 'Inactivo', variant: 'destructive' },
+  INACTIVE: { label: 'Inactivo', variant: 'outline' },
 };
+
+function formatEarningRuleSummary(program: LoyaltyProgram): string {
+  const rule = program.earning_rule as Record<string, unknown> | undefined;
+  if (!rule) return 'Regla no configurada';
+  if (program.program_type === 'SPEND_POINTS') {
+    const spend = rule.spendBlockNio ?? 10;
+    const points = rule.pointsPerBlock ?? 1;
+    return `C$ ${spend} = ${points} punto${Number(points) === 1 ? '' : 's'}`;
+  }
+  if (program.program_type === 'PRODUCT_STAMPS') {
+    const units = rule.unitsPerPurchasedUnit ?? 1;
+    const prods = Array.isArray(rule.eligibleProductIds) ? rule.eligibleProductIds.length : 0;
+    return `${units} sello${Number(units) === 1 ? '' : 's'} por unidad (${prods} producto${prods === 1 ? '' : 's'})`;
+  }
+  if (program.program_type === 'VISIT_STAMPS') {
+    const units = rule.unitsPerVisit ?? 1;
+    const minSpend = rule.minimumSpendNio ? ` · mín. C$ ${rule.minimumSpendNio}` : '';
+    return `${units} sello${Number(units) === 1 ? '' : 's'} por visita${minSpend}`;
+  }
+  return 'Regla configurada';
+}
 
 function ProgramForm({
   initial,
@@ -99,7 +122,8 @@ function ProgramForm({
     defaultValues: {
       name: initial?.name ?? '',
       programType: initial?.program_type ?? 'SPEND_POINTS',
-      useCustomJson: false,
+      startsAt: initial?.starts_at ? new Date(initial.starts_at).toISOString().slice(0, 10) : '',
+      endsAt: initial?.ends_at ? new Date(initial.ends_at).toISOString().slice(0, 10) : '',
       spendBlockNio: Number(rule?.spendBlockNio ?? 10),
       pointsPerBlock: Number(rule?.pointsPerBlock ?? 1),
       eligibleProductIds: Array.isArray(rule?.eligibleProductIds)
@@ -115,7 +139,6 @@ function ProgramForm({
     },
   });
   const programType = watch('programType');
-  const useCustomJson = watch('useCustomJson');
   const watchedEligibleProductIds = watch('eligibleProductIds');
 
   // §17.6 selector wiring (multi mode): the operator's search text goes to
@@ -130,10 +153,6 @@ function ProgramForm({
     refetch: refetchEligibleProducts,
   } = useProductSearch(eligibleSearch);
 
-  // Specific field for VISIT_STAMPS (JSON advanced mode textarea)
-  const [earningRule, setEarningRule] = useState(
-    JSON.stringify(initial?.earning_rule ?? {}, null, 2),
-  );
   const [error, setError] = useState<string | null>(null);
 
   const createMutation = useCreateProgram();
@@ -141,48 +160,42 @@ function ProgramForm({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   // Resolver-validated entry point: this only runs when the schema accepted
-  // every field the ACTIVE branch renders, so the handler-level JSON parse
-  // keeps its exact pre-sweep behavior and message.
+  // every field the ACTIVE branch renders.
   const onValid = async (values: ProgramFormValues) => {
     if (isPending) return;
     setError(null);
 
     let parsedRule: Record<string, unknown>;
-    if (values.useCustomJson) {
-      try {
-        parsedRule = JSON.parse(earningRule);
-      } catch {
-        setError('earning_rule debe ser JSON válido');
-        return;
-      }
+    if (values.programType === 'SPEND_POINTS') {
+      parsedRule = {
+        spendBlockNio: Number(values.spendBlockNio),
+        pointsPerBlock: Number(values.pointsPerBlock),
+      };
+    } else if (values.programType === 'PRODUCT_STAMPS') {
+      // §17.6: the resolver guarantees at least one picked uuid.
+      parsedRule = {
+        eligibleProductIds: values.eligibleProductIds,
+        unitsPerPurchasedUnit: Number(values.unitsPerPurchasedUnit),
+      };
     } else {
-      if (values.programType === 'SPEND_POINTS') {
-        parsedRule = {
-          spendBlockNio: Number(values.spendBlockNio),
-          pointsPerBlock: Number(values.pointsPerBlock),
-        };
-      } else if (values.programType === 'PRODUCT_STAMPS') {
-        // §17.6: the resolver guarantees at least one picked uuid. The old
-        // `prodList.length > 0 ? prodList : ['prod-smash']` fallback is
-        // deliberately gone: it fired whenever the operator left the old
-        // comma-list EMPTY OR WHITESPACE (create defaulted to 'prod-smash',
-        // and a cleared field produced '' → empty list) and fabricated an
-        // identifier that traveled to the backend as the earning rule.
-        parsedRule = {
-          eligibleProductIds: values.eligibleProductIds,
-          unitsPerPurchasedUnit: Number(values.unitsPerPurchasedUnit),
-        };
-      } else {
-        parsedRule = {
-          unitsPerVisit: Number(values.unitsPerVisit),
-          ...(values.minimumSpendNio.trim() ? { minimumSpendNio: Number(values.minimumSpendNio) } : {}),
-        };
-      }
+      parsedRule = {
+        unitsPerVisit: Number(values.unitsPerVisit),
+        ...(values.minimumSpendNio.trim() ? { minimumSpendNio: Number(values.minimumSpendNio) } : {}),
+      };
     }
+
+    const startsAtIso = values.startsAt?.trim() ? new Date(values.startsAt).toISOString() : null;
+    const endsAtIso = values.endsAt?.trim() ? new Date(values.endsAt).toISOString() : null;
 
     try {
       if (isEditing) {
-        const input: UpdateLoyaltyProgramInput = { name: values.name, earning_rule: parsedRule };
+        const input: UpdateLoyaltyProgramInput = {
+          name: values.name,
+          earning_rule: parsedRule,
+          eligibility_rule: (initial.eligibility_rule as Record<string, unknown>) ?? {},
+          starts_at: startsAtIso,
+          ends_at: endsAtIso,
+        };
         await updateMutation.mutateAsync({ programId: initial.id, input });
         toast({
           variant: "success",
@@ -194,6 +207,9 @@ function ProgramForm({
           name: values.name,
           program_type: values.programType,
           earning_rule: parsedRule,
+          eligibility_rule: {},
+          starts_at: startsAtIso,
+          ends_at: endsAtIso,
         };
         await createMutation.mutateAsync(input);
         toast({
@@ -250,9 +266,40 @@ function ProgramForm({
         </div>
       )}
 
+      {/* Vigencia */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label htmlFor="program-starts-at" className="block text-xs font-medium mb-1">
+            Vigencia desde (opcional)
+          </label>
+          <Input
+            id="program-starts-at"
+            type="date"
+            {...register('startsAt')}
+            aria-invalid={Boolean(errors.startsAt)}
+          />
+          {errors.startsAt && (
+            <p className="text-xs text-destructive">{errors.startsAt.message}</p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="program-ends-at" className="block text-xs font-medium mb-1">
+            Vigencia hasta (opcional)
+          </label>
+          <Input
+            id="program-ends-at"
+            type="date"
+            {...register('endsAt')}
+            aria-invalid={Boolean(errors.endsAt)}
+          />
+          {errors.endsAt && (
+            <p className="text-xs text-destructive">{errors.endsAt.message}</p>
+          )}
+        </div>
+      </div>
+
       {/* Dynamic structured fields according to mechanics */}
-      {!useCustomJson ? (
-        <div className="space-y-3 p-3 bg-muted/40 rounded-md border border-border/60">
+      <div className="space-y-3 p-3 bg-muted/40 rounded-md border border-border/60">
           <p className="text-xs font-semibold uppercase text-muted-foreground">
             Regla de acumulación ({programType})
           </p>
@@ -387,29 +434,6 @@ function ProgramForm({
             </div>
           )}
         </div>
-      ) : (
-        <div>
-          <label htmlFor="earning-rule" className="block text-sm font-medium mb-1">Regla de acumulación (JSON)</label>
-          <textarea
-            id="earning-rule"
-            value={earningRule}
-            onChange={(e) => setEarningRule(e.target.value)}
-            rows={4}
-            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground"
-            placeholder='{"spendBlockNio": 10, "pointsPerBlock": 1}'
-          />
-        </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setValue('useCustomJson', !useCustomJson)}
-          className="text-xs text-primary underline"
-        >
-          {useCustomJson ? 'Usar formulario guiado' : 'Modo JSON avanzado'}
-        </button>
-      </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
@@ -458,18 +482,14 @@ function RewardForm({
       name: initial?.name ?? '',
       description: initial?.description ?? '',
       rewardType: initial?.reward_type ?? 'DISCOUNT_AMOUNT',
-      useCustomJson: false,
       costUnits: initial?.cost_units ?? 10,
       amountNio: Number(benefit?.amountNio ?? 50),
       // §17.6: no default selection — the operator picks the product from
-      // the governed selector. The old fabricated default ('prod-smash')
-      // is gone; an empty selection blocks submit with the schema's
-      // Spanish message instead of inventing an identifier.
+      // the governed selector.
       productId: typeof benefit?.productId === 'string' ? benefit.productId : '',
     },
   });
   const rewardType = watch('rewardType');
-  const useCustomJson = watch('useCustomJson');
   const watchedProductId = watch('productId');
 
   // §17.6 selector wiring: the search text goes to the query hook verbatim
@@ -489,10 +509,6 @@ function RewardForm({
       : undefined;
   const { data: storedProduct } = useProductById(storedProductId);
 
-  // Specific field for JSON advanced mode textarea
-  const [benefitConfig, setBenefitConfig] = useState(
-    JSON.stringify(initial?.benefit_config ?? {}, null, 2),
-  );
   const [error, setError] = useState<string | null>(null);
 
   const createMutation = useCreateReward();
@@ -500,32 +516,16 @@ function RewardForm({
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   // Resolver-validated entry point: this only runs when the schema accepted
-  // every field the ACTIVE branch renders, so the handler-level JSON parse
-  // keeps its exact pre-sweep behavior and message.
+  // every field the ACTIVE branch renders.
   const onValid = async (values: RewardFormValues) => {
     if (isPending) return;
     setError(null);
 
     let parsedConfig: Record<string, unknown>;
-    if (values.useCustomJson) {
-      try {
-        parsedConfig = JSON.parse(benefitConfig);
-      } catch {
-        setError('benefit_config debe ser JSON válido');
-        return;
-      }
+    if (values.rewardType === 'DISCOUNT_AMOUNT') {
+      parsedConfig = { amountNio: Number(values.amountNio) };
     } else {
-      if (values.rewardType === 'DISCOUNT_AMOUNT') {
-        parsedConfig = { amountNio: Number(values.amountNio) };
-      } else {
-        // §17.6: the resolver guarantees a picked uuid; the trim is
-        // belt-and-braces only. The old `|| 'prod-smash'` fallback is
-        // deliberately gone: it fired exactly when a whitespace-only
-        // product id reached onValid (the only empty-ish value the old
-        // schema's length<1 check let through) and fabricated an
-        // identifier that could travel to the backend.
-        parsedConfig = { productId: values.productId.trim() };
-      }
+      parsedConfig = { productId: values.productId.trim() };
     }
 
     try {
@@ -632,80 +632,56 @@ function RewardForm({
       </div>
 
       {/* Dynamic structured fields according to reward type */}
-      {!useCustomJson ? (
-        <div className="p-3 bg-muted/40 rounded-md border border-border/60">
-          <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-            Beneficio ({rewardType})
-          </p>
-          {rewardType === 'DISCOUNT_AMOUNT' ? (
-            <div>
-              <label htmlFor="benefit-amount" className="block text-xs font-medium mb-1">
-                Monto de descuento (C$)
-              </label>
-              <Input
-                id="benefit-amount"
-                type="number"
-                {...register('amountNio', {
-                  setValueAs: (v) => (v === '' ? 0 : Number(v)),
-                })}
-                aria-invalid={Boolean(errors.amountNio)}
-              />
-              {errors.amountNio && (
-                <p className="text-xs text-destructive">{errors.amountNio.message}</p>
-              )}
-            </div>
-          ) : (
-            <div>
-              <EntitySearchSelect
-                inputId="benefit-product"
-                label="Producto a entregar"
-                value={watchedProductId ?? ''}
-                onChange={(id) =>
-                  setValue('productId', id, { shouldValidate: true })
-                }
-                options={(productSearchData?.data ?? []).map((product) => ({
-                  id: product.id,
-                  label: product.name,
-                }))}
-                search={productSearch}
-                onSearchChange={setProductSearch}
-                isLoading={isProductSearchLoading}
-                isError={isProductSearchError}
-                onRetry={() => void refetchProducts()}
-                emptyMessage="No hay productos todavía. Cree productos en el catálogo."
-                selectedLabel={storedProduct?.name}
-                total={productSearchData?.total}
-                onVerTodos={() => setProductSearch('')}
-                placeholder="Ej: Smash Burger, Café"
-              />
-              {errors.productId && (
-                <p className="text-xs text-destructive">{errors.productId.message}</p>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div>
-          <label htmlFor="benefit-config" className="block text-sm font-medium mb-1">Configuración de beneficio (JSON)</label>
-          <textarea
-            id="benefit-config"
-            value={benefitConfig}
-            onChange={(e) => setBenefitConfig(e.target.value)}
-            rows={3}
-            className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-sm placeholder:text-muted-foreground"
-            placeholder='{"amountNio": 50}'
-          />
-        </div>
-      )}
-
-      <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setValue('useCustomJson', !useCustomJson)}
-          className="text-xs text-primary underline"
-        >
-          {useCustomJson ? 'Usar formulario guiado' : 'Modo JSON avanzado'}
-        </button>
+      <div className="p-3 bg-muted/40 rounded-md border border-border/60">
+        <p className="text-xs font-semibold uppercase text-muted-foreground mb-2">
+          Beneficio ({rewardType})
+        </p>
+        {rewardType === 'DISCOUNT_AMOUNT' ? (
+          <div>
+            <label htmlFor="benefit-amount" className="block text-xs font-medium mb-1">
+              Monto de descuento (C$)
+            </label>
+            <Input
+              id="benefit-amount"
+              type="number"
+              {...register('amountNio', {
+                setValueAs: (v) => (v === '' ? 0 : Number(v)),
+              })}
+              aria-invalid={Boolean(errors.amountNio)}
+            />
+            {errors.amountNio && (
+              <p className="text-xs text-destructive">{errors.amountNio.message}</p>
+            )}
+          </div>
+        ) : (
+          <div>
+            <EntitySearchSelect
+              inputId="benefit-product"
+              label="Producto a entregar"
+              value={watchedProductId ?? ''}
+              onChange={(id) =>
+                setValue('productId', id, { shouldValidate: true })
+              }
+              options={(productSearchData?.data ?? []).map((product) => ({
+                id: product.id,
+                label: product.name,
+              }))}
+              search={productSearch}
+              onSearchChange={setProductSearch}
+              isLoading={isProductSearchLoading}
+              isError={isProductSearchError}
+              onRetry={() => void refetchProducts()}
+              emptyMessage="No hay productos todavía. Cree productos en el catálogo."
+              selectedLabel={storedProduct?.name}
+              total={productSearchData?.total}
+              onVerTodos={() => setProductSearch('')}
+              placeholder="Ej: Smash Burger, Café"
+            />
+            {errors.productId && (
+              <p className="text-xs text-destructive">{errors.productId.message}</p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
@@ -729,6 +705,11 @@ export function LoyaltyPage() {
   const [showCreateReward, setShowCreateReward] = useState(false);
   const [editingReward, setEditingReward] = useState<RewardDefinition | null>(null);
   const [profitAwareReward, setProfitAwareReward] = useState<RewardDefinition | null>(null);
+  const [confirmDeactivateProgram, setConfirmDeactivateProgram] = useState<LoyaltyProgram | null>(null);
+  const [confirmDeactivateReward, setConfirmDeactivateReward] = useState<RewardDefinition | null>(null);
+
+  const user = useAuthStore((s) => s.user);
+  const canManage = !user || user.role === 'OWNER';
 
   const { data: programs, isLoading, error } = usePrograms(
     statusFilter ? { status: statusFilter } : undefined,
@@ -820,10 +801,20 @@ export function LoyaltyPage() {
           <h1 className="text-2xl font-bold text-foreground">Fidelización</h1>
           <p className="text-sm text-muted-foreground">Gestione programas de lealtad y recompensas</p>
         </div>
-        <Button onClick={() => setShowCreateProgram(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          Nuevo programa
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link to="/customers?tab=loyalty">
+            <Button variant="outline">
+              <Users className="h-4 w-4 mr-1.5" />
+              Saldos de clientes
+            </Button>
+          </Link>
+          {canManage && (
+            <Button onClick={() => setShowCreateProgram(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Nuevo programa
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -881,55 +872,66 @@ export function LoyaltyPage() {
                 </div>
 
                 <div className="space-y-1 text-sm text-muted-foreground">
+                  <p><span className="font-medium text-foreground">Regla:</span> {formatEarningRuleSummary(program)}</p>
                   <p>Tipo: {LOYALTY_PROGRAM_TYPES.find((t) => t.id === program.program_type)?.label ?? "Desconocido"}</p>
                   <p>Versión: {program.config_version}</p>
+                  {program.starts_at && (
+                    <p className="text-xs">
+                      Vigencia: {new Date(program.starts_at).toLocaleDateString('es-NI')}
+                      {program.ends_at ? ` al ${new Date(program.ends_at).toLocaleDateString('es-NI')}` : ''}
+                    </p>
+                  )}
                 </div>
 
-                <div className="flex gap-2 mt-3">
-                  {(program.status === 'DRAFT' || program.status === 'INACTIVE') && (
+                {canManage && (
+                  <div className="flex gap-2 mt-3">
+                    {(program.status === 'DRAFT' || program.status === 'INACTIVE') && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); handleToggleProgram(program); }}
+                        disabled={activateProgram.isPending}
+                      >
+                        <ToggleRight className="h-3 w-3 mr-1" />
+                        Activar
+                      </Button>
+                    )}
+                    {program.status === 'ACTIVE' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => { e.stopPropagation(); setConfirmDeactivateProgram(program); }}
+                        disabled={deactivateProgram.isPending}
+                      >
+                        <ToggleLeft className="h-3 w-3 mr-1" />
+                        Desactivar
+                      </Button>
+                    )}
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={(e) => { e.stopPropagation(); handleToggleProgram(program); }}
-                      disabled={activateProgram.isPending}
+                      variant="ghost"
+                      onClick={(e) => { e.stopPropagation(); setEditingProgram(program); }}
                     >
-                      <ToggleRight className="h-3 w-3 mr-1" />
-                      Activar
+                      <Edit className="h-3 w-3" />
                     </Button>
-                  )}
-                  {program.status === 'ACTIVE' && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => { e.stopPropagation(); handleToggleProgram(program); }}
-                      disabled={deactivateProgram.isPending}
-                    >
-                      <ToggleLeft className="h-3 w-3 mr-1" />
-                      Desactivar
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => { e.stopPropagation(); setEditingProgram(program); }}
-                  >
-                    <Edit className="h-3 w-3" />
-                  </Button>
-                </div>
+                  </div>
+                )}
 
                 {/* Expanded rewards */}
                 {selectedProgram?.id === program.id && (
                   <div className="mt-4 pt-3 border-t space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium">Recompensas</h4>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => { e.stopPropagation(); setShowCreateReward(true); }}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Agregar
-                      </Button>
+                      {canManage && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => { e.stopPropagation(); setShowCreateReward(true); }}
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Agregar
+                        </Button>
+                      )}
                     </div>
                     {rewards && rewards.length > 0 ? (
                       <div className="space-y-2">
@@ -938,31 +940,42 @@ export function LoyaltyPage() {
                             <div className="flex items-center gap-2">
                               <Tag className="h-3 w-3" />
                               <span>{reward.name}</span>
-                              <Badge variant={reward.status === 'ACTIVE' ? 'success' : 'secondary'} className="text-xs">
+                              <Badge variant={reward.status === 'ACTIVE' ? 'success' : 'outline'} className="text-xs">
                                 {reward.status === 'ACTIVE' ? 'Activo' : 'Inactivo'}
                               </Badge>
                             </div>
                             <div className="flex gap-1 items-center">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-1"
-                                onClick={(e) => { e.stopPropagation(); handleToggleReward(reward); }}
-                              >
-                                {reward.status === 'ACTIVE' ? (
-                                  <ToggleLeft className="h-3 w-3" />
-                                ) : (
-                                  <ToggleRight className="h-3 w-3" />
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-6 px-1"
-                                onClick={(e) => { e.stopPropagation(); setEditingReward(reward); }}
-                              >
-                                <Edit className="h-3 w-3" />
-                              </Button>
+                              {canManage && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-1"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (reward.status === 'ACTIVE') {
+                                        setConfirmDeactivateReward(reward);
+                                      } else {
+                                        handleToggleReward(reward);
+                                      }
+                                    }}
+                                  >
+                                    {reward.status === 'ACTIVE' ? (
+                                      <ToggleLeft className="h-3 w-3" />
+                                    ) : (
+                                      <ToggleRight className="h-3 w-3" />
+                                    )}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 px-1"
+                                    onClick={(e) => { e.stopPropagation(); setEditingReward(reward); }}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -1060,6 +1073,70 @@ export function LoyaltyPage() {
         open={!!profitAwareReward}
         onOpenChange={(open) => !open && setProfitAwareReward(null)}
       />
+
+      {/* Confirm Deactivate Program Dialog */}
+      <Dialog
+        open={!!confirmDeactivateProgram}
+        onOpenChange={(open) => !open && setConfirmDeactivateProgram(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>¿Desactivar programa?</DialogTitle>
+            <DialogDescription>
+              Al desactivar &quot;{confirmDeactivateProgram?.name}&quot;, los clientes dejarán de acumular puntos o sellos en las terminales de venta. Las recompensas activas no podrán ser canjeadas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmDeactivateProgram(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (confirmDeactivateProgram) {
+                  const p = confirmDeactivateProgram;
+                  setConfirmDeactivateProgram(null);
+                  await handleToggleProgram(p);
+                }
+              }}
+            >
+              Desactivar programa
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Deactivate Reward Dialog */}
+      <Dialog
+        open={!!confirmDeactivateReward}
+        onOpenChange={(open) => !open && setConfirmDeactivateReward(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>¿Desactivar recompensa?</DialogTitle>
+            <DialogDescription>
+              Al desactivar &quot;{confirmDeactivateReward?.name}&quot;, los clientes ya no podrán canjearla en el punto de venta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setConfirmDeactivateReward(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (confirmDeactivateReward) {
+                  const r = confirmDeactivateReward;
+                  setConfirmDeactivateReward(null);
+                  await handleToggleReward(r);
+                }
+              }}
+            >
+              Desactivar recompensa
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

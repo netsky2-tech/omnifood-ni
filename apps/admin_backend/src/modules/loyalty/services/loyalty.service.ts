@@ -91,7 +91,7 @@ export class LoyaltyService {
           status: LoyaltyProgramStatus.DRAFT,
           config_version: 1,
           earning_rule: dto.earning_rule as unknown as Record<string, unknown>,
-          eligibility_rule: dto.eligibility_rule as unknown as Record<
+          eligibility_rule: (dto.eligibility_rule ?? {}) as unknown as Record<
             string,
             unknown
           >,

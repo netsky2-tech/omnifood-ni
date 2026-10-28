@@ -62,10 +62,11 @@ export class CreateLoyaltyProgramDto {
   @Type(() => EarningRuleDto)
   earning_rule: EarningRuleDto;
 
+  @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => EligibilityRuleDto)
-  eligibility_rule: EligibilityRuleDto;
+  eligibility_rule?: EligibilityRuleDto;
 }
 
 export class UpdateLoyaltyProgramDto {

@@ -1,5 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LoyaltyPage } from '@/features/loyalty/loyalty-page';
@@ -53,7 +54,11 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    </MemoryRouter>
+  );
 }
 
 const MOCK_PROGRAMS: LoyaltyProgram[] = [
@@ -298,6 +303,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
             eligibleProductIds: [SMASH_PRODUCT_ID],
             unitsPerPurchasedUnit: 1,
           },
+          eligibility_rule: {},
+          starts_at: null,
+          ends_at: null,
         });
       });
     });
@@ -332,6 +340,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
             spendBlockNio: 20,
             pointsPerBlock: 2,
           },
+          eligibility_rule: {},
+          starts_at: null,
+          ends_at: null,
         });
       });
     });
@@ -366,11 +377,14 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
             unitsPerVisit: 1,
             minimumSpendNio: 100,
           },
+          eligibility_rule: {},
+          starts_at: null,
+          ends_at: null,
         });
       });
     });
 
-    it('supports advanced JSON mode and validates syntax', async () => {
+    it('validates vigencia dates and supports setting program validity', async () => {
       const user = userEvent.setup();
 
       render(
@@ -380,20 +394,43 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       );
 
       await user.click(screen.getByRole('button', { name: /nuevo programa/i }));
-      await user.type(screen.getByLabelText(/nombre/i), 'Custom JSON Program');
+      await user.type(screen.getByLabelText(/nombre/i), 'Campaña Navideña');
 
-      await user.click(screen.getByText(/modo json avanzado/i));
+      const startsInput = screen.getByLabelText(/vigencia desde/i);
+      const endsInput = screen.getByLabelText(/vigencia hasta/i);
 
-      const jsonTextarea = screen.getByLabelText(/regla de acumulación \(json\)/i);
-      fireEvent.change(jsonTextarea, { target: { value: 'INVALID_JSON{' } });
+      // Inverted dates: ends earlier than starts
+      fireEvent.change(startsInput, { target: { value: '2026-12-31' } });
+      fireEvent.change(endsInput, { target: { value: '2026-12-01' } });
 
       await user.click(screen.getByRole('button', { name: /crear programa/i }));
 
       await waitFor(() => {
-        expect(screen.getByText('earning_rule debe ser JSON válido')).toBeInTheDocument();
+        expect(
+          screen.getByText('La fecha de fin debe ser posterior a la fecha de inicio'),
+        ).toBeInTheDocument();
       });
-
       expect(mockCreateProgram).not.toHaveBeenCalled();
+
+      // Fix dates
+      fireEvent.change(startsInput, { target: { value: '2026-12-01' } });
+      fireEvent.change(endsInput, { target: { value: '2026-12-31' } });
+
+      await user.click(screen.getByRole('button', { name: /crear programa/i }));
+
+      await waitFor(() => {
+        expect(mockCreateProgram).toHaveBeenCalledWith({
+          name: 'Campaña Navideña',
+          program_type: 'SPEND_POINTS',
+          earning_rule: {
+            spendBlockNio: 10,
+            pointsPerBlock: 1,
+          },
+          eligibility_rule: {},
+          starts_at: new Date('2026-12-01').toISOString(),
+          ends_at: new Date('2026-12-31').toISOString(),
+        });
+      });
     });
   });
 
@@ -415,7 +452,7 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       });
     });
 
-    it('deactivates ACTIVE program when "Desactivar" is clicked', async () => {
+    it('deactivates ACTIVE program when "Desactivar" is clicked and confirmed', async () => {
       const user = userEvent.setup();
 
       render(
@@ -426,6 +463,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
 
       const deactivateBtn = screen.getByRole('button', { name: /^desactivar$/i });
       await user.click(deactivateBtn);
+
+      const confirmBtn = await screen.findByRole('button', { name: /desactivar programa/i });
+      await user.click(confirmBtn);
 
       await waitFor(() => {
         expect(mockDeactivateProgram).toHaveBeenCalledWith('prog-smash');
@@ -465,6 +505,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
               eligibleProductIds: [SMASH_PRODUCT_ID],
               unitsPerPurchasedUnit: 1,
             },
+            eligibility_rule: {},
+            starts_at: null,
+            ends_at: null,
           },
         });
       });
@@ -625,6 +668,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
       const toggleButtons = rewardRow.parentElement!.querySelectorAll('button');
       // First button is toggle, second is edit
       await user.click(toggleButtons[0]!);
+
+      const confirmBtn = await screen.findByRole('button', { name: /desactivar recompensa/i });
+      await user.click(confirmBtn);
 
       await waitFor(() => {
         expect(mockDeactivateReward).toHaveBeenCalledWith('rw-smash');
@@ -913,6 +959,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         name: 'Club de Visitas',
         program_type: 'VISIT_STAMPS',
         earning_rule: { unitsPerVisit: 1 },
+        eligibility_rule: {},
+        starts_at: null,
+        ends_at: null,
       });
     });
 
@@ -981,6 +1030,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         name: 'Club de Visitas',
         program_type: 'VISIT_STAMPS',
         earning_rule: { unitsPerVisit: 1 },
+        eligibility_rule: {},
+        starts_at: null,
+        ends_at: null,
       });
     });
 
@@ -1028,6 +1080,9 @@ describe('LV1.5A & LV1.5B — LoyaltyPage (Programs & Rewards UI)', () => {
         name: 'Puntos por Compra',
         program_type: 'SPEND_POINTS',
         earning_rule: { spendBlockNio: 10, pointsPerBlock: 1 },
+        eligibility_rule: {},
+        starts_at: null,
+        ends_at: null,
       });
     });
   });
