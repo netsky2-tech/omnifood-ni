@@ -35,6 +35,9 @@ Future<LogoutShiftDecision?> showLogoutShiftGateDialog(BuildContext context) {
           style: OutlinedButton.styleFrom(
             foregroundColor: NhilosColors.danger,
             side: const BorderSide(color: NhilosColors.dangerBorder),
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: const Text('ABANDONAR TURNO TEMPORALMENTE'),
         ),
@@ -45,6 +48,9 @@ Future<LogoutShiftDecision?> showLogoutShiftGateDialog(BuildContext context) {
           style: FilledButton.styleFrom(
             backgroundColor: NhilosColors.brandPrimary,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: const Text('HACER CORTE Z AHORA'),
         ),
@@ -72,6 +78,7 @@ class _ShiftAbandonReasonDialog extends StatefulWidget {
 class _ShiftAbandonReasonDialogState extends State<_ShiftAbandonReasonDialog> {
   final _reasonController = TextEditingController();
   String? _error;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -80,6 +87,7 @@ class _ShiftAbandonReasonDialogState extends State<_ShiftAbandonReasonDialog> {
   }
 
   void _confirm() {
+    if (_submitting) return;
     final reason = _reasonController.text.trim();
     if (reason.isEmpty) {
       setState(() {
@@ -87,6 +95,13 @@ class _ShiftAbandonReasonDialogState extends State<_ShiftAbandonReasonDialog> {
       });
       return;
     }
+    if (reason.length < 4) {
+      setState(() {
+        _error = 'Ingrese un motivo descriptivo (mínimo 4 caracteres).';
+      });
+      return;
+    }
+    setState(() => _submitting = true);
     Navigator.of(context).pop(reason);
   }
 
@@ -133,15 +148,18 @@ class _ShiftAbandonReasonDialogState extends State<_ShiftAbandonReasonDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
           child: const Text('CANCELAR'),
         ),
         FilledButton(
           key: const Key('shift_abandon_confirm_button'),
-          onPressed: _confirm,
+          onPressed: _submitting ? null : _confirm,
           style: FilledButton.styleFrom(
             backgroundColor: NhilosColors.danger,
             foregroundColor: Colors.white,
+            shape: const RoundedRectangleBorder(
+              borderRadius: NhilosRadii.buttonRadius,
+            ),
           ),
           child: const Text('CONFIRMAR Y CERRAR SESIÓN'),
         ),

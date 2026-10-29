@@ -7,6 +7,7 @@ import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/models/user.dart';
 import '../../../domain/services/config/tenant_config_service.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
+import '../design_system/nhilos_tokens.dart';
 import '../features/cash/cash_shift_view_model.dart';
 import '../features/cash/widgets/close_shift_dialog.dart';
 import '../features/inventory/boh/boh_permissions.dart';
@@ -111,8 +112,9 @@ class _AppDrawerState extends State<AppDrawer> {
         if (!mounted) return;
         if (cashShiftViewModel.hasActiveShift) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
+            SnackBar(
+              backgroundColor: NhilosColors.danger,
+              content: const Text(
                 'No se cerró la sesión: el turno de caja sigue abierto.',
               ),
             ),
@@ -131,8 +133,9 @@ class _AppDrawerState extends State<AppDrawer> {
         if (!mounted) return;
         if (user == null || user.tenantId == null || user.tenantId!.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
+            SnackBar(
+              backgroundColor: NhilosColors.danger,
+              content: const Text(
                 'No se pudo registrar el motivo. No se cerró la sesión.',
               ),
             ),
@@ -153,8 +156,9 @@ class _AppDrawerState extends State<AppDrawer> {
         } catch (_) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
+            SnackBar(
+              backgroundColor: NhilosColors.danger,
+              content: const Text(
                 'No se pudo registrar el motivo. No se cerró la sesión.',
               ),
             ),
