@@ -183,6 +183,7 @@ describe("label families — key sets verified against source enums", () => {
         "MODIFIER_EFFECT_QUANTITY_OVERRIDE",
         "SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY",
         "DRAWER_OPENED_MANUALLY",
+        "SHIFT_ABANDONED_ON_LOGOUT",
         "REPRINT_REQUESTED",
         "PRINT_PAYLOAD_CORRUPT",
         "SALE_INVENTORY_REMEDIATED",

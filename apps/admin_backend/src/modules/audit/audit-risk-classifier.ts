@@ -78,6 +78,10 @@ const ACTION_SEVERITY_TABLE: Readonly<Record<string, AuditSeverity>> = {
   SUPERVISOR_OVERRIDE_CLOSE_SESSION: 'CRITICAL',
   // Supervised cash drawer open outside a sale: cash exposure follow-up.
   DRAWER_OPENED_MANUALLY: 'WARNING',
+  // The operator signed out leaving a cash shift OPEN on the terminal: a
+  // conscious, recorded abandonment. Fiscal follow-up: the shift still owes
+  // its Corte Z, and the reason travels in the metadata.
+  SHIFT_ABANDONED_ON_LOGOUT: 'WARNING',
   // ------------------------------------------------------------------
   // The tenant's SUPERVISION POLICY made the supervisor optional (the
   // owner's decision, 2026-10-20: in a food park there is often nobody

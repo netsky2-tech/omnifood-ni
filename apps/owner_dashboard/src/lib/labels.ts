@@ -194,6 +194,7 @@ export const auditLedgerActionLabels: Record<string, string> = {
   MODIFIER_EFFECT_QUANTITY_OVERRIDE: "Cantidad de un extra ajustada con supervisor",
   SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY: "Cantidad de un extra ajustada por el operador",
   DRAWER_OPENED_MANUALLY: "Apertura manual de gaveta",
+  SHIFT_ABANDONED_ON_LOGOUT: "Abandono de turno al cerrar sesión",
   REPRINT_REQUESTED: "Reimpresión solicitada",
   PRINT_PAYLOAD_CORRUPT: "Impresión detenida por datos corruptos",
   SALE_INVENTORY_REMEDIATED: "Corrección de inventario sobre factura",

@@ -1,10 +1,16 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../domain/repositories/audit_repository.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/models/user.dart';
 import '../../../domain/services/config/tenant_config_service.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
+import '../features/cash/cash_shift_view_model.dart';
+import '../features/cash/widgets/close_shift_dialog.dart';
 import '../features/inventory/boh/boh_permissions.dart';
+import 'logout_shift_gate_dialog.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -80,6 +86,89 @@ class _AppDrawerState extends State<AppDrawer> {
 
     navigator.pop();
     navigator.pushNamed('/lock');
+  }
+
+  /// Explicit sign-out. An open shift can never be abandoned silently: the
+  /// operator either runs the Corte Z right here or records a conscious
+  /// temporary abandonment (with a reason) before the session ends.
+  Future<void> _handleLogout() async {
+    final navigator = Navigator.of(context);
+    final authRepository = context.read<AuthRepository>();
+    final cashShiftViewModel = context.read<CashShiftViewModel>();
+
+    await cashShiftViewModel.init();
+    if (!mounted) return;
+
+    if (cashShiftViewModel.hasActiveShift) {
+      final decision = await showLogoutShiftGateDialog(context);
+      if (!mounted || decision == null) return;
+
+      if (decision == LogoutShiftDecision.closeShiftNow) {
+        await showCloseShiftFlow(context, cashShiftViewModel);
+        if (!mounted) return;
+
+        await cashShiftViewModel.init();
+        if (!mounted) return;
+        if (cashShiftViewModel.hasActiveShift) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No se cerró la sesión: el turno de caja sigue abierto.',
+              ),
+            ),
+          );
+          return;
+        }
+      } else {
+        final reason = await showShiftAbandonReasonDialog(context);
+        if (!mounted || reason == null) return;
+
+        final shift = cashShiftViewModel.activeShift;
+        if (shift == null) return;
+
+        final auditRepository = context.read<AuditRepository>();
+        final user = await authRepository.getCurrentUser();
+        if (!mounted) return;
+        if (user == null || user.tenantId == null || user.tenantId!.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No se pudo registrar el motivo. No se cerró la sesión.',
+              ),
+            ),
+          );
+          return;
+        }
+
+        try {
+          await auditRepository.logForensic(
+            'SHIFT_ABANDONED_ON_LOGOUT',
+            metadata: jsonEncode({
+              'action': 'shift_abandoned_on_logout',
+              'shift_id': shift.id,
+              'terminal_id': shift.terminalId,
+              'reason': reason,
+            }),
+          );
+        } catch (_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'No se pudo registrar el motivo. No se cerró la sesión.',
+              ),
+            ),
+          );
+          return;
+        }
+        if (!mounted) return;
+      }
+    }
+
+    await authRepository.logout();
+    if (mounted) {
+      navigator.pushNamedAndRemoveUntil('/', (route) => false);
+    }
   }
 
   String _getRoleLabel(UserRole? role) {
@@ -324,12 +413,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              onTap: () async {
-                await context.read<AuthRepository>().logout();
-                if (context.mounted) {
-                  Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-                }
-              },
+              onTap: _handleLogout,
             ),
             const SizedBox(height: 16),
           ],
