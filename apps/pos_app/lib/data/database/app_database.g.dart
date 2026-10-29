@@ -5112,6 +5112,42 @@ class _$CashierSessionDao extends CashierSessionDao {
   }
 
   @override
+  Future<List<CashierSessionEntity>> getOpenSessionsForTerminal(
+      String terminalId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM cashier_sessions WHERE is_closed = 0 AND terminal_id = ?1 ORDER BY opened_at DESC',
+        mapper: (Map<String, Object?> row) => CashierSessionEntity(id: row['id'] as String, userId: row['user_id'] as String, cashierName: row['cashier_name'] as String?, terminalId: row['terminal_id'] as String, openedAt: row['opened_at'] as int, tipoModelo: row['tipo_modelo'] as String, closedAt: row['closed_at'] as int?, openingBalanceNio: row['opening_balance_nio'] as double?, openingBalanceUsd: row['opening_balance_usd'] as double, closingCountedNio: row['closing_counted_nio'] as double?, closingCountedUsd: row['closing_counted_usd'] as double?, expectedNio: row['expected_nio'] as double?, expectedUsd: row['expected_usd'] as double, differenceNio: row['difference_nio'] as double?, differenceUsd: row['difference_usd'] as double?, zReportSequence: row['z_report_sequence'] as int?, isClosed: (row['is_closed'] as int) != 0, supervisorId: row['supervisor_id'] as String?, notes: row['notes'] as String?, syncStatus: row['sync_status'] as String),
+        arguments: [terminalId]);
+  }
+
+  @override
+  Future<List<CashierSessionEntity>> getAllOpenSessions() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM cashier_sessions WHERE is_closed = 0 ORDER BY opened_at DESC',
+        mapper: (Map<String, Object?> row) => CashierSessionEntity(
+            id: row['id'] as String,
+            userId: row['user_id'] as String,
+            cashierName: row['cashier_name'] as String?,
+            terminalId: row['terminal_id'] as String,
+            openedAt: row['opened_at'] as int,
+            tipoModelo: row['tipo_modelo'] as String,
+            closedAt: row['closed_at'] as int?,
+            openingBalanceNio: row['opening_balance_nio'] as double?,
+            openingBalanceUsd: row['opening_balance_usd'] as double,
+            closingCountedNio: row['closing_counted_nio'] as double?,
+            closingCountedUsd: row['closing_counted_usd'] as double?,
+            expectedNio: row['expected_nio'] as double?,
+            expectedUsd: row['expected_usd'] as double,
+            differenceNio: row['difference_nio'] as double?,
+            differenceUsd: row['difference_usd'] as double?,
+            zReportSequence: row['z_report_sequence'] as int?,
+            isClosed: (row['is_closed'] as int) != 0,
+            supervisorId: row['supervisor_id'] as String?,
+            notes: row['notes'] as String?,
+            syncStatus: row['sync_status'] as String));
+  }
+
+  @override
   Future<List<CashierSessionEntity>> getAllSessions() async {
     return _queryAdapter.queryList(
         'SELECT * FROM cashier_sessions ORDER BY opened_at DESC',

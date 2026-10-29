@@ -795,6 +795,7 @@ void main() async {
               // identity source at action time (AuthRepository.getCurrentUser),
               // never from a hard-coded literal.
               authRepository: authRepository,
+              auditRepository: auditRepository,
               currentUserRole: saleVm.currentUserRole,
               // FC-1 (JD-A-002 residual): the cash-shift opener must stamp
               // the SAME terminal the sale path does, or the void guard's

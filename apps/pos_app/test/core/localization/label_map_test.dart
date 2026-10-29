@@ -197,7 +197,8 @@ void main() {
 
     test('audit ledger action labels cover every POS writer code (dashboard copy)', () {
       // Exhaustive against the POS's own audit writers: sales_repository_impl
-      // (log / prepareLog), durable_print_service, sale_view logForensic.
+      // (log / prepareLog), durable_print_service, sale_view logForensic and
+      // app_drawer (logout with an open shift).
       expect(kAuditLedgerActionLabels.keys.toList(), [
         'SALE_CREATED',
         'SALE_VOIDED',
@@ -205,6 +206,8 @@ void main() {
         'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT',
         'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
         'DRAWER_OPENED_MANUALLY',
+        'SHIFT_ABANDONED_ON_LOGOUT',
+        'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT',
         'REPRINT_REQUESTED',
         'PRINT_PAYLOAD_CORRUPT',
       ]);
@@ -221,6 +224,8 @@ void main() {
           kAuditLedgerActionLabels), 'Cierre de sesión autorizado');
       expect(localize('DRAWER_OPENED_MANUALLY', kAuditLedgerActionLabels),
           'Apertura manual de gaveta');
+      expect(localize('SHIFT_ABANDONED_ON_LOGOUT', kAuditLedgerActionLabels),
+          'Abandono de turno al cerrar sesión');
       expect(localize('REPRINT_REQUESTED', kAuditLedgerActionLabels),
           'Reimpresión solicitada');
       expect(localize('PRINT_PAYLOAD_CORRUPT', kAuditLedgerActionLabels),
@@ -232,7 +237,8 @@ void main() {
     test('audit metadata key labels cover every POS emit-site key', () {
       // Exhaustive against the POS's own metadata emit sites:
       // sales_repository_impl (log / prepareLog), durable_print_service,
-      // sale_view logForensic. Unverified keys are intentionally absent:
+      // sale_view logForensic and app_drawer (logout with an open shift).
+      // Unverified keys are intentionally absent:
       // the view humanises them instead of inventing a meaning.
       expect(kAuditMetadataKeyLabels.keys.toList(), [
         'invoice_id',
@@ -253,6 +259,15 @@ void main() {
         'role',
         'action',
         'justification',
+        'shift_id',
+        'terminal_id',
+        'original_user_id',
+        'supervisor_id',
+        'counted_nio',
+        'counted_usd',
+        'diff_nio',
+        'diff_usd',
+        'z_sequence',
       ]);
       // Spot checks across every emitting action family.
       expect(localize('invoice_id', kAuditMetadataKeyLabels), 'Factura (ID)');
@@ -265,6 +280,9 @@ void main() {
       expect(localize('fulfillmentId', kAuditMetadataKeyLabels), 'Pedido (ID)');
       expect(localize('justification', kAuditMetadataKeyLabels),
           'Justificación');
+      expect(localize('shift_id', kAuditMetadataKeyLabels), 'Turno (ID)');
+      expect(localize('terminal_id', kAuditMetadataKeyLabels),
+          'Terminal (ID)');
     });
 
     test('cash movement types cover every code with a Spanish label (D-14)', () {

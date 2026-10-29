@@ -29,6 +29,25 @@ abstract class CashierSessionDao {
     String terminalId,
   );
 
+  /// Issue #940: lists all open cashier sessions on a given terminal,
+  /// ordered newest first. Enables supervisors/owners to view and manage
+  /// orphaned shifts abandoned by previous operators.
+  @Query(
+    'SELECT * FROM cashier_sessions '
+    'WHERE is_closed = 0 AND terminal_id = :terminalId '
+    'ORDER BY opened_at DESC',
+  )
+  Future<List<CashierSessionEntity>> getOpenSessionsForTerminal(String terminalId);
+
+  /// Issue #940: lists all open cashier sessions across all terminals,
+  /// ordered newest first.
+  @Query(
+    'SELECT * FROM cashier_sessions '
+    'WHERE is_closed = 0 '
+    'ORDER BY opened_at DESC',
+  )
+  Future<List<CashierSessionEntity>> getAllOpenSessions();
+
   @Insert(onConflict: OnConflictStrategy.replace)
   Future<void> insertSession(CashierSessionEntity session);
 

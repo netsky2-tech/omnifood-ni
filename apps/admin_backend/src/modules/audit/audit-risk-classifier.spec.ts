@@ -113,6 +113,18 @@ describe('audit-risk-classifier', () => {
         evidence:
           'sale_view.dart:744 (logForensic) and backend audit-trail.service.ts recordManualDrawerOpen — supervised cash drawer open outside a sale: cash exposure follow-up (PRD §19.1 Warning)',
       },
+      {
+        action: 'SHIFT_ABANDONED_ON_LOGOUT',
+        expected: 'WARNING',
+        evidence:
+          'app_drawer.dart (logForensic) — the operator signs out leaving an OPEN cash shift after an explicit confirmation with a registered reason: the shift still owes its Corte Z, an operational/fiscal follow-up (PRD §19.1 Warning)',
+      },
+      {
+        action: 'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT',
+        expected: 'CRITICAL',
+        evidence:
+          'cash_shift_view_model.dart (logForensic) — supervisor administratively closes an orphaned or stuck cashier session with mandatory reason: forces a Corte Z, material fiscal event (PRD §19.1 Critical)',
+      },
       // The tenant's supervision policy made the supervisor optional, so the
       // terminal records the self-authorization instead of the override. The
       // severity follows the EVENT, not the signer: the same class keeps the
@@ -240,6 +252,8 @@ describe('audit-risk-classifier', () => {
       'SALE_INVENTORY_REMEDIATED',
       'USER_PERMISSIONS_UPDATED',
       'DRAWER_OPENED_MANUALLY',
+      'SHIFT_ABANDONED_ON_LOGOUT',
+      'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT',
       'REPRINT_REQUESTED',
       'PRINT_PAYLOAD_CORRUPT',
       'USER_DEACTIVATED',

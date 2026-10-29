@@ -349,6 +349,8 @@ const Map<String, String> kForensicMovementTypeLabels = <String, String>{
 /// - `lib/ui/features/sales/sale_view.dart`
 ///   (SUPERVISOR_OVERRIDE_CLOSE_SESSION, DRAWER_OPENED_MANUALLY,
 ///   SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT via `logForensic`).
+/// - `lib/ui/widgets/app_drawer.dart`
+///   (SHIFT_ABANDONED_ON_LOGOUT via `logForensic`).
 ///
 /// Copy mirrors the owner dashboard's `auditLedgerActionLabels`
 /// (`apps/owner_dashboard/src/lib/labels.ts`) so the tablet and the dashboard
@@ -363,6 +365,8 @@ const Map<String, String> kAuditLedgerActionLabels = <String, String>{
   'SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT': 'Descuento manual autorizado',
   'SUPERVISOR_OVERRIDE_CLOSE_SESSION': 'Cierre de sesión autorizado',
   'DRAWER_OPENED_MANUALLY': 'Apertura manual de gaveta',
+  'SHIFT_ABANDONED_ON_LOGOUT': 'Abandono de turno al cerrar sesión',
+  'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT': 'Cierre administrativo de turno huérfano',
   'REPRINT_REQUESTED': 'Reimpresión solicitada',
   'PRINT_PAYLOAD_CORRUPT': 'Impresión detenida por datos corruptos',
 };
@@ -470,6 +474,8 @@ const Map<String, String> kActivationBackendVerdictLabels =
 ///   action for SUPERVISOR_OVERRIDE_CLOSE_SESSION and
 ///   SUPERVISOR_OVERRIDE_MANUAL_DISCOUNT; action + justification for
 ///   DRAWER_OPENED_MANUALLY).
+/// - `lib/ui/widgets/app_drawer.dart` (SHIFT_ABANDONED_ON_LOGOUT:
+///   action, shift_id, terminal_id, reason).
 ///
 /// Values are rendered verbatim next to their label: the evidence value is
 /// never reinterpreted, only the KEY is humanised. Cloud-projected or
@@ -494,6 +500,15 @@ const Map<String, String> kAuditMetadataKeyLabels = <String, String>{
   'role': 'Rol',
   'action': 'Acción',
   'justification': 'Justificación',
+  'shift_id': 'Turno (ID)',
+  'terminal_id': 'Terminal (ID)',
+  'original_user_id': 'Operador original (ID)',
+  'supervisor_id': 'Supervisor (ID)',
+  'counted_nio': 'Efectivo contado (C\$)',
+  'counted_usd': 'Efectivo contado (\$ USD)',
+  'diff_nio': 'Diferencia (C\$)',
+  'diff_usd': 'Diferencia (\$ USD)',
+  'z_sequence': 'Consecutivo Corte Z',
 };
 
 /// Registry of every exported label family. The regression guard walks this

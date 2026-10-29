@@ -341,24 +341,27 @@ class _CloseShiftDialogState extends State<CloseShiftDialog> {
         try {
           context.read<SaleViewModel>().checkActiveSession();
         } catch (_) {}
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop(true);
-        }
-        if (vm.lastClosedShift != null) {
-          // R-18: the Z report must carry the same resolved person names the
-          // standalone 'Ver Último Corte Z' site passes (D-14). The dialog
-          // itself keeps the honest fallback contract for unresolvable ids.
-          final shift = vm.lastClosedShift!;
-          showDialog<void>(
+        // R-18: the Z report must carry the same resolved person names the
+        // standalone 'Ver Último Corte Z' site passes (D-14). The dialog
+        // itself keeps the honest fallback contract for unresolvable ids.
+        // The report is awaited BEFORE this dialog closes so a caller that
+        // signs out right after the close (drawer CERRAR SESIÓN) does not
+        // dismiss the operator's fiscal evidence.
+        final closedShift = vm.lastClosedShift;
+        if (closedShift != null && mounted) {
+          await showDialog<void>(
             context: context,
             builder: (_) => ZReportDialog(
-              shift: shift,
-              cashierName: resolveUserName(shift.userId, widget.usersById),
-              supervisorName: shift.supervisorId == null
+              shift: closedShift,
+              cashierName: resolveUserName(closedShift.userId, widget.usersById),
+              supervisorName: closedShift.supervisorId == null
                   ? null
-                  : resolveUserName(shift.supervisorId, widget.usersById),
+                  : resolveUserName(closedShift.supervisorId, widget.usersById),
             ),
           );
+        }
+        if (mounted && Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
         }
         return;
       }

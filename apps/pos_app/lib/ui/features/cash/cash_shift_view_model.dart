@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../data/database/app_database.dart';
@@ -9,6 +10,7 @@ import '../../../data/models/sales/cash_movement_entity.dart';
 import '../../../domain/models/sales/cart_item.dart';
 import '../../../domain/models/sales/hold_ticket.dart';
 import '../../../domain/models/user.dart';
+import '../../../domain/repositories/audit_repository.dart';
 import '../../../domain/repositories/auth_repository.dart';
 import '../../../domain/services/sales/table_order_service.dart';
 import '../../../domain/services/sales/waiter_settlement_service.dart';
@@ -26,7 +28,18 @@ class CashShiftViewModel extends ChangeNotifier {
   /// path uses via AuthRepository.getCurrentUser) instead of trusting a
   /// hard-coded literal captured at construction.
   final AuthRepository? authRepository;
+  final AuditRepository? auditRepository;
   UserRole? _currentUserRole;
+
+  /// Issue #940: all open cashier sessions on this terminal. Allows
+  /// supervisor surfaces to see and close orphaned shifts from previous
+  /// operators.
+  List<CashierSessionEntity> _openTerminalShifts = [];
+  List<CashierSessionEntity> get openTerminalShifts => _openTerminalShifts;
+  bool get hasOrphanShifts =>
+      _openTerminalShifts.any((s) => s.id != _activeShift?.id);
+  List<CashierSessionEntity> get orphanShifts =>
+      _openTerminalShifts.where((s) => s.id != _activeShift?.id).toList();
 
   /// T8 (cuentas abiertas, INV-16.5): loads THIS device's open accounts
   /// (hold tickets). Optional and null on the plain constructor — an
@@ -65,6 +78,7 @@ class CashShiftViewModel extends ChangeNotifier {
     required this.sessionDao,
     required this.movementDao,
     this.paymentDao,
+    this.auditRepository,
     // Issue #552: no longer required — callers SHOULD inject authRepository
     // and let the identity source provide the acting user id. Kept as a
     // fallback for direct constructions (widget tests, isolated harnesses).
@@ -85,12 +99,14 @@ class CashShiftViewModel extends ChangeNotifier {
     // terminal or the void guard's scoped session lookup never matches.
     String currentTerminalId = 'TERM-01',
     AuthRepository? authRepository,
+    AuditRepository? auditRepository,
     UserRole? currentUserRole,
   }) {
     return CashShiftViewModel(
       sessionDao: database.cashierSessionDao,
       movementDao: database.cashMovementDao,
       paymentDao: database.paymentDao,
+      auditRepository: auditRepository,
       currentUserId: currentUserId,
       currentUserName: currentUserName,
       currentTerminalId: currentTerminalId,
@@ -258,6 +274,10 @@ class CashShiftViewModel extends ChangeNotifier {
         _salesCashNio = 0.0;
         _salesCashUsd = 0.0;
       }
+      // Issue #940: load all open cashier sessions on this terminal to give
+      // visibility into orphaned sessions.
+      _openTerminalShifts =
+          await sessionDao.getOpenSessionsForTerminal(currentTerminalId);
       // T8 (cuentas abiertas): part of the same refresh the close flow
       // performs (showCloseShiftFlow calls init first), so the UI block
       // dialog and the Corte X render the same figure from the same loader.
@@ -573,6 +593,136 @@ class CashShiftViewModel extends ChangeNotifier {
       return true;
     } catch (e) {
       _errorMessage = 'Error al cerrar turno: $e';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Issue #940: allows an authorized supervisor (Owner or Manager) to audit
+  /// and close an orphaned or stuck cashier session on this terminal.
+  /// Requires a non-empty reason, emits the CRITICAL forensic event
+  /// [ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT], computes Z sequence, re-queries
+  /// cash sales, and records the supervisor and administrative note.
+  Future<bool> closeOrphanShift({
+    required String shiftId,
+    required String reason,
+    required double countedNio,
+    required double countedUsd,
+    String? notes,
+    String? supervisorId,
+  }) async {
+    final trimmedReason = reason.trim();
+    if (trimmedReason.isEmpty) {
+      _errorMessage = 'Debe ingresar un motivo para el cierre administrativo.';
+      notifyListeners();
+      return false;
+    }
+
+    final isAuthorizedRole = _currentUserRole == UserRole.owner ||
+        _currentUserRole == UserRole.manager;
+    if (!isAuthorizedRole) {
+      _errorMessage = 'Solo un supervisor o dueño puede cerrar turnos huérfanos.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final shift = await sessionDao.getSessionById(shiftId);
+      if (shift == null || shift.isClosed) {
+        _errorMessage = 'El turno no existe o ya fue cerrado.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      final actingSupervisor =
+          supervisorId ?? await _actingUserId() ?? currentUserId;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final closedCount = (await sessionDao.countClosedSessions()) ?? 0;
+      final zSequence = closedCount + 1;
+
+      final salesTotals = await _computeSalesCashTotals(shift.id);
+      final effectiveExpectedNio = shift.expectedNio + salesTotals.$1;
+      final effectiveExpectedUsd = shift.expectedUsd + salesTotals.$2;
+
+      final diffNio = countedNio - effectiveExpectedNio;
+      final diffUsd = countedUsd - effectiveExpectedUsd;
+
+      final adminNote = notes != null && notes.trim().isNotEmpty
+          ? '[CIERRE ADMINISTRATIVO] Motivo: $trimmedReason - ${notes.trim()}'
+          : '[CIERRE ADMINISTRATIVO] Motivo: $trimmedReason';
+
+      final closedShift = CashierSessionEntity(
+        id: shift.id,
+        userId: shift.userId,
+        cashierName: shift.cashierName,
+        terminalId: shift.terminalId,
+        openedAt: shift.openedAt,
+        tipoModelo: shift.tipoModelo,
+        closedAt: now,
+        openingBalanceNio: shift.openingBalanceNio,
+        openingBalanceUsd: shift.openingBalanceUsd,
+        closingCountedNio: countedNio,
+        closingCountedUsd: countedUsd,
+        expectedNio: effectiveExpectedNio,
+        expectedUsd: effectiveExpectedUsd,
+        differenceNio: diffNio,
+        differenceUsd: diffUsd,
+        zReportSequence: zSequence,
+        isClosed: true,
+        supervisorId: actingSupervisor,
+        notes: adminNote,
+        syncStatus: 'pending',
+      );
+
+      await sessionDao.updateSession(closedShift);
+      _lastClosedShift = closedShift;
+
+      if (_activeShift?.id == shift.id) {
+        _activeShift = null;
+        _movements = [];
+        _salesCashNio = 0.0;
+        _salesCashUsd = 0.0;
+      }
+
+      final audit = auditRepository;
+      if (audit != null) {
+        try {
+          await audit.logForensic(
+            'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT',
+            metodoAutorizacion: 'SUPERVISOR_OVERRIDE',
+            usuarioAutorizadorId: actingSupervisor,
+            metadata: jsonEncode({
+              'action': 'administrative_close_orphan_shift',
+              'shift_id': shift.id,
+              'terminal_id': shift.terminalId,
+              'original_user_id': shift.userId,
+              'supervisor_id': actingSupervisor,
+              'reason': trimmedReason,
+              'counted_nio': countedNio,
+              'counted_usd': countedUsd,
+              'diff_nio': diffNio,
+              'diff_usd': diffUsd,
+              'z_sequence': zSequence,
+            }),
+          );
+        } catch (_) {
+          // Forensic log failure must not crash the completed close
+        }
+      }
+
+      _openTerminalShifts =
+          await sessionDao.getOpenSessionsForTerminal(currentTerminalId);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Error al cerrar turno huérfano: $e';
       _isLoading = false;
       notifyListeners();
       return false;

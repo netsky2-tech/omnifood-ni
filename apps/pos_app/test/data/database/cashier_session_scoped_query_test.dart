@@ -100,4 +100,58 @@ void main() {
         .getActiveSessionForUserAndTerminal('nobody', 'term-9');
     expect(result, isNull);
   });
+
+  test('getOpenSessionsForTerminal returns all open sessions on that terminal regardless of user (issue #940)', () async {
+    // Two different users opened shifts on term-1, one user on term-2, and one closed shift on term-1
+    await database.cashierSessionDao
+        .insertSession(openSession('shift-1', 'cashier-1', 'term-1'));
+    await database.cashierSessionDao
+        .insertSession(openSession('shift-2', 'cashier-2', 'term-1'));
+    await database.cashierSessionDao
+        .insertSession(openSession('shift-3', 'cashier-3', 'term-2'));
+    await database.cashierSessionDao.insertSession(
+      CashierSessionEntity(
+        id: 'shift-closed-1',
+        userId: 'cashier-4',
+        terminalId: 'term-1',
+        openedAt: DateTime.parse('2026-02-01T07:00:00Z').millisecondsSinceEpoch,
+        closedAt: DateTime.parse('2026-02-01T15:00:00Z').millisecondsSinceEpoch,
+        isClosed: true,
+      ),
+    );
+
+    final openOnTerm1 = await database.cashierSessionDao.getOpenSessionsForTerminal('term-1');
+    expect(openOnTerm1, hasLength(2));
+    final ids = openOnTerm1.map((s) => s.id).toList();
+    expect(ids, containsAll(['shift-1', 'shift-2']));
+    expect(ids, isNot(contains('shift-3')));
+    expect(ids, isNot(contains('shift-closed-1')));
+
+    final openOnTerm2 = await database.cashierSessionDao.getOpenSessionsForTerminal('term-2');
+    expect(openOnTerm2, hasLength(1));
+    expect(openOnTerm2.single.id, 'shift-3');
+  });
+
+  test('getAllOpenSessions returns all open sessions across all terminals (issue #940)', () async {
+    await database.cashierSessionDao
+        .insertSession(openSession('shift-1', 'cashier-1', 'term-1'));
+    await database.cashierSessionDao
+        .insertSession(openSession('shift-2', 'cashier-2', 'term-2'));
+    await database.cashierSessionDao.insertSession(
+      CashierSessionEntity(
+        id: 'shift-closed',
+        userId: 'cashier-3',
+        terminalId: 'term-1',
+        openedAt: DateTime.parse('2026-02-01T07:00:00Z').millisecondsSinceEpoch,
+        closedAt: DateTime.parse('2026-02-01T15:00:00Z').millisecondsSinceEpoch,
+        isClosed: true,
+      ),
+    );
+
+    final allOpen = await database.cashierSessionDao.getAllOpenSessions();
+    expect(allOpen, hasLength(2));
+    final ids = allOpen.map((s) => s.id).toList();
+    expect(ids, containsAll(['shift-1', 'shift-2']));
+    expect(ids, isNot(contains('shift-closed')));
+  });
 }

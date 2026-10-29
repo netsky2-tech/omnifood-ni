@@ -5,6 +5,7 @@ import 'cash_shift_view_model.dart';
 import 'widgets/open_shift_dialog.dart';
 import 'widgets/cash_movement_dialog.dart';
 import 'widgets/close_shift_dialog.dart';
+import 'widgets/device_shifts_dialog.dart';
 import 'widgets/z_report_dialog.dart';
 import 'widgets/x_report_dialog.dart';
 import '../../design_system/nhilos_tokens.dart';
@@ -80,6 +81,21 @@ class _CashShiftViewState extends State<CashShiftView> {
         foregroundColor: Colors.white,
         actions: [
           IconButton(
+            icon: Badge(
+              isLabelVisible: vm.hasOrphanShifts,
+              backgroundColor: NhilosColors.warning,
+              child: const Icon(Icons.devices_other),
+            ),
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => ChangeNotifierProvider<CashShiftViewModel>.value(
+                value: vm,
+                child: DeviceShiftsDialog(usersById: _usersById),
+              ),
+            ),
+            tooltip: 'Turnos del Dispositivo',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => vm.init(),
             tooltip: 'Actualizar',
@@ -114,6 +130,65 @@ class _CashShiftViewState extends State<CashShiftView> {
               style: TextStyle(color: NhilosColors.textSecondary),
             ),
             const SizedBox(height: 24),
+            if (vm.hasOrphanShifts) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: NhilosColors.warningLight,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: NhilosColors.warningBorder, width: 1.5),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded,
+                            color: NhilosColors.warning, size: 28),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            '⚠️ Existen ${vm.orphanShifts.length} turno(s) abierto(s) por otro operador en esta terminal',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: NhilosColors.warning,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Un supervisor o encargado debe auditar o cerrar estos turnos huérfanos para liberar el dispositivo y emitir el Corte Z correspondiente.',
+                      style: TextStyle(
+                          fontSize: 13, color: NhilosColors.textPrimary),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) =>
+                            ChangeNotifierProvider<CashShiftViewModel>.value(
+                          value: vm,
+                          child: DeviceShiftsDialog(usersById: _usersById),
+                        ),
+                      ),
+                      icon: const Icon(Icons.devices_other, size: 18),
+                      label: const Text('Gestionar Turnos del Dispositivo'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: NhilosColors.warning,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Wrap(
               spacing: 12,
               runSpacing: 12,
@@ -186,6 +261,63 @@ class _CashShiftViewState extends State<CashShiftView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Orphan shifts on terminal warning banner (issue #940)
+          if (vm.hasOrphanShifts)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NhilosColors.warningLight,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: NhilosColors.warningBorder, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded,
+                      color: NhilosColors.warning, size: 28),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '⚠️ Se detectaron ${vm.orphanShifts.length} turno(s) de otro operador en esta terminal',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: NhilosColors.warning,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const Text(
+                          'Pueden requerir cierre administrativo con motivo para auditoría fiscal.',
+                          style: TextStyle(
+                              fontSize: 12, color: NhilosColors.warning),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) =>
+                          ChangeNotifierProvider<CashShiftViewModel>.value(
+                        value: vm,
+                        child: DeviceShiftsDialog(usersById: _usersById),
+                      ),
+                    ),
+                    icon: const Icon(Icons.devices_other, size: 16),
+                    label: const Text('Auditar Turnos'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: NhilosColors.warning,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Header card
           Card(
             elevation: 2,
