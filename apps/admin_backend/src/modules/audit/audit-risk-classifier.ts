@@ -82,6 +82,9 @@ const ACTION_SEVERITY_TABLE: Readonly<Record<string, AuditSeverity>> = {
   // conscious, recorded abandonment. Fiscal follow-up: the shift still owes
   // its Corte Z, and the reason travels in the metadata.
   SHIFT_ABANDONED_ON_LOGOUT: 'WARNING',
+  // Privileged supervisor action to close an orphaned or stuck cashier session
+  // left behind on a terminal. Critical fiscal event: forces a Corte Z with a reason.
+  ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT: 'CRITICAL',
   // ------------------------------------------------------------------
   // The tenant's SUPERVISION POLICY made the supervisor optional (the
   // owner's decision, 2026-10-20: in a food park there is often nobody

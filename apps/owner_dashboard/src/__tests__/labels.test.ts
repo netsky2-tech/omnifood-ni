@@ -184,6 +184,7 @@ describe("label families — key sets verified against source enums", () => {
         "SELF_AUTHORIZED_MODIFIER_EFFECT_QUANTITY",
         "DRAWER_OPENED_MANUALLY",
         "SHIFT_ABANDONED_ON_LOGOUT",
+        "ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT",
         "REPRINT_REQUESTED",
         "PRINT_PAYLOAD_CORRUPT",
         "SALE_INVENTORY_REMEDIATED",

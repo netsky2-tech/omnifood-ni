@@ -357,6 +357,38 @@ void main() {
     verifyNever(mockSessionDao.insertSession(any));
   });
 
+  test('openSession blocks duplicate shift for same operator and terminal (issue #940)', () async {
+    when(mockAuthRepo.getCurrentUser()).thenAnswer(
+      (_) async => const User(
+        id: 'u-1',
+        name: 'Cashier',
+        role: UserRole.cashier,
+        isActive: true,
+      ),
+    );
+    final existingSession = CashierSessionEntity(
+      id: 'existing-shift-1',
+      userId: 'u-1',
+      terminalId: 'term-1',
+      openedAt: DateTime.now().millisecondsSinceEpoch,
+      tipoModelo: 'CAJA_CENTRAL',
+      openingBalanceNio: 500,
+      openingBalanceUsd: 20,
+      expectedNio: 500,
+      expectedUsd: 20,
+      isClosed: false,
+    );
+    when(mockSessionDao.getActiveSessionForUserAndTerminal('u-1', any))
+        .thenAnswer((_) async => existingSession);
+
+    await viewModel.openSession(300);
+
+    expect(viewModel.errorMessage, 'Ya existe un turno de caja activo en esta terminal.');
+    expect(viewModel.activeSession, isNotNull);
+    expect(viewModel.activeSession!.id, 'existing-shift-1');
+    verifyNever(mockSessionDao.insertSession(any));
+  });
+
   test('finalizeSale in CARTERA_MESERO persists the cash/card split the Z figure aggregates', () async {
     when(mockAuthRepo.getCurrentUser()).thenAnswer(
       (_) async => const User(

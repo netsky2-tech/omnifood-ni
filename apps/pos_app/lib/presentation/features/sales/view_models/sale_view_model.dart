@@ -1832,6 +1832,22 @@ class SaleViewModel extends ChangeNotifier {
       return;
     }
 
+    final effectiveTerminalId =
+        _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01';
+
+    // Issue #940: the duplicate-shift guard is synchronized with
+    // CashShiftViewModel.openShift — an operator cannot open two concurrent
+    // shifts on the same terminal; attempting to do so previously left the
+    // older shift orphaned and invisible.
+    final existing = await _database.cashierSessionDao
+        .getActiveSessionForUserAndTerminal(user.id, effectiveTerminalId);
+    if (existing != null) {
+      _errorMessage = 'Ya existe un turno de caja activo en esta terminal.';
+      _activeSession = SalesMapper.toSessionDomain(existing);
+      notifyListeners();
+      return;
+    }
+
     final session = CashierSession(
       id: const Uuid().v4(),
       userId: user.id,
@@ -1840,7 +1856,7 @@ class SaleViewModel extends ChangeNotifier {
       // getActiveSessionForUserAndTerminal never matches and every cashier
       // void degrades to deniedShiftUnknown. Mirrors the effectiveTerminalId
       // resolution below (and CashShiftViewModel's opener).
-      terminalId: _terminalId.trim().isNotEmpty ? _terminalId.trim() : 'TERM-01',
+      terminalId: effectiveTerminalId,
       openedAt: DateTime.now(),
       tipoModelo: tipoModelo,
       openingBalance: balance,

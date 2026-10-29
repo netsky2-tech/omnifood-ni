@@ -3,10 +3,33 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:pos_app/data/database/app_database.dart';
 import 'package:pos_app/data/models/sales/cashier_session_entity.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/repositories/audit_repository.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/models/sales/payment_entity.dart';
 import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
+
+class FakeAuditRepository implements AuditRepository {
+  final List<Map<String, dynamic>> loggedEvents = [];
+
+  @override
+  Future<void> logForensic(
+    String action, {
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+    String? metadata,
+  }) async {
+    loggedEvents.add({
+      'action': action,
+      'metodoAutorizacion': metodoAutorizacion,
+      'usuarioAutorizadorId': usuarioAutorizadorId,
+      'metadata': metadata,
+    });
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => UnimplementedError();
+}
 
 /// Identity-source fake (issue #552): only [getCurrentUser] matters for the
 /// cash-shift VM; every other repository capability is out of scope here.
@@ -475,6 +498,146 @@ void main() {
       expect(closed.expectedUsd, 50.0);
       expect(closed.differenceNio, 10.0);
       expect(closed.differenceUsd, -2.0);
+    });
+
+    test('init loads openTerminalShifts and flags hasOrphanShifts when another operator has an open shift (issue #940)', () async {
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'orphan-shift-1',
+          userId: 'other-user',
+          cashierName: 'María López',
+          terminalId: 'term-main',
+          openedAt: DateTime.now().subtract(const Duration(hours: 4)).millisecondsSinceEpoch,
+          openingBalanceNio: 800.0,
+          openingBalanceUsd: 10.0,
+          expectedNio: 800.0,
+          expectedUsd: 10.0,
+          isClosed: false,
+        ),
+      );
+
+      await viewModel.init();
+
+      expect(viewModel.hasActiveShift, isFalse);
+      expect(viewModel.openTerminalShifts, hasLength(1));
+      expect(viewModel.hasOrphanShifts, isTrue);
+      expect(viewModel.orphanShifts.first.id, 'orphan-shift-1');
+    });
+
+    test('closeOrphanShift refuses when caller is not an owner or manager (issue #940)', () async {
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'orphan-shift-2',
+          userId: 'other-user',
+          terminalId: 'term-main',
+          openedAt: DateTime.now().millisecondsSinceEpoch,
+          openingBalanceNio: 500.0,
+          openingBalanceUsd: 0.0,
+          expectedNio: 500.0,
+          expectedUsd: 0.0,
+          isClosed: false,
+        ),
+      );
+      await viewModel.init();
+
+      final success = await viewModel.closeOrphanShift(
+        shiftId: 'orphan-shift-2',
+        reason: 'Operador abandonó turno',
+        countedNio: 500.0,
+        countedUsd: 0.0,
+      );
+
+      expect(success, isFalse);
+      expect(viewModel.errorMessage, contains('supervisor o dueño'));
+    });
+
+    test('closeOrphanShift refuses when reason is empty (issue #940)', () async {
+      final managerVm = CashShiftViewModel.fromDatabase(
+        database: database,
+        currentUserId: 'mgr-1',
+        currentUserName: 'Gerente General',
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.manager,
+      );
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'orphan-shift-3',
+          userId: 'other-user',
+          terminalId: 'term-main',
+          openedAt: DateTime.now().millisecondsSinceEpoch,
+          openingBalanceNio: 500.0,
+          openingBalanceUsd: 0.0,
+          expectedNio: 500.0,
+          expectedUsd: 0.0,
+          isClosed: false,
+        ),
+      );
+      await managerVm.init();
+
+      final success = await managerVm.closeOrphanShift(
+        shiftId: 'orphan-shift-3',
+        reason: '   ',
+        countedNio: 500.0,
+        countedUsd: 0.0,
+      );
+
+      expect(success, isFalse);
+      expect(managerVm.errorMessage, contains('motivo'));
+    });
+
+    test('closeOrphanShift successfully closes orphan shift with audit log and Z sequence (issue #940)', () async {
+      final auditRepo = FakeAuditRepository();
+      final managerVm = CashShiftViewModel(
+        sessionDao: database.cashierSessionDao,
+        movementDao: database.cashMovementDao,
+        paymentDao: database.paymentDao,
+        auditRepository: auditRepo,
+        currentUserId: 'mgr-1',
+        currentUserName: 'Gerente General',
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.owner,
+      );
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'orphan-shift-4',
+          userId: 'abandoned-cashier',
+          cashierName: 'Carlos Abandonado',
+          terminalId: 'term-main',
+          openedAt: DateTime.now().subtract(const Duration(hours: 6)).millisecondsSinceEpoch,
+          openingBalanceNio: 1000.0,
+          openingBalanceUsd: 20.0,
+          expectedNio: 1000.0,
+          expectedUsd: 20.0,
+          isClosed: false,
+        ),
+      );
+      await managerVm.init();
+      expect(managerVm.hasOrphanShifts, isTrue);
+
+      final success = await managerVm.closeOrphanShift(
+        shiftId: 'orphan-shift-4',
+        reason: 'Cajero se retiró por emergencia médica',
+        countedNio: 1050.0,
+        countedUsd: 20.0,
+        notes: 'Arqueo realizado en presencia de seguridad',
+      );
+
+      expect(success, isTrue);
+      expect(managerVm.hasOrphanShifts, isFalse);
+
+      final closedInDb = await database.cashierSessionDao.getSessionById('orphan-shift-4');
+      expect(closedInDb, isNotNull);
+      expect(closedInDb!.isClosed, isTrue);
+      expect(closedInDb.closingCountedNio, 1050.0);
+      expect(closedInDb.differenceNio, 50.0);
+      expect(closedInDb.zReportSequence, 1);
+      expect(closedInDb.supervisorId, 'mgr-1');
+      expect(closedInDb.notes, contains('[CIERRE ADMINISTRATIVO]'));
+      expect(closedInDb.notes, contains('Cajero se retiró por emergencia médica'));
+
+      expect(auditRepo.loggedEvents, hasLength(1));
+      expect(auditRepo.loggedEvents.first['action'], 'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT');
+      expect(auditRepo.loggedEvents.first['metadata'], contains('orphan-shift-4'));
     });
   });
 }

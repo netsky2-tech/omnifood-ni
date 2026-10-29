@@ -207,6 +207,7 @@ void main() {
         'SUPERVISOR_OVERRIDE_CLOSE_SESSION',
         'DRAWER_OPENED_MANUALLY',
         'SHIFT_ABANDONED_ON_LOGOUT',
+        'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT',
         'REPRINT_REQUESTED',
         'PRINT_PAYLOAD_CORRUPT',
       ]);
@@ -260,6 +261,13 @@ void main() {
         'justification',
         'shift_id',
         'terminal_id',
+        'original_user_id',
+        'supervisor_id',
+        'counted_nio',
+        'counted_usd',
+        'diff_nio',
+        'diff_usd',
+        'z_sequence',
       ]);
       // Spot checks across every emitting action family.
       expect(localize('invoice_id', kAuditMetadataKeyLabels), 'Factura (ID)');

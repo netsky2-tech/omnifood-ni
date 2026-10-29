@@ -1714,6 +1714,29 @@ class MockCashierSessionDao extends _i1.Mock implements _i30.CashierSessionDao {
       ) as _i53.Future<_i62.CashierSessionEntity?>);
 
   @override
+  _i53.Future<List<_i62.CashierSessionEntity>> getOpenSessionsForTerminal(
+          String? terminalId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getOpenSessionsForTerminal,
+          [terminalId],
+        ),
+        returnValue: _i53.Future<List<_i62.CashierSessionEntity>>.value(
+            <_i62.CashierSessionEntity>[]),
+      ) as _i53.Future<List<_i62.CashierSessionEntity>>);
+
+  @override
+  _i53.Future<List<_i62.CashierSessionEntity>> getAllOpenSessions() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getAllOpenSessions,
+          [],
+        ),
+        returnValue: _i53.Future<List<_i62.CashierSessionEntity>>.value(
+            <_i62.CashierSessionEntity>[]),
+      ) as _i53.Future<List<_i62.CashierSessionEntity>>);
+
+  @override
   _i53.Future<void> insertSession(_i62.CashierSessionEntity? session) =>
       (super.noSuchMethod(
         Invocation.method(

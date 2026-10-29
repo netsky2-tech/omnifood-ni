@@ -366,6 +366,7 @@ const Map<String, String> kAuditLedgerActionLabels = <String, String>{
   'SUPERVISOR_OVERRIDE_CLOSE_SESSION': 'Cierre de sesión autorizado',
   'DRAWER_OPENED_MANUALLY': 'Apertura manual de gaveta',
   'SHIFT_ABANDONED_ON_LOGOUT': 'Abandono de turno al cerrar sesión',
+  'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT': 'Cierre administrativo de turno huérfano',
   'REPRINT_REQUESTED': 'Reimpresión solicitada',
   'PRINT_PAYLOAD_CORRUPT': 'Impresión detenida por datos corruptos',
 };
@@ -501,6 +502,13 @@ const Map<String, String> kAuditMetadataKeyLabels = <String, String>{
   'justification': 'Justificación',
   'shift_id': 'Turno (ID)',
   'terminal_id': 'Terminal (ID)',
+  'original_user_id': 'Operador original (ID)',
+  'supervisor_id': 'Supervisor (ID)',
+  'counted_nio': 'Efectivo contado (C\$)',
+  'counted_usd': 'Efectivo contado (\$ USD)',
+  'diff_nio': 'Diferencia (C\$)',
+  'diff_usd': 'Diferencia (\$ USD)',
+  'z_sequence': 'Consecutivo Corte Z',
 };
 
 /// Registry of every exported label family. The regression guard walks this
