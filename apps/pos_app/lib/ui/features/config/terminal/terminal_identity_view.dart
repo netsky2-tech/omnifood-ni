@@ -4,6 +4,7 @@ import 'package:pos_app/data/services/api_base_url_service.dart';
 import 'package:pos_app/domain/services/update/ota_discovery_service.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:provider/provider.dart';
+import '../../../design_system/nhilos_tokens.dart';
 
 import 'terminal_identity_view_model.dart';
 import 'widgets/ota_update_card.dart';
@@ -463,22 +464,22 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                   key: const Key('server_staging_warning'),
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.orange.shade300),
+                    color: NhilosColors.warningLight,
+                    borderRadius: NhilosRadii.buttonRadius,
+                    border: Border.all(color: NhilosColors.warningBorder),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
                       Icon(Icons.warning_amber_rounded,
-                          size: 18, color: Colors.orange.shade900),
-                      const SizedBox(width: 8),
+                          size: 18, color: NhilosColors.warning),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Terminal conectada al entorno de pruebas (staging). '
                           'Las ventas no se sincronizarán con el servidor oficial de producción.',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.orange.shade900,
+                            color: NhilosColors.warning,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -581,30 +582,34 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
   }
 
   Widget _buildEnvironmentBadge(ApiBaseUrlEnvironment env) {
-    final (label, icon, color, bgColor) = switch (env) {
+    final (label, icon, color, bgColor, borderColor) = switch (env) {
       ApiBaseUrlEnvironment.production => (
           'PRODUCCIÓN',
           Icons.check_circle_outline,
-          Colors.green.shade800,
-          Colors.green.shade50,
+          NhilosColors.success,
+          NhilosColors.successLight,
+          NhilosColors.successBorder,
         ),
       ApiBaseUrlEnvironment.staging => (
           'STAGING / PRUEBAS',
           Icons.science_outlined,
-          Colors.orange.shade900,
-          Colors.orange.shade50,
+          NhilosColors.warning,
+          NhilosColors.warningLight,
+          NhilosColors.warningBorder,
         ),
       ApiBaseUrlEnvironment.custom => (
           'PERSONALIZADO / LAN',
           Icons.tune,
-          Colors.blue.shade800,
-          Colors.blue.shade50,
+          NhilosColors.brandPrimary,
+          NhilosColors.brandTealLight,
+          NhilosColors.brandPrimary.withOpacity(0.3),
         ),
       ApiBaseUrlEnvironment.unconfigured => (
           'SIN CONFIGURAR',
           Icons.cloud_off,
-          Colors.red.shade800,
-          Colors.red.shade50,
+          NhilosColors.danger,
+          NhilosColors.dangerLight,
+          NhilosColors.dangerBorder,
         ),
     };
 
@@ -613,8 +618,8 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.4)),
+        borderRadius: NhilosRadii.chipRadius,
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../design_system/nhilos_tokens.dart';
 import '../viewmodels/login_viewmodel.dart';
 
 class LoginView extends StatefulWidget {
@@ -84,23 +85,23 @@ class _LoginViewState extends State<LoginView> {
                         key: const Key('login_unconfigured_server_card'),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.orange.shade300),
+                          color: NhilosColors.warningLight,
+                          borderRadius: NhilosRadii.cardRadius,
+                          border: Border.all(color: NhilosColors.warningBorder),
                         ),
                         child: Column(
                           children: [
-                            Row(
+                            const Row(
                               children: [
                                 Icon(Icons.cloud_off,
-                                    size: 20, color: Colors.orange.shade900),
-                                const SizedBox(width: 8),
+                                    size: 20, color: NhilosColors.warning),
+                                SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     'Servidor no configurado',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade900,
+                                      color: NhilosColors.warning,
                                     ),
                                   ),
                                 ),
@@ -109,19 +110,28 @@ class _LoginViewState extends State<LoginView> {
                             const SizedBox(height: 6),
                             Text(
                               viewModel.error!,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 13,
-                                color: Colors.orange.shade900,
+                                color: NhilosColors.warning,
                               ),
                               textAlign: TextAlign.left,
                             ),
                             const SizedBox(height: 10),
                             OutlinedButton.icon(
                               key: const Key('login_open_server_config_button'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: NhilosColors.brandPrimary,
+                                side: const BorderSide(
+                                    color: NhilosColors.brandPrimary),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: NhilosRadii.buttonRadius,
+                                ),
+                              ),
                               icon: const Icon(Icons.settings, size: 16),
                               label: const Text('Configurar Servidor'),
                               onPressed: () {
-                                Navigator.pushNamed(context, '/config/terminal');
+                                Navigator.pushNamed(
+                                    context, '/config/terminal');
                               },
                             ),
                           ],
