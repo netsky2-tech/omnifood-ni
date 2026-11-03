@@ -339,6 +339,45 @@ fi
 printf '%s\n' "${FLEET_API_OUTPUT}" | grep -q -- "api_url: provisioned-at-runtime" || { echo "❌ FAILED: fleet --plan must report api_url as provisioned-at-runtime"; echo "${FLEET_API_OUTPUT}"; rm -rf "${SHIM_DIR}"; exit 1; }
 echo "✅ [Test 15 Passed] Fleet builds bake no API_URL define and report provisioned-at-runtime."
 
+# Test 15b: --preset production and staging bake the corresponding API_URL and record api_preset
+echo "🔍 [Test 15b] Verifying --preset production and staging bake defines and record api_preset..."
+PROD_PRESET_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --preset production 2>&1)" || PROD_PRESET_RC=$?
+if ! printf '%s\n' "${PROD_PRESET_OUTPUT}" | grep -q -- "--dart-define=API_URL=https://api.nhilospos.com/api"; then
+    echo "❌ FAILED: --preset production must bake --dart-define=API_URL=https://api.nhilospos.com/api" >&2
+    echo "${PROD_PRESET_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${PROD_PRESET_OUTPUT}" | grep -q -- "api_preset: production"; then
+    echo "❌ FAILED: --preset production must record api_preset: production" >&2
+    echo "${PROD_PRESET_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+
+STAGING_PRESET_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --preset staging 2>&1)" || STAGING_PRESET_RC=$?
+if ! printf '%s\n' "${STAGING_PRESET_OUTPUT}" | grep -q -- "--dart-define=API_URL=https://api-staging.nhilospos.com/api"; then
+    echo "❌ FAILED: --preset staging must bake --dart-define=API_URL=https://api-staging.nhilospos.com/api" >&2
+    echo "${STAGING_PRESET_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+if ! printf '%s\n' "${STAGING_PRESET_OUTPUT}" | grep -q -- "api_preset: staging"; then
+    echo "❌ FAILED: --preset staging must record api_preset: staging" >&2
+    echo "${STAGING_PRESET_OUTPUT}" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+
+BAD_PRESET_RC=0
+BAD_PRESET_OUTPUT="$(PATH="${SHIM_DIR}:${PATH}" "${SCRIPT_DIR}/build_pos_apk.sh" --plan --preset invalid_env 2>&1)" || BAD_PRESET_RC=$?
+if [ "${BAD_PRESET_RC}" -eq 0 ]; then
+    echo "❌ FAILED: --preset invalid_env must fail with non-zero exit code" >&2
+    rm -rf "${SHIM_DIR}"
+    exit 1
+fi
+echo "✅ [Test 15b Passed] --preset production and staging bake correct defines, report api_preset, and reject invalid presets."
+
 # Test 16: --test-concurrency is accepted, shown on the flutter test command
 # line in --plan, and recorded in the manifest.
 echo "🔍 [Test 16] Verifying --test-concurrency resolves and appears in the plan..."
@@ -450,10 +489,22 @@ echo "✅ [Test 19 Passed] release_manifest.json records the resolved test concu
 
 # -----------------------------------------------------------------------------
 # Cheap release-signing tests (20-23): no Flutter / Android SDK required.
-# There is no release keystore in the repository, so the fail-closed gate and
-# the plan-mode signing report are exercised with the failing flutter shim,
-# proving the gate fires before the toolchain is ever invoked.
+# If a custody key.properties exists on the development host, back it up
+# temporarily so tests 20-23 exercise the absent state, then restore it.
 # -----------------------------------------------------------------------------
+ORIGINAL_KEY_PROPERTIES="${POS_APP_DIR}/android/key.properties"
+ORIGINAL_KP_BACKUP=""
+if [ -e "${ORIGINAL_KEY_PROPERTIES}" ]; then
+    ORIGINAL_KP_BACKUP="${SHIM_DIR}/original_key_properties.bak"
+    mv "${ORIGINAL_KEY_PROPERTIES}" "${ORIGINAL_KP_BACKUP}"
+fi
+restore_original_key_properties() {
+    if [ -n "${ORIGINAL_KP_BACKUP}" ] && [ -e "${ORIGINAL_KP_BACKUP}" ]; then
+        mv "${ORIGINAL_KP_BACKUP}" "${ORIGINAL_KEY_PROPERTIES}"
+        ORIGINAL_KP_BACKUP=""
+    fi
+}
+trap restore_original_key_properties EXIT
 
 # Test 20: a real build without a keystore and without the opt-in fails closed
 # with exit code 2 and an actionable message, before the Flutter toolchain runs.
@@ -539,11 +590,13 @@ echo "✅ [Test 23 Passed] --help documents --allow-debug-signing."
 # skipped rather than risking an operator's real custody configuration.
 # -----------------------------------------------------------------------------
 KP_GATE_FILE="${POS_APP_DIR}/android/key.properties"
+restore_original_key_properties
 KP_GATE_WROTE=0
 cleanup_kp_gate() {
     if [ "${KP_GATE_WROTE}" = "1" ]; then
         rm -f "${KP_GATE_FILE}"
     fi
+    restore_original_key_properties
 }
 trap cleanup_kp_gate EXIT
 

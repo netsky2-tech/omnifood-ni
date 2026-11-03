@@ -121,6 +121,21 @@ POST /api/onboarding/menu-import/commit
 
 ## 6. Fase 4: Despliegue en Hardware (MIRAY Q80 / iPOS)
 
+### Paso 0: Verificación del Artefacto y Backend Destino
+Antes de instalar el APK, se debe verificar en `release_manifest.json` a qué backend apunta el artefacto:
+
+```bash
+cat dist/release_candidate/release_manifest.json | grep -E 'api_url|api_preset'
+```
+
+- **Artefacto de Producción Oficial:** Debe reportar `"api_preset": "production"` y `"api_url": "https://api.nhilospos.com/api"`.
+  - Para generar un release con este preset horneado:
+    ```bash
+    ./scripts/build_pos_apk.sh --split-per-abi --preset production
+    ```
+- **Artefacto de Flota Genérico (sin define horneado):** Reportará `"api_url": "provisioned-at-runtime"`.
+  - En este caso, el backend debe aprovisionarse en el terminal antes de la vinculación (ver *Paso 3b* abajo).
+
 ### Paso 1: Instalación del Release Candidate APK
 1. Conectar el terminal MIRAY Q80 por cable USB a la estación de trabajo.
 2. Habilitar *Depuración por USB* en Android 12 (`Ajustes > Opciones de desarrollador`).
@@ -148,9 +163,16 @@ POST /api/devices/pairing-codes
 
 ### Paso 3: Vinculación y Activación en Terminal
 1. Abrir la aplicación **NHILOS POS** en la MIRAY Q80.
-2. En la pantalla inicial de bienvenida, ingresar el código de vinculación (`123-456`).
-3. El terminal descargará sus llaves criptográficas locales, el catálogo de 58 productos y la configuración fiscal.
-4. El terminal ejecutará automáticamente el runner de venta controlada de activación (`activation_controlled_sale_runner.dart`), emitiendo el comprobante de prueba inicial.
+2. En la pantalla inicial de bienvenida (`Vincular Terminal`):
+   - Si el APK tiene el preset de producción horneado (recomendado): ingresar el código de vinculación (`123-456`) directamente.
+   - **Caso APK sin define (Flota genérica):**
+     1. Si el terminal muestra el aviso `Servidor no configurado`, pulsar el botón de ajustes en la barra superior o `Configurar Servidor`.
+     2. En la pantalla *Identidad de la Terminal > Servidor del Backend*, pulsar el chip `[Producción]` (`https://api.nhilospos.com/api`) y presionar `[Guardar]`.
+     3. Reiniciar la aplicación para aplicar el backend.
+     4. Verificar que en la pantalla de identidad se visualice el badge verde `PRODUCCIÓN` (y nunca `STAGING / PRUEBAS`).
+3. Ingresar el código de vinculación (`123-456`).
+4. El terminal descargará sus llaves criptográficas locales, el catálogo de 58 productos y la configuración fiscal.
+5. El terminal ejecutará automáticamente el runner de venta controlada de activación (`activation_controlled_sale_runner.dart`), emitiendo el comprobante de prueba inicial.
 
 ---
 

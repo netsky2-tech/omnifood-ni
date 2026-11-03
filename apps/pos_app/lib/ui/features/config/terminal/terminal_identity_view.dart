@@ -407,10 +407,18 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Servidor del Backend',
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Servidor del Backend',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (resolution != null)
+                  _buildEnvironmentBadge(resolution.environment),
+              ],
             ),
             const SizedBox(height: 8),
             Text(
@@ -449,6 +457,37 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
                 ],
               ),
               const SizedBox(height: 4),
+              if (resolution.environment == ApiBaseUrlEnvironment.staging) ...[
+                const SizedBox(height: 4),
+                Container(
+                  key: const Key('server_staging_warning'),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.orange.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded,
+                          size: 18, color: Colors.orange.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Terminal conectada al entorno de pruebas (staging). '
+                          'Las ventas no se sincronizarán con el servidor oficial de producción.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange.shade900,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 4),
+              ],
             ],
             if (sourceLabel != null)
               Text(
@@ -537,6 +576,61 @@ class _ServerConfigCardState extends State<_ServerConfigCard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEnvironmentBadge(ApiBaseUrlEnvironment env) {
+    final (label, icon, color, bgColor) = switch (env) {
+      ApiBaseUrlEnvironment.production => (
+          'PRODUCCIÓN',
+          Icons.check_circle_outline,
+          Colors.green.shade800,
+          Colors.green.shade50,
+        ),
+      ApiBaseUrlEnvironment.staging => (
+          'STAGING / PRUEBAS',
+          Icons.science_outlined,
+          Colors.orange.shade900,
+          Colors.orange.shade50,
+        ),
+      ApiBaseUrlEnvironment.custom => (
+          'PERSONALIZADO / LAN',
+          Icons.tune,
+          Colors.blue.shade800,
+          Colors.blue.shade50,
+        ),
+      ApiBaseUrlEnvironment.unconfigured => (
+          'SIN CONFIGURAR',
+          Icons.cloud_off,
+          Colors.red.shade800,
+          Colors.red.shade50,
+        ),
+    };
+
+    return Container(
+      key: const Key('server_environment_badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
