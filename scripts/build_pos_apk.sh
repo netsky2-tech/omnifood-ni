@@ -29,6 +29,9 @@ RUN_CODEGEN=false
 OUT_DIR="${DEFAULT_OUT_DIR}"
 DEVICE_ID=""
 API_URL=""
+PRODUCTION_API_URL="https://api.nhilospos.com/api"
+STAGING_API_URL="https://api-staging.nhilospos.com/api"
+API_PRESET="provisioned-at-runtime"
 TEST_CONCURRENCY=""
 PILOT_MODE=false
 PLAN_ONLY=false
@@ -67,6 +70,25 @@ validate_device_id() {
     DEVICE_ID="${id}"
 }
 
+# Validate a --preset candidate: production or staging.
+validate_preset() {
+    local raw="$1"
+    case "${raw}" in
+        production|prod)
+            API_URL="${PRODUCTION_API_URL}"
+            API_PRESET="production"
+            ;;
+        staging)
+            API_URL="${STAGING_API_URL}"
+            API_PRESET="staging"
+            ;;
+        *)
+            echo "Invalid --preset: '${raw}' is not supported. Use 'production' or 'staging'." >&2
+            exit 1
+            ;;
+    esac
+}
+
 # Validate an --api-url candidate: absolute http:// or https:// URL with no
 # whitespace and a non-empty host. Plain http:// is only accepted for LAN
 # hosts (private IPs, loopback, single-label names, .local/.lan/.internal):
@@ -78,6 +100,15 @@ validate_api_url() {
     if [ -z "${raw}" ]; then
         echo "Invalid --api-url: value is empty." >&2
         exit 1
+    fi
+    if [ "${raw}" = "production" ] || [ "${raw}" = "prod" ]; then
+        API_URL="${PRODUCTION_API_URL}"
+        API_PRESET="production"
+        return
+    elif [ "${raw}" = "staging" ]; then
+        API_URL="${STAGING_API_URL}"
+        API_PRESET="staging"
+        return
     fi
     if printf '%s' "${raw}" | grep -q '[[:space:]]'; then
         echo "Invalid --api-url: '${raw}' contains whitespace." >&2
@@ -98,6 +129,13 @@ validate_api_url() {
         fi
     fi
     API_URL="${raw}"
+    if [ "${raw}" = "${PRODUCTION_API_URL}" ]; then
+        API_PRESET="production"
+    elif [ "${raw}" = "${STAGING_API_URL}" ]; then
+        API_PRESET="staging"
+    else
+        API_PRESET="custom"
+    fi
 }
 
 # LAN host test mirroring `isLanHost` in
@@ -212,6 +250,14 @@ while [[ $# -gt 0 ]]; do
             validate_api_url "$2"
             shift 2
             ;;
+        --preset)
+            if [ "$#" -lt 2 ]; then
+                echo "Invalid --preset: missing required value." >&2
+                exit 1
+            fi
+            validate_preset "$2"
+            shift 2
+            ;;
         --test-concurrency)
             if [ "$#" -lt 2 ]; then
                 echo "Invalid --test-concurrency: missing required value." >&2
@@ -242,12 +288,15 @@ while [[ $# -gt 0 ]]; do
             echo "                    --dart-define=DEVICE_ID (trimmed, no whitespace, max 64 chars)"
             echo "  --api-url <url>   Backend base URL baked into the APK via"
             echo "                    --dart-define=API_URL (absolute http:// or https:// URL,"
-            echo "                    no whitespace, non-empty host). REQUIRED for --pilot;"
-            echo "                    fleet builds omit it: the app resolves the backend at"
-            echo "                    runtime from the device's persisted api_base_url config,"
-            echo "                    falling back to this define. A fleet build with neither is"
-            echo "                    UNCONFIGURED (the app reports it as such; it never uses"
+            echo "                    no whitespace, non-empty host, or preset 'production'/'staging')."
+            echo "                    REQUIRED for --pilot; fleet builds omit it: the app resolves"
+            echo "                    the backend at runtime from the device's persisted api_base_url"
+            echo "                    config, falling back to this define. A fleet build with neither"
+            echo "                    is UNCONFIGURED (the app reports it as such; it never uses"
             echo "                    localhost as a configured backend)"
+            echo "  --preset <preset> Shorthand to bake official preset URL: 'production'"
+            echo "                    (${PRODUCTION_API_URL}) or 'staging'"
+            echo "                    (${STAGING_API_URL})"
             echo "  --pilot           Pilot/single-terminal build; REQUIRES --device-id and --api-url"
             echo "  --allow-debug-signing"
             echo "                    Allow a release build without a release keystore to fall"
@@ -353,7 +402,7 @@ if [ "${PLAN_ONLY}" = true ]; then
     if [ -z "${DEVICE_ID}" ]; then
         echo "   (fleet build: no DEVICE_ID dart-define is baked; terminal is provisioned at runtime)"
     fi
-    echo "🌐 API URL:             ${API_URL_BINDING}"
+    echo "🌐 API URL:             ${API_URL_BINDING} [preset: ${API_PRESET}]"
     if [ -z "${API_URL}" ]; then
         echo "   (fleet build: no API_URL dart-define is baked; the app resolves the"
         echo "    backend at runtime from the device's persisted api_base_url config,"
@@ -370,6 +419,7 @@ if [ "${PLAN_ONLY}" = true ]; then
     fi
     echo "📋 release_manifest.json would record terminal_identity: ${TERMINAL_ID_BINDING}"
     echo "📋 release_manifest.json would record api_url: ${API_URL_BINDING}"
+    echo "📋 release_manifest.json would record api_preset: ${API_PRESET}"
     echo "📋 release_manifest.json would record test_concurrency: ${TEST_CONCURRENCY_BINDING}"
     echo "------------------------------------------------------------------------------"
     if [ "${RUN_TESTS}" = true ]; then
@@ -522,6 +572,7 @@ cat <<EOF > release_manifest.json
   "build_timestamp": "${BUILD_TIMESTAMP}",
   "terminal_identity": "${TERMINAL_ID_BINDING}",
   "api_url": "${API_URL_BINDING}",
+  "api_preset": "${API_PRESET}",
   "test_concurrency": "${TEST_CONCURRENCY_BINDING}",
   "artifacts": [
 EOF

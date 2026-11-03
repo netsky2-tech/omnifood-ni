@@ -289,5 +289,34 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets('renders PRODUCCIÓN badge when URL matches production',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        buildTimeApiUrl: 'https://api.nhilospos.com/api',
+      );
+      expect(find.byKey(const Key('server_environment_badge')), findsOneWidget);
+      expect(find.text('PRODUCCIÓN'), findsOneWidget);
+      expect(find.byKey(const Key('server_staging_warning')), findsNothing);
+    });
+
+    testWidgets('renders STAGING badge and warning when URL matches staging',
+        (tester) async {
+      await pumpScreen(
+        tester,
+        buildTimeApiUrl: 'https://api-staging.nhilospos.com/api',
+      );
+      expect(find.byKey(const Key('server_environment_badge')), findsOneWidget);
+      expect(find.text('STAGING / PRUEBAS'), findsOneWidget);
+      expect(find.byKey(const Key('server_staging_warning')), findsOneWidget);
+    });
+
+    testWidgets('renders SIN CONFIGURAR badge when unconfigured in release',
+        (tester) async {
+      await pumpScreen(tester, isReleaseMode: true);
+      expect(find.byKey(const Key('server_environment_badge')), findsOneWidget);
+      expect(find.text('SIN CONFIGURAR'), findsOneWidget);
+    });
   });
 }

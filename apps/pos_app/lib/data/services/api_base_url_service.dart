@@ -20,6 +20,21 @@ enum ApiBaseUrlSource {
   unconfigured,
 }
 
+/// Target environment classified from the resolved URL.
+enum ApiBaseUrlEnvironment {
+  /// Official production API (`https://api.nhilospos.com/api`).
+  production,
+
+  /// Staging / test API (`https://api-staging.nhilospos.com/api`).
+  staging,
+
+  /// Custom or local network URL.
+  custom,
+
+  /// Transport has no configured backend.
+  unconfigured,
+}
+
 /// Resolved backend URL plus the provenance of the resolution. The source is
 /// part of the contract so the configuration UI can report which value is in
 /// force instead of guessing.
@@ -43,6 +58,32 @@ class ApiBaseUrlResolution {
   final ApiBaseUrlSource source;
 
   bool get isConfigured => url != null;
+
+  /// Target environment classified from [url].
+  ApiBaseUrlEnvironment get environment {
+    if (url == null || url!.trim().isEmpty) {
+      return ApiBaseUrlEnvironment.unconfigured;
+    }
+    final normalized = url!.trim().replaceAll(RegExp(r'/+$'), '');
+    final prodNormalized =
+        ApiBaseUrlService.productionUrl.replaceAll(RegExp(r'/+$'), '');
+    final stagNormalized =
+        ApiBaseUrlService.stagingUrl.replaceAll(RegExp(r'/+$'), '');
+
+    if (normalized == prodNormalized) {
+      return ApiBaseUrlEnvironment.production;
+    }
+    if (normalized == stagNormalized) {
+      return ApiBaseUrlEnvironment.staging;
+    }
+    return ApiBaseUrlEnvironment.custom;
+  }
+
+  /// Whether the effective URL targets official production.
+  bool get isProduction => environment == ApiBaseUrlEnvironment.production;
+
+  /// Whether the effective URL targets staging.
+  bool get isStaging => environment == ApiBaseUrlEnvironment.staging;
 }
 
 /// Why a backend URL was rejected. A structured code, so an operator-facing
@@ -173,6 +214,12 @@ class ApiBaseUrlService {
   /// Development fallback. Debug builds only; never presented as a configured
   /// backend in release.
   static const developmentDefaultUrl = 'http://127.0.0.1:3000/api';
+
+  /// Official production backend URL.
+  static const productionUrl = 'https://api.nhilospos.com/api';
+
+  /// Staging / test backend URL.
+  static const stagingUrl = 'https://api-staging.nhilospos.com/api';
 
   final LocalConfigDao _configDao;
   final bool _isReleaseMode;

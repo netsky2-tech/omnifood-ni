@@ -98,6 +98,15 @@ class TerminalIdentityViewModel extends ChangeNotifier {
   /// report verbatim. `null` only before the first load completes.
   ApiBaseUrlResolution? get serverResolution => _serverResolution;
 
+  /// Effective environment (production, staging, custom, unconfigured) or null.
+  ApiBaseUrlEnvironment? get serverEnvironment => _serverResolution?.environment;
+
+  /// Whether the effective server URL targets the official production environment.
+  bool get isProductionServer => _serverResolution?.isProduction ?? false;
+
+  /// Whether the effective server URL targets staging.
+  bool get isStagingServer => _serverResolution?.isStaging ?? false;
+
   /// Effective backend URL, or `null` when the transport is unconfigured.
   String? get effectiveServerUrl => _serverResolution?.url;
 

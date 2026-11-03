@@ -288,8 +288,10 @@ class AuthRepositoryImpl implements AuthRepository {
 
       final localUser = await _findLocalUserByIdentifier(email);
       if (localUser == null) {
-        _lastAuthError =
-            'Sin conexión al servidor y usuario no encontrado localmente.';
+        if (!isUnconfigured) {
+          _lastAuthError =
+              'Sin conexión al servidor y usuario no encontrado localmente.';
+        }
         debugPrint(
           '[AuthRepository] Offline fallback denied: unknown local user',
         );
@@ -302,8 +304,10 @@ class AuthRepositoryImpl implements AuthRepository {
           !profile.isPinEnabled ||
           pinHash == null ||
           pinHash.isEmpty) {
-        _lastAuthError =
-            'Perfil de seguridad local no disponible para este usuario.';
+        if (!isUnconfigured) {
+          _lastAuthError =
+              'Perfil de seguridad local no disponible para este usuario.';
+        }
         debugPrint(
           '[AuthRepository] Offline fallback denied: missing local security profile',
         );

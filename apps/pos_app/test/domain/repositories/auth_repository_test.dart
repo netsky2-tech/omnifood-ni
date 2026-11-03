@@ -60,7 +60,8 @@ void main() {
 
     expect(user, isNull);
     expect(repository.lastAuthError,
-        'Sin conexión al servidor y usuario no encontrado localmente.');
+        'Esta terminal no tiene un servidor configurado. '
+        'El inicio de sesión en línea no está disponible.');
   });
 
   test('loginOnline keeps network/offline-fallback copy for a genuine '

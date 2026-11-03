@@ -498,4 +498,34 @@ void main() {
       );
     });
   });
+
+  group('ApiBaseUrlResolution environment classification (Issue #941)', () {
+    test('classifies official production URL correctly', () {
+      const res = ApiBaseUrlResolution.buildDefine('https://api.nhilospos.com/api');
+      expect(res.environment, ApiBaseUrlEnvironment.production);
+      expect(res.isProduction, isTrue);
+      expect(res.isStaging, isFalse);
+    });
+
+    test('classifies staging URL correctly', () {
+      const res = ApiBaseUrlResolution.persisted('https://api-staging.nhilospos.com/api');
+      expect(res.environment, ApiBaseUrlEnvironment.staging);
+      expect(res.isProduction, isFalse);
+      expect(res.isStaging, isTrue);
+    });
+
+    test('classifies custom URL correctly', () {
+      const res = ApiBaseUrlResolution.developmentDefault('http://192.168.1.100:3000/api');
+      expect(res.environment, ApiBaseUrlEnvironment.custom);
+      expect(res.isProduction, isFalse);
+      expect(res.isStaging, isFalse);
+    });
+
+    test('classifies unconfigured resolution correctly', () {
+      const res = ApiBaseUrlResolution.unconfigured();
+      expect(res.environment, ApiBaseUrlEnvironment.unconfigured);
+      expect(res.isProduction, isFalse);
+      expect(res.isStaging, isFalse);
+    });
+  });
 }

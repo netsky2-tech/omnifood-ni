@@ -21,8 +21,23 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
   Widget build(BuildContext context) {
     final viewModel = context.watch<LinkTerminalViewModel>();
     final textTheme = Theme.of(context).textTheme;
+    final isUnconfigured = viewModel.error != null &&
+        (viewModel.error!.contains('servidor configurado') ||
+            viewModel.error!.contains('no tiene un servidor'));
 
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            key: const Key('terminal_config_button'),
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Ajustes Técnicos / Servidor',
+            onPressed: () => Navigator.pushNamed(context, '/config/terminal'),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -89,12 +104,62 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
                   ),
                   if (viewModel.error != null) ...[
                     const SizedBox(height: 16),
-                    Text(
-                      viewModel.error!,
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error),
-                      textAlign: TextAlign.center,
-                    ),
+                    if (isUnconfigured) ...[
+                      Container(
+                        key: const Key('unconfigured_server_card'),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade300),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.cloud_off,
+                                    size: 20, color: Colors.orange.shade900),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Servidor no configurado',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.orange.shade900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              viewModel.error!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.orange.shade900,
+                              ),
+                              textAlign: TextAlign.left,
+                            ),
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              key: const Key('open_server_config_button'),
+                              icon: const Icon(Icons.settings, size: 16),
+                              label: const Text('Configurar Servidor'),
+                              onPressed: () {
+                                Navigator.pushNamed(context, '/config/terminal');
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        viewModel.error!,
+                        style: TextStyle(
+                            color: Theme.of(context).colorScheme.error),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 28),
                   ElevatedButton(
