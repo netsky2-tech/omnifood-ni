@@ -214,5 +214,82 @@ void main() {
       );
       expect(find.text('Gestionar Turnos del Dispositivo'), findsOneWidget);
     });
+
+    testWidgets(
+        'DeviceShiftsDialog displays bulk sanitization button when multiple orphans exist and validates reason',
+        (tester) async {
+      final o1 = CashierSessionEntity(
+        id: 'shift-o1',
+        userId: 'user-a',
+        cashierName: 'Cajero A',
+        terminalId: 'term-main',
+        openedAt: 1715900000000,
+        openingBalanceNio: 500.0,
+        expectedNio: 500.0,
+        isClosed: false,
+      );
+      final o2 = CashierSessionEntity(
+        id: 'shift-o2',
+        userId: 'user-b',
+        cashierName: 'Cajero B',
+        terminalId: 'term-main',
+        openedAt: 1715900000100,
+        openingBalanceNio: 800.0,
+        expectedNio: 800.0,
+        isClosed: false,
+      );
+
+      when(() => mockSessionDao.getActiveSessionForUserAndTerminal(any(), any()))
+          .thenAnswer((_) async => null);
+      when(() => mockSessionDao.getOpenSessionsForTerminal('term-main'))
+          .thenAnswer((_) async => [o1, o2]);
+      when(() => mockSessionDao.countClosedSessions())
+          .thenAnswer((_) async => 0);
+      when(() => mockSessionDao.updateSession(any()))
+          .thenAnswer((_) async {});
+
+      await viewModel.init();
+
+      await tester.pumpWidget(
+        buildTestableWidget(
+          const DeviceShiftsDialog(usersById: {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Bulk sanitization banner visible
+      expect(find.byKey(const Key('bulk_sanitize_orphan_shifts_button')), findsOneWidget);
+      expect(find.textContaining('Se detectaron 2 turnos huérfanos históricos'), findsOneWidget);
+
+      // Tap bulk sanitization button
+      await tester.tap(find.byKey(const Key('bulk_sanitize_orphan_shifts_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saneamiento Masivo de Turnos'), findsOneWidget);
+      expect(find.text('Turnos huérfanos a sanear: 2'), findsOneWidget);
+
+      // Attempt submit without reason -> validation error
+      await tester.tap(find.byKey(const Key('bulk_sanitize_confirm_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('El motivo es obligatorio para registrar el saneamiento.'), findsOneWidget);
+
+      // Short reason (< 4 chars) -> validation error
+      await tester.enterText(find.byKey(const Key('bulk_sanitize_reason_input')), 'fin');
+      await tester.tap(find.byKey(const Key('bulk_sanitize_confirm_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ingrese un motivo descriptivo (mínimo 4 caracteres).'), findsOneWidget);
+
+      // Valid reason
+      await tester.enterText(
+        find.byKey(const Key('bulk_sanitize_reason_input')),
+        'Limpieza de turnos huérfanos terminal Soho',
+      );
+      await tester.tap(find.byKey(const Key('bulk_sanitize_confirm_button')));
+      await tester.pumpAndSettle();
+
+      verify(() => mockSessionDao.updateSession(any())).called(2);
+    });
   });
 }

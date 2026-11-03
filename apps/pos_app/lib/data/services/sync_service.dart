@@ -1497,7 +1497,10 @@ class SyncService {
     CashierSessionEntity session,
     Map<String, String> userNamesById,
   ) async {
-    final cashierName = userNamesById[session.userId];
+    final cashierName =
+        (session.cashierName != null && session.cashierName!.trim().isNotEmpty)
+            ? session.cashierName!.trim()
+            : userNamesById[session.userId];
     final payload = {
       'id': session.id,
       'terminalId': session.terminalId,
@@ -1577,6 +1580,7 @@ class SyncService {
     return CashierSessionEntity(
       id: session.id,
       userId: session.userId,
+      cashierName: session.cashierName,
       terminalId: session.terminalId,
       openedAt: session.openedAt,
       tipoModelo: session.tipoModelo,

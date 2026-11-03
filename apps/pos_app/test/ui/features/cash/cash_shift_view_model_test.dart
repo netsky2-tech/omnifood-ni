@@ -639,5 +639,110 @@ void main() {
       expect(auditRepo.loggedEvents.first['action'], 'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT');
       expect(auditRepo.loggedEvents.first['metadata'], contains('orphan-shift-4'));
     });
+
+    test('sanitizeAllOrphanShifts bulk closes orphans, preserves active shift, is idempotent (issue #943)', () async {
+      final auditRepo = FakeAuditRepository();
+      final ownerVm = CashShiftViewModel(
+        sessionDao: database.cashierSessionDao,
+        movementDao: database.cashMovementDao,
+        paymentDao: database.paymentDao,
+        auditRepository: auditRepo,
+        currentUserId: 'owner-1',
+        currentUserName: 'Dueño Soho',
+        currentTerminalId: 'term-main',
+        currentUserRole: UserRole.owner,
+      );
+
+      // Seed 1 active shift for current user and 3 historical orphan shifts
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'active-shift-owner',
+          userId: 'owner-1',
+          terminalId: 'term-main',
+          openedAt: now - 1000,
+          openingBalanceNio: 2000.0,
+          openingBalanceUsd: 50.0,
+          expectedNio: 2000.0,
+          expectedUsd: 50.0,
+          isClosed: false,
+        ),
+      );
+
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'orphan-1',
+          userId: 'cajero-antiguo-1',
+          cashierName: 'Juan Pérez',
+          terminalId: 'term-main',
+          openedAt: now - 3600000 * 48,
+          openingBalanceNio: 500.0,
+          expectedNio: 500.0,
+          isClosed: false,
+        ),
+      );
+
+      await database.cashierSessionDao.insertSession(
+        CashierSessionEntity(
+          id: 'orphan-2',
+          userId: 'cajero-antiguo-2',
+          cashierName: 'María López',
+          terminalId: 'term-main',
+          openedAt: now - 3600000 * 24,
+          openingBalanceNio: 800.0,
+          expectedNio: 800.0,
+          isClosed: false,
+        ),
+      );
+
+      await ownerVm.init();
+      expect(ownerVm.activeShift?.id, 'active-shift-owner');
+      expect(ownerVm.orphanShifts, hasLength(2));
+
+      // Attempt with short reason -> fails
+      final failedCount = await ownerVm.sanitizeAllOrphanShifts(reason: 'ok');
+      expect(failedCount, 0);
+      expect(ownerVm.errorMessage, contains('mínimo 4 caracteres'));
+
+      // Valid bulk sanitization
+      final sanitizedCount = await ownerVm.sanitizeAllOrphanShifts(
+        reason: 'Saneamiento rutinario de huérfanos Q80',
+      );
+      expect(sanitizedCount, 2);
+      expect(ownerVm.orphanShifts, isEmpty);
+
+      // Active shift must remain untouched and OPEN
+      expect(ownerVm.activeShift?.id, 'active-shift-owner');
+      final activeInDb = await database.cashierSessionDao.getSessionById('active-shift-owner');
+      expect(activeInDb!.isClosed, isFalse);
+
+      // Both orphans must be closed with sequential Z reports and pending sync status
+      final o1 = await database.cashierSessionDao.getSessionById('orphan-1');
+      final o2 = await database.cashierSessionDao.getSessionById('orphan-2');
+      expect(o1!.isClosed, isTrue);
+      expect(o2!.isClosed, isTrue);
+      expect(o1.syncStatus, 'pending');
+      expect(o2.syncStatus, 'pending');
+      expect(o1.notes, contains('[SANEAMIENTO ADMINISTRATIVO #943]'));
+      expect(o2.notes, contains('[SANEAMIENTO ADMINISTRATIVO #943]'));
+
+      // Sequential Z numbers
+      expect(o1.zReportSequence, 1);
+      expect(o2.zReportSequence, 2);
+
+      // Audit logs
+      expect(auditRepo.loggedEvents, hasLength(2));
+      for (final event in auditRepo.loggedEvents) {
+        expect(event['action'], 'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT');
+        expect(event['metadata'], contains('bulk_orphan_shift_sanitization'));
+      }
+
+      // Idempotency: running it again touches 0 rows and returns 0
+      final secondRunCount = await ownerVm.sanitizeAllOrphanShifts(
+        reason: 'Saneamiento rutinario de huérfanos Q80',
+      );
+      expect(secondRunCount, 0);
+      expect(auditRepo.loggedEvents, hasLength(2)); // No extra logs
+    });
   });
 }
