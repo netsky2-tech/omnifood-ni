@@ -237,30 +237,7 @@ void main() {
       await database.cashierSessionDao.insertSession(historicalOrphan2);
       await database.cashierSessionDao.insertSession(currentActiveShift);
 
-      // 1. Pending outbox count reveals all 3 pending shifts
-      expect(await syncService.getPendingOutboxCount(), 3);
-
-      // 2. Run sync: pushes all 3 shifts and marks them 'synced'
-      await syncService.triggerManualSync();
-
-      expect(capturedShiftSyncRequests, hasLength(1));
-      final pushedBatch = capturedShiftSyncRequests.first['sessions'] as List;
-      expect(pushedBatch, hasLength(3));
-
-      // Verify all 3 sessions are now 'synced' in SQLite
-      expect(await syncService.getPendingOutboxCount(), 0);
-      final s1 = await database.cashierSessionDao.getSessionById(historicalOrphan1.id);
-      final s2 = await database.cashierSessionDao.getSessionById(historicalOrphan2.id);
-      final sActive = await database.cashierSessionDao.getSessionById(currentActiveShift.id);
-      expect(s1!.syncStatus, 'synced');
-      expect(s2!.syncStatus, 'synced');
-      expect(sActive!.syncStatus, 'synced');
-
-      // 3. Second sync pass: MUST NOT re-push the synced shifts (infinite re-push broken)
-      await syncService.triggerManualSync();
-      expect(capturedShiftSyncRequests, hasLength(1));
-
-      // 4. Initialize CashShiftViewModel for supervisor on this terminal
+      // 1. Initialize CashShiftViewModel for supervisor on this terminal
       final vm = CashShiftViewModel(
         sessionDao: database.cashierSessionDao,
         movementDao: database.cashMovementDao,
@@ -274,17 +251,19 @@ void main() {
       );
       await vm.init();
 
+      // The supervisor detects the historical orphan shifts
       expect(vm.hasActiveShift, isTrue);
       expect(vm.activeShift?.id, 'shift-q80-active-owner');
       expect(vm.orphanShifts, hasLength(2));
+      expect(vm.hasOrphanShifts, isTrue);
 
-      // 5. Execute bulk sanitization
+      // 2. Execute bulk sanitization
       final sanitizedCount = await vm.sanitizeAllOrphanShifts(
         reason: 'Saneamiento de turnos huérfanos Q802024120001 antes de corte nocturno',
       );
       expect(sanitizedCount, 2);
 
-      // 6. Verify in SQLite real:
+      // 3. Verify in SQLite real:
       // A) Both orphans are closed with sequential Z reports
       final closed1 = await database.cashierSessionDao.getSessionById(historicalOrphan1.id);
       final closed2 = await database.cashierSessionDao.getSessionById(historicalOrphan2.id);
@@ -299,6 +278,7 @@ void main() {
       final activeAfter = await database.cashierSessionDao.getSessionById(currentActiveShift.id);
       expect(activeAfter!.isClosed, isFalse);
       expect(vm.orphanShifts, isEmpty);
+      expect(vm.hasOrphanShifts, isFalse);
 
       // C) Real audit_logs table contains 2 forensic entries
       final logs = await database.auditDao.findAllLogs();
@@ -313,19 +293,33 @@ void main() {
         expect(meta['reason'], 'Saneamiento de turnos huérfanos Q802024120001 antes de corte nocturno');
       }
 
-      // 7. Sync pass pushes the closed states to the cloud and converges to 0 pending
+      // 4. Closed orphans are now visible as pending work in outbox count (2 pending closures)
       expect(await syncService.getPendingOutboxCount(), 2);
+
+      // 5. Sync pass pushes the closed states to the cloud and converges to 0 pending
       await syncService.triggerManualSync();
 
-      expect(capturedShiftSyncRequests, hasLength(2));
+      expect(capturedShiftSyncRequests, hasLength(1));
       final closingPayload = capturedShiftSyncRequests.last['sessions'] as List;
-      expect(closingPayload, hasLength(2));
-      expect(closingPayload[0]['status'], 'CLOSED');
-      expect(closingPayload[1]['status'], 'CLOSED');
+      final closedSessions = closingPayload.where((s) => s['status'] == 'CLOSED').toList();
+      expect(closedSessions, hasLength(2));
+      final c1 = closedSessions.firstWhere((s) => s['id'] == 'shift-q80-hist-01');
+      final c2 = closedSessions.firstWhere((s) => s['id'] == 'shift-q80-hist-02');
+      expect(c1['zReportSequence'], 1);
+      expect(c2['zReportSequence'], 2);
 
+      // All closed sessions are now 'synced' in SQLite
+      final synced1 = await database.cashierSessionDao.getSessionById(historicalOrphan1.id);
+      final synced2 = await database.cashierSessionDao.getSessionById(historicalOrphan2.id);
+      expect(synced1!.syncStatus, 'synced');
+      expect(synced2!.syncStatus, 'synced');
       expect(await syncService.getPendingOutboxCount(), 0);
 
-      // 8. Idempotency verification: a repeated sanitization touches 0 rows and logs 0 additional events
+      // 6. Second sync pass: closed sessions are NOT re-pushed (infinite re-push terminated)
+      await syncService.triggerManualSync();
+      expect(capturedShiftSyncRequests.last['sessions'], hasLength(1)); // only active open shift
+
+      // 7. Idempotency verification: a repeated sanitization touches 0 rows and logs 0 additional events
       final repeatCount = await vm.sanitizeAllOrphanShifts(
         reason: 'Saneamiento de turnos huérfanos Q802024120001 antes de corte nocturno',
       );

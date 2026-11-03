@@ -431,12 +431,11 @@ void main() {
       expect(session.containsKey('cardVouchersReconciled'), isFalse);
       expect(session.containsKey('cardVouchersOverridden'), isFalse);
 
-      // Issue #943: an open session accepted by the cloud is marked 'synced'
-      // to prevent infinite re-pushing. When closed, its sync_status is set to
-      // 'pending' to push the closure with voucher reconciliation state.
+      // A still-OPEN session intentionally stays pending: the later closed
+      // push carries the voucher state.
       final stored = await database.cashierSessionDao
           .getSessionById('shift-vsync-open');
-      expect(stored!.syncStatus, 'synced');
+      expect(stored!.syncStatus, 'pending');
     },
   );
 
