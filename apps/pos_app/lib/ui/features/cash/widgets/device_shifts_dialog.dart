@@ -96,6 +96,53 @@ class DeviceShiftsDialog extends StatelessWidget {
               const Divider(height: 1),
               const SizedBox(height: 16),
 
+              // Bulk sanitization banner when multiple orphans exist (issue #943)
+              if (vm.orphanShifts.length > 1) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: NhilosColors.warningLight,
+                    borderRadius: NhilosRadii.buttonRadius,
+                    border: Border.all(color: NhilosColors.warning),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: NhilosColors.warning, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Se detectaron ${vm.orphanShifts.length} turnos huérfanos históricos en esta terminal.',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: NhilosColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        key: const Key('bulk_sanitize_orphan_shifts_button'),
+                        onPressed: () => _openBulkSanitization(context, vm),
+                        icon: const Icon(Icons.cleaning_services, size: 16),
+                        label: const Text('Sanear todos'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: NhilosColors.danger,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          textStyle: const TextStyle(fontSize: 12),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: NhilosRadii.buttonRadius,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+
               // Content list
               if (openShifts.isEmpty)
                 Container(
@@ -356,6 +403,27 @@ class DeviceShiftsDialog extends StatelessWidget {
       }
     }
   }
+
+  Future<void> _openBulkSanitization(
+    BuildContext context,
+    CashShiftViewModel vm,
+  ) async {
+    final count = await showDialog<int>(
+      context: context,
+      builder: (_) => BulkSanitizeOrphanShiftsDialog(viewModel: vm),
+    );
+
+    if (count != null && count > 0 && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Saneamiento completado: $count turno(s) huérfano(s) cerrados administrativamente.',
+          ),
+          backgroundColor: NhilosColors.success,
+        ),
+      );
+    }
+  }
 }
 
 /// Modal dialog requiring a justified reason and cash counts before
@@ -582,6 +650,203 @@ class _AdministrativeCloseShiftDialogState
                 )
               : const Icon(Icons.check, size: 16),
           label: const Text('Confirmar y Emitir Corte Z'),
+          style: FilledButton.styleFrom(
+            backgroundColor: NhilosColors.danger,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Issue #943: Dialog for bulk administrative sanitization of all orphaned shifts
+/// accumulated on this physical terminal. Requires a mandatory descriptive reason
+/// and executes idempotent, sequential Corte Z closures with forensic logging.
+class BulkSanitizeOrphanShiftsDialog extends StatefulWidget {
+  const BulkSanitizeOrphanShiftsDialog({
+    super.key,
+    required this.viewModel,
+  });
+
+  final CashShiftViewModel viewModel;
+
+  @override
+  State<BulkSanitizeOrphanShiftsDialog> createState() =>
+      _BulkSanitizeOrphanShiftsDialogState();
+}
+
+class _BulkSanitizeOrphanShiftsDialogState
+    extends State<BulkSanitizeOrphanShiftsDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _reasonController;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _reasonController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _submitting = true);
+
+    final count = await widget.viewModel.sanitizeAllOrphanShifts(
+      reason: _reasonController.text.trim(),
+    );
+
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    if (count > 0) {
+      Navigator.of(context).pop(count);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.viewModel.errorMessage ??
+                'No se pudo completar el saneamiento de turnos.',
+          ),
+          backgroundColor: NhilosColors.danger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final orphanCount = widget.viewModel.orphanShifts.length;
+
+    return AlertDialog(
+      shape: const RoundedRectangleBorder(borderRadius: NhilosRadii.modalRadius),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: NhilosColors.dangerLight,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.cleaning_services,
+              color: NhilosColors.danger,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Saneamiento Masivo de Turnos',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: NhilosColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: NhilosColors.neutralGray,
+                  borderRadius: NhilosRadii.buttonRadius,
+                  border: Border.all(color: NhilosColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Turnos huérfanos a sanear: $orphanCount',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: NhilosColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '• Se emitirá un Corte Z individual para cada turno.\n'
+                      '• Los turnos cerrados convergerán y se sincronizarán a la nube.\n'
+                      '• El turno activo del operador actual permanecerá abierto.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: NhilosColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Motivo del saneamiento masivo (Obligatorio)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: NhilosColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextFormField(
+                key: const Key('bulk_sanitize_reason_input'),
+                controller: _reasonController,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  hintText: 'Ej: Limpieza de turnos abandonados en terminal Q80',
+                  border: OutlineInputBorder(),
+                  contentPadding:
+                      EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'El motivo es obligatorio para registrar el saneamiento.';
+                  }
+                  if (value.trim().length < 4) {
+                    return 'Ingrese un motivo descriptivo (mínimo 4 caracteres).';
+                  }
+                  return null;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton.icon(
+          key: const Key('bulk_sanitize_confirm_button'),
+          onPressed: _submitting ? null : _submit,
+          icon: _submitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.check, size: 16),
+          label: const Text('Confirmar Saneamiento'),
           style: FilledButton.styleFrom(
             backgroundColor: NhilosColors.danger,
             foregroundColor: Colors.white,

@@ -504,14 +504,13 @@ class SyncService {
       }
 
       try {
-        // Only CLOSED sessions count as unconfirmed work: an open session
-        // stays sync_status='pending' by design until closure (the backend
-        // upserts it by id on every pass), so counting it would keep the
-        // badge permanently above zero during every open shift. The closure
-        // — counted totals, difference, Z report — is the pending work.
+        // Issue #943: count all cashier sessions pending sync (both open
+        // and closed) so that unconfirmed work is never silently hidden from
+        // the pending badge. Once accepted by the backend, sessions converge
+        // to sync_status='synced'.
         final rows = await database.database.rawQuery(
           "SELECT COUNT(*) AS pending FROM cashier_sessions "
-          "WHERE sync_status = 'pending' AND is_closed = 1",
+          "WHERE sync_status = 'pending'",
         );
         count += _scalarCount(rows);
       } catch (e, st) {
@@ -609,13 +608,12 @@ class SyncService {
       "SELECT MIN(timestamp) AS oldest FROM cash_movements "
       "WHERE sync_status = 'pending'",
     );
-    // Open sessions are excluded deliberately: they stay 'pending' by design
-    // until closure and are re-pushed (idempotently) on every pass, so their
-    // age is not evidence of a stall. See getPendingOutboxCount.
+    // Issue #943: sessions pending sync (whether open or closed) age
+    // if they fail to synchronize to the cloud.
     await readOldest(
       'cash sessions oldest pending',
       "SELECT MIN(opened_at) AS oldest FROM cashier_sessions "
-      "WHERE sync_status = 'pending' AND is_closed = 1",
+      "WHERE sync_status = 'pending'",
     );
     await readOldest(
       'loyalty oldest pending',
@@ -1466,11 +1464,13 @@ class SyncService {
       final failedKeys = _failedCashShiftSyncKeys(response.data);
       for (final session in sessionBatch) {
         if (failedKeys.contains(session.id)) continue;
-        if (session.isClosed) {
-          await sessionDao.updateSession(
-            _copySessionWithSyncStatus(session, 'synced'),
-          );
-        }
+        // Issue #943: both open and closed sessions accepted by the cloud
+        // are marked 'synced'. When an open session changes (cash movement or
+        // closure), its sync_status is reset to 'pending' to push the delta.
+        // This prevents infinite re-push of open/orphan sessions every sync cycle.
+        await sessionDao.updateSession(
+          _copySessionWithSyncStatus(session, 'synced'),
+        );
       }
       for (final movement in movementBatch) {
         if (failedKeys.contains(movement.id)) continue;
@@ -1497,7 +1497,10 @@ class SyncService {
     CashierSessionEntity session,
     Map<String, String> userNamesById,
   ) async {
-    final cashierName = userNamesById[session.userId];
+    final cashierName =
+        (session.cashierName != null && session.cashierName!.trim().isNotEmpty)
+            ? session.cashierName!.trim()
+            : userNamesById[session.userId];
     final payload = {
       'id': session.id,
       'terminalId': session.terminalId,
@@ -1577,6 +1580,7 @@ class SyncService {
     return CashierSessionEntity(
       id: session.id,
       userId: session.userId,
+      cashierName: session.cashierName,
       terminalId: session.terminalId,
       openedAt: session.openedAt,
       tipoModelo: session.tipoModelo,

@@ -728,4 +728,135 @@ class CashShiftViewModel extends ChangeNotifier {
       return false;
     }
   }
+
+  /// Issue #943: Allows a supervisor (Owner or Manager) to perform a bulk
+  /// administrative sanitization of all orphaned shifts on this terminal.
+  /// Iterates through every orphan shift (open sessions not belonging to the
+  /// active shift of the current user), generates consecutive Z reports,
+  /// writes individual CRITICAL forensic audit events, sets is_closed=true
+  /// and sync_status='pending' so each shift converges cleanly.
+  ///
+  /// Idempotent: If run when no orphan shifts exist, touches 0 rows and returns 0.
+  Future<int> sanitizeAllOrphanShifts({
+    required String reason,
+    String? supervisorId,
+  }) async {
+    final trimmedReason = reason.trim();
+    if (trimmedReason.length < 4) {
+      _errorMessage =
+          'Ingrese un motivo descriptivo para el saneamiento (mínimo 4 caracteres).';
+      notifyListeners();
+      return 0;
+    }
+
+    final isAuthorizedRole = _currentUserRole == UserRole.owner ||
+        _currentUserRole == UserRole.manager;
+    if (!isAuthorizedRole) {
+      _errorMessage = 'Solo un supervisor o dueño puede sanear turnos huérfanos.';
+      notifyListeners();
+      return 0;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      _openTerminalShifts =
+          await sessionDao.getOpenSessionsForTerminal(currentTerminalId);
+      final orphans = List<CashierSessionEntity>.from(orphanShifts);
+
+      if (orphans.isEmpty) {
+        _isLoading = false;
+        notifyListeners();
+        return 0;
+      }
+
+      // Sort chronologically so older historical shifts get earlier Z report sequences
+      orphans.sort((a, b) => a.openedAt.compareTo(b.openedAt));
+
+      final actingSupervisor =
+          supervisorId ?? await _actingUserId() ?? currentUserId;
+      int sanitizedCount = 0;
+
+      for (final orphan in orphans) {
+        final salesTotals = await _computeSalesCashTotals(orphan.id);
+        final effectiveExpectedNio = orphan.expectedNio + salesTotals.$1;
+        final effectiveExpectedUsd = orphan.expectedUsd + salesTotals.$2;
+
+        final countedNio = effectiveExpectedNio;
+        final countedUsd = effectiveExpectedUsd;
+
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final closedCount = (await sessionDao.countClosedSessions()) ?? 0;
+        final zSequence = closedCount + 1;
+
+        final adminNote =
+            '[SANEAMIENTO ADMINISTRATIVO #943] Motivo: $trimmedReason';
+
+        final closedShift = CashierSessionEntity(
+          id: orphan.id,
+          userId: orphan.userId,
+          cashierName: orphan.cashierName,
+          terminalId: orphan.terminalId,
+          openedAt: orphan.openedAt,
+          tipoModelo: orphan.tipoModelo,
+          closedAt: now,
+          openingBalanceNio: orphan.openingBalanceNio,
+          openingBalanceUsd: orphan.openingBalanceUsd,
+          closingCountedNio: countedNio,
+          closingCountedUsd: countedUsd,
+          expectedNio: effectiveExpectedNio,
+          expectedUsd: effectiveExpectedUsd,
+          differenceNio: 0.0,
+          differenceUsd: 0.0,
+          zReportSequence: zSequence,
+          isClosed: true,
+          supervisorId: actingSupervisor,
+          notes: adminNote,
+          syncStatus: 'pending',
+        );
+
+        await sessionDao.updateSession(closedShift);
+        _lastClosedShift = closedShift;
+
+        final audit = auditRepository;
+        if (audit != null) {
+          try {
+            await audit.logForensic(
+              'ADMINISTRATIVE_CLOSE_ORPHAN_SHIFT',
+              metodoAutorizacion: 'SUPERVISOR_OVERRIDE',
+              usuarioAutorizadorId: actingSupervisor,
+              metadata: jsonEncode({
+                'action': 'bulk_orphan_shift_sanitization',
+                'shift_id': orphan.id,
+                'terminal_id': orphan.terminalId,
+                'original_user_id': orphan.userId,
+                'supervisor_id': actingSupervisor,
+                'reason': trimmedReason,
+                'counted_nio': countedNio,
+                'counted_usd': countedUsd,
+                'diff_nio': 0.0,
+                'diff_usd': 0.0,
+                'z_sequence': zSequence,
+              }),
+            );
+          } catch (_) {}
+        }
+
+        sanitizedCount++;
+      }
+
+      _openTerminalShifts =
+          await sessionDao.getOpenSessionsForTerminal(currentTerminalId);
+      _isLoading = false;
+      notifyListeners();
+      return sanitizedCount;
+    } catch (e) {
+      _errorMessage = 'Error al sanear turnos huérfanos: $e';
+      _isLoading = false;
+      notifyListeners();
+      return 0;
+    }
+  }
 }
