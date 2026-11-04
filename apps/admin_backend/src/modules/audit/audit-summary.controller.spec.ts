@@ -671,7 +671,9 @@ describe('AuditSummaryController', () => {
     it('returns forensic alerts for OWNER with status filter forwarding', async () => {
       const jwtService = app.get(JwtService);
       mockAuditLogsService.getForensicAlerts.mockResolvedValueOnce({
-        alerts: [{ id: 'alert-1', alertType: 'AUDIT_BACKEND_TERMINAL_REJECTION' }],
+        alerts: [
+          { id: 'alert-1', alertType: 'AUDIT_BACKEND_TERMINAL_REJECTION' },
+        ],
         total: 1,
       });
 
@@ -698,7 +700,10 @@ describe('AuditSummaryController', () => {
 
       const response = await request(getHttpServer())
         .post('/operations/audit/alerts/alert-123/resolve')
-        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+        .set(
+          'Authorization',
+          `Bearer ${signToken(jwtService, UserRole.MANAGER)}`,
+        )
         .expect(201);
 
       expect(mockAuditLogsService.resolveForensicAlert).toHaveBeenCalledWith(
