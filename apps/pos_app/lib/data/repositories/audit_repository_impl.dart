@@ -330,7 +330,23 @@ class AuditRepositoryImpl implements AuditRepository {
                 ) ??
                 0) >
             0) {
-      return (false, false, true);
+      // Issue #936: Check if cloud head allows automatic re-anchoring
+      // instead of locking the stream permanently.
+      final cloudHead =
+          await getCloudStreamHead(stream.$3, deviceId: stream.$2);
+      if (cloudHead != null &&
+          (cloudHead.sequenceNo >= rows.first.sequenceNo ||
+              rows.first.prevHash != cloudHead.entryHash)) {
+        final reanchored =
+            await _reanchorStream(stream, rows, cloudHead);
+        if (reanchored != null && reanchored.isNotEmpty) {
+          rows = reanchored;
+        } else {
+          return (false, false, true);
+        }
+      } else {
+        return (false, false, true);
+      }
     }
     final safe = <AuditLogEntity>[];
     AuditLogEntity? previous;
@@ -366,6 +382,50 @@ class AuditRepositoryImpl implements AuditRepository {
         }
         if (accepted.length != 1) return (false, false, false);
       } catch (error) {
+        if (error is DioException && error.response?.statusCode == 409) {
+          // Issue #936: Conflicting replay detected (409). Re-anchor stream.
+          final cloudHead = _extractCloudHeadFromError(error) ??
+              await getCloudStreamHead(stream.$3, deviceId: stream.$2);
+          if (cloudHead != null) {
+            final remainingRows = safe.sublist(safe.indexOf(row));
+            final reanchored =
+                await _reanchorStream(stream, remainingRows, cloudHead);
+            if (reanchored != null && reanchored.isNotEmpty) {
+              var reanchorSuccess = true;
+              for (final r in reanchored) {
+                try {
+                  final resp = await _dio.post(
+                    '/identity/audit',
+                    data: {'logs': [_payload(r)]},
+                  );
+                  final accepted = _acceptedRows([r], resp.data);
+                  if (accepted.isNotEmpty) {
+                    await _auditDao.markAsSyncedByRemoteRefs(
+                      accepted.map((e) => e.remoteRefUuid).toList(),
+                    );
+                  }
+                } catch (reErr) {
+                  reanchorSuccess = false;
+                  if (_isTerminalBackendRejection(reErr)) {
+                    await _recordTerminalRejection(
+                      r,
+                      stream,
+                      reErr as DioException,
+                    );
+                  }
+                  return (
+                    false,
+                    _isOffline(reErr),
+                    _isTerminalBackendRejection(reErr),
+                  );
+                }
+              }
+              if (reanchorSuccess) {
+                return (true, false, false);
+              }
+            }
+          }
+        }
         if (_isTerminalBackendRejection(error)) {
           await _recordTerminalRejection(
             row,
@@ -377,6 +437,167 @@ class AuditRepositoryImpl implements AuditRepository {
       }
     }
     return (safe.length == rows.length, false, false);
+  }
+
+  ({int sequenceNo, String entryHash})? _extractCloudHeadFromError(
+    DioException error,
+  ) {
+    final data = error.response?.data;
+    if (data is Map && data['streamHead'] is Map) {
+      final sh = data['streamHead'] as Map;
+      final seq = (sh['sequence_no'] ?? sh['sequenceNo']) as int?;
+      final hash = (sh['entry_hash'] ?? sh['entryHash'])?.toString();
+      if (seq != null && hash != null) {
+        return (sequenceNo: seq, entryHash: hash);
+      }
+    }
+    return null;
+  }
+
+  Future<List<AuditLogEntity>?> _reanchorStream(
+    (String, String, String) stream,
+    List<AuditLogEntity> rowsToReanchor,
+    ({int sequenceNo, String entryHash}) cloudHead,
+  ) async {
+    if (rowsToReanchor.isEmpty) return null;
+
+    final tenantId = stream.$1;
+    final deviceId = stream.$2;
+    final userId = stream.$3;
+
+    final reanchorTimestamp = _now().toUtc().toIso8601String();
+    final reanchorSeq = cloudHead.sequenceNo + 1;
+    final reanchorPrevHash = cloudHead.entryHash;
+
+    final reanchorMetadata = jsonEncode({
+      'reason': 'conflicting_replay_resolved',
+      'cloud_head_sequence': cloudHead.sequenceNo,
+      'cloud_head_hash': cloudHead.entryHash,
+      'previous_local_sequence': rowsToReanchor.first.sequenceNo,
+      'reanchored_rows_count': rowsToReanchor.length,
+    });
+
+    final selectedVersion = _capabilityCache.isV3Eligible(tenantId)
+        ? 'v3-jcs-rfc8785'
+        : _forensicHashVersion;
+
+    final v3Provenance = selectedVersion == 'v3-jcs-rfc8785'
+        ? _buildV3Provenance(
+            userId,
+            'AUDIT_STREAM_REANCHOR',
+            reanchorTimestamp,
+            reanchorSeq,
+            reanchorPrevHash,
+            reanchorMetadata,
+            null,
+            null,
+          )
+        : null;
+
+    final reanchorEntryHash = v3Provenance?.$1 ??
+        _computeCanonicalHash(
+          userId: userId,
+          action: 'AUDIT_STREAM_REANCHOR',
+          timestamp: reanchorTimestamp,
+          sequenceNo: reanchorSeq,
+          prevHash: reanchorPrevHash,
+          canonicalMetadata: reanchorMetadata,
+        );
+
+    final reanchorEvent = AuditLogEntity(
+      userId: userId,
+      action: 'AUDIT_STREAM_REANCHOR',
+      timestamp: reanchorTimestamp,
+      deviceId: deviceId,
+      metadata: v3Provenance?.$2 ?? reanchorMetadata,
+      isSynced: false,
+      sequenceNo: reanchorSeq,
+      prevHash: reanchorPrevHash,
+      entryHash: reanchorEntryHash,
+      remoteRefUuid: _uuid.v4(),
+      hashVersion:
+          v3Provenance == null ? _forensicHashVersion : selectedVersion,
+      tenantId: tenantId,
+      metadataRaw: reanchorMetadata,
+    );
+
+    final recomputedLogs = <AuditLogEntity>[];
+    var currentPrevHash = reanchorEntryHash;
+    var currentSeq = reanchorSeq + 1;
+
+    for (final oldRow in rowsToReanchor) {
+      final isV3 = oldRow.hashVersion == 'v3-jcs-rfc8785';
+      final rowMetadataRaw = oldRow.metadataRaw ?? oldRow.metadata;
+
+      final rowV3Prov = isV3
+          ? _buildV3Provenance(
+              oldRow.userId,
+              oldRow.action,
+              oldRow.timestamp,
+              currentSeq,
+              currentPrevHash,
+              rowMetadataRaw,
+              oldRow.metodoAutorizacion,
+              oldRow.usuarioAutorizadorId,
+            )
+          : null;
+
+      final rowMetadataObject =
+          _normalizeMetadataToJsonObject(oldRow.metadata);
+      final rowCanonicalMetadata = jsonEncode(rowMetadataObject);
+
+      final newEntryHash = rowV3Prov?.$1 ??
+          _computeCanonicalHash(
+            userId: oldRow.userId,
+            action: oldRow.action,
+            timestamp: oldRow.timestamp,
+            sequenceNo: currentSeq,
+            prevHash: currentPrevHash,
+            canonicalMetadata: rowCanonicalMetadata,
+            metodoAutorizacion: oldRow.metodoAutorizacion,
+            usuarioAutorizadorId: oldRow.usuarioAutorizadorId,
+          );
+
+      final updatedRow = AuditLogEntity(
+        id: oldRow.id,
+        userId: oldRow.userId,
+        action: oldRow.action,
+        timestamp: oldRow.timestamp,
+        deviceId: oldRow.deviceId,
+        metadata: rowV3Prov?.$2 ?? oldRow.metadata,
+        isSynced: false,
+        sequenceNo: currentSeq,
+        prevHash: currentPrevHash,
+        entryHash: newEntryHash,
+        metodoAutorizacion: oldRow.metodoAutorizacion,
+        usuarioAutorizadorId: oldRow.usuarioAutorizadorId,
+        remoteRefUuid: oldRow.remoteRefUuid,
+        hashVersion: oldRow.hashVersion,
+        hasMetodoAutorizacion: oldRow.hasMetodoAutorizacion,
+        hasUsuarioAutorizadorId: oldRow.hasUsuarioAutorizadorId,
+        tenantId: oldRow.tenantId,
+        metadataRaw: oldRow.metadataRaw,
+      );
+
+      recomputedLogs.add(updatedRow);
+      currentPrevHash = newEntryHash;
+      currentSeq++;
+    }
+
+    try {
+      await _auditDao.reanchorStreamLogs(reanchorEvent, recomputedLogs);
+      await _forensicAlertDao.resolveAllActiveAuditTerminalAlerts();
+      return [reanchorEvent, ...recomputedLogs];
+    } catch (e, st) {
+      developer.log(
+        'Failed to persist reanchored audit stream logs',
+        name: 'AuditRepository',
+        level: 900,
+        error: e,
+        stackTrace: st,
+      );
+      return null;
+    }
   }
 
   bool _isOffline(Object error) =>
@@ -616,5 +837,39 @@ class AuditRepositoryImpl implements AuditRepository {
       userId ?? "",
     );
     return entities.map(AuditMapper.toDomain).toList();
+  }
+
+  @override
+  Future<({int sequenceNo, String entryHash})?> getCloudStreamHead(
+    String userId, {
+    String? deviceId,
+  }) async {
+    final effectiveDeviceId = deviceId ?? _deviceId;
+    try {
+      final response = await _dio.get(
+        '/identity/audit/stream-head',
+        queryParameters: {
+          'deviceId': effectiveDeviceId,
+          'userId': userId,
+        },
+      );
+      if (response.data is Map) {
+        final data = response.data as Map;
+        final seq = (data['sequence_no'] ?? data['sequenceNo']) as int? ?? 0;
+        final hash =
+            (data['entry_hash'] ?? data['entryHash'])?.toString() ?? 'GENESIS';
+        return (sequenceNo: seq, entryHash: hash);
+      }
+      return null;
+    } catch (e, st) {
+      developer.log(
+        'Failed to query cloud audit stream head (deviceId=$effectiveDeviceId, userId=$userId)',
+        name: 'AuditRepository',
+        level: 800,
+        error: e,
+        stackTrace: st,
+      );
+      return null;
+    }
   }
 }

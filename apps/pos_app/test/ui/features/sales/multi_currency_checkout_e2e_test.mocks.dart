@@ -230,6 +230,20 @@ class MockAuditRepository extends _i1.Mock implements _i2.AuditRepository {
         ),
         returnValue: _i7.Future<List<_i8.AuditLog>>.value(<_i8.AuditLog>[]),
       ) as _i7.Future<List<_i8.AuditLog>>);
+
+  @override
+  _i7.Future<({String entryHash, int sequenceNo})?> getCloudStreamHead(
+    String? userId, {
+    String? deviceId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCloudStreamHead,
+          [userId],
+          {#deviceId: deviceId},
+        ),
+        returnValue: _i7.Future<({String entryHash, int sequenceNo})?>.value(),
+      ) as _i7.Future<({String entryHash, int sequenceNo})?>);
 }
 
 /// A class which mocks [InventoryRepository].

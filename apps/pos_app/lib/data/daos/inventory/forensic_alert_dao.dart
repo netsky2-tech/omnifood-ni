@@ -36,6 +36,16 @@ abstract class ForensicAlertDao {
   )
   Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId);
 
+  @Query(
+    "UPDATE forensic_alerts SET status = 'resolved' WHERE alert_type = 'AUDIT_BACKEND_TERMINAL_REJECTION' AND status = 'active'",
+  )
+  Future<void> resolveAllActiveAuditTerminalAlerts();
+
+  @Query(
+    "UPDATE forensic_alerts SET status = 'resolved' WHERE alert_type = 'AUDIT_BACKEND_TERMINAL_REJECTION' AND source_document_id = :sourceDocumentId AND status = 'active'",
+  )
+  Future<void> resolveActiveAuditTerminalAlert(String sourceDocumentId);
+
   @Query('UPDATE forensic_alerts SET is_synced = 1 WHERE id = :id')
   Future<void> markAsSynced(String id);
 }

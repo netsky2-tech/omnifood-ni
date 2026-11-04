@@ -4545,6 +4545,17 @@ class SyncService {
           if (inserted) {
             alertsCount++;
           }
+
+          // Issue #936: If the cloud resolved an alert, update active local state
+          // so terminal rejection alerts unblock audit synchronization.
+          if (resolvedAt != null) {
+            await _database!.database.execute(
+              "UPDATE forensic_alerts SET status = 'resolved' "
+              "WHERE (id = ? OR (alert_type = 'AUDIT_BACKEND_TERMINAL_REJECTION' AND ? = 'AUDIT_BACKEND_TERMINAL_REJECTION')) "
+              "AND status = 'active'",
+              [id, alertType],
+            );
+          }
         }
 
         // 5c. Loyalty programs & rewards (slice 5d, finding M1). Each

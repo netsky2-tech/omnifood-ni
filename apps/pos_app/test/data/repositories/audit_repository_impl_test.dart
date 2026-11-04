@@ -25,21 +25,41 @@ class _Clock implements MonotonicClock { @override Duration elapsed() => Duratio
 class _Capabilities extends mt.Mock implements TenantCapabilityCache {}
 class _Alerts implements ForensicAlertDao {
   final calls = <List<Object>>[];
+  final activeAlertsByDocId = <String, bool>{};
   bool throwsOnInsert = false;
   bool unresolvedTerminalAlert = false;
 
   @override
-  Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId) async =>
-      unresolvedTerminalAlert ? 1 : 0;
+  Future<int?> countActiveAuditTerminalAlerts(String sourceDocumentId) async {
+    if (activeAlertsByDocId.containsKey(sourceDocumentId)) {
+      return activeAlertsByDocId[sourceDocumentId]! ? 1 : 0;
+    }
+    return (unresolvedTerminalAlert && activeAlertsByDocId.isEmpty) ? 1 : 0;
+  }
 
   @override
   Future<void> insertIfAbsentForensicAlert(String id, String alertType, String severity, String message, String createdAt, String status, String sourceDocumentType, String sourceDocumentId, String metadataJson, bool isSynced) async {
     if (throwsOnInsert) throw StateError('alert persistence unavailable');
+    if (alertType == 'AUDIT_BACKEND_TERMINAL_REJECTION' && status == 'active') {
+      unresolvedTerminalAlert = true;
+      activeAlertsByDocId[sourceDocumentId] = true;
+    }
     calls.add([id, alertType, severity, message, createdAt, status, sourceDocumentType, sourceDocumentId, metadataJson, isSynced]);
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  Future<void> resolveAllActiveAuditTerminalAlerts() async {
+    unresolvedTerminalAlert = false;
+    activeAlertsByDocId.clear();
+  }
+
+  @override
+  Future<void> resolveActiveAuditTerminalAlert(String sourceDocumentId) async {
+    activeAlertsByDocId[sourceDocumentId] = false;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
 }
 
 @GenerateNiceMocks([
@@ -884,5 +904,230 @@ void main() {
             'sorts ~6 hours behind it and silently hides the shift',
       );
     });
+  });
+
+  group('getCloudStreamHead (Issue #936)', () {
+    test('queries /identity/audit/stream-head and returns sequence and hash', () async {
+      when(mockDio.get(
+        '/identity/audit/stream-head',
+        queryParameters: {
+          'deviceId': 'device_123',
+          'userId': 'user_1',
+        },
+      )).thenAnswer((_) async => Response(
+        requestOptions: RequestOptions(path: '/identity/audit/stream-head'),
+        statusCode: 200,
+        data: {
+          'sequence_no': 19,
+          'entry_hash': 'cloud_entry_hash_19',
+        },
+      ));
+
+      final head = await repository.getCloudStreamHead('user_1');
+
+      expect(head, isNotNull);
+      expect(head!.sequenceNo, 19);
+      expect(head.entryHash, 'cloud_entry_hash_19');
+    });
+
+    test('returns null when network request fails', () async {
+      when(mockDio.get(
+        '/identity/audit/stream-head',
+        queryParameters: anyNamed('queryParameters'),
+      )).thenThrow(DioException(
+        requestOptions: RequestOptions(path: '/identity/audit/stream-head'),
+        type: DioExceptionType.connectionTimeout,
+      ));
+
+      final head = await repository.getCloudStreamHead('user_1');
+
+      expect(head, isNull);
+    });
+  });
+
+  group('Forensic Stream Re-anchor (#936 Acceptance Criteria)', () {
+    test(
+      'RED: when cloud rejects with 409 and re-anchor is unavailable, terminal stays blocked with unsynced logs and no outgoing POST',
+      () async {
+        final row1 = AuditLogEntity(
+          id: 1,
+          userId: 'user_1',
+          action: 'SALE_CREATED',
+          timestamp: '2026-10-20T10:00:00.000Z',
+          deviceId: 'device_123',
+          metadata: '{"invoice_id":"inv-1"}',
+          isSynced: false,
+          sequenceNo: 1,
+          prevHash: 'GENESIS',
+          entryHash: 'entry-hash-1',
+          remoteRefUuid: 'uuid-1',
+          tenantId: 'tenant-1',
+        );
+
+        when(mockAuthRepository.getCurrentUser()).thenAnswer(
+          (_) async => User(id: 'user_1', name: 'User 1', role: UserRole.cashier, isActive: true, tenantId: 'tenant-1'),
+        );
+        when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [row1]);
+
+        when(mockDio.get(
+          '/identity/audit/stream-head',
+          queryParameters: anyNamed('queryParameters'),
+        )).thenThrow(DioException(
+          requestOptions: RequestOptions(path: '/identity/audit/stream-head'),
+          type: DioExceptionType.connectionTimeout,
+        ));
+
+        when(mockDio.post(
+          '/identity/audit',
+          data: anyNamed('data'),
+          options: anyNamed('options'),
+          cancelToken: anyNamed('cancelToken'),
+          onSendProgress: anyNamed('onSendProgress'),
+          onReceiveProgress: anyNamed('onReceiveProgress'),
+        )).thenThrow(DioException(
+          requestOptions: RequestOptions(path: '/identity/audit'),
+          response: Response(
+            requestOptions: RequestOptions(path: '/identity/audit'),
+            statusCode: 409,
+            data: {'message': 'Conflicting forensic replay detected'},
+          ),
+        ));
+
+        final outcome1 = await repository.syncLogs();
+        expect(outcome1.status, AuditSyncStatus.terminal);
+
+        expect(alerts.unresolvedTerminalAlert, isTrue);
+
+        reset(mockDio);
+        when(mockDio.get(
+          '/identity/audit/stream-head',
+          queryParameters: anyNamed('queryParameters'),
+        )).thenThrow(DioException(
+          requestOptions: RequestOptions(path: '/identity/audit/stream-head'),
+          type: DioExceptionType.connectionTimeout,
+        ));
+
+        final outcome2 = await repository.syncLogs();
+        expect(outcome2.status, AuditSyncStatus.terminal);
+        verifyNever(mockDio.post(any, data: anyNamed('data'), options: anyNamed('options'), cancelToken: anyNamed('cancelToken'), onSendProgress: anyNamed('onSendProgress'), onReceiveProgress: anyNamed('onReceiveProgress')));
+        verifyNever(mockAuditDao.markAsSynced(any));
+      },
+    );
+
+    test(
+      'GREEN: happy path of re-anchoring when cloud rejects with 409 - chain is continuous and verified on both sides',
+      () async {
+        final row1 = AuditLogEntity(
+          id: 1,
+          userId: 'user_1',
+          action: 'SALE_CREATED',
+          timestamp: '2026-10-20T10:00:00.000Z',
+          deviceId: 'device_123',
+          metadata: '{"invoice_id":"inv-1"}',
+          isSynced: false,
+          sequenceNo: 1,
+          prevHash: 'GENESIS',
+          entryHash: 'entry-hash-1',
+          remoteRefUuid: 'uuid-1',
+          tenantId: 'tenant-1',
+        );
+
+        final row2 = AuditLogEntity(
+          id: 2,
+          userId: 'user_1',
+          action: 'SALE_CREATED',
+          timestamp: '2026-10-20T10:01:00.000Z',
+          deviceId: 'device_123',
+          metadata: '{"invoice_id":"inv-2"}',
+          isSynced: false,
+          sequenceNo: 2,
+          prevHash: 'entry-hash-1',
+          entryHash: 'entry-hash-2',
+          remoteRefUuid: 'uuid-2',
+          tenantId: 'tenant-1',
+        );
+
+        when(mockAuthRepository.getCurrentUser()).thenAnswer(
+          (_) async => User(id: 'user_1', name: 'User 1', role: UserRole.cashier, isActive: true, tenantId: 'tenant-1'),
+        );
+        when(mockAuditDao.findUnsyncedLogs()).thenAnswer((_) async => [row1, row2]);
+        when(mockAuditDao.reanchorStreamLogs(any, any)).thenAnswer((_) async {});
+        when(mockAuditDao.markAsSyncedByRemoteRefs(any)).thenAnswer((_) async {});
+
+        final postedLogs = <Map<String, dynamic>>[];
+
+        var postAttempts = 0;
+        when(mockDio.post(
+          '/identity/audit',
+          data: anyNamed('data'),
+          options: anyNamed('options'),
+          cancelToken: anyNamed('cancelToken'),
+          onSendProgress: anyNamed('onSendProgress'),
+          onReceiveProgress: anyNamed('onReceiveProgress'),
+        )).thenAnswer((call) async {
+          postAttempts++;
+          final data = call.namedArguments[#data] as Map<String, dynamic>;
+          final logs = data['logs'] as List<dynamic>;
+          final firstLog = logs.first as Map<String, dynamic>;
+
+          if (postAttempts == 1) {
+            throw DioException(
+              requestOptions: RequestOptions(path: '/identity/audit'),
+              response: Response(
+                requestOptions: RequestOptions(path: '/identity/audit'),
+                statusCode: 409,
+                data: {
+                  'message': 'Conflicting forensic replay detected',
+                  'streamHead': {
+                    'sequence_no': 19,
+                    'entry_hash': 'cloud-hash-19',
+                  },
+                },
+              ),
+            );
+          }
+
+          postedLogs.add(firstLog);
+          return Response(
+            requestOptions: RequestOptions(path: '/identity/audit'),
+            statusCode: 200,
+            data: {
+              'status': 'success',
+              'accepted_ids': [firstLog['id']],
+              'count': 1,
+            },
+          );
+        });
+
+        final outcome = await repository.syncLogs();
+
+        expect(outcome.status, AuditSyncStatus.complete);
+        expect(postedLogs, hasLength(3));
+
+        final reanchor = postedLogs[0];
+        expect(reanchor['action'], 'AUDIT_STREAM_REANCHOR');
+        expect(reanchor['sequence_no'], 20);
+        expect(reanchor['prev_hash'], 'cloud-hash-19');
+        final reanchorEntryHash = reanchor['entry_hash'] as String;
+        expect(reanchorEntryHash, isNotEmpty);
+
+        final log1 = postedLogs[1];
+        expect(log1['id'], 'uuid-1');
+        expect(log1['sequence_no'], 21);
+        expect(log1['prev_hash'], reanchorEntryHash);
+        final log1EntryHash = log1['entry_hash'] as String;
+        expect(log1EntryHash, isNotEmpty);
+
+        final log2 = postedLogs[2];
+        expect(log2['id'], 'uuid-2');
+        expect(log2['sequence_no'], 22);
+        expect(log2['prev_hash'], log1EntryHash);
+
+        expect(log1['prev_hash'], equals(reanchor['entry_hash']));
+        expect(log2['prev_hash'], equals(log1['entry_hash']));
+
+        verify(mockAuditDao.markAsSyncedByRemoteRefs(any)).called(3);
+      },
+    );
   });
 }

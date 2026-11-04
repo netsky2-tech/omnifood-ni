@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Post,
+  Param,
   Query,
   UseGuards,
   UseInterceptors,
@@ -158,5 +160,29 @@ export class AuditSummaryController {
     @GetTenantId() tenantId: string,
   ): Promise<AuditIntegrityResponseDto> {
     return this.auditLogsService.getIntegrityAlerts(tenantId);
+  }
+
+  /**
+   * Lists forensic alerts for the tenant (Issue #936).
+   */
+  @Get('alerts')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async getForensicAlerts(
+    @GetTenantId() tenantId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.auditLogsService.getForensicAlerts(tenantId, status);
+  }
+
+  /**
+   * Resolves a forensic alert remotely from the backoffice dashboard (Issue #936).
+   */
+  @Post('alerts/:id/resolve')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  async resolveForensicAlert(
+    @GetTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.auditLogsService.resolveForensicAlert(tenantId, id);
   }
 }

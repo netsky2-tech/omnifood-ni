@@ -62,4 +62,12 @@ abstract class AuditRepository {
     DateTime? end,
     String? userId,
   });
+
+  /// Queries the cloud for the latest sequence number and entry hash of the
+  /// given (deviceId, userId) forensic audit stream (Issue #936).
+  /// Returns null on network failure, offline state, or rejection.
+  Future<({int sequenceNo, String entryHash})?> getCloudStreamHead(
+    String userId, {
+    String? deviceId,
+  }) async => null;
 }

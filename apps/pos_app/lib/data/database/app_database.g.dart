@@ -1048,6 +1048,18 @@ class _$AuditDao extends AuditDao {
   }
 
   @override
+  Future<void> updateLogSequenceAndHashes(
+    int id,
+    int sequenceNo,
+    String prevHash,
+    String entryHash,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE audit_logs SET sequence_no = ?2, prev_hash = ?3, entry_hash = ?4 WHERE id = ?1',
+        arguments: [id, sequenceNo, prevHash, entryHash]);
+  }
+
+  @override
   Future<void> markAsSynced(List<int> ids) async {
     const offset = 1;
     final _sqliteVariablesForIds =
@@ -1058,6 +1070,19 @@ class _$AuditDao extends AuditDao {
             _sqliteVariablesForIds +
             ')',
         arguments: [...ids]);
+  }
+
+  @override
+  Future<void> markAsSyncedByRemoteRefs(List<String> uuids) async {
+    const offset = 1;
+    final _sqliteVariablesForUuids =
+        Iterable<String>.generate(uuids.length, (i) => '?${i + offset}')
+            .join(',');
+    await _queryAdapter.queryNoReturn(
+        'UPDATE audit_logs SET is_synced = 1 WHERE remote_ref_uuid IN (' +
+            _sqliteVariablesForUuids +
+            ')',
+        arguments: [...uuids]);
   }
 
   @override
@@ -1081,6 +1106,24 @@ class _$AuditDao extends AuditDao {
           ..database = transaction;
         await transactionDatabase.auditDao
             .appendForensicLog(tenantId, deviceId, userId, createLog);
+      });
+    }
+  }
+
+  @override
+  Future<void> reanchorStreamLogs(
+    AuditLogEntity reanchorEvent,
+    List<AuditLogEntity> recomputedLogs,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.reanchorStreamLogs(reanchorEvent, recomputedLogs);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.auditDao
+            .reanchorStreamLogs(reanchorEvent, recomputedLogs);
       });
     }
   }
@@ -1949,6 +1992,19 @@ class _$ForensicAlertDao extends ForensicAlertDao {
     return _queryAdapter.query(
         'SELECT COUNT(*) FROM forensic_alerts WHERE alert_type = \'AUDIT_BACKEND_TERMINAL_REJECTION\' AND source_document_type = \'audit_log\' AND source_document_id = ?1 AND status = \'active\'',
         mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [sourceDocumentId]);
+  }
+
+  @override
+  Future<void> resolveAllActiveAuditTerminalAlerts() async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE forensic_alerts SET status = \'resolved\' WHERE alert_type = \'AUDIT_BACKEND_TERMINAL_REJECTION\' AND status = \'active\'');
+  }
+
+  @override
+  Future<void> resolveActiveAuditTerminalAlert(String sourceDocumentId) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE forensic_alerts SET status = \'resolved\' WHERE alert_type = \'AUDIT_BACKEND_TERMINAL_REJECTION\' AND source_document_id = ?1 AND status = \'active\'',
         arguments: [sourceDocumentId]);
   }
 

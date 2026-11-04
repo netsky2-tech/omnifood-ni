@@ -53,6 +53,9 @@ class DeviceSyncAuthInterceptor extends Interceptor {
     // transport on the backend; in an offline-PIN kiosk session there is no
     // cloud user JWT, so the push must ride the device credential.
     'identity/audit',
+    // Issue #936: forensic audit stream head query (GET /identity/audit/stream-head)
+    // for terminal continuity and re-anchoring behind SyncTransportGuard.
+    'identity/audit/stream-head',
   ];
 
   static String _normalizePath(String path) {
