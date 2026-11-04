@@ -16,6 +16,7 @@ export type DashboardSourceWidget =
   | "payment-mix"
   | "sales-trend"
   | "hourly-sales"
+  | "weekly-rhythm"
   | "profitability"
   | "kpi";
 

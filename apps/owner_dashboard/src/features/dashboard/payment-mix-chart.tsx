@@ -51,11 +51,36 @@ export function PaymentMixChart({ start, end }: { start: string; end: string }) 
       );
     } else {
       const maxAmount = Math.max(...rows.map((r) => (r.currency === "NIO" ? r.amount : 0)), 0);
+      const cashUsdAmount = Number(query.data.paymentMethodsBreakdown?.cashUsd ?? 0);
       body = (
         <>
           <p className="mb-2 text-xs text-muted-foreground" data-testid="payment-mix-currency-note">
             Montos netos de cambio entregado, en moneda original; consolidación en córdobas (C$).
           </p>
+          {cashUsdAmount > 0 && (
+            <div
+              data-testid="usd-cash-monitoring-card"
+              className="mb-3 rounded-md border border-emerald-200/70 bg-emerald-50/60 p-2.5 dark:border-emerald-800/50 dark:bg-emerald-950/30"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="flex h-2 w-2 rounded-full bg-emerald-600 shrink-0" aria-hidden="true" />
+                  <span className="truncate text-xs font-semibold text-emerald-900 dark:text-emerald-200">
+                    Dólares físicos en caja (Arqueo)
+                  </span>
+                </div>
+                <span
+                  data-testid="usd-cash-amount"
+                  className="shrink-0 text-sm font-bold tabular-nums text-emerald-800 dark:text-emerald-300"
+                >
+                  {formatUsd(cashUsdAmount)}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300/80">
+                Efectivo captado en USD para arqueo diario y control de tasa de cambio.
+              </p>
+            </div>
+          )}
           <ul className="space-y-2" data-testid="payment-mix-rows">
             {rows.map((row) => {
               const paymentDrilldownUrl = buildDashboardDrilldownUrl(
@@ -69,16 +94,27 @@ export function PaymentMixChart({ start, end }: { start: string; end: string }) 
                 },
                 { tab: "summary", paymentMethod: row.key },
               );
+              const isUsdCash = row.key === "cashUsd";
               return (
                 <li key={row.key} className="text-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <Link
-                      to={paymentDrilldownUrl}
-                      className="rounded text-card-foreground hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
-                      title={`Ver pagos con ${row.label}`}
-                    >
-                      {row.label}
-                    </Link>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Link
+                        to={paymentDrilldownUrl}
+                        className="truncate rounded text-card-foreground hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+                        title={`Ver pagos con ${row.label}`}
+                      >
+                        {row.label}
+                      </Link>
+                      {isUsdCash && (
+                        <span
+                          data-testid="usd-cash-badge"
+                          className="shrink-0 rounded bg-emerald-100 dark:bg-emerald-900/60 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:text-emerald-200"
+                        >
+                          Arqueo
+                        </span>
+                      )}
+                    </div>
                     <span className="whitespace-nowrap text-right text-sm font-medium tabular-nums text-card-foreground">
                       {formatRowAmount(row.currency, row.amount)}
                       {row.percent !== null && (

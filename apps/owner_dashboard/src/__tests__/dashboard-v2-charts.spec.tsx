@@ -23,6 +23,7 @@ import {
   buildPaymentMixRows,
   buildTopProductRows,
   buildTrendRows,
+  buildWeeklyRhythm,
   formatNio,
   formatUsd,
   isZeroSeries,
@@ -280,6 +281,60 @@ describe("chart-domain — hourly adapter (pure)", () => {
     expect(buildHourlyBars([])).toMatchObject({ hasActivity: false, firstActiveHour: null });
     expect(buildHourlyBars(null)).toMatchObject({ hasActivity: false, lastActiveHour: null });
   });
+
+  it("identifies peak demand moments distinguishing almuerzo (11-14) vs cena (18-22)", () => {
+    const { bars, peaks } = buildHourlyBars([
+      { hour: 11, invoiceCount: 2, netSalesNio: 400 },
+      { hour: 12, invoiceCount: 6, netSalesNio: 1800 }, // Lunch peak
+      { hour: 13, invoiceCount: 4, netSalesNio: 1200 },
+      { hour: 19, invoiceCount: 5, netSalesNio: 1500 },
+      { hour: 20, invoiceCount: 8, netSalesNio: 2400 }, // Dinner peak and overall peak
+    ]);
+
+    expect(peaks.overallPeakHour).toBe(20);
+    expect(peaks.overallPeakSales).toBe(2400);
+
+    expect(peaks.lunchPeakHour).toBe(12);
+    expect(peaks.lunchSales).toBe(3400); // 400 + 1800 + 1200
+
+    expect(peaks.dinnerPeakHour).toBe(20);
+    expect(peaks.dinnerSales).toBe(3900); // 1500 + 2400
+
+    expect(bars[12]).toMatchObject({ hour: 12, mealWindow: "almuerzo", isPeak: true });
+    expect(bars[20]).toMatchObject({ hour: 20, mealWindow: "cena", isPeak: true });
+    expect(bars[11]).toMatchObject({ hour: 11, mealWindow: "almuerzo", isPeak: false });
+  });
+
+  it("aggregates daily series into Monday-to-Sunday weekly rhythm and identifies peak day", () => {
+    // 2026-09-14 is Monday, 2026-09-19 is Saturday
+    const days = [
+      { date: "2026-09-14", netSalesNio: 1000, completedTicketCount: 10, averageTicketNetNio: 100 }, // Lun
+      { date: "2026-09-15", netSalesNio: 1200, completedTicketCount: 12, averageTicketNetNio: 100 }, // Mar
+      { date: "2026-09-16", netSalesNio: 1100, completedTicketCount: 11, averageTicketNetNio: 100 }, // Mié
+      { date: "2026-09-17", netSalesNio: 1400, completedTicketCount: 14, averageTicketNetNio: 100 }, // Jue
+      { date: "2026-09-18", netSalesNio: 2500, completedTicketCount: 20, averageTicketNetNio: 125 }, // Vie
+      { date: "2026-09-19", netSalesNio: 3500, completedTicketCount: 25, averageTicketNetNio: 140 }, // Sáb
+      { date: "2026-09-20", netSalesNio: 2800, completedTicketCount: 22, averageTicketNetNio: 127 }, // Dom
+    ];
+
+    const result = buildWeeklyRhythm(days);
+
+    expect(result.days).toHaveLength(7);
+    expect(result.days[0]?.name).toBe("Lunes");
+    expect(result.days[5]?.name).toBe("Sábado");
+    expect(result.days[6]?.name).toBe("Domingo");
+
+    expect(result.hasActivity).toBe(true);
+    expect(result.totalPeriodSales).toBe(13500);
+
+    // Sábado is the peak day (3500)
+    expect(result.peakDay?.name).toBe("Sábado");
+    expect(result.peakDay?.isPeakDay).toBe(true);
+    expect(result.days[0]?.isPeakDay).toBe(false);
+
+    // Weekend share (Vie + Sáb + Dom) = 2500 + 3500 + 2800 = 8800 / 13500 = 65.2%
+    expect(result.weekendSharePercent).toBeCloseTo(65.2, 1);
+  });
 });
 
 describe("chart-domain — top-products adapter (pure)", () => {
@@ -508,6 +563,15 @@ describe("HourlySales — states (PRD §15/§23)", () => {
     expect(screen.getByTestId("hourly-caption").textContent).toContain("Promedio por hora en 6 días");
     expect(screen.getByTestId("hourly-caption").textContent).toContain("07:00");
     expect(screen.getByTestId("hourly-caption").textContent).toContain("20:00");
+
+    // S2 / Issue #960: Peak demand badges
+    expect(screen.getByTestId("peak-lunch-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("peak-lunch-badge").textContent).toContain("Almuerzo");
+    expect(screen.getByTestId("peak-lunch-badge").textContent).toContain("12:00");
+
+    expect(screen.getByTestId("peak-dinner-badge")).toBeInTheDocument();
+    expect(screen.getByTestId("peak-dinner-badge").textContent).toContain("Cena");
+    expect(screen.getByTestId("peak-dinner-badge").textContent).toContain("20:00");
   });
 
   it("queries a single day with date and reports the day caption", async () => {
@@ -669,6 +733,28 @@ describe("PaymentMix — states (PRD §17/§23)", () => {
     expect(screen.getByText("C$23,290.00")).toBeInTheDocument();
     expect(screen.getAllByText(/\d+(?:\.\d+)?%/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/consolidaci/i)).toBeInTheDocument();
+  });
+
+  it("renders the USD physical cash monitoring card and badge when cash USD is collected (S4 / Issue #960)", async () => {
+    vi.mocked(fetchSalesDashboard).mockResolvedValue({
+      ...dashboardReportPayload(),
+      paymentMethodsBreakdown: {
+        cashNio: 20000,
+        cashUsd: 150,
+        cardNio: 15000,
+        cardUsd: 0,
+        other: 0,
+        totalNio: 40500,
+      },
+    } as never);
+
+    renderWithProviders(<PerformanceBand range={RANGE} today="2026-09-23" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("usd-cash-monitoring-card")).toBeInTheDocument();
+    });
+    expect(screen.getByTestId("usd-cash-amount").textContent).toContain("150.00");
+    expect(screen.getByTestId("usd-cash-badge")).toBeInTheDocument();
   });
 
   it("renders an explicit empty state on a zero total (no zero placeholders)", async () => {

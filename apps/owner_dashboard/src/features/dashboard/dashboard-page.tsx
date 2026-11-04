@@ -21,11 +21,11 @@ function PerformanceBandSkeleton() {
   return (
     <div
       data-testid="performance-band-skeleton"
-      className="grid grid-cols-1 gap-6 lg:grid-cols-3"
+      className="grid grid-cols-1 gap-6 lg:grid-cols-2"
       aria-hidden="true"
     >
-      <div className="h-64 animate-pulse rounded-lg border border-border bg-muted/40 lg:col-span-3" />
-      {Array.from({ length: 3 }).map((_, i) => (
+      <div className="h-64 animate-pulse rounded-lg border border-border bg-muted/40 lg:col-span-2" />
+      {Array.from({ length: 4 }).map((_, i) => (
         <div key={i} className="h-56 animate-pulse rounded-lg border border-border bg-muted/40" />
       ))}
     </div>
@@ -42,9 +42,14 @@ const FISCAL_REGIME_LABELS: Record<string, string> = {
   REGIMEN_GENERAL: "Régimen General",
 };
 
-function todayRange(): DateRangeValue {
-  const iso = formatLocalDate(new Date());
-  return { startDate: iso, endDate: iso };
+export function defaultDashboardRange(): DateRangeValue {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(start.getDate() - 29); // Últimos 30 días inclusive
+  return {
+    startDate: formatLocalDate(start),
+    endDate: formatLocalDate(end),
+  };
 }
 
 // Review round 2 (WU5): the management band reflows between the two-card
@@ -58,7 +63,7 @@ function rangeFromSearchParams(sp: URLSearchParams): DateRangeValue {
   const startDate = sp.get("startDate");
   const endDate = sp.get("endDate");
   if (startDate && endDate) return { startDate, endDate };
-  return todayRange();
+  return defaultDashboardRange();
 }
 
 export function DashboardPage() {

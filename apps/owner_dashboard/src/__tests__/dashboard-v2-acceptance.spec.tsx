@@ -53,6 +53,7 @@ import {
 import { useSalesDashboard } from "@/features/sales/use-sales-reports";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { formatLocalDate } from "@/lib/utils";
+import { defaultDashboardRange } from "@/features/dashboard/dashboard-page";
 import type { User, UserRole } from "@/types";
 
 vi.mock("@/lib/tenant", () => ({ useTenantId: () => "tenant-1" }));
@@ -270,11 +271,15 @@ function mockDashboardReport(
   previous: Record<string, unknown> = {},
   currentKey = DAY,
 ) {
-  // The page component anchors its range on the REAL system date (it owns a
-  // todayRange() state); the strip tests inject a deterministic range. Both
+  // The page component anchors its range on the default 30-day range
+  // (defaultDashboardRange); the strip tests inject a deterministic range. Both
   // current-period keys resolve to the current fixture so page-level tests
   // stay deterministic without mocking the hook away.
-  const currentKeys = new Set([currentKey, formatLocalDate(new Date())]);
+  const currentKeys = new Set([
+    currentKey,
+    formatLocalDate(new Date()),
+    defaultDashboardRange().startDate,
+  ]);
   vi.mocked(fetchDashboardReport).mockImplementation(((start: string) => {
     if (currentKeys.has(start)) {
       return Promise.resolve({ ...SALES_DAY, ...current } as unknown as DashboardV2Report);
@@ -1316,5 +1321,34 @@ describe("AC-17 — permission-limited Manager (Gate F)", () => {
       expect(tileByLabel("Margen Bruto")?.textContent).toContain("61.4%");
     });
     expect(screen.getAllByTestId("kpi-tile")).toHaveLength(4);
+  });
+});
+
+describe("S1 / Issue #960 — Corrección de arranque con rango por defecto de 30 días", () => {
+  it("al entrar a / sin parámetros, precarga automáticamente el rango de 30 días y carga los widgets de inmediato", async () => {
+    mockDashboardReport({});
+    vi.mocked(fetchDailySeries).mockResolvedValue({
+      date: defaultDashboardRange().startDate,
+      days: [],
+    } as never);
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Ventas Netas")).toBeInTheDocument();
+    });
+
+    const expectedRange = defaultDashboardRange();
+    // The date range picker button reflects the 30-day range on initial load
+    const trigger = screen.getByRole("button", { name: /seleccionar rango de fechas/i });
+    expect(trigger).toBeInTheDocument();
+    expect(expectedRange.startDate).not.toBe(expectedRange.endDate);
+
+    // Verifies that fetchDashboardReport was called with the 30-day default start date
+    expect(fetchDashboardReport).toHaveBeenCalledWith(
+      expectedRange.startDate,
+      expectedRange.endDate,
+      expect.anything(),
+    );
   });
 });

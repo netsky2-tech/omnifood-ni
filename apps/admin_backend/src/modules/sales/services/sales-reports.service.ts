@@ -11,6 +11,7 @@ import {
 import {
   currentLocalDateKey,
   localDateKeySpanDays,
+  managuaHourBucket,
   parseLocalDateKey,
   ReportingPeriodValidationError,
   resolveReportingBounds,
@@ -490,7 +491,7 @@ export class SalesReportsService {
 
     for (const inv of invoices) {
       const invDate = new Date(inv.created_at);
-      const hour = invDate.getUTCHours();
+      const hour = managuaHourBucket(invDate);
       if (hour >= 0 && hour < 24) {
         const amount = Number(inv.total ?? 0);
         const netAmount = Number(inv.subtotal ?? 0);
