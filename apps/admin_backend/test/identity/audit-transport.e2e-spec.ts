@@ -442,7 +442,9 @@ describe('AuditController transport (D-18 part 2)', () => {
         controller.getStreamHead('tenant-1', 'other-device', 'user-1', {
           devicePrincipal: { deviceId: 'term-1' },
         }),
-      ).rejects.toThrow('Device term-1 cannot query stream head for other-device');
+      ).rejects.toThrow(
+        'Device term-1 cannot query stream head for other-device',
+      );
     });
 
     it('defaults deviceId to devicePrincipal.deviceId when query deviceId is omitted', async () => {
