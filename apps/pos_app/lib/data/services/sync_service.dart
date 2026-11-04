@@ -129,6 +129,9 @@ class InboundSyncResult {
   /// CREDIT_NOTE_SERIES).
   final int creditNotesCount;
 
+  /// #937 T5: backoffice-voided regular invoices applied locally.
+  final int voidedInvoicesCount;
+
   /// Promotions rows delivered by the `promotions` delta. The open checkout
   /// uses this as a precise reload signal: the cloud is authoritative for
   /// promotions, so any delivered row (new or re-delivered) must trigger a
@@ -159,6 +162,7 @@ class InboundSyncResult {
     this.usersCount = 0,
     this.alertsCount = 0,
     this.creditNotesCount = 0,
+    this.voidedInvoicesCount = 0,
     this.promotionsCount = 0,
     this.appliedFiscalRevision,
     this.appliedFiscalFingerprint,
@@ -5170,6 +5174,32 @@ class SyncService {
           creditNotesCount++;
         }
 
+        // 5d. #937 T5: backoffice-voided regular invoices applied to local SQLite.
+        final rawVoidedInvoices =
+            rawDeltas['voidedInvoices'] as List<dynamic>? ??
+            rawDeltas['voided_invoices'] as List<dynamic>? ??
+            const [];
+        var voidedInvoicesCount = 0;
+        for (final vi in rawVoidedInvoices) {
+          final map = Map<String, dynamic>.from(vi as Map);
+          final invoiceId = map['id'] as String?;
+          final voidReason =
+              map['voidReason'] as String? ?? 'Anulación administrativa remota';
+          if (invoiceId != null && invoiceId.isNotEmpty) {
+            try {
+              await _salesRepository.applyRemoteVoid(invoiceId, voidReason);
+              voidedInvoicesCount++;
+            } catch (e, st) {
+              developer.log(
+                '[SYNC_PULL] applyRemoteVoid failed for $invoiceId: $e',
+                name: 'SyncService',
+                error: e,
+                stackTrace: st,
+              );
+            }
+          }
+        }
+
         // Update local sync watermark version
         final currentVersion = data['currentVersion'];
         if (currentVersion != null) {
@@ -5203,6 +5233,7 @@ class SyncService {
           usersCount: userEntities.length,
           alertsCount: alertsCount,
           creditNotesCount: creditNotesCount,
+          voidedInvoicesCount: voidedInvoicesCount,
           appliedFiscalRevision: appliedFiscalRevision,
           appliedFiscalFingerprint: appliedFiscalFingerprint,
           authorityInsumosCount: authorityInsumosCount,

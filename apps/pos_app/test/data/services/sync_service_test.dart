@@ -189,9 +189,16 @@ class MockSalesRepository implements SalesRepository {
   }) async =>
       throw UnimplementedError();
 
+  final appliedRemoteVoids = <String, String>{};
+
   @override
   Future<void> voidInvoice(String invoiceId, String reasonCode,
       {String? reasonDetail}) async => throw UnimplementedError();
+
+  @override
+  Future<void> applyRemoteVoid(String invoiceId, String voidReason) async {
+    appliedRemoteVoids[invoiceId] = voidReason;
+  }
 }
 
 class FakeAuditRepository implements AuditRepository {
@@ -3124,6 +3131,53 @@ void main() {
               .getConfigByKey('last_inbound_sync_version');
           expect(savedVersionConfig, isNotNull);
           expect(savedVersionConfig!.value, '1792000000000');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      '#937 T5: pullInboundDeltas consumes voidedInvoices and calls applyRemoteVoid on salesRepository',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-11-04T12:00:00.000Z',
+            'currentVersion': 1793000000000,
+            'deltas': {
+              'voidedInvoices': [
+                {
+                  'id': 'inv-remote-void-1',
+                  'number': '001-001-01-00000015',
+                  'isCanceled': true,
+                  'voidReason': 'ERROR_DE_CAPTURA',
+                  'updatedAt': '2026-11-04T12:00:00.000Z',
+                },
+              ],
+            },
+          };
+
+          final result = await syncServiceWithDb.pullInboundDeltas();
+
+          expect(result, isNotNull);
+          expect(result!.voidedInvoicesCount, 1);
+          expect(
+            mockSalesRepository.appliedRemoteVoids['inv-remote-void-1'],
+            'ERROR_DE_CAPTURA',
+          );
         } finally {
           await database.close();
         }

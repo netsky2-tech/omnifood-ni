@@ -240,6 +240,10 @@ class _NoopSalesRepository implements SalesRepository {
       Future.value();
 
   @override
+  Future<void> applyRemoteVoid(String invoiceId, String voidReason) =>
+      Future.value();
+
+  @override
   Future<String> createCreditNote({
     required String originalInvoiceId,
     required String reason,

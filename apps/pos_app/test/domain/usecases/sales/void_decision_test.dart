@@ -64,6 +64,7 @@ void main() {
     DateTime? invoiceCreatedAt,
     String? currentShiftId = 'shift-1',
     DateTime? comparedTo,
+    bool isInvoiceSyncFailed = false,
   }) =>
       evaluateVoidRequest(
         actorCanVoidAny: hasSalesPermission(
@@ -78,6 +79,7 @@ void main() {
             invoiceCreatedAt ?? DateTime(2026, 9, 24, 0, 15),
         currentShiftId: currentShiftId,
         comparedTo: comparedTo ?? DateTime(2026, 9, 24, 0, 20),
+        isInvoiceSyncFailed: isInvoiceSyncFailed,
       );
 
   group('evaluateVoidRequest — permission predicate', () {
@@ -138,6 +140,40 @@ void main() {
           invoiceLocalIssueDate: '2026-09-01',
           invoiceCreatedAt: DateTime(2026, 9, 1, 21, 0),
           currentShiftId: 'shift-1',
+        ),
+        VoidDecision.deniedCrossDay,
+      );
+    });
+
+    test('#937: owner with an un-synced/failed cross-day invoice is allowed to administratively void it locally',
+        () {
+      expect(
+        evaluate(
+          actorRole: UserRole.owner,
+          actorUserId: 'owner-1',
+          invoiceUserId: 'cashier-1',
+          invoiceShiftId: 'shift-1',
+          invoiceLocalIssueDate: '2026-09-01',
+          invoiceCreatedAt: DateTime(2026, 9, 1, 21, 0),
+          currentShiftId: 'shift-1',
+          isInvoiceSyncFailed: true,
+        ),
+        VoidDecision.allowed,
+      );
+    });
+
+    test('#937: cashier with an un-synced/failed cross-day invoice is still deniedCrossDay',
+        () {
+      expect(
+        evaluate(
+          actorRole: UserRole.cashier,
+          actorUserId: 'cashier-1',
+          invoiceUserId: 'cashier-1',
+          invoiceShiftId: 'shift-1',
+          invoiceLocalIssueDate: '2026-09-01',
+          invoiceCreatedAt: DateTime(2026, 9, 1, 21, 0),
+          currentShiftId: 'shift-1',
+          isInvoiceSyncFailed: true,
         ),
         VoidDecision.deniedCrossDay,
       );

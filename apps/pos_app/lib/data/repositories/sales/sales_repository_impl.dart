@@ -1025,6 +1025,47 @@ class SalesRepositoryImpl implements SalesRepository {
   }
 
   @override
+  Future<void> applyRemoteVoid(String invoiceId, String voidReason) async {
+    final entity = await invoiceDao.getInvoiceById(invoiceId);
+    if (entity == null || entity.isCanceled) return;
+
+    final itemEntities = await itemDao.getItemsByInvoiceId(invoiceId);
+    final items = itemEntities.map(SalesMapper.toItemDomain).toList();
+
+    final movements = await reverseInventoryUseCase.execute(
+      items,
+      'Anulación Administrativa: ${entity.number}',
+    );
+    final movementEntities = movements
+        .map(
+          (m) => InventoryMapper.toMovementEntity(
+            m.copyWith(
+              userId: entity.userId,
+              sourceDocumentType: 'invoice',
+              sourceDocumentId: entity.id,
+            ),
+          ),
+        )
+        .toList();
+
+    final canceledInvoice = _copyInvoiceEntity(
+      entity,
+      isCanceled: true,
+      voidReason: voidReason,
+      syncStatus: 'synced',
+    );
+
+    await transactionDao.executeVoidTransaction(
+      movementEntities,
+      canceledInvoice,
+      null,
+      false,
+      const [],
+      null,
+    );
+  }
+
+  @override
   Future<String> createCreditNote({
     required String originalInvoiceId,
     required String reason,

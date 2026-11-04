@@ -1031,6 +1031,67 @@ void main() {
     );
 
     test(
+      '#937 T5: applyRemoteVoid reverses inventory and marks invoice canceled with syncStatus=synced without cashier audit log',
+      () async {
+        final entity = InvoiceEntity(
+          id: 'inv-remote-void',
+          number: '001-00000008',
+          createdAt: 1000,
+          userId: 'u1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          isCanceled: false,
+          voidReason: null,
+          syncStatus: 'synced',
+          paymentStatus: 'paid',
+          globalTaxOverride: false,
+          type: 'regular',
+        );
+
+        when(mockInvoiceDao.getInvoiceById('inv-remote-void'))
+            .thenAnswer((_) async => entity);
+        when(mockItemDao.getItemsByInvoiceId('inv-remote-void'))
+            .thenAnswer((_) async => []);
+        when(mockReverseInventoryUseCase.execute(any, any))
+            .thenAnswer((_) async => []);
+        when(
+          mockTransactionDao.executeVoidTransaction(
+            any,
+            any,
+            any,
+            any,
+            any,
+            any,
+          ),
+        ).thenAnswer((_) async {});
+
+        await repository.applyRemoteVoid(
+          'inv-remote-void',
+          'ERROR_DE_CAPTURA',
+        );
+
+        final captured = verify(
+          mockTransactionDao.executeVoidTransaction(
+            captureAny,
+            captureAny,
+            captureAny,
+            captureAny,
+            captureAny,
+            captureAny,
+          ),
+        ).captured;
+
+        final canceled = captured[1] as InvoiceEntity;
+        expect(canceled.id, 'inv-remote-void');
+        expect(canceled.isCanceled, isTrue);
+        expect(canceled.voidReason, 'ERROR_DE_CAPTURA');
+        expect(canceled.syncStatus, 'synced');
+        expect(captured[2], isNull); // no cashier audit log
+      },
+    );
+
+    test(
       'rolls back the whole unit if a DAO write inside the void transaction fails (no partial cancellation persisted directly)',
       () async {
         // The previous blocker: voidInvoice awaited each DAO write
