@@ -2977,4 +2977,54 @@ describe('InboundSyncService', () => {
       );
     });
   });
+
+  describe('voidedInvoices domain (#937 T3)', () => {
+    const mockVoidedInvoices = [
+      {
+        id: 'inv-voided-1',
+        number: '001-001-01-00000003',
+        type: 'regular',
+        isCanceled: true,
+        voidReason: 'ERROR_DE_CAPTURA',
+        created_at: new Date('2026-10-01T00:00:00Z'),
+        updated_at: new Date('2026-10-02T00:00:00Z'),
+      } as unknown as Invoice,
+    ];
+
+    it('delivers voided regular invoices when the type is requested, honoring the update watermark', async () => {
+      creditNoteQb.getMany.mockResolvedValue(mockVoidedInvoices);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'voidedinvoices', since: '2026-09-30T00:00:00Z' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.voidedInvoices).toEqual([
+        {
+          id: 'inv-voided-1',
+          number: '001-001-01-00000003',
+          isCanceled: true,
+          voidReason: 'ERROR_DE_CAPTURA',
+          updatedAt: '2026-10-02T00:00:00.000Z',
+        },
+      ]);
+      expect(creditNoteQb.andWhere).toHaveBeenCalledWith(
+        'invoice.updated_at >= :sinceDate',
+        { sinceDate: expect.anything() },
+      );
+    });
+
+    it('ships an empty voidedInvoices domain when another type is requested', async () => {
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.voidedInvoices).toEqual([]);
+    });
+  });
 });

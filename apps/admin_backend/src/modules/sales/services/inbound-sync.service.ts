@@ -43,6 +43,7 @@ import {
   InboundSyncResponseDto,
   InboundSyncDeltasDto,
   InboundSyncCreditNoteDto,
+  InboundSyncVoidedInvoiceDto,
   InboundSyncProductDto,
   InboundSyncCatalogValueDto,
   InboundSyncInsumoDto,
@@ -241,6 +242,15 @@ export class InboundSyncService {
       creditNotes:
         requestedTypes.has('creditnotes') || requestedTypes.has('credit_notes')
           ? await this.fetchCreditNoteDeltas(tenantId, sinceDate, entityManager)
+          : [],
+      voidedInvoices:
+        requestedTypes.has('voidedinvoices') ||
+        requestedTypes.has('voided_invoices')
+          ? await this.fetchVoidedInvoiceDeltas(
+              tenantId,
+              sinceDate,
+              entityManager,
+            )
           : [],
       batches: requestedTypes.has('batches')
         ? await this.fetchBatchDeltas(tenantId, sinceDate, entityManager)
@@ -514,6 +524,44 @@ export class InboundSyncService {
     }));
   }
 
+  /**
+   * #937 T3: regular invoices voided administratively in the Backoffice.
+   * Fetches rows where type = 'regular' AND is_canceled = true.
+   * Cursor is `updated_at >= sinceDate`.
+   */
+  private async fetchVoidedInvoiceDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncVoidedInvoiceDto[]> {
+    if (!entityManager) {
+      throw new UnauthorizedException(
+        'Inbound voided invoices sync requires a tenant-bound transaction manager',
+      );
+    }
+    const invoiceRepository = entityManager.getRepository(Invoice);
+    const qb = invoiceRepository
+      .createQueryBuilder('invoice')
+      .where('invoice.tenant_id = :tenantId', { tenantId })
+      .andWhere('invoice.type = :type', { type: 'regular' })
+      .andWhere('invoice.is_canceled = true');
+
+    if (sinceDate) {
+      qb.andWhere('invoice.updated_at >= :sinceDate', { sinceDate });
+    }
+
+    qb.orderBy('invoice.updated_at', 'ASC').addOrderBy('invoice.id', 'ASC');
+
+    const rows = await qb.getMany();
+    return rows.map((row) => ({
+      id: row.id,
+      number: row.number,
+      isCanceled: row.isCanceled,
+      voidReason: row.voidReason ?? null,
+      updatedAt: row.updated_at.toISOString(),
+    }));
+  }
+
   private parseRequestedTypes(types?: string): Set<string> {
     if (!types || types.trim() === '') {
       return new Set([
@@ -538,6 +586,8 @@ export class InboundSyncService {
         'alerts',
         'creditnotes',
         'credit_notes',
+        'voidedinvoices',
+        'voided_invoices',
         'batches',
         'fiscal',
         'fiscal_config',

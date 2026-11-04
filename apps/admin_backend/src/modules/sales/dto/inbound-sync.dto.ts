@@ -472,6 +472,12 @@ export interface InboundSyncDeltasDto {
    * service always populates it (empty when not requested).
    */
   creditNotes?: InboundSyncCreditNoteDto[];
+  /**
+   * #937 T3: regular invoices voided administratively in the Backoffice.
+   * Optional in the type like `alerts` — older envelope literals predate it — but the
+   * service always populates it (empty when not requested).
+   */
+  voidedInvoices?: InboundSyncVoidedInvoiceDto[];
   batches?: InboundSyncBatchDto[];
   fiscalConfig?: FiscalConfigSnapshot | null;
 }
@@ -502,6 +508,19 @@ export interface InboundSyncCreditNoteDto {
   commercialRate: number;
   totalUsd: number;
   createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * #937 T3: regular invoices voided administratively in the Backoffice.
+ * The POS receives these stored facts to mark its local SQLite rows as
+ * canceled and apply compensating inventory movements without altering cash shift.
+ */
+export interface InboundSyncVoidedInvoiceDto {
+  id: string;
+  number: string;
+  isCanceled: boolean;
+  voidReason: string | null;
   updatedAt: string;
 }
 
