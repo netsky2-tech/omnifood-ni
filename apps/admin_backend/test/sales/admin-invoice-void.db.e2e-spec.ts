@@ -152,13 +152,13 @@ describe('Admin invoice void & DGI sequence closure (Real PostgreSQL DB, migrati
     );
 
     inboundSyncService = new InboundSyncService(
-      runtime.getRepository(Invoice),
-      runtime.getRepository(Invoice),
-      runtime.getRepository(Insumo),
-      runtime.getRepository(Invoice),
-      runtime.getRepository(Invoice),
-      runtime.getRepository(Invoice),
-      runtime.getRepository(User),
+      runtime.getRepository(Product) as any,
+      runtime.getRepository(Product) as any,
+      runtime.getRepository(Insumo) as any,
+      runtime.getRepository(Product) as any,
+      runtime.getRepository(Product) as any,
+      runtime.getRepository(Product) as any,
+      runtime.getRepository(User) as any,
     );
 
     // Seed Tenants
