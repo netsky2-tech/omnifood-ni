@@ -65,6 +65,8 @@ import {
   parseCreditNoteSeries,
 } from '../../onboarding/services/fiscal-config-version.service';
 import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
+import { VoidAdminInvoiceDto } from '../dto/admin-void-invoice.dto';
+import { AuditLog } from '../../identity/entities/audit-log.entity';
 import { SequenceGapPolicyService } from '../sync-health/sequence-gap-policy.service';
 
 const SCALE_4 = 4;
@@ -579,6 +581,172 @@ export class InvoicesService {
         }
         throw error;
       }
+    });
+  }
+
+  /**
+   * D-14 / Issue #937: Administrative void of terminal invoices from the Backoffice.
+   * Gated to OWNER / MANAGER with SALES_VOID_INVOICE permission.
+   *
+   * Executes in ONE SERIALIZABLE tenant-bound transaction:
+   * 1. Finds the invoice and asserts it is regular, active, and not already canceled.
+   * 2. Sets isCanceled = true and records the mandatory voidReason.
+   * 3. Reverses inventory in Kardex if prior SALE movements exist for this invoice,
+   *    restoring insumo stock and batch inflow without creating phantom stock.
+   * 4. Appends a hash-chained audit log entry under WEB_ADMIN device with action ADMIN_INVOICE_VOIDED.
+   */
+  async voidAdminInvoice(
+    tenantId: string,
+    invoiceId: string,
+    dto: VoidAdminInvoiceDto,
+    authorizer: { userId: string; role: UserRole },
+  ): Promise<{
+    id: string;
+    number: string;
+    isCanceled: boolean;
+    voidReason: string;
+  }> {
+    return this.dataSource.transaction('SERIALIZABLE', async (manager) => {
+      await bindTenantContext(manager, tenantId);
+
+      const invoice = await this.invoiceRepoFor(manager).findOne({
+        where: { id: invoiceId, tenant_id: tenantId },
+      });
+      if (!invoice) {
+        throw new NotFoundException(`Invoice '${invoiceId}' was not found`);
+      }
+      if (invoice.type === 'creditNote') {
+        throw new BadRequestException('Cannot void a credit note document');
+      }
+      if (invoice.isCanceled) {
+        throw new ConflictException(
+          `Invoice '${invoiceId}' is already canceled`,
+        );
+      }
+
+      const effectiveReason = dto.reasonDetail?.trim()
+        ? `${dto.reason.trim()} \u2014 ${dto.reasonDetail.trim()}`
+        : dto.reason.trim();
+
+      invoice.isCanceled = true;
+      invoice.voidReason = effectiveReason;
+      await this.invoiceRepoFor(manager).save(invoice);
+
+      // Inventory compensation: if sale movements exist in Kardex, reverse them
+      const movRepo = manager.getRepository(InventoryMovement);
+      const existingMovements = await movRepo.find({
+        where: {
+          tenant_id: tenantId,
+          sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
+          type: MovementType.SALE,
+        },
+      });
+
+      for (const mov of existingMovements) {
+        const insumo = await manager
+          .createQueryBuilder(Insumo, 'insumo')
+          .setLock('pessimistic_write')
+          .where('insumo.id = :insumoId', { insumoId: mov.insumoId })
+          .andWhere('insumo.tenant_id = :tenantId', { tenantId })
+          .getOne();
+
+        if (insumo) {
+          const returnedQty = Math.abs(Number(mov.quantity));
+          const previousStock = Number(insumo.stock);
+          const newStock = Number((previousStock + returnedQty).toFixed(4));
+          insumo.stock = newStock;
+          insumo.existenciaActual = newStock;
+          await manager.save(Insumo, insumo);
+
+          const unitCostNio = Number(
+            mov.unitCostNio ?? insumo.averageCost ?? 0,
+          );
+          await movRepo.save(
+            movRepo.create({
+              tenant_id: tenantId,
+              insumoId: mov.insumoId,
+              type: MovementType.SALE_CANCEL,
+              quantity: returnedQty,
+              previousStock,
+              newStock,
+              averageCostAfterNio: Number(insumo.averageCost ?? 0),
+              unitCostNio,
+              totalCostNio: Number((returnedQty * unitCostNio).toFixed(4)),
+              idempotencyKey: `admin-void:${invoice.id}:${mov.id}`,
+              sourceDeviceId: 'WEB_ADMIN',
+              sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${invoice.id}`,
+              sourceDocumentType: MovementType.SALE_CANCEL,
+              compensationForKardexId: mov.id,
+              timestamp: new Date(),
+              user_id: authorizer.userId,
+            }),
+          );
+
+          await restoreBatchInflow({
+            manager,
+            tenantId,
+            movementId: String(mov.id),
+          });
+        }
+      }
+
+      // Hash-chained audit trail
+      const auditRepo = manager.getRepository(AuditLog);
+      const lastLog =
+        typeof auditRepo.findOne === 'function'
+          ? await auditRepo.findOne({
+              where: {
+                tenant_id: tenantId,
+                device_id: 'WEB_ADMIN',
+                user_id: authorizer.userId,
+                forensic_status: 'ACTIVE',
+              },
+              order: { sequence_no: 'DESC' },
+            })
+          : null;
+
+      const sequenceNo = lastLog ? Number(lastLog.sequence_no) + 1 : 1;
+      const prevHash = lastLog?.entry_hash ? lastLog.entry_hash : 'GENESIS';
+      const timestamp = new Date();
+      const metadata: Record<string, unknown> = {
+        invoice_id: invoice.id,
+        invoice_number: invoice.number,
+        reason: effectiveReason,
+        authorized_by_user_id: authorizer.userId,
+        authorized_by_role: authorizer.role,
+        timestamp: timestamp.toISOString(),
+      };
+
+      const action = 'ADMIN_INVOICE_VOIDED';
+      const canonicalPayload = `${authorizer.userId}|${action}|WEB_ADMIN|${timestamp.toISOString()}|${sequenceNo}|${prevHash}|null|null|${JSON.stringify(metadata)}`;
+      const entryHash = createHash('sha256')
+        .update(canonicalPayload)
+        .digest('hex');
+
+      const auditEntry = auditRepo.create({
+        tenant_id: tenantId,
+        user_id: authorizer.userId,
+        action,
+        target_type: 'invoice',
+        target_id: invoice.id,
+        device_id: 'WEB_ADMIN',
+        sequence_no: sequenceNo,
+        prev_hash: prevHash,
+        entry_hash: entryHash,
+        metodo_autorizacion: 'JWT_ROLE_PERMISSION',
+        usuario_autorizador_id: authorizer.userId,
+        timestamp,
+        metadata,
+        forensic_status: 'ACTIVE',
+      });
+      await auditRepo.save(auditEntry);
+
+      return {
+        id: invoice.id,
+        number: invoice.number,
+        isCanceled: invoice.isCanceled,
+        voidReason: invoice.voidReason,
+      };
     });
   }
 
@@ -2069,8 +2237,24 @@ export class InvoicesService {
           continue;
         }
 
-        const normalizedQuantity =
+        const compensationForKardexId =
           movementType === MovementType.SALE_CANCEL
+            ? await this.resolveCompensatedMovementId(
+                manager,
+                tenantId,
+                insumoId,
+                invoice.id,
+              )
+            : null;
+
+        // Issue #937 / S8: if SALE_CANCEL compensates a sale that never existed in the cloud Kardex,
+        // do NOT add phantom stock. Keep quantity = 0 for stock adjustments.
+        const isUncompensatedCancel =
+          movementType === MovementType.SALE_CANCEL && !compensationForKardexId;
+
+        const normalizedQuantity = isUncompensatedCancel
+          ? 0
+          : movementType === MovementType.SALE_CANCEL
             ? Math.abs(explodedQuantity)
             : -Math.abs(explodedQuantity);
         const previousStock = Number(insumo.stock);
@@ -2099,16 +2283,6 @@ export class InvoicesService {
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
         await manager.save(Insumo, insumo);
-
-        const compensationForKardexId =
-          movementType === MovementType.SALE_CANCEL
-            ? await this.resolveCompensatedMovementId(
-                manager,
-                tenantId,
-                insumoId,
-                invoice.id,
-              )
-            : null;
 
         const savedMovement = await manager.save(
           this.movementRepository.create({
@@ -2494,8 +2668,24 @@ export class InvoicesService {
       return declaredDivergences;
     }
 
-    const normalizedQuantity =
+    const compensationForKardexId =
       movementType === MovementType.SALE_CANCEL
+        ? await this.resolveCompensatedMovementId(
+            manager,
+            tenantId,
+            binding.insumoId,
+            invoice.id,
+          )
+        : null;
+
+    // Issue #937 / S8: if SALE_CANCEL compensates a sale that never existed in the cloud Kardex,
+    // do NOT add phantom stock. Keep quantity = 0 for stock adjustments.
+    const isUncompensatedCancel =
+      movementType === MovementType.SALE_CANCEL && !compensationForKardexId;
+
+    const normalizedQuantity = isUncompensatedCancel
+      ? 0
+      : movementType === MovementType.SALE_CANCEL
         ? Math.abs(explodedQuantity)
         : -Math.abs(explodedQuantity);
     const previousStock = Number(insumo.stock);
@@ -2541,20 +2731,6 @@ export class InvoicesService {
     insumo.stock = newStock;
     insumo.existenciaActual = newStock;
     await manager.save(Insumo, insumo);
-
-    // S5 (H4): the flowType branch must carry the link to the write-up it
-    // reverses. appendFohMovements did this from the start, but this branch
-    // never did, so a SALE_CANCEL left compensation_for_kardex_id NULL and the
-    // ledger could not show which entry the reversal compensates.
-    const compensationForKardexId =
-      movementType === MovementType.SALE_CANCEL
-        ? await this.resolveCompensatedMovementId(
-            manager,
-            tenantId,
-            binding.insumoId,
-            invoice.id,
-          )
-        : null;
 
     const savedMovement = await manager.save(
       this.movementRepository.create({
