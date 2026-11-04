@@ -21,6 +21,11 @@
 .codegraph/
 .pi/
 
+# Backups and database dumps
+backups/
+*.sql
+*.dump
+
 # Release signing material must never be committed. Custody, backup and
 # provisioning rules live in docs/operations/release-signing-runbook.md.
 *.jks
