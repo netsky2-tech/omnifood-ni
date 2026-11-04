@@ -6,7 +6,6 @@ import { AuditLog } from './entities/audit-log.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
 import { AuditIntegrityAlert } from './entities/audit-integrity-alert.entity';
 import { TenantCapabilityEvent } from './entities/tenant-capability-event.entity';
-import { ForensicAlert } from '../inventory/entities/forensic-alert.entity';
 import { AuthService } from './services/auth.service';
 import { AuthAuditService } from './services/auth-audit.service';
 import { UserService } from './services/user.service';
@@ -55,7 +54,6 @@ import { SyncTransportGuard } from './guards/sync-transport.guard';
       SecurityProfile,
       AuditIntegrityAlert,
       TenantCapabilityEvent,
-      ForensicAlert,
     ]),
     JwtModule.registerAsync({
       imports: [IdentityJwtConfigModule],

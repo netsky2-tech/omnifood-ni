@@ -44,9 +44,6 @@ export class AuditController {
     private readonly dataSource: DataSource,
     private readonly auditTrailService: AuditTrailService,
     private readonly verificationService: AuditVerificationService,
-    @Optional()
-    @InjectRepository(ForensicAlert)
-    private readonly forensicAlertRepository?: Repository<ForensicAlert>,
   ) {}
 
   @Get('overrides')
@@ -330,8 +327,9 @@ export class AuditController {
     existingHash: string,
   ): Promise<{ id: string }> {
     try {
-      if (this.forensicAlertRepository) {
-        const alert = this.forensicAlertRepository.create({
+      if (this.dataSource && typeof this.dataSource.getRepository === 'function') {
+        const alertRepo = this.dataSource.getRepository(ForensicAlert);
+        const alert = alertRepo.create({
           tenant_id: tenantId,
           alert_type: 'AUDIT_BACKEND_TERMINAL_REJECTION',
           severity: 'critical',
@@ -347,7 +345,7 @@ export class AuditController {
           },
           resolved_at: null,
         });
-        const saved = await this.forensicAlertRepository.save(alert);
+        const saved = await alertRepo.save(alert);
         return { id: saved.id };
       }
     } catch {
