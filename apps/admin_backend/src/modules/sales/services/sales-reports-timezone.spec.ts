@@ -153,4 +153,51 @@ describe('SalesReportsService — America/Managua Business Day Boundaries Regres
     expect(saleE2.getTime()).toBeGreaterThan(year2026End.getTime());
     expect(saleE2.getTime()).toBeGreaterThanOrEqual(year2027Start.getTime());
   });
+
+  it('buckets invoices in getHourlySales using America/Managua (UTC-6) local hour, including across UTC midnight', async () => {
+    // 2026-09-18 in Managua (UTC-6):
+    // Lunch: 12:30 local -> 18:30 UTC
+    // Dinner: 20:15 local -> 2026-09-19T02:15 UTC (next day in UTC, but same day in Managua!)
+    invoiceRepo.find.mockResolvedValue([
+      {
+        id: 'inv-lunch',
+        tenant_id: 'tenant-1',
+        total: 600,
+        subtotal: 520,
+        created_at: new Date('2026-09-18T18:30:00.000Z'), // 12:30 Managua
+        isCanceled: false,
+      },
+      {
+        id: 'inv-dinner',
+        tenant_id: 'tenant-1',
+        total: 900,
+        subtotal: 780,
+        created_at: new Date('2026-09-19T02:15:00.000Z'), // 20:15 Managua
+        isCanceled: false,
+      },
+    ]);
+
+    const report = await service.getHourlySales('tenant-1', {
+      date: '2026-09-18',
+    });
+
+    expect(report.hourly).toHaveLength(24);
+
+    const hour12 = report.hourly.find((h) => h.hour === 12);
+    expect(hour12?.invoiceCount).toBe(1);
+    expect(hour12?.totalSales).toBe(600);
+    expect(hour12?.netSalesNio).toBe(520);
+
+    const hour20 = report.hourly.find((h) => h.hour === 20);
+    expect(hour20?.invoiceCount).toBe(1);
+    expect(hour20?.totalSales).toBe(900);
+    expect(hour20?.netSalesNio).toBe(780);
+
+    // Ensure raw UTC hours (18 and 2) do not get the sales
+    const hour18 = report.hourly.find((h) => h.hour === 18);
+    expect(hour18?.invoiceCount).toBe(0);
+
+    const hour2 = report.hourly.find((h) => h.hour === 2);
+    expect(hour2?.invoiceCount).toBe(0);
+  });
 });

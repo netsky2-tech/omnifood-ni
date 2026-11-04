@@ -21,6 +21,7 @@ import { AttentionBand } from "./attention-band";
 import { useAttentionSignals } from "./use-attention-signals";
 import { SalesTrendChart } from "./sales-trend-chart";
 import { HourlySalesChart } from "./hourly-sales-chart";
+import { WeeklyRhythmChart } from "./weekly-rhythm-chart";
 import { TopProductsChart } from "./top-products-chart";
 import { PaymentMixChart } from "./payment-mix-chart";
 
@@ -95,13 +96,23 @@ export function PerformanceBand({ range, today }: PerformanceBandProps) {
           </ChartCellBoundary>
         )}
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Capa 3 (NHILOS §8): Ritmo operativo del negocio — Horas pico de
+          demanda (almuerzo vs cena UTC-6 Managua) + Afluencia semanal consolidada (Lun–Dom). */}
+      <div data-testid="operational-rhythm-band" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCellBoundary>
           {/* Batch 5c: a single day queries with `date`; a multi-day range
               queries with `startDate`/`endDate` and the card shows the
-              averaged per-hour distribution (FR-HOURLY-01/03). */}
+              averaged per-hour distribution (FR-HOURLY-01/03) with peak badges. */}
           <HourlySalesChart start={period.currentStart} end={period.currentEnd} />
         </ChartCellBoundary>
+        <ChartCellBoundary>
+          <WeeklyRhythmChart start={period.currentStart} end={period.currentEnd} />
+        </ChartCellBoundary>
+      </div>
+
+      {/* Capa 4 (NHILOS §8): Desglose comercial y pagos — Top productos con
+          unidades y share + Mix de pagos con monitoreo de USD físico para arqueo. */}
+      <div data-testid="commercial-breakdown-band" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ChartCellBoundary>
           <TopProductsChart start={period.currentStart} end={period.currentEnd} />
         </ChartCellBoundary>

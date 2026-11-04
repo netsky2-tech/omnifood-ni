@@ -17,7 +17,7 @@ import { Rectangle } from "recharts";
 import type { BarShapeProps } from "recharts";
 import type { ComponentProps } from "react";
 import { useNavigate } from "react-router-dom";
-import { buildHourlyBars, formatNio } from "./chart-domain";
+import { buildHourlyBars, formatNio, type HourlyBar } from "./chart-domain";
 import { ChartCard, EmptyNote, WidgetError, WidgetSkeleton } from "./chart-card";
 import { useHourlyReport } from "./use-dashboard-charts";
 import { buildDashboardDrilldownUrl } from "./domain/navigation-context";
@@ -66,7 +66,9 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
         rest[key] = value;
       }
     }
-    const hour = Number((props as { payload?: { hour?: unknown } }).payload?.hour);
+    const payload = (props as { payload?: { hour?: unknown; isPeak?: unknown } }).payload;
+    const hour = Number(payload?.hour);
+    const isPeak = Boolean(payload?.isPeak);
     return (
       <Rectangle
         {...(rest as ComponentProps<typeof Rectangle>)}
@@ -74,6 +76,11 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
         tabIndex={0}
         data-testid={`hourly-bar-${hour}`}
         aria-label={`Ver ventas de las ${String(hour).padStart(2, "0")}:00`}
+        fill={
+          isPeak
+            ? "var(--color-primary, #013a57)"
+            : "color-mix(in srgb, var(--color-primary, #013a57) 75%, transparent)"
+        }
         className="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -96,7 +103,7 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
       />
     );
   } else {
-    const { bars, hasActivity, firstActiveHour, lastActiveHour } = buildHourlyBars(query.data.hourly);
+    const { bars, hasActivity, firstActiveHour, lastActiveHour, peaks } = buildHourlyBars(query.data.hourly);
     if (!hasActivity) {
       body = <EmptyNote testId="hourly-empty">sin actividad</EmptyNote>;
     } else {
@@ -107,10 +114,32 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
           : `Día: ${query.data.date || start}`;
       body = (
         <>
-          <p data-testid="hourly-caption" className="mb-2 text-xs text-muted-foreground">
+          <p data-testid="hourly-caption" className="mb-1.5 text-xs text-muted-foreground">
             {rangeCaption} · Horario con actividad: {String(firstActiveHour).padStart(2, "0")}:00 –{" "}
             {String(lastActiveHour).padStart(2, "0")}:00
           </p>
+          {(peaks.lunchPeakHour !== null || peaks.dinnerPeakHour !== null) && (
+            <div data-testid="hourly-peaks-strip" className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+              {peaks.lunchPeakHour !== null && (
+                <span
+                  data-testid="peak-lunch-badge"
+                  className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/60"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  Almuerzo · Pico {String(peaks.lunchPeakHour).padStart(2, "0")}:00 ({formatNio(peaks.lunchSales)})
+                </span>
+              )}
+              {peaks.dinnerPeakHour !== null && (
+                <span
+                  data-testid="peak-dinner-badge"
+                  className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 font-medium text-indigo-800 border border-indigo-200/60 dark:bg-indigo-950/40 dark:text-indigo-200 dark:border-indigo-800/60"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                  Cena · Pico {String(peaks.dinnerPeakHour).padStart(2, "0")}:00 ({formatNio(peaks.dinnerSales)})
+                </span>
+              )}
+            </div>
+          )}
           <div role="group" aria-label="Ventas por hora del día">
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={bars} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
@@ -127,7 +156,17 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
                 <YAxis tickFormatter={formatNio} width={88} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
                 <Tooltip
                   cursor={{ fill: "var(--color-muted, #f1f5f9)" }}
-                  formatter={(value) => formatNio(Number(value))}
+                  formatter={(value, _name, item) => {
+                    const payload = (item as unknown as { payload?: HourlyBar })?.payload;
+                    const windowName =
+                      payload?.mealWindow === "almuerzo"
+                        ? " · Almuerzo"
+                        : payload?.mealWindow === "cena"
+                          ? " · Cena"
+                          : "";
+                    const peakText = payload?.isPeak ? " (Pico)" : "";
+                    return [`${formatNio(Number(value))}${windowName}${peakText}`, "Venta neta"];
+                  }}
                   labelFormatter={(label) => String(label)}
                 />
                 {/* §15/§28.F.6: Bar-level onClick is the recharts-native click

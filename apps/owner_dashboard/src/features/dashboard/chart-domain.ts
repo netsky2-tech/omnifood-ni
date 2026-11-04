@@ -103,11 +103,22 @@ export function isZeroSeries(days: DailySeriesDay[] | null | undefined): boolean
   return days.every((d) => d.netSalesNio === 0 && d.completedTicketCount === 0);
 }
 
+export interface PeakDemandAnalysis {
+  overallPeakHour: number | null;
+  overallPeakSales: number;
+  lunchPeakHour: number | null;
+  lunchSales: number;
+  dinnerPeakHour: number | null;
+  dinnerSales: number;
+}
+
 export interface HourlyBar {
   hour: number;
   /** Zero-padded "HH:00" label. */
   label: string;
   sales: number;
+  mealWindow: "almuerzo" | "cena" | null;
+  isPeak: boolean;
 }
 
 export interface HourlyBarsResult {
@@ -115,6 +126,7 @@ export interface HourlyBarsResult {
   hasActivity: boolean;
   firstActiveHour: number | null;
   lastActiveHour: number | null;
+  peaks: PeakDemandAnalysis;
 }
 
 /** Zero-pads an hour into "HH:00". */
@@ -141,7 +153,7 @@ export interface HourlyWireBucket {
  * Fills the full 24h domain: buckets missing from the wire are zero-sale
  * inactivity gaps, never dropped points (Batch 5b scope 3). Sales are read
  * from the V2 `netSalesNio` bucket field; absent/garbage values fail closed
- * to 0.
+ * to 0. Identifies peak moments including lunch (11-14) vs dinner (18-22).
  */
 export function buildHourlyBars(
   hourly: HourlyWireBucket[] | null | undefined,
@@ -155,17 +167,74 @@ export function buildHourlyBars(
       salesByHour.set(hour, (salesByHour.get(hour) ?? 0) + sales);
     }
   }
-  const bars: HourlyBar[] = Array.from({ length: 24 }, (_, hour) => ({
-    hour,
-    label: hourLabel(hour),
-    sales: salesByHour.get(hour) ?? 0,
-  }));
+
+  let overallPeakHour: number | null = null;
+  let overallPeakSales = 0;
+  let lunchPeakHour: number | null = null;
+  let lunchPeakSales = 0;
+  let lunchSales = 0;
+  let dinnerPeakHour: number | null = null;
+  let dinnerPeakSales = 0;
+  let dinnerSales = 0;
+
+  for (let hour = 0; hour < 24; hour++) {
+    const s = salesByHour.get(hour) ?? 0;
+    if (s > 0) {
+      if (s > overallPeakSales) {
+        overallPeakSales = s;
+        overallPeakHour = hour;
+      }
+      // Almuerzo: 11:00 to 14:59
+      if (hour >= 11 && hour <= 14) {
+        lunchSales += s;
+        if (s > lunchPeakSales) {
+          lunchPeakSales = s;
+          lunchPeakHour = hour;
+        }
+      }
+      // Cena: 18:00 to 22:59
+      if (hour >= 18 && hour <= 22) {
+        dinnerSales += s;
+        if (s > dinnerPeakSales) {
+          dinnerPeakSales = s;
+          dinnerPeakHour = hour;
+        }
+      }
+    }
+  }
+
+  const bars: HourlyBar[] = Array.from({ length: 24 }, (_, hour) => {
+    const sales = salesByHour.get(hour) ?? 0;
+    const isLunch = hour >= 11 && hour <= 14;
+    const isDinner = hour >= 18 && hour <= 22;
+    const mealWindow = isLunch ? "almuerzo" : isDinner ? "cena" : null;
+    const isPeak =
+      sales > 0 &&
+      (hour === overallPeakHour || hour === lunchPeakHour || hour === dinnerPeakHour);
+
+    return {
+      hour,
+      label: hourLabel(hour),
+      sales,
+      mealWindow,
+      isPeak,
+    };
+  });
+
   const activeHours = bars.filter((b) => b.sales > 0).map((b) => b.hour);
   return {
     bars,
     hasActivity: activeHours.length > 0,
     firstActiveHour: activeHours.length > 0 ? Math.min(...activeHours) : null,
     lastActiveHour: activeHours.length > 0 ? Math.max(...activeHours) : null,
+    peaks: {
+      overallPeakHour,
+      overallPeakSales,
+      lunchPeakHour,
+      lunchSales,
+      dinnerPeakHour,
+      dinnerSales,
+    },
   };
 }
 
@@ -284,5 +353,125 @@ export function buildPaymentMixRows(breakdown: PaymentMethodsBreakdown | null | 
         percent: percentOf(amount, totalNio),
       })),
     totalNio,
+  };
+}
+
+export const SPANISH_WEEKDAYS = [
+  { name: "Lunes", shortName: "Lun" },
+  { name: "Martes", shortName: "Mar" },
+  { name: "Miércoles", shortName: "Mié" },
+  { name: "Jueves", shortName: "Jue" },
+  { name: "Viernes", shortName: "Vie" },
+  { name: "Sábado", shortName: "Sáb" },
+  { name: "Domingo", shortName: "Dom" },
+] as const;
+
+export interface WeeklyRhythmDay {
+  dayIndex: number;
+  name: string;
+  shortName: string;
+  totalSales: number;
+  averageSales: number;
+  ticketCount: number;
+  averageTickets: number;
+  sharePercent: number | null;
+  isPeakDay: boolean;
+}
+
+export interface WeeklyRhythmResult {
+  days: WeeklyRhythmDay[];
+  hasActivity: boolean;
+  totalPeriodSales: number;
+  peakDay: WeeklyRhythmDay | null;
+  weekendSharePercent: number | null;
+}
+
+/**
+ * Aggregates a daily series by day of week (Monday through Sunday).
+ * Computes average daily sales and ticket counts per weekday, share of weekly
+ * volume, peak day of week, and weekend concentration (Fri-Sun).
+ */
+export function buildWeeklyRhythm(
+  days: DailySeriesDay[] | null | undefined,
+): WeeklyRhythmResult {
+  const list = Array.isArray(days) ? days : [];
+  const salesByWeekday = [0, 0, 0, 0, 0, 0, 0];
+  const countByWeekday = [0, 0, 0, 0, 0, 0, 0];
+  const occurrencesByWeekday = [0, 0, 0, 0, 0, 0, 0];
+
+  let totalPeriodSales = 0;
+
+  for (const d of list) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d.date);
+    if (!m) continue;
+    const dateObj = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    // 0 = Sunday, 1 = Monday, ..., 6 = Saturday in UTC
+    const utcDay = dateObj.getUTCDay();
+    // Map to 0 = Monday, ..., 6 = Sunday
+    const weekdayIdx = (utcDay + 6) % 7;
+
+    const sales = Number.isFinite(d.netSalesNio) ? d.netSalesNio : 0;
+    const tickets = Number.isFinite(d.completedTicketCount) ? d.completedTicketCount : 0;
+
+    const rawSales = salesByWeekday[weekdayIdx] ?? 0;
+    const rawTickets = countByWeekday[weekdayIdx] ?? 0;
+    const rawOccurrences = occurrencesByWeekday[weekdayIdx] ?? 0;
+
+    salesByWeekday[weekdayIdx] = rawSales + sales;
+    countByWeekday[weekdayIdx] = rawTickets + tickets;
+    occurrencesByWeekday[weekdayIdx] = rawOccurrences + 1;
+    totalPeriodSales += sales;
+  }
+
+  let maxAvgSales = 0;
+  let peakIdx: number | null = null;
+
+  const resultDays: WeeklyRhythmDay[] = SPANISH_WEEKDAYS.map((spec, i) => {
+    const rawSales = salesByWeekday[i] ?? 0;
+    const totalSales = Math.round((rawSales + Number.EPSILON) * 100) / 100;
+    const occurrences = occurrencesByWeekday[i] ?? 1;
+    const avgSales = Math.round((totalSales / (occurrences || 1) + Number.EPSILON) * 100) / 100;
+    const ticketCount = countByWeekday[i] ?? 0;
+    const avgTickets = Math.round((ticketCount / (occurrences || 1) + Number.EPSILON) * 10) / 10;
+    const sharePercent = totalPeriodSales > 0 ? percentOf(totalSales, totalPeriodSales) : null;
+
+    if (avgSales > maxAvgSales) {
+      maxAvgSales = avgSales;
+      peakIdx = i;
+    }
+
+    return {
+      dayIndex: i,
+      name: spec.name,
+      shortName: spec.shortName,
+      totalSales,
+      averageSales: avgSales,
+      ticketCount,
+      averageTickets: avgTickets,
+      sharePercent,
+      isPeakDay: false,
+    };
+  });
+
+  if (peakIdx !== null && maxAvgSales > 0) {
+    const peak = resultDays[peakIdx];
+    if (peak) {
+      peak.isPeakDay = true;
+    }
+  }
+
+  // Weekend: Viernes (4), Sábado (5), Domingo (6)
+  const weekendSales = (salesByWeekday[4] ?? 0) + (salesByWeekday[5] ?? 0) + (salesByWeekday[6] ?? 0);
+  const weekendSharePercent = totalPeriodSales > 0 ? percentOf(weekendSales, totalPeriodSales) : null;
+
+  const peakDay =
+    peakIdx !== null && maxAvgSales > 0 ? (resultDays[peakIdx] ?? null) : null;
+
+  return {
+    days: resultDays,
+    hasActivity: totalPeriodSales > 0,
+    totalPeriodSales: Math.round((totalPeriodSales + Number.EPSILON) * 100) / 100,
+    peakDay,
+    weekendSharePercent,
   };
 }

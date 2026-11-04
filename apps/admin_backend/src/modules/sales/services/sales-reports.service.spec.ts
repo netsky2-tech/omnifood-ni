@@ -1038,21 +1038,21 @@ describe('SalesReportsService', () => {
           id: 'inv-1',
           tenant_id: tenantId,
           total: 500,
-          created_at: new Date('2026-08-26T08:15:00.000Z'),
+          created_at: new Date('2026-08-26T14:15:00.000Z'), // 08:15 in America/Managua (UTC-6)
           isCanceled: false,
         },
         {
           id: 'inv-2',
           tenant_id: tenantId,
           total: 350,
-          created_at: new Date('2026-08-26T08:45:00.000Z'),
+          created_at: new Date('2026-08-26T14:45:00.000Z'), // 08:45 in America/Managua (UTC-6)
           isCanceled: false,
         },
         {
           id: 'inv-3',
           tenant_id: tenantId,
           total: 1200,
-          created_at: new Date('2026-08-26T13:30:00.000Z'),
+          created_at: new Date('2026-08-26T19:30:00.000Z'), // 13:30 in America/Managua (UTC-6)
           isCanceled: false,
         },
       ];

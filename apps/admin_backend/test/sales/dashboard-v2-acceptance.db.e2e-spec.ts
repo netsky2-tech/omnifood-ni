@@ -496,6 +496,27 @@ describe('Dashboard V2 acceptance — two-tenant isolation across the new dashbo
     expect(total).toBe(900);
   });
 
+  it('hourly sales: buckets invoice by America/Managua (UTC-6) hour under real RLS, isolating tenant B', async () => {
+    const endKey = managuaDayKey(now);
+    const report = await salesReports.getHourlySales(tenantAId, {
+      date: endKey,
+    });
+
+    expect(report.hourly).toHaveLength(24);
+    const nowHour = (now.getUTCHours() + 24 - 6) % 24;
+    const bucket = report.hourly.find((h) => h.hour === nowHour);
+    expect(bucket?.invoiceCount).toBe(1);
+    expect(bucket?.totalSales).toBe(1150);
+    expect(bucket?.netSalesNio).toBe(1000);
+
+    // Tenant B's invoice never leaks into tenant A
+    const tenantBReport = await salesReports.getHourlySales(tenantBId, {
+      date: endKey,
+    });
+    const bBucket = tenantBReport.hourly.find((h) => h.hour === nowHour);
+    expect(bBucket?.totalSales).toBe(900);
+  });
+
   // ------------------------------------------------------------------------
   // GET /operations/sync/freshness
   // ------------------------------------------------------------------------

@@ -300,3 +300,43 @@ describe("WU9 — period attribution (owner finding 3)", () => {
     expect(trigger.textContent).toMatch(/\d{2}\/\d{2}\/\d{4}—\d{2}\/\d{2}\/\d{4}/);
   });
 });
+
+describe("S5 / Issue #960 — Jerarquía visual NHILOS por capas ejecutivas", () => {
+  it("organiza el dashboard en 4 capas ejecutivas: KPIs -> Tendencia -> Ritmo operativo -> Desglose", async () => {
+    vi.mocked(fetchDailySeries).mockResolvedValue({
+      current: [{ date: "2026-09-23", netSalesNio: 1000 }],
+      previous: [],
+    } as never);
+    vi.mocked(fetchHourlyReport).mockResolvedValue({
+      hourly: [{ hour: 12, netSalesNio: 500 }],
+      date: "2026-09-23",
+      dayCount: 1,
+    } as never);
+
+    renderWithProviders(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-strip-grid")).toBeInTheDocument();
+    });
+
+    // Capa 1: KPIs
+    expect(screen.getByTestId("kpi-strip-grid")).toBeInTheDocument();
+
+    // Capa 2: Tendencia
+    expect(screen.getByTestId("trend-card")).toBeInTheDocument();
+
+    // Capa 3: Ritmo operativo (Ventas por hora + Afluencia semanal)
+    const operationalBand = screen.getByTestId("operational-rhythm-band");
+    expect(operationalBand).toBeInTheDocument();
+    expect(within(operationalBand).getByTestId("hourly-card")).toBeInTheDocument();
+    expect(within(operationalBand).getByTestId("weekly-rhythm-card")).toBeInTheDocument();
+
+    // Capa 4: Desglose comercial y financiero
+    const commercialBand = screen.getByTestId("commercial-breakdown-band");
+    expect(commercialBand).toBeInTheDocument();
+    expect(within(commercialBand).getByTestId("top-products-card")).toBeInTheDocument();
+    expect(within(commercialBand).getByTestId("payment-mix-card")).toBeInTheDocument();
+
+    expect(screen.getByTestId("management-band")).toBeInTheDocument();
+  });
+});
