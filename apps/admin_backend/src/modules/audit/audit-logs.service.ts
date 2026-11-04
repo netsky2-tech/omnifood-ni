@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
@@ -6,6 +6,7 @@ import { resolveReportingBounds } from '../../core/reporting/reporting-period';
 import { classifyAuditSeverity } from './audit-risk-classifier';
 import { AuditLog } from '../identity/entities/audit-log.entity';
 import { AuditIntegrityAlert } from '../identity/entities/audit-integrity-alert.entity';
+import { ForensicAlert } from '../inventory/entities/forensic-alert.entity';
 import {
   AuditIntegrityAlertDto,
   AuditIntegrityResponseDto,
@@ -54,6 +55,9 @@ export class AuditLogsService {
     // cron, so the table is read here only through the bound manager.
     private readonly integrityAlertRepo: Repository<AuditIntegrityAlert>,
     private readonly dataSource: DataSource,
+    @Optional()
+    @InjectRepository(ForensicAlert)
+    private readonly forensicAlertRepo?: Repository<ForensicAlert>,
   ) {}
 
   async getLedger(
@@ -192,5 +196,61 @@ export class AuditLogsService {
     }));
 
     return { alerts, generatedAt: generatedAt.toISOString() };
+  }
+
+  /**
+   * Lists forensic alerts for the tenant with optional status filter (Issue #936).
+   */
+  async getForensicAlerts(tenantId: string, status?: string) {
+    return runInTenantTransaction(this.dataSource, tenantId, async (bound) => {
+      const qb = bound
+        .getRepository(ForensicAlert)
+        .createQueryBuilder('alert')
+        .where('alert.tenant_id = :tenantId', { tenantId })
+        .orderBy('alert.created_at', 'DESC');
+
+      if (status === 'active') {
+        qb.andWhere('alert.resolved_at IS NULL');
+      } else if (status === 'resolved') {
+        qb.andWhere('alert.resolved_at IS NOT NULL');
+      }
+
+      const alerts = await qb.getMany();
+      return {
+        alerts: alerts.map((a) => ({
+          id: a.id,
+          alertType: a.alert_type,
+          severity: a.severity,
+          message: a.message,
+          actorRole: a.actor_role ?? null,
+          metadata: a.metadata,
+          resolvedAt: a.resolved_at?.toISOString() ?? null,
+          createdAt: a.created_at.toISOString(),
+        })),
+        total: alerts.length,
+      };
+    });
+  }
+
+  /**
+   * Marks a forensic alert as resolved by an authorized administrator (Issue #936).
+   */
+  async resolveForensicAlert(tenantId: string, alertId: string) {
+    return runInTenantTransaction(this.dataSource, tenantId, async (bound) => {
+      const repo = bound.getRepository(ForensicAlert);
+      const alert = await repo.findOne({
+        where: { id: alertId, tenant_id: tenantId },
+      });
+      if (!alert) {
+        throw new NotFoundException(`Forensic alert ${alertId} not found`);
+      }
+      alert.resolved_at = new Date();
+      await repo.save(alert);
+      return {
+        status: 'success',
+        id: alert.id,
+        resolved_at: alert.resolved_at.toISOString(),
+      };
+    });
   }
 }

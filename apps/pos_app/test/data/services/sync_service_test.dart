@@ -227,6 +227,12 @@ class FakeAuditRepository implements AuditRepository {
     DateTime? end,
     String? userId,
   }) async => [];
+
+  @override
+  Future<({int sequenceNo, String entryHash})?> getCloudStreamHead(
+    String userId, {
+    String? deviceId,
+  }) async => null;
 }
 
 class FakeInventoryRepository
@@ -4198,6 +4204,71 @@ void main() {
           final active = byId['alert-active']!;
           expect(active.status, 'active');
           expect(active.actorLabel, 'CASHIER');
+        } finally {
+          await database.close();
+        }
+      },
+    );
+
+    test(
+      'resolves active AUDIT_BACKEND_TERMINAL_REJECTION alert locally when cloud sends resolvedAt (Issue #936)',
+      () async {
+        final database = await $FloorAppDatabase
+            .inMemoryDatabaseBuilder()
+            .build();
+
+        try {
+          final syncServiceWithDb = SyncService(
+            mockAuditRepository,
+            mockSalesRepository,
+            mockInventoryRepository,
+            dio,
+            database: database,
+          );
+
+          await database.forensicAlertDao.upsertAlert(
+            ForensicAlertEntity(
+              id: 'local-rejection-1',
+              alertType: 'AUDIT_BACKEND_TERMINAL_REJECTION',
+              severity: 'critical',
+              message: 'Rechazo local.',
+              createdAt: '2026-09-01T10:00:00.000Z',
+              status: 'active',
+              sourceDocumentType: 'audit_log',
+              sourceDocumentId: 'uuid-log-1',
+            ),
+          );
+
+          expect(
+            await database.forensicAlertDao.countActiveAuditTerminalAlerts('uuid-log-1'),
+            1,
+          );
+
+          capturedGets['/v1/sync/inbound/deltas'] = {
+            'status': 'success',
+            'serverTime': '2026-09-02T12:00:00.000Z',
+            'currentVersion': 1787745600000,
+            'deltas': {
+              'alerts': [
+                {
+                  'id': 'cloud-alert-1',
+                  'alertType': 'AUDIT_BACKEND_TERMINAL_REJECTION',
+                  'severity': 'critical',
+                  'message': 'Conflicto resuelto desde dashboard.',
+                  'actorRole': 'OWNER',
+                  'resolvedAt': '2026-09-02T12:00:00.000Z',
+                  'createdAt': '2026-09-01T10:00:00.000Z',
+                },
+              ],
+            },
+          };
+
+          await syncServiceWithDb.pullInboundDeltas();
+
+          expect(
+            await database.forensicAlertDao.countActiveAuditTerminalAlerts('uuid-log-1'),
+            0,
+          );
         } finally {
           await database.close();
         }

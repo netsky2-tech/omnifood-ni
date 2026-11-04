@@ -264,10 +264,59 @@ class MockAuditDao extends _i1.Mock implements _i9.AuditDao {
       ) as _i10.Future<void>);
 
   @override
+  _i10.Future<void> updateLogSequenceAndHashes(
+    int? id,
+    int? sequenceNo,
+    String? prevHash,
+    String? entryHash,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #updateLogSequenceAndHashes,
+          [
+            id,
+            sequenceNo,
+            prevHash,
+            entryHash,
+          ],
+        ),
+        returnValue: _i10.Future<void>.value(),
+        returnValueForMissingStub: _i10.Future<void>.value(),
+      ) as _i10.Future<void>);
+
+  @override
+  _i10.Future<void> reanchorStreamLogs(
+    _i11.AuditLogEntity? reanchorEvent,
+    List<_i11.AuditLogEntity>? recomputedLogs,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #reanchorStreamLogs,
+          [
+            reanchorEvent,
+            recomputedLogs,
+          ],
+        ),
+        returnValue: _i10.Future<void>.value(),
+        returnValueForMissingStub: _i10.Future<void>.value(),
+      ) as _i10.Future<void>);
+
+  @override
   _i10.Future<void> markAsSynced(List<int>? ids) => (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,
           [ids],
+        ),
+        returnValue: _i10.Future<void>.value(),
+        returnValueForMissingStub: _i10.Future<void>.value(),
+      ) as _i10.Future<void>);
+
+  @override
+  _i10.Future<void> markAsSyncedByRemoteRefs(List<String>? uuids) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markAsSyncedByRemoteRefs,
+          [uuids],
         ),
         returnValue: _i10.Future<void>.value(),
         returnValueForMissingStub: _i10.Future<void>.value(),

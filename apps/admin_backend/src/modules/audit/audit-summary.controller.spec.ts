@@ -57,6 +57,8 @@ describe('AuditSummaryController', () => {
   let mockAuditLogsService: {
     getLedger: jest.Mock;
     getIntegrityAlerts: jest.Mock;
+    getForensicAlerts: jest.Mock;
+    resolveForensicAlert: jest.Mock;
   };
   let mockSupervisionReviewService: { getReview: jest.Mock };
 
@@ -93,6 +95,15 @@ describe('AuditSummaryController', () => {
       getIntegrityAlerts: jest.fn().mockResolvedValue({
         alerts: [],
         generatedAt: '2026-09-01T12:00:00.000Z',
+      }),
+      getForensicAlerts: jest.fn().mockResolvedValue({
+        alerts: [],
+        total: 0,
+      }),
+      resolveForensicAlert: jest.fn().mockResolvedValue({
+        status: 'success',
+        id: 'alert-1',
+        resolved_at: '2026-09-01T12:00:00.000Z',
       }),
     };
 
@@ -647,6 +658,55 @@ describe('AuditSummaryController', () => {
         'tenant-1',
       );
       expect(response.body).toEqual(integrityResponse);
+    });
+  });
+
+  describe('GET /operations/audit/alerts and POST /operations/audit/alerts/:id/resolve (#936)', () => {
+    it('requires authentication for alerts listing', async () => {
+      await request(getHttpServer())
+        .get('/operations/audit/alerts')
+        .expect(401);
+    });
+
+    it('returns forensic alerts for OWNER with status filter forwarding', async () => {
+      const jwtService = app.get(JwtService);
+      mockAuditLogsService.getForensicAlerts.mockResolvedValueOnce({
+        alerts: [{ id: 'alert-1', alertType: 'AUDIT_BACKEND_TERMINAL_REJECTION' }],
+        total: 1,
+      });
+
+      const response = await request(getHttpServer())
+        .get('/operations/audit/alerts')
+        .query({ status: 'active' })
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.OWNER)}`)
+        .expect(200);
+
+      expect(mockAuditLogsService.getForensicAlerts).toHaveBeenCalledWith(
+        'tenant-1',
+        'active',
+      );
+      expect(response.body.total).toBe(1);
+    });
+
+    it('resolves an alert for OWNER/MANAGER', async () => {
+      const jwtService = app.get(JwtService);
+      mockAuditLogsService.resolveForensicAlert.mockResolvedValueOnce({
+        status: 'success',
+        id: 'alert-123',
+        resolved_at: '2026-09-01T12:00:00.000Z',
+      });
+
+      const response = await request(getHttpServer())
+        .post('/operations/audit/alerts/alert-123/resolve')
+        .set('Authorization', `Bearer ${signToken(jwtService, UserRole.MANAGER)}`)
+        .expect(201);
+
+      expect(mockAuditLogsService.resolveForensicAlert).toHaveBeenCalledWith(
+        'tenant-1',
+        'alert-123',
+      );
+      expect(response.body.status).toBe('success');
+      expect(response.body.id).toBe('alert-123');
     });
   });
 });

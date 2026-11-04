@@ -507,6 +507,13 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
         reason:
           'audit stream push from the POS background sync pass under a device-sync JWT; per-log user_id preserves human attribution (D-18)',
       },
+      {
+        httpMethod: 'GET',
+        handlerPath: 'stream-head',
+        transport: 'device',
+        reason:
+          'forensic audit stream head query for POS terminal continuity and re-anchoring behind SyncTransportGuard (Issue #936)',
+      },
     ],
   },
   // OHAC recovery tokens (design §9): issuance/revocation by an active

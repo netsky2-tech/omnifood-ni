@@ -75,6 +75,40 @@ abstract class AuditDao {
   @Query('UPDATE audit_logs SET metadata = :metadata WHERE id = :id')
   Future<void> updateMetadataById(int id, String metadata);
 
+  @Query(
+    'UPDATE audit_logs SET sequence_no = :sequenceNo, prev_hash = :prevHash, entry_hash = :entryHash WHERE id = :id',
+  )
+  Future<void> updateLogSequenceAndHashes(
+    int id,
+    int sequenceNo,
+    String prevHash,
+    String entryHash,
+  );
+
+  /// Re-anchors a forensic stream atomically (Issue #936):
+  /// Inserts the re-anchoring audit event at the new anchor position and
+  /// updates subsequent un-synced logs with recomputed sequence and hashes.
+  @transaction
+  Future<void> reanchorStreamLogs(
+    AuditLogEntity reanchorEvent,
+    List<AuditLogEntity> recomputedLogs,
+  ) async {
+    await insertLog(reanchorEvent);
+    for (final log in recomputedLogs) {
+      if (log.id != null) {
+        await updateLogSequenceAndHashes(
+          log.id!,
+          log.sequenceNo,
+          log.prevHash,
+          log.entryHash,
+        );
+      }
+    }
+  }
+
   @Query('UPDATE audit_logs SET is_synced = 1 WHERE id IN (:ids)')
   Future<void> markAsSynced(List<int> ids);
+
+  @Query('UPDATE audit_logs SET is_synced = 1 WHERE remote_ref_uuid IN (:uuids)')
+  Future<void> markAsSyncedByRemoteRefs(List<String> uuids);
 }

@@ -1672,6 +1672,22 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
         returnValueForMissingStub:
             _i18.Future<List<_i27.AuditLog>>.value(<_i27.AuditLog>[]),
       ) as _i18.Future<List<_i27.AuditLog>>);
+
+  @override
+  _i18.Future<({String entryHash, int sequenceNo})?> getCloudStreamHead(
+    String? userId, {
+    String? deviceId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #getCloudStreamHead,
+          [userId],
+          {#deviceId: deviceId},
+        ),
+        returnValue: _i18.Future<({String entryHash, int sequenceNo})?>.value(),
+        returnValueForMissingStub:
+            _i18.Future<({String entryHash, int sequenceNo})?>.value(),
+      ) as _i18.Future<({String entryHash, int sequenceNo})?>);
 }
 
 /// A class which mocks [SyncService].

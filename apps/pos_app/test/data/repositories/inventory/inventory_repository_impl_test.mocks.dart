@@ -1477,6 +1477,28 @@ class MockForensicAlertDao extends _i1.Mock implements _i17.ForensicAlertDao {
       ) as _i59.Future<int?>);
 
   @override
+  _i59.Future<void> resolveAllActiveAuditTerminalAlerts() =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #resolveAllActiveAuditTerminalAlerts,
+          [],
+        ),
+        returnValue: _i59.Future<void>.value(),
+        returnValueForMissingStub: _i59.Future<void>.value(),
+      ) as _i59.Future<void>);
+
+  @override
+  _i59.Future<void> resolveActiveAuditTerminalAlert(String? sourceDocumentId) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #resolveActiveAuditTerminalAlert,
+          [sourceDocumentId],
+        ),
+        returnValue: _i59.Future<void>.value(),
+        returnValueForMissingStub: _i59.Future<void>.value(),
+      ) as _i59.Future<void>);
+
+  @override
   _i59.Future<void> markAsSynced(String? id) => (super.noSuchMethod(
         Invocation.method(
           #markAsSynced,

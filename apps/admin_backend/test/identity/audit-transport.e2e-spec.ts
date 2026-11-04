@@ -84,6 +84,17 @@ describe('AuditController transport (D-18 part 2)', () => {
     ]);
   });
 
+  it('declares GET stream-head as device sync transport with sync:push and sync:pull scopes and no human guard (#936)', () => {
+    const headHandler = handlerOf('getStreamHead');
+    const guards = Reflect.getMetadata(GUARDS_METADATA, headHandler) ?? [];
+    expect(guards).toContain(SyncTransportGuard);
+    expect(guards).not.toContain(AuthGuard);
+    expect(Reflect.getMetadata(SYNC_SCOPES_KEY, headHandler)).toEqual([
+      'sync:push',
+      'sync:pull',
+    ]);
+  });
+
   it('classifies the enumerated AuditController routes with the registry and passes the contract', () => {
     @Controller('identity/audit')
     class AuditControllerFixture extends AuditController {}
@@ -95,7 +106,7 @@ describe('AuditController transport (D-18 part 2)', () => {
       ...route,
       controller: 'AuditController',
     }));
-    expect(routes.length).toBe(4);
+    expect(routes.length).toBe(5);
 
     const findings = verifyRouteTransportRegistry(
       routes,
@@ -246,6 +257,213 @@ describe('AuditController transport (D-18 part 2)', () => {
         'user_1',
       );
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+
+    it('records AUDIT_BACKEND_TERMINAL_REJECTION and throws 409 with streamHead when replay conflict is detected (#936)', async () => {
+      mockQueryRunner.manager.findOne.mockImplementation(
+        (_entity: unknown, options: { where: { sequence_no: number } }) => {
+          if (options.where.sequence_no === undefined) {
+            // latest query
+            return Promise.resolve({
+              sequence_no: 19,
+              entry_hash: 'cloud_hash_19',
+            });
+          }
+          // existing sequence check
+          return Promise.resolve({
+            sequence_no: 1,
+            entry_hash: 'different_cloud_hash_1',
+          });
+        },
+      );
+
+      const dto = {
+        logs: [
+          {
+            id: 'conflicting-log',
+            user_id: 'user_1',
+            action: 'SALE_CREATED',
+            timestamp: '2026-03-01T12:00:00.000Z',
+            device_id: 'term-1',
+            sequence_no: 1,
+            prev_hash: 'GENESIS',
+            entry_hash: 'local_hash_1',
+          },
+        ],
+      } as unknown as PushAuditLogsDto;
+
+      await expect(
+        controller.pushLogs('tenant_1', dto, {
+          devicePrincipal: { deviceId: 'term-1' },
+        }),
+      ).rejects.toThrow('Conflicting forensic replay detected');
+
+      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
+    });
+
+    it('accepts AUDIT_STREAM_REANCHOR event followed by contiguous re-anchored logs (#936)', async () => {
+      mockQueryRunner.manager.findOne.mockResolvedValueOnce({
+        sequence_no: 19,
+        entry_hash: 'cloud_hash_19',
+      });
+
+      const dto = {
+        logs: [
+          {
+            id: 'reanchor-log',
+            user_id: 'user_1',
+            action: 'AUDIT_STREAM_REANCHOR',
+            timestamp: '2026-03-01T12:00:00.000Z',
+            device_id: 'term-1',
+            sequence_no: 20,
+            prev_hash: 'cloud_hash_19',
+            entry_hash: 'reanchor_hash_20',
+          },
+          {
+            id: 'reanchored-sale',
+            user_id: 'user_1',
+            action: 'SALE_CREATED',
+            timestamp: '2026-03-01T12:01:00.000Z',
+            device_id: 'term-1',
+            sequence_no: 21,
+            prev_hash: 'reanchor_hash_20',
+            entry_hash: 'sale_hash_21',
+          },
+        ],
+      } as unknown as PushAuditLogsDto;
+
+      const result = await controller.pushLogs('tenant_1', dto, {
+        devicePrincipal: { deviceId: 'term-1' },
+      });
+
+      expect(result).toEqual({ status: 'success', count: 2 });
+      expect(mockQueryRunner.manager.insert).toHaveBeenCalledTimes(2);
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+    });
+  });
+
+  describe('getStreamHead (Issue #936)', () => {
+    let controller: AuditController;
+    let mockAuditRepo: { findOne: jest.Mock };
+
+    beforeEach(async () => {
+      mockAuditRepo = {
+        findOne: jest.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        controllers: [AuditController],
+        providers: [
+          {
+            provide: getRepositoryToken(AuditLog),
+            useValue: mockAuditRepo,
+          },
+          {
+            provide: DataSource,
+            useValue: {},
+          },
+          {
+            provide: AuditTrailService,
+            useValue: {},
+          },
+          {
+            provide: AuditVerificationService,
+            useValue: {},
+          },
+        ],
+      })
+        .overrideGuard(AuthGuard)
+        .useValue({ canActivate: () => true })
+        .overrideGuard(SyncTransportGuard)
+        .useValue({ canActivate: () => true })
+        .compile();
+
+      controller = module.get<AuditController>(AuditController);
+    });
+
+    it('returns sequence_no: 0 and entry_hash: GENESIS when stream is empty', async () => {
+      mockAuditRepo.findOne.mockResolvedValue(null);
+
+      const result = await controller.getStreamHead(
+        'tenant-1',
+        'term-1',
+        'user-1',
+        { devicePrincipal: { deviceId: 'term-1' } },
+      );
+
+      expect(result).toEqual({
+        sequence_no: 0,
+        entry_hash: 'GENESIS',
+        sequenceNo: 0,
+        entryHash: 'GENESIS',
+      });
+      expect(mockAuditRepo.findOne).toHaveBeenCalledWith({
+        where: {
+          tenant_id: 'tenant-1',
+          device_id: 'term-1',
+          user_id: 'user-1',
+          forensic_status: 'ACTIVE',
+        },
+        order: { sequence_no: 'DESC' },
+      });
+    });
+
+    it('returns latest sequence_no and entry_hash when stream has records', async () => {
+      mockAuditRepo.findOne.mockResolvedValue({
+        sequence_no: 19,
+        entry_hash: 'hash-19-entry',
+      });
+
+      const result = await controller.getStreamHead(
+        'tenant-1',
+        'term-1',
+        'user-1',
+        { devicePrincipal: { deviceId: 'term-1' } },
+      );
+
+      expect(result).toEqual({
+        sequence_no: 19,
+        entry_hash: 'hash-19-entry',
+        sequenceNo: 19,
+        entryHash: 'hash-19-entry',
+      });
+    });
+
+    it('throws BadRequestException when userId is missing', async () => {
+      await expect(
+        controller.getStreamHead('tenant-1', 'term-1', '', {
+          devicePrincipal: { deviceId: 'term-1' },
+        }),
+      ).rejects.toThrow('Missing userId');
+    });
+
+    it('throws ForbiddenException when deviceId does not match devicePrincipal', async () => {
+      await expect(
+        controller.getStreamHead('tenant-1', 'other-device', 'user-1', {
+          devicePrincipal: { deviceId: 'term-1' },
+        }),
+      ).rejects.toThrow('Device term-1 cannot query stream head for other-device');
+    });
+
+    it('defaults deviceId to devicePrincipal.deviceId when query deviceId is omitted', async () => {
+      mockAuditRepo.findOne.mockResolvedValue({
+        sequence_no: 5,
+        entry_hash: 'hash-5',
+      });
+
+      const result = await controller.getStreamHead(
+        'tenant-1',
+        undefined,
+        'user-1',
+        { devicePrincipal: { deviceId: 'term-1' } },
+      );
+
+      expect(result.sequence_no).toBe(5);
+      expect(mockAuditRepo.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ device_id: 'term-1' }),
+        }),
+      );
     });
   });
 });

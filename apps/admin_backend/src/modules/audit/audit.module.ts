@@ -4,6 +4,7 @@ import { IdentityModule } from '../identity/identity.module';
 import { ChangeLog } from './entities/change-log.entity';
 import { AuditLog } from '../identity/entities/audit-log.entity';
 import { AuditIntegrityAlert } from '../identity/entities/audit-integrity-alert.entity';
+import { ForensicAlert } from '../inventory/entities/forensic-alert.entity';
 import { ChangeLogService } from './change-log.service';
 import { AuditSummaryService } from './audit-summary.service';
 import { AuditEventsService } from './audit-events.service';
@@ -27,7 +28,12 @@ import { AuditSummaryController } from './audit-summary.controller';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ChangeLog, AuditLog, AuditIntegrityAlert]),
+    TypeOrmModule.forFeature([
+      ChangeLog,
+      AuditLog,
+      AuditIntegrityAlert,
+      ForensicAlert,
+    ]),
     IdentityModule,
   ],
   controllers: [AuditSummaryController],

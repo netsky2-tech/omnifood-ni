@@ -10,7 +10,8 @@ import 'package:mockito/mockito.dart' as _i1;
 import 'package:mockito/src/dummies.dart' as _i12;
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart' as _i9;
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart' as _i8;
-import 'package:pos_app/data/models/sales/cash_movement_entity.dart' as _i24;
+import 'package:pos_app/data/models/sales/cash_movement_entity.dart' as _i25;
+import 'package:pos_app/data/models/sales/cashier_session_entity.dart' as _i24;
 import 'package:pos_app/domain/models/config/tax_regime.dart' as _i18;
 import 'package:pos_app/domain/models/config/tenant_operation_mode.dart'
     as _i11;
@@ -21,7 +22,7 @@ import 'package:pos_app/domain/models/sales/cashier_session.dart' as _i19;
 import 'package:pos_app/domain/models/sales/hold_ticket.dart' as _i16;
 import 'package:pos_app/domain/models/sales/payment.dart' as _i20;
 import 'package:pos_app/domain/models/sales/promotion.dart' as _i15;
-import 'package:pos_app/domain/models/user.dart' as _i25;
+import 'package:pos_app/domain/models/user.dart' as _i26;
 import 'package:pos_app/domain/repositories/sales/sales_repository.dart'
     as _i21;
 import 'package:pos_app/domain/services/config/business_mode_evaluator.dart'
@@ -1388,6 +1389,27 @@ class MockCashShiftViewModel extends _i1.Mock
       ) as String);
 
   @override
+  List<_i24.CashierSessionEntity> get openTerminalShifts => (super.noSuchMethod(
+        Invocation.getter(#openTerminalShifts),
+        returnValue: <_i24.CashierSessionEntity>[],
+        returnValueForMissingStub: <_i24.CashierSessionEntity>[],
+      ) as List<_i24.CashierSessionEntity>);
+
+  @override
+  bool get hasOrphanShifts => (super.noSuchMethod(
+        Invocation.getter(#hasOrphanShifts),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
+  List<_i24.CashierSessionEntity> get orphanShifts => (super.noSuchMethod(
+        Invocation.getter(#orphanShifts),
+        returnValue: <_i24.CashierSessionEntity>[],
+        returnValueForMissingStub: <_i24.CashierSessionEntity>[],
+      ) as List<_i24.CashierSessionEntity>);
+
+  @override
   double get effectiveExpectedNio => (super.noSuchMethod(
         Invocation.getter(#effectiveExpectedNio),
         returnValue: 0.0,
@@ -1409,11 +1431,11 @@ class MockCashShiftViewModel extends _i1.Mock
       ) as bool);
 
   @override
-  List<_i24.CashMovementEntity> get movements => (super.noSuchMethod(
+  List<_i25.CashMovementEntity> get movements => (super.noSuchMethod(
         Invocation.getter(#movements),
-        returnValue: <_i24.CashMovementEntity>[],
-        returnValueForMissingStub: <_i24.CashMovementEntity>[],
-      ) as List<_i24.CashMovementEntity>);
+        returnValue: <_i25.CashMovementEntity>[],
+        returnValueForMissingStub: <_i25.CashMovementEntity>[],
+      ) as List<_i25.CashMovementEntity>);
 
   @override
   int get pendingVouchersCount => (super.noSuchMethod(
@@ -1489,7 +1511,7 @@ class MockCashShiftViewModel extends _i1.Mock
       ) as _i17.Future<String?>);
 
   @override
-  void setUserRole(_i25.UserRole? role) => super.noSuchMethod(
+  void setUserRole(_i26.UserRole? role) => super.noSuchMethod(
         Invocation.method(
           #setUserRole,
           [role],
@@ -1592,6 +1614,50 @@ class MockCashShiftViewModel extends _i1.Mock
         returnValue: _i17.Future<bool>.value(false),
         returnValueForMissingStub: _i17.Future<bool>.value(false),
       ) as _i17.Future<bool>);
+
+  @override
+  _i17.Future<bool> closeOrphanShift({
+    required String? shiftId,
+    required String? reason,
+    required double? countedNio,
+    required double? countedUsd,
+    String? notes,
+    String? supervisorId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #closeOrphanShift,
+          [],
+          {
+            #shiftId: shiftId,
+            #reason: reason,
+            #countedNio: countedNio,
+            #countedUsd: countedUsd,
+            #notes: notes,
+            #supervisorId: supervisorId,
+          },
+        ),
+        returnValue: _i17.Future<bool>.value(false),
+        returnValueForMissingStub: _i17.Future<bool>.value(false),
+      ) as _i17.Future<bool>);
+
+  @override
+  _i17.Future<int> sanitizeAllOrphanShifts({
+    required String? reason,
+    String? supervisorId,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #sanitizeAllOrphanShifts,
+          [],
+          {
+            #reason: reason,
+            #supervisorId: supervisorId,
+          },
+        ),
+        returnValue: _i17.Future<int>.value(0),
+        returnValueForMissingStub: _i17.Future<int>.value(0),
+      ) as _i17.Future<int>);
 
   @override
   void addListener(_i22.VoidCallback? listener) => super.noSuchMethod(

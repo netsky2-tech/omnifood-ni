@@ -171,6 +171,34 @@ void main() {
     );
 
     test(
+      'allowlists the forensic stream-head route as device-transported (Issue #936)',
+      () async {
+        when(
+          () => coordinator.getAccessToken(),
+        ).thenAnswer((_) async => 'device.access.jwt');
+
+        expect(
+          DeviceSyncAuthInterceptor.isDeviceTransportedRoute(
+            'identity/audit/stream-head',
+          ),
+          isTrue,
+        );
+
+        final options = RequestOptions(
+          path: '/identity/audit/stream-head?deviceId=pos-1&userId=u-1',
+          baseUrl: 'https://api.test',
+        );
+        final handler = _TestRequestHandler();
+
+        await interceptor.onRequest(options, handler);
+
+        expect(handler.isNextCalled, isTrue);
+        expect(handler.isRejected, isFalse);
+        expect(options.headers['Authorization'], 'Bearer device.access.jwt');
+      },
+    );
+
+    test(
       'attaches device token to the five device-transported inventory document routes',
       () async {
         when(
