@@ -19,6 +19,7 @@ import { Invoice } from '../../src/modules/sales/entities/invoice.entity';
 import { InvoiceItem } from '../../src/modules/sales/entities/invoice-item.entity';
 import { Payment } from '../../src/modules/sales/entities/payment.entity';
 import { User } from '../../src/modules/identity/entities/user.entity';
+import { managuaHourBucket } from '../../src/core/reporting/reporting-period';
 
 /**
  * Issue #581 WU4 gate (decision D3, Option A): every endpoint fixed in WU1
@@ -209,7 +210,7 @@ describe('pooled reads vs tenant-bound RLS gate (Real PostgreSQL DB, migration-b
 
     expect(report.totalInvoices).toBe(2);
     expect(report.totalSales).toBe(1725);
-    const bucket = report.hourly[ids.seededAt.getUTCHours()];
+    const bucket = report.hourly[managuaHourBucket(ids.seededAt)];
     expect(bucket.invoiceCount).toBe(2);
     expect(bucket.totalSales).toBe(1725);
   });

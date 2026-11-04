@@ -131,7 +131,7 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       totalUsd: 31.51,
       isCanceled: false,
       shiftId: 'shift-e2e-1',
-      created_at: new Date('2026-08-26T09:30:00.000Z'),
+      created_at: new Date('2026-08-26T15:30:00.000Z'), // 09:30 local America/Managua (UTC-6)
       items: [
         {
           id: 'item-e2e-1',
@@ -176,7 +176,7 @@ describe('Sales & Fiscal Reports & Exports E2E Integration', () => {
       totalUsd: 13.7,
       isCanceled: false,
       shiftId: 'shift-e2e-1',
-      created_at: new Date('2026-08-26T14:15:00.000Z'),
+      created_at: new Date('2026-08-26T20:15:00.000Z'), // 14:15 local America/Managua (UTC-6)
       items: [
         {
           id: 'item-e2e-2',
