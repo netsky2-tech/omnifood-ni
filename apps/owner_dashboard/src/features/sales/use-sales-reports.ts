@@ -16,11 +16,11 @@ export function useSalesDashboard(startDate?: string, endDate?: string) {
   });
 }
 
-export function useHourlySales(date?: string) {
+export function useHourlySales(startDate?: string, endDate?: string) {
   const tenantId = useTenantId();
   return useQuery({
-    queryKey: ["sales", tenantId, "hourly", date],
-    queryFn: ({ signal }) => fetchHourlySales(date, { signal }),
+    queryKey: ["sales", tenantId, "hourly", startDate, endDate],
+    queryFn: ({ signal }) => fetchHourlySales(startDate, endDate, { signal }),
     staleTime: 2 * 60 * 1000,
   });
 }

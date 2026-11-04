@@ -155,6 +155,14 @@ describe("W2 Contract — API functions send correct parameters", () => {
     );
   });
 
+  it("fetchHourlySales sends startDate and endDate when a multi-day range is passed", async () => {
+    await fetchHourlySales("2026-10-06", "2026-11-04");
+
+    expect(mockGet).toHaveBeenCalledWith(
+      "/sales/reports/hourly-sales?startDate=2026-10-06&endDate=2026-11-04",
+    );
+  });
+
   it("fetchTopProducts sends startDate, endDate, and limit", async () => {
     await fetchTopProducts("2026-08-01", "2026-08-31", 5);
 

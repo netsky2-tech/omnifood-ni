@@ -19,8 +19,16 @@ export function fetchSalesDashboard(startDate?: string, endDate?: string, opts?:
   return opts ? api.get<SalesDashboardReport>(url, opts) : api.get<SalesDashboardReport>(url);
 }
 
-export function fetchHourlySales(date?: string, opts?: ApiClientMethodOptions) {
-  const url = `/sales/reports/hourly-sales${toQueryParams({ date })}`;
+export function fetchHourlySales(
+  startDateOrDate?: string,
+  endDate?: string,
+  opts?: ApiClientMethodOptions,
+) {
+  const isRange = Boolean(startDateOrDate && endDate && startDateOrDate !== endDate);
+  const params = isRange
+    ? { startDate: startDateOrDate, endDate }
+    : { date: startDateOrDate };
+  const url = `/sales/reports/hourly-sales${toQueryParams(params)}`;
   return opts ? api.get<HourlySalesReport>(url, opts) : api.get<HourlySalesReport>(url);
 }
 
