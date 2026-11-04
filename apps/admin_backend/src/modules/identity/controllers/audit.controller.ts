@@ -33,6 +33,7 @@ import { AuditVerificationService } from '../services/audit-verification.service
 import { deriveAuditTarget } from '../services/audit-target-derivation';
 import { SyncTransportGuard } from '../guards/sync-transport.guard';
 import { RequireSyncScopes } from '../decorators/sync-scopes.decorator';
+import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 
 @Controller('identity/audit')
 @UseInterceptors(TenantInterceptor)
@@ -328,27 +329,33 @@ export class AuditController {
     try {
       if (
         this.dataSource &&
-        typeof this.dataSource.getRepository === 'function'
+        typeof this.dataSource.transaction === 'function'
       ) {
-        const alertRepo = this.dataSource.getRepository(ForensicAlert);
-        const alert = alertRepo.create({
-          tenant_id: tenantId,
-          alert_type: 'AUDIT_BACKEND_TERMINAL_REJECTION',
-          severity: 'critical',
-          message: `Conflicting forensic replay detected on terminal ${log.device_id as string} for sequence ${sequenceNo}`,
-          actor_role: 'SYSTEM',
-          metadata: {
-            device_id: log.device_id,
-            user_id: log.user_id,
-            sequence_no: sequenceNo,
-            proposed_entry_hash: log.entry_hash,
-            existing_entry_hash: existingHash,
-            remote_ref_uuid: log.id,
+        return await runInTenantTransaction(
+          this.dataSource,
+          tenantId,
+          async (bound) => {
+            const alertRepo = bound.getRepository(ForensicAlert);
+            const alert = alertRepo.create({
+              tenant_id: tenantId,
+              alert_type: 'AUDIT_BACKEND_TERMINAL_REJECTION',
+              severity: 'critical',
+              message: `Conflicting forensic replay detected on terminal ${log.device_id as string} for sequence ${sequenceNo}`,
+              actor_role: 'SYSTEM',
+              metadata: {
+                device_id: log.device_id,
+                user_id: log.user_id,
+                sequence_no: sequenceNo,
+                proposed_entry_hash: log.entry_hash,
+                existing_entry_hash: existingHash,
+                remote_ref_uuid: log.id,
+              },
+              resolved_at: null,
+            });
+            const saved = await alertRepo.save(alert);
+            return { id: saved.id };
           },
-          resolved_at: null,
-        });
-        const saved = await alertRepo.save(alert);
-        return { id: saved.id };
+        );
       }
     } catch {
       // In isolated fixtures without real repository, gracefully return fallback
