@@ -11,7 +11,6 @@ import {
   ConflictException,
   UnauthorizedException,
   ForbiddenException,
-  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
@@ -327,7 +326,10 @@ export class AuditController {
     existingHash: string,
   ): Promise<{ id: string }> {
     try {
-      if (this.dataSource && typeof this.dataSource.getRepository === 'function') {
+      if (
+        this.dataSource &&
+        typeof this.dataSource.getRepository === 'function'
+      ) {
         const alertRepo = this.dataSource.getRepository(ForensicAlert);
         const alert = alertRepo.create({
           tenant_id: tenantId,
