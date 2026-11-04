@@ -31,6 +31,9 @@ export interface HourlySalesReport {
   totalSales: number;
   totalInvoices: number;
   generatedAt: string;
+  meta?: {
+    dayCount?: number;
+  };
   hourly: HourlySalesBucket[];
 }
 

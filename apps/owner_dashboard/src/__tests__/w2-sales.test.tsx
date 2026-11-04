@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
@@ -385,5 +386,37 @@ describe("W2 — SalesPage error states", () => {
     render(<SalesPage />, { wrapper: TestWrapper });
     expect(screen.queryByText("Hamburguesa Clásica")).not.toBeInTheDocument();
     expect(screen.queryByText("María")).not.toBeInTheDocument();
+  });
+});
+
+describe("HourlyTab range & contextual drilldown", () => {
+  it("queries range when startDate and endDate are present in query params and shows day count caption", () => {
+    vi.mocked(useHourlySales).mockReturnValue({
+      data: {
+        date: "2026-10-06",
+        totalSales: 178,
+        totalInvoices: 3,
+        generatedAt: "2026-11-04T16:44:21.730Z",
+        meta: { dayCount: 30 },
+        hourly: [
+          { hour: 8, invoiceCount: 1, totalSales: 60 },
+          { hour: 11, invoiceCount: 2, totalSales: 118 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    } as ReturnType<typeof useHourlySales>);
+
+    render(
+      <MemoryRouter initialEntries={["/sales?tab=hourly&startDate=2026-10-06&endDate=2026-11-04&hour=11"]}>
+        <SalesPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Total Ventas")).toBeInTheDocument();
+    expect(screen.getByText("C$178.00")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText(/Agregado de 30 días/)).toBeInTheDocument();
+    expect(useHourlySales).toHaveBeenCalledWith("2026-10-06", "2026-11-04");
   });
 });

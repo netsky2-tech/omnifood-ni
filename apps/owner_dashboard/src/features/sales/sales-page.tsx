@@ -104,14 +104,26 @@ function SummaryTab({
   );
 }
 
-function HourlyTab({ date }: { date?: string }) {
-  const { data, isLoading } = useHourlySales(date ?? todayISO());
+function HourlyTab({
+  startDate,
+  endDate,
+  highlightHour,
+}: {
+  startDate?: string;
+  endDate?: string;
+  highlightHour?: number;
+}) {
+  const effectiveStart = startDate ?? todayISO();
+  const effectiveEnd = endDate ?? effectiveStart;
+  const { data, isLoading } = useHourlySales(effectiveStart, effectiveEnd);
 
   if (isLoading) return <LoadingState message="Cargando ventas por hora..." />;
   if (!data || !Array.isArray(data.hourly) || data.hourly.length === 0)
     return <EmptyState message="Sin datos horarios" />;
 
   const maxSales = Math.max(...data.hourly.map((h) => Number(h.totalSales) || 0), 1);
+  const isRange = effectiveStart !== effectiveEnd;
+  const dayCount = data.meta?.dayCount ?? 1;
 
   return (
     <div className="space-y-6">
@@ -126,31 +138,53 @@ function HourlyTab({ date }: { date?: string }) {
         </div>
       </div>
       <div className="rounded-lg border border-border bg-card p-5 sm:p-6 shadow-xs">
-        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Ventas por Hora (00:00 - 23:00)
-        </h3>
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Ventas por Hora (00:00 - 23:00)
+          </h3>
+          {isRange && dayCount > 1 && (
+            <span className="text-xs text-muted-foreground">
+              Agregado de {dayCount} días ({effectiveStart} — {effectiveEnd})
+            </span>
+          )}
+        </div>
         <div className="overflow-x-auto pb-2">
           <div className="flex items-end gap-1.5 min-w-[500px]" style={{ height: 160 }}>
-            {data.hourly.map((bucket) => (
-              <div
-                key={bucket.hour}
-                className="flex flex-1 flex-col items-center gap-1.5"
-                role="img"
-                aria-label={`${bucket.hour}:00 — ${formatCurrency(bucket.totalSales)}`}
-                title={`${bucket.hour}:00 — ${formatCurrency(bucket.totalSales)}`}
-              >
+            {data.hourly.map((bucket) => {
+              const isHighlighted = highlightHour !== undefined && bucket.hour === highlightHour;
+              return (
                 <div
-                  className="w-full rounded-t bg-primary hover:bg-primary-600 transition-colors"
-                  style={{
-                    height: `${(bucket.totalSales / maxSales) * 120}px`,
-                    minHeight: bucket.totalSales > 0 ? 4 : 0,
-                  }}
-                />
-                {bucket.hour % 3 === 0 && (
-                  <span className="text-[10px] text-muted-foreground tabular-nums">{bucket.hour}h</span>
-                )}
-              </div>
-            ))}
+                  key={bucket.hour}
+                  className="flex flex-1 flex-col items-center gap-1.5"
+                  role="img"
+                  aria-label={`${bucket.hour}:00 — ${formatCurrency(bucket.totalSales)}${isHighlighted ? " (Seleccionado)" : ""}`}
+                  title={`${bucket.hour}:00 — ${formatCurrency(bucket.totalSales)} (${bucket.invoiceCount} facturas)`}
+                >
+                  <div
+                    className={`w-full rounded-t transition-colors ${
+                      isHighlighted
+                        ? "bg-amber-500 hover:bg-amber-600 ring-2 ring-amber-400"
+                        : "bg-primary hover:bg-primary-600"
+                    }`}
+                    style={{
+                      height: `${(bucket.totalSales / maxSales) * 120}px`,
+                      minHeight: bucket.totalSales > 0 ? 4 : 0,
+                    }}
+                  />
+                  {bucket.hour % 3 === 0 && (
+                    <span
+                      className={`text-[10px] tabular-nums ${
+                        isHighlighted
+                          ? "font-bold text-amber-600 dark:text-amber-400"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {bucket.hour}h
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -314,6 +348,11 @@ export function SalesPage() {
   const paymentMethodFilter = searchParams.get("paymentMethod") || undefined;
   const reconciliationStatusFilter =
     searchParams.get("reconciliationStatus") || undefined;
+  const hourParam = searchParams.get("hour");
+  const highlightHour =
+    hourParam !== null && !Number.isNaN(Number(hourParam))
+      ? Number(hourParam)
+      : undefined;
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -368,7 +407,13 @@ export function SalesPage() {
             highlightPaymentMethod={paymentMethodFilter}
           />
         )}
-        {activeTab === "hourly" && <HourlyTab date={range.startDate} />}
+        {activeTab === "hourly" && (
+          <HourlyTab
+            startDate={range.startDate}
+            endDate={range.endDate}
+            highlightHour={highlightHour}
+          />
+        )}
         {activeTab === "products" && (
           <ProductsTab
             startDate={range.startDate}
