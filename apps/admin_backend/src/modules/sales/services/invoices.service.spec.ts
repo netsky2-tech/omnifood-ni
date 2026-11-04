@@ -366,6 +366,29 @@ describe('InvoicesService', () => {
       expect(movement?.compensationForKardexId).toBeNull();
       expect(txManager.findOne).not.toHaveBeenCalled();
     });
+
+    it('does not add phantom stock when SALE_CANCEL compensates a sale that never entered cloud Kardex (#937 S8)', async () => {
+      txManager.findOne.mockResolvedValue(null);
+
+      await invokeAppendV1Movement(cancelRecord, txManager);
+
+      expect(txManager.save).toHaveBeenCalledWith(
+        Insumo,
+        expect.objectContaining({
+          id: 'ins-1',
+          stock: 6, // Unchanged! Previous was 6, stays 6 (no phantom +2)
+        }),
+      );
+      expect(txManager.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: MovementType.SALE_CANCEL,
+          quantity: 0,
+          previousStock: 6,
+          newStock: 6,
+          compensationForKardexId: null,
+        }),
+      );
+    });
   });
 
   /**

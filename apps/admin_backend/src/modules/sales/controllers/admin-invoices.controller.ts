@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   Post,
   Req,
   UnauthorizedException,
@@ -19,6 +20,7 @@ import { UserRole } from '../../identity/entities/user.entity';
 import { TenantInterceptor } from '../../../core/database/rls.interceptor';
 import { InvoicesService } from '../services/invoices.service';
 import { CreateAdminCreditNoteDto } from '../dto/admin-credit-note.dto';
+import { VoidAdminInvoiceDto } from '../dto/admin-void-invoice.dto';
 import { serializeAdminInvoices } from '../dto/admin-invoice-response';
 
 interface AdminRequestUser {
@@ -107,5 +109,31 @@ export class AdminInvoicesController {
   async listInvoices(@Req() request: AdminRequest) {
     const tenantId = this.requireTenantId(request.user);
     return serializeAdminInvoices(await this.invoicesService.findAll(tenantId));
+  }
+
+  /**
+   * D-14 / Issue #937: administrative void of terminal invoices.
+   * Gated to OWNER / MANAGER under SALES_VOID_INVOICE permission.
+   * The authorizer identity is derived from the JWT principal.
+   */
+  @Post('invoices/:id/void')
+  @Roles(UserRole.OWNER, UserRole.MANAGER)
+  @RequirePermissions(AppPermission.SALES_VOID_INVOICE)
+  async voidInvoice(
+    @Req() request: AdminRequest,
+    @Param('id') invoiceId: string,
+    @Body() dto: VoidAdminInvoiceDto,
+  ) {
+    const tenantId = this.requireTenantId(request.user);
+    const authorizer = {
+      userId: this.requireAuthorizerId(request.user),
+      role: request.user?.role as UserRole,
+    };
+    return this.invoicesService.voidAdminInvoice(
+      tenantId,
+      invoiceId,
+      dto,
+      authorizer,
+    );
   }
 }

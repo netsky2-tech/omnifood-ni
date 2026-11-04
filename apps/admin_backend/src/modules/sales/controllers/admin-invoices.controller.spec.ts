@@ -21,6 +21,7 @@ describe('AdminInvoicesController', () => {
   let app: INestApplication;
   let serviceMock: {
     createAdminCreditNote: jest.Mock;
+    voidAdminInvoice: jest.Mock;
     findAll?: jest.Mock;
   };
 
@@ -54,6 +55,12 @@ describe('AdminInvoicesController', () => {
         originInvoiceId: 'origin-1',
         originInvoiceNumber: '001-001-01-00000010',
         total: -57.5,
+      }),
+      voidAdminInvoice: jest.fn().mockResolvedValue({
+        id: 'inv-1',
+        number: '001-001-01-00000010',
+        isCanceled: true,
+        voidReason: 'ERROR_DE_CAPTURA',
       }),
     };
 
@@ -91,6 +98,7 @@ describe('AdminInvoicesController', () => {
 
   beforeEach(() => {
     serviceMock.createAdminCreditNote.mockClear();
+    serviceMock.voidAdminInvoice.mockClear();
   });
 
   it('grants 201 to an OWNER principal and passes the principal-derived authorizer', async () => {
@@ -223,6 +231,99 @@ describe('AdminInvoicesController', () => {
         .send();
 
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe('POST /sales/admin/invoices/:id/void (administrative void)', () => {
+    const targetInvoiceId = '11111111-2222-3333-4444-555555555555';
+
+    it('grants 201 to an OWNER and passes principal-derived authorizer', async () => {
+      injectedUser = buildPrincipal('OWNER');
+
+      const res = await request(app.getHttpServer())
+        .post(`/sales/admin/invoices/${targetInvoiceId}/void`)
+        .send({
+          reason: 'ERROR_DE_CAPTURA',
+          reasonDetail: 'Ticket cobrado dos veces',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({
+        id: 'inv-1',
+        number: '001-001-01-00000010',
+        isCanceled: true,
+        voidReason: 'ERROR_DE_CAPTURA',
+      });
+      expect(serviceMock.voidAdminInvoice).toHaveBeenCalledTimes(1);
+      const [tenantId, invoiceId, dto, authorizer] =
+        serviceMock.voidAdminInvoice.mock.calls[0];
+      expect(tenantId).toBe('tenant-1');
+      expect(invoiceId).toBe(targetInvoiceId);
+      expect(dto).toMatchObject({
+        reason: 'ERROR_DE_CAPTURA',
+        reasonDetail: 'Ticket cobrado dos veces',
+      });
+      expect(authorizer).toEqual({ userId: 'principal-1', role: 'OWNER' });
+    });
+
+    it('grants 201 to a MANAGER', async () => {
+      injectedUser = buildPrincipal('MANAGER');
+
+      const res = await request(app.getHttpServer())
+        .post(`/sales/admin/invoices/${targetInvoiceId}/void`)
+        .send({ reason: 'CLIENTE_DESISTE' });
+
+      expect(res.status).toBe(201);
+      expect(serviceMock.voidAdminInvoice).toHaveBeenCalledTimes(1);
+      const [, , , authorizer] = serviceMock.voidAdminInvoice.mock.calls[0];
+      expect(authorizer).toEqual({ userId: 'principal-1', role: 'MANAGER' });
+    });
+
+    it('rejects 403 for CASHIER (lacks SALES_VOID_INVOICE)', async () => {
+      injectedUser = buildPrincipal('CASHIER');
+
+      const res = await request(app.getHttpServer())
+        .post(`/sales/admin/invoices/${targetInvoiceId}/void`)
+        .send({ reason: 'ERROR_DE_CAPTURA' });
+
+      expect(res.status).toBe(403);
+      expect(serviceMock.voidAdminInvoice).not.toHaveBeenCalled();
+    });
+
+    it('rejects 403 for WAITER', async () => {
+      injectedUser = buildPrincipal('WAITER');
+
+      const res = await request(app.getHttpServer())
+        .post(`/sales/admin/invoices/${targetInvoiceId}/void`)
+        .send({ reason: 'ERROR_DE_CAPTURA' });
+
+      expect(res.status).toBe(403);
+      expect(serviceMock.voidAdminInvoice).not.toHaveBeenCalled();
+    });
+
+    it('rejects 400 when reason is missing or empty', async () => {
+      injectedUser = buildPrincipal('OWNER');
+
+      const res = await request(app.getHttpServer())
+        .post(`/sales/admin/invoices/${targetInvoiceId}/void`)
+        .send({ reason: '   ' });
+
+      expect(res.status).toBe(400);
+      expect(serviceMock.voidAdminInvoice).not.toHaveBeenCalled();
+    });
+
+    it('rejects 400 when body supplies forged authorizedByUserId', async () => {
+      injectedUser = buildPrincipal('OWNER');
+
+      const res = await request(app.getHttpServer())
+        .post(`/sales/admin/invoices/${targetInvoiceId}/void`)
+        .send({
+          reason: 'ERROR_DE_CAPTURA',
+          authorizedByUserId: 'other-user',
+        });
+
+      expect(res.status).toBe(400);
+      expect(serviceMock.voidAdminInvoice).not.toHaveBeenCalled();
     });
   });
 });

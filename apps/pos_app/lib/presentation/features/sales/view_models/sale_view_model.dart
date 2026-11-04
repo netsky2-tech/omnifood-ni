@@ -3208,6 +3208,7 @@ class SaleViewModel extends ChangeNotifier {
             DateTime.fromMillisecondsSinceEpoch(entity.createdAt),
         currentShiftId: session?.id,
         comparedTo: DateTime.now(),
+        isInvoiceSyncFailed: entity.syncStatus.toLowerCase() == 'failed',
       );
       if (!decision.isAllowed) {
         _errorMessage = decision.uiMessage;

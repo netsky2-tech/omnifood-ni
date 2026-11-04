@@ -44,9 +44,9 @@ enum VoidDecision {
         allowed => '',
         deniedOwnInvoice => 'Solo puede anular sus propias facturas.',
         deniedCrossDay =>
-          'La anulación de días anteriores se realiza por el flujo administrativo.',
+          'La anulación de días anteriores debe realizarse en el Portal Web de Administración.',
         deniedShiftUnknown =>
-          'No se puede verificar el turno de esta factura. Solicite la anulación por el flujo administrativo.',
+          'No se puede verificar el turno de esta factura. Solicite la anulación en el Portal Web de Administración.',
         deniedOtherShift =>
           'Solo puede anular facturas de su turno actual.',
         deniedNotPermitted => 'No tiene permiso para anular facturas.',
@@ -77,13 +77,20 @@ VoidDecision evaluateVoidRequest({
   required DateTime invoiceCreatedAt,
   required String? currentShiftId,
   required DateTime comparedTo,
+  bool isInvoiceSyncFailed = false,
 }) {
   if (!actorCanVoidAny && !actorCanVoidOwnCurrentShift) {
     return VoidDecision.deniedNotPermitted;
   }
-  // D-14 is categorical: previous-date void is prohibited for EVERY actor.
-  // This predicate sits BEFORE the void.any bypass on purpose — the
-  // Backoffice credit note (not a broader role) is the cross-day path.
+  // #937 S7/S8: If a sale failed to sync to the cloud, the web backoffice cannot
+  // see or void it. An actor with void.any capability (Owner / Manager)
+  // is authorized to administratively void it locally to revert local stock
+  // and send the compensating SALE_CANCEL to close the cloud DGI sequence.
+  if (isInvoiceSyncFailed && actorCanVoidAny) {
+    return VoidDecision.allowed;
+  }
+  // D-14 is categorical: previous-date void is prohibited for regular cashier
+  // actors and synced invoices. Cross-day corrections go to the Backoffice.
   final dateCheck = classifyIssueDate(
     localIssueDate: invoiceLocalIssueDate,
     createdAt: invoiceCreatedAt,

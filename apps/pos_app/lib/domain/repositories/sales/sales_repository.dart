@@ -84,6 +84,10 @@ abstract class SalesRepository {
     String reasonCode, {
     String? reasonDetail,
   });
+
+  /// #937 T5: Applies an administrative void received from Backoffice via inbound sync.
+  /// Reverses local inventory movements and sets isCanceled = true with syncStatus = 'synced'.
+  Future<void> applyRemoteVoid(String invoiceId, String voidReason);
   /// Creates a local credit note for [originalInvoiceId] and returns the NEW
   /// credit note entity id so the caller can print and reference the
   /// committed document (H5/H8: the UI prints from the persisted rows of
