@@ -9,6 +9,12 @@
     "build": "remotion render src/index.ts ShowcaseMaster out/showcase-master.mp4",
     "build:metrics": "remotion render src/index.ts MetricsShowcase out/nhilos_pos_metricas_convenios.mp4",
     "build:reel": "remotion render src/index.ts SocialReel out/social-reel.mp4",
+    "build:speed": "remotion render src/index.ts SpeedReel out/nhilos_pos_velocidad_mostrador.mp4",
+    "build:fiscal": "remotion render src/index.ts FiscalReel out/nhilos_pos_certeza_fiscal_dgi.mp4",
+    "build:offline": "remotion render src/index.ts OfflineReel out/nhilos_pos_continuidad_offline.mp4",
+    "build:blind": "remotion render src/index.ts BlindAuditReel out/nhilos_pos_cierre_arqueo_ciego.mp4",
+    "build:hold": "remotion render src/index.ts HoldOrdersReel out/nhilos_pos_cuentas_espera_variantes.mp4",
+    "build:owner": "remotion render src/index.ts OwnerDashboardReel out/nhilos_pos_owner_dashboard_navegacion_contextual.mp4",
     "build:square": "remotion render src/index.ts SocialSquare out/social-square.mp4",
     "generate:voiceover": "python3 scripts/generate-voiceover.py",
     "typecheck": "tsc --noEmit"

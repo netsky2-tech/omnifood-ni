@@ -46,4 +46,46 @@ export const COMPOSITION_PRESETS = {
     fps: VIDEO_FPS,
     durationInFrames: 24 * VIDEO_FPS, // 24 segundos (720 frames)
   },
+  speedReel: {
+    id: 'SpeedReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 960, // 32 segundos (180 + 280 + 260 + 240 = 960 frames)
+  },
+  fiscalReel: {
+    id: 'FiscalReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1050, // 35 segundos (220 + 300 + 280 + 250 = 1050 frames)
+  },
+  offlineReel: {
+    id: 'OfflineReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1080, // 36 segundos (240 + 300 + 270 + 270 = 1080 frames)
+  },
+  blindAuditReel: {
+    id: 'BlindAuditReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1140, // 38 segundos (600 + 300 + 240 = 1140 frames)
+  },
+  holdOrdersReel: {
+    id: 'HoldOrdersReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1065, // 35.5 segundos (590 + 245 + 230 = 1065 frames)
+  },
+  ownerDashboardReel: {
+    id: 'OwnerDashboardReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1220, // 40.67 segundos (315 + 345 + 320 + 240 = 1220 frames)
+  },
 } as const;
