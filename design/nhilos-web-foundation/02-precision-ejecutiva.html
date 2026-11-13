@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="es-NI">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NHILOS POS — Precisión Ejecutiva & Sofisticación Técnica | Linear + Lightspeed</title>
+  <style>
+    /* ==========================================================================
+       NHILOS DESIGN SYSTEM TOKENS — DIRECTION 02: PRECISIÓN EJECUTIVA & LINEAR TECH
+       Minimalismo sobrio, rejillas hairline 1px, alto contraste, conector 'Hilo Operativo' SVG
+       ========================================================================== */
+    :root {
+      --brand-navy-deep: #003757;
+      --brand-navy-dark: #00253B;
+      --brand-navy-midnight: #001829;
+      --brand-emerald: #00BF81;
+      --brand-emerald-aa: #007A52; /* WCAG AA on light */
+      --brand-emerald-glow: rgba(0, 191, 129, 0.35);
+      --surface-white: #FFFFFF;
+      --surface-subtle: #F8FAFC;
+      --surface-dark-slate: #0A1622;
+      --border-hairline: rgba(255, 255, 255, 0.12);
+      --border-hairline-dark: rgba(0, 55, 87, 0.12);
+      --border-subtle: #CCCCCC;
+      --border-structural: #E2E8F0;
+      --text-ink: #0B1924;
+      --text-muted: #4A5568;
+      --text-subtle: #718096;
+      --text-light-muted: #94A3B8;
+      --text-inverse: #FFFFFF;
+      --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-pill: 9999px;
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      background-color: var(--brand-navy-midnight);
+      color: var(--text-inverse);
+      font-family: var(--font-display);
+      line-height: 1.5;
+      font-size: 16px;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--brand-navy-midnight);
+      color: var(--text-inverse);
+      min-width: 320px;
+      overflow-x: hidden;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--brand-emerald);
+      outline-offset: 3px;
+    }
+
+    .container {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .tabular {
+      font-variant-numeric: tabular-nums;
+      font-family: var(--font-mono);
+    }
+
+    /* Tuning Top Bar (Interactivity: density / contrast tuning + copy as prompt) */
+    .tuning-bar {
+      background: #030D14;
+      border-bottom: 1px solid var(--border-hairline);
+      padding: 8px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 200;
+    }
+    .tuning-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .tuning-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border-hairline);
+      color: var(--text-inverse);
+      padding: 3px 10px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tuning-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+    }
+    .copy-prompt-btn {
+      background: var(--brand-emerald);
+      color: var(--brand-navy-midnight);
+      border: none;
+      padding: 4px 12px;
+      border-radius: var(--radius-sm);
+      font-weight: 700;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    /* ==========================================================================
+       H01: HEADER
+       ========================================================================== */
+    .header-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(0, 24, 41, 0.90);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 68px;
+    }
+    .brand-mark-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .brand-wordmark {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      color: var(--text-inverse);
+    }
+    .nav-menu {
+      display: flex;
+      list-style: none;
+      gap: 32px;
+    }
+    .nav-menu a {
+      color: var(--text-light-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: color 0.15s ease;
+    }
+    .nav-menu a:hover {
+      color: var(--brand-emerald);
+    }
+    .btn-header {
+      background: rgba(0, 191, 129, 0.15);
+      border: 1px solid var(--brand-emerald);
+      color: var(--brand-emerald);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+    .btn-header:hover {
+      background: var(--brand-emerald);
+      color: var(--brand-navy-midnight);
+    }
+
+    /* ==========================================================================
+       H02: HERO (LINEAR ARCHITECTURAL RHYTHM & HAIRLINE STRUCTURES)
+       ========================================================================== */
+    .hero-architectural {
+      padding: 88px 0 96px 0;
+      position: relative;
+      border-bottom: 1px solid var(--border-hairline);
+      background: radial-gradient(circle at 50% 0%, rgba(0, 55, 87, 0.4) 0%, rgba(0, 24, 41, 1) 75%);
+    }
+    .hero-center-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-pill);
+      padding: 4px 14px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      color: var(--brand-emerald);
+      margin-bottom: 24px;
+    }
+    .hero-main-title {
+      font-size: 52px;
+      line-height: 1.08;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--text-inverse);
+      max-width: 980px;
+      margin-bottom: 24px;
+    }
+    .hero-main-title .hilo-accent {
+      color: var(--brand-emerald);
+      text-shadow: 0 0 24px rgba(0, 191, 129, 0.35);
+    }
+    .hero-subcopy {
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--text-light-muted);
+      max-width: 760px;
+      margin-bottom: 36px;
+    }
+    .hero-cta-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    .btn-exec-primary {
+      background: var(--brand-emerald);
+      color: var(--brand-navy-midnight);
+      font-weight: 700;
+      font-size: 14px;
+      padding: 12px 28px;
+      border-radius: var(--radius-sm);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-exec-primary:hover {
+      box-shadow: 0 0 20px var(--brand-emerald-glow);
+    }
+    .btn-exec-secondary {
+      background: transparent;
+      border: 1px solid var(--border-hairline);
+      color: var(--text-inverse);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 24px;
+      border-radius: var(--radius-sm);
+      text-decoration: none;
+    }
+    .btn-exec-secondary:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Hairline Spec Grid in Hero */
+    .spec-hairline-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      border-top: 1px solid var(--border-hairline);
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .spec-item {
+      padding: 16px 20px;
+      border-right: 1px solid var(--border-hairline);
+    }
+    .spec-item:last-child {
+      border-right: none;
+    }
+    .spec-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-light-muted);
+      font-family: var(--font-mono);
+      margin-bottom: 4px;
+    }
+    .spec-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-inverse);
+    }
+
+    /* ==========================================================================
+       H03: HILO OPERATIVO CONNECTOR & 4-STAGE INTERACTIVE INSPECTOR
+       ========================================================================== */
+    .inspector-section {
+      padding: 88px 0;
+      background: #001F33;
+      border-bottom: 1px solid var(--border-hairline);
+      position: relative;
+    }
+    .section-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--brand-emerald);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .section-heading-dark {
+      font-size: 36px;
+      font-weight: 800;
+      color: var(--text-inverse);
+      margin-bottom: 16px;
+    }
+    .section-intro-dark {
+      font-size: 16px;
+      color: var(--text-light-muted);
+      max-width: 720px;
+      margin-bottom: 48px;
+      line-height: 1.6;
+    }
+
+    /* Visible SVG Hilo Operativo */
+    .hilo-svg-connector {
+      width: 100%;
+      height: 48px;
+      margin-bottom: 32px;
+    }
+
+    /* 4-Stage Inspector Nav */
+    .stage-nodes-bar {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stage-node-btn {
+      background: rgba(0, 37, 59, 0.6);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      text-align: left;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+      color: var(--text-inverse);
+    }
+    .stage-node-btn.active {
+      border-color: var(--brand-emerald);
+      background: rgba(0, 191, 129, 0.08);
+      box-shadow: 0 0 16px rgba(0, 191, 129, 0.15);
+    }
+    .stage-node-btn .node-num {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--brand-emerald);
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .stage-node-btn .node-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    /* Live Schematic Frame (Interactive Target) */
+    .schematic-frame {
+      background: #02121E;
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 32px;
+      min-height: 380px;
+    }
+    .schematic-info h3 {
+      font-size: 24px;
+      color: var(--text-inverse);
+      margin-bottom: 12px;
+    }
+    .schematic-info p {
+      font-size: 14px;
+      color: var(--text-light-muted);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .schematic-meta-row {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .meta-item {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--brand-emerald);
+    }
+    .schematic-data-view {
+      background: #000B12;
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #A5F3FC;
+    }
+
+    /* ==========================================================================
+       H04 & H05: LIGHT CONTRAST BREAK (WHITE SECTION: ROLES & WORKFLOWS)
+       ========================================================================== */
+    .light-section {
+      background: var(--surface-white);
+      color: var(--text-ink);
+      padding: 88px 0;
+      border-bottom: 1px solid var(--border-structural);
+    }
+    .light-section h2 {
+      color: var(--brand-navy-deep);
+      font-size: 36px;
+      margin-bottom: 16px;
+    }
+    .light-section p.sub {
+      color: var(--text-muted);
+      font-size: 16px;
+      max-width: 720px;
+      margin-bottom: 48px;
+    }
+    .light-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+    .light-card {
+      border: 1px solid var(--border-structural);
+      border-radius: var(--radius-md);
+      padding: 28px;
+      background: var(--surface-subtle);
+      transition: all 0.2s ease;
+    }
+    .light-card:hover {
+      border-color: var(--brand-navy-deep);
+      box-shadow: 0 4px 16px rgba(0, 55, 87, 0.08);
+    }
+    .light-card h3 {
+      color: var(--brand-navy-deep);
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    .light-card p {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    /* ==========================================================================
+       H06 & H07: CONTINUIDAD Y OWNER DASHBOARD (DEEP NAVY SECTION)
+       ========================================================================== */
+    .dark-operational-section {
+      background: var(--brand-navy-midnight);
+      padding: 88px 0;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .dual-pane-dash {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      margin-top: 36px;
+    }
+    .pane-card {
+      background: #02121E;
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 24px;
+    }
+    .pane-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 14px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+
+    /* ==========================================================================
+       H08 & H09: IMPLEMENTACION & EVIDENCIA
+       ========================================================================== */
+    .matrix-section {
+      background: var(--brand-navy-dark);
+      padding: 80px 0;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .matrix-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 32px;
+    }
+    .matrix-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-hairline);
+      padding: 20px;
+      border-radius: var(--radius-sm);
+    }
+    .matrix-box .tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--brand-emerald);
+      margin-bottom: 8px;
+    }
+
+    /* ==========================================================================
+       H11: FAQ
+       ========================================================================== */
+    .faq-dark-section {
+      padding: 80px 0;
+      background: #001829;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .faq-grid-cols {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 36px;
+    }
+    .faq-card-tech {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-md);
+      padding: 20px;
+    }
+    .faq-card-tech h4 {
+      font-size: 16px;
+      color: var(--text-inverse);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .faq-card-tech p {
+      font-size: 13px;
+      color: var(--text-light-muted);
+      line-height: 1.6;
+    }
+
+    /* ==========================================================================
+       H12: FINAL CTA & H13: FOOTER
+       ========================================================================== */
+    .cta-linear {
+      padding: 96px 0;
+      background: radial-gradient(circle at 50% 100%, rgba(0, 191, 129, 0.25) 0%, rgba(0, 24, 41, 1) 70%);
+      text-align: center;
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .footer-linear {
+      background: #020C13;
+      padding: 64px 0 32px 0;
+      font-size: 13px;
+      color: var(--text-light-muted);
+    }
+    .footer-grid-linear {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+      gap: 32px;
+      margin-bottom: 48px;
+    }
+    .footer-grid-linear h5 {
+      color: var(--text-inverse);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 16px;
+      font-family: var(--font-mono);
+    }
+    .footer-grid-linear ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .footer-grid-linear a {
+      color: var(--text-light-muted);
+      text-decoration: none;
+    }
+    .footer-grid-linear a:hover {
+      color: var(--brand-emerald);
+    }
+
+    
+    @media (max-width: 1024px) {
+      .stage-nodes-bar, .schematic-frame, .light-grid-3, .dual-pane-dash, .matrix-grid, .faq-grid-cols, .footer-grid-linear {
+        grid-template-columns: 1fr !important;
+      }
+      .spec-hairline-strip {
+        grid-template-columns: 1fr 1fr !important;
+      }
+    }
+    @media (max-width: 640px) {
+      .nav-menu { display: none; }
+      .hero-main-title { font-size: 32px; }
+      .spec-hairline-strip { grid-template-columns: 1fr !important; }
+    }
+
+    /* Prefers reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation: none !important;
+        transition: none !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    /* ==========================================================================
+       REAL SCREENSHOT FRAMES, ANIMATIONS & INTERACTIVE LIGHTBOX (SQUARE/LINEAR/LIGHTSPEED/TOAST)
+       ========================================================================== */
+    @keyframes floatSlow {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
+    }
+    @keyframes hiloPulse {
+      0% { stroke-dashoffset: 240; }
+      100% { stroke-dashoffset: 0; }
+    }
+    .reveal-on-scroll {
+      opacity: 0;
+      transform: translateY(22px);
+      transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1), transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .reveal-on-scroll.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .real-logo-img {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      object-fit: contain;
+      display: block;
+      box-shadow: 0 2px 8px rgba(0, 55, 87, 0.18);
+      transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .brand-lockup:hover .real-logo-img,
+    .brand-mark-group:hover .real-logo-img,
+    .brand-group:hover .real-logo-img {
+      transform: scale(1.06);
+    }
+    .device-bezel-browser {
+      background: #0B1924;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 24, 41, 0.22);
+      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .device-bezel-browser:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 28px 64px rgba(0, 24, 41, 0.30);
+    }
+    .browser-top-chrome {
+      background: #001829;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #94B4C7;
+    }
+    .browser-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .browser-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .browser-dots span:nth-child(1) { background: #EF4444; }
+    .browser-dots span:nth-child(2) { background: #F59E0B; }
+    .browser-dots span:nth-child(3) { background: #00BF81; }
+
+    .device-bezel-pos {
+      background: #0B1924;
+      border-radius: 18px;
+      padding: 10px;
+      border: 2px solid #1E3A52;
+      box-shadow: 0 18px 42px rgba(0, 24, 41, 0.28);
+      transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .device-bezel-pos:hover {
+      transform: translateY(-4px) scale(1.01);
+    }
+    .screenshot-img {
+      width: 100%;
+      height: auto;
+      display: block;
+      cursor: zoom-in;
+      transition: opacity 0.28s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .screenshot-img:hover {
+      transform: scale(1.015);
+    }
+    .shot-switcher-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .shot-pill {
+      appearance: none;
+      -webkit-appearance: none;
+      background: #F0F5F9;
+      border: 1px solid #D9E6EE;
+      color: #003757;
+      padding: 6px 13px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      outline: none;
+    }
+    .shot-pill-dark {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #E2E8F0;
+    }
+    .shot-pill-dark:hover {
+      background: rgba(255, 255, 255, 0.16);
+      color: #FFFFFF;
+      border-color: rgba(0, 191, 129, 0.55);
+    }
+    .shot-pill-dark.active {
+      background: #00BF81;
+      color: #001829;
+      border-color: #00BF81;
+      font-weight: 700;
+    }
+    .zoom-hint-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: #007A52;
+      background: #ECFDF5;
+      border: 1px solid #A7F3D0;
+      padding: 3px 9px;
+      border-radius: 999px;
+      margin-top: 8px;
+      font-weight: 600;
+    }
+    /* Lightbox Modal */
+    .nhilos-lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0, 18, 30, 0.88);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+    .nhilos-lightbox.open {
+      display: flex;
+    }
+    .nhilos-lightbox-inner {
+      max-width: 1180px;
+      max-height: 90vh;
+      background: #001829;
+      border: 1px solid #00BF81;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 30px 90px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+    }
+    .nhilos-lightbox-bar {
+      padding: 12px 20px;
+      background: #00253B;
+      color: #FFFFFF;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+      font-weight: 700;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+    }
+    .nhilos-lightbox-close {
+      background: #00BF81;
+      color: #001829;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-weight: 800;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .nhilos-lightbox-body {
+      padding: 16px;
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      background: #020C13;
+    }
+    .nhilos-lightbox-body img {
+      max-width: 100%;
+      max-height: 76vh;
+      object-fit: contain;
+      border-radius: 8px;
+    }
+
+
+    /* ==========================================================================
+       GENTLE-UI-DESIGN PASS: FOCUS != SELECTION, COMPACT MOBILE NAV, DEMO LABELS
+       ========================================================================== */
+    .shot-pill:focus-visible,
+    .shot-pill-dark:focus-visible,
+    .role-tab-btn:focus-visible,
+    .stage-node-btn:focus-visible,
+    .segment-btn:focus-visible {
+      outline: 2px solid #00BF81 !important;
+      outline-offset: 3px !important;
+    }
+    .demo-data-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      background: #F1F5F9;
+      border: 1px solid #CBD5E1;
+      padding: 3px 9px;
+      border-radius: 6px;
+    }
+    .demo-data-note-dark {
+      color: #CBD5E1;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+    }
+    .mobile-nav-toggle {
+      display: none;
+      appearance: none;
+      background: transparent;
+      border: 1px solid #CBD5E1;
+      color: inherit;
+      min-height: 44px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      align-items: center;
+      gap: 6px;
+    }
+    .mobile-nav-drawer {
+      display: none;
+      padding: 16px 24px;
+      border-bottom: 1px solid #E2E8F0;
+      background: #FFFFFF;
+    }
+    .mobile-nav-drawer.open {
+      display: block;
+    }
+    .mobile-nav-drawer ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+    }
+    .mobile-nav-drawer a {
+      display: block;
+      padding: 8px 4px;
+      font-weight: 600;
+      color: #003757;
+      text-decoration: none;
+    }
+    @media (max-width: 640px) {
+      .mobile-nav-toggle {
+        display: inline-flex;
+      }
+      .header-inner {
+        height: auto !important;
+        min-height: 68px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+    }
+
+  </style>
+</head>
+<body>
+
+  
+
+  <!-- ==========================================================================
+       H01: HEADER
+       ========================================================================== -->
+  <header class="header-nav" role="banner">
+    <div class="container header-inner">
+      <a href="#inicio" class="brand-mark-group" aria-label="NHILOS — Inicio">
+        <img src="media/logo.png" alt="Logo oficial NHILOS POS" class="real-logo-img" width="34" height="34" />
+        <span class="brand-wordmark">NHILOS</span>
+      </a>
+
+      <nav aria-label="Navegación principal">
+        <ul class="nav-menu">
+          <li><a href="#producto">Producto</a></li>
+          <li><a href="#implementacion">Implementación</a></li>
+          <li><a href="#recursos">Recursos</a></li>
+          <li><a href="#nosotros">Nosotros</a></li>
+        </ul>
+      </nav>
+      <button type="button" class="mobile-nav-toggle" aria-expanded="false" aria-controls="mobile-nav-drawer" onclick="toggleMobileNav(this)">☰ Menú</button>
+
+      <a href="#demo" class="btn-header">Solicitar una demo</a>
+    </div>
+  </header>
+  <div id="mobile-nav-drawer" class="mobile-nav-drawer" role="navigation" aria-label="Navegación móvil">
+    <ul>
+      <li><a href="#producto">Producto</a></li>
+      <li><a href="#implementacion">Implementación</a></li>
+      <li><a href="#recursos">Recursos y Preguntas</a></li>
+      <li><a href="#nosotros">Nosotros</a></li>
+    </ul>
+  </div>
+
+  <main id="main-content">
+    <!-- ==========================================================================
+         H02: HERO (LINEAR ARCHITECTURAL RHYTHM)
+         ========================================================================== -->
+    <section id="inicio" class="hero-architectural" aria-labelledby="hero-title">
+      <div class="container">
+        <div class="hero-center-badge">
+          <span style="color: var(--brand-emerald);">●</span> CONTINUIDAD OPERATIVA Y CONTROL EJECUTIVO · NICARAGUA
+        </div>
+
+        <h1 id="hero-title" class="hero-main-title">
+          El punto de venta que sigue operando cuando se cae el internet. <span class="hilo-accent">Precisión y control sin interrupciones.</span>
+        </h1>
+
+        <p class="hero-subcopy">
+          Cobrá y facturá en caja aunque falle la conexión, con numeración correlativa conforme a la DT 09-2007. Cuando vuelve el internet, tus ventas e inventarios sincronizan de forma transparente con la nube.
+        </p>
+
+        <div class="hero-cta-group">
+          <a href="#demo" class="btn-exec-primary">
+            Solicitar una demo
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </a>
+          <a href="#hilo-inspector" class="btn-exec-secondary">Explorar el Hilo de una Venta</a>
+        </div>
+
+        
+        <!-- Linear-Style Perspective Product Stage with Real Screenshots -->
+        <div style="margin: 40px auto 36px; max-width: 1080px; display: grid; grid-template-columns: 1.55fr 0.85fr; gap: 24px; align-items: center; text-align: left;">
+          <div class="device-bezel-browser" style="border-color: rgba(0, 191, 129, 0.35);">
+            <div class="browser-top-chrome">
+              <div class="browser-dots"><span></span><span></span><span></span></div>
+              <span>Panel Ejecutivo del Dueño · Vista en Tiempo Real</span>
+              <span style="color:#00BF81;">● EN LÍNEA</span>
+            </div>
+            <img id="linear-hero-dsh" src="media/dsh_02_kpis_ventas.webp" alt="Owner Dashboard KPIs y Ventas" class="screenshot-img" onclick="openLightbox(this.src, 'Owner Dashboard v2: Venta Neta, Horas Pico y Sync Freshness Badge')" />
+          </div>
+          <div class="device-bezel-pos" style="border-color: rgba(0, 191, 129, 0.45);">
+            <div style="display:flex; justify-content:space-between; font-family:var(--font-mono); font-size:11px; color:#94B4C7; padding: 2px 6px 8px;">
+              <span>PUNTO DE VENTA EN CAJA</span>
+              <span style="color:#00BF81;">RESPUESTA INMEDIATA</span>
+            </div>
+            <img id="linear-hero-pos" src="media/pos_08_cobro_dolares.webp" alt="Checkout Bimoneda en Terminal POS" class="screenshot-img" style="border-radius:10px; max-height:310px; object-fit:cover; object-position:top;" onclick="openLightbox(this.src, 'Terminal POS: Cobro Bimoneda NIO/USD con tipo de cambio oficial y comercial')" />
+            <div class="shot-switcher-pills" style="margin-top:10px; margin-bottom:0;">
+              <button type="button" class="shot-pill shot-pill-dark active" onclick="swapShot('linear-hero-pos',null,'media/pos_08_cobro_dolares.webp','Cobro Bimoneda USD/NIO',this)">Bimoneda</button>
+              <button type="button" class="shot-pill shot-pill-dark" onclick="swapShot('linear-hero-pos',null,'media/pos_03_catalogo_soho.webp','Catálogo de Productos en Caja',this)">Catálogo</button>
+              <button type="button" class="shot-pill shot-pill-dark" onclick="swapShot('linear-hero-pos',null,'media/pos_16_cierre_turno_corte_z.webp','Arqueo Ciego y Corte Z',this)">Corte Z</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hairline Spec Strip -->
+        <div class="spec-hairline-strip">
+          <div class="spec-item">
+            <div class="spec-label">Núcleo de Caja</div>
+            <div class="spec-val">Operación Continua sin Internet</div>
+          </div>
+          <div class="spec-item">
+            <div class="spec-label">Normativa Fiscal</div>
+            <div class="spec-val">DGI DT 09-2007 y Notas de Crédito</div>
+          </div>
+          <div class="spec-item">
+            <div class="spec-label">Moneda & Cobro</div>
+            <div class="spec-val">NIO / USD + BAC / Banpro</div>
+          </div>
+          <div class="spec-item">
+            <div class="spec-label">Aislamiento Cloud</div>
+            <div class="spec-val">Datos Empresariales Protegidos</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         H03: HILO OPERATIVO CONNECTOR & 4-STAGE INTERACTIVE INSPECTOR
+         ========================================================================== -->
+    <section id="hilo-inspector" class="inspector-section" aria-labelledby="inspector-title">
+      <div class="container">
+        <div class="section-tag">Trazabilidad Técnica</div>
+        <h2 id="inspector-title" class="section-heading-dark">El Hilo de una Venta Real: Venta → Operación → Control → Visibilidad</h2>
+        <p class="section-intro-dark">
+          Seguí cómo viaja un ticket en tiempo real: desde la selección en la pantalla táctil de caja hasta el asiento contable en el panel ejecutivo.
+        </p>
+
+        <!-- SVG Connector Line (Animated Graphic) -->
+        <svg class="hilo-svg-connector" viewBox="0 0 1192 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <line x1="20" y1="24" x2="1172" y2="24" stroke="rgba(255,255,255,0.15)" stroke-width="2" stroke-dasharray="4 4"/>
+          <line id="hilo-active-track" x1="20" y1="24" x2="150" y2="24" stroke="#00BF81" stroke-width="3"/>
+          <circle cx="20" cy="24" r="6" fill="#00BF81"/>
+          <circle cx="397" cy="24" r="4" fill="#003757" stroke="#00BF81" stroke-width="2"/>
+          <circle cx="774" cy="24" r="4" fill="#003757" stroke="#00BF81" stroke-width="2"/>
+          <circle cx="1172" cy="24" r="4" fill="#003757" stroke="#00BF81" stroke-width="2"/>
+        </svg>
+
+        <!-- 4 Node Selector Buttons -->
+        <div class="stage-nodes-bar" role="tablist">
+          <button class="stage-node-btn active" id="btn-stage-1" onclick="selectStage(1)" role="tab" aria-selected="true">
+            <div class="node-num">PASO 01 · MOSTRADOR</div>
+            <div class="node-title">1. Cobro Bimoneda y Factura</div>
+          </button>
+          <button class="stage-node-btn" id="btn-stage-2" onclick="selectStage(2)" role="tab" aria-selected="false">
+            <div class="node-num">PASO 02 · COCINA Y BODEGA</div>
+            <div class="node-title">2. Descuento de Receta y Costos</div>
+          </button>
+          <button class="stage-node-btn" id="btn-stage-3" onclick="selectStage(3)" role="tab" aria-selected="false">
+            <div class="node-num">PASO 03 · CONTINUIDAD</div>
+            <div class="node-title">3. Cierre de Turno y Respaldo</div>
+          </button>
+          <button class="stage-node-btn" id="btn-stage-4" onclick="selectStage(4)" role="tab" aria-selected="false">
+            <div class="node-num">PASO 04 · DIRECCIÓN</div>
+            <div class="node-title">4. Panel del Dueño y Contabilidad</div>
+          </button>
+        </div>
+
+        <!-- Executive Stage Inspector Frame (Real Screenshot + Business Summary) -->
+        <div class="schematic-frame" style="align-items: center;">
+          <div class="schematic-info">
+            <h3 id="stage-detail-title">1. Cobro Bimoneda y Emisión de Factura</h3>
+            <p id="stage-detail-desc">
+              Tu cajero recibe pagos en Córdobas, Dólares o combinados con tarjeta BAC y Banpro. El sistema calcula el vuelto exacto al instante y emite la factura con numeración correlativa autorizada según la normativa DGI DT 09-2007.
+            </p>
+            <div class="schematic-meta-row">
+              <div class="meta-item" id="stage-meta-1">
+                <strong>Dónde ocurre:</strong> Punto de venta en mostrador o barra
+              </div>
+              <div class="meta-item" id="stage-meta-2">
+                <strong>Velocidad:</strong> Inmediata, incluso si falla el internet del local
+              </div>
+              <div class="meta-item" id="stage-meta-3">
+                <strong>Respaldo:</strong> Folio correlativo #004-001-000429 sin saltos
+              </div>
+            </div>
+          </div>
+
+          <div class="schematic-data-view" style="display:grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; align-items: stretch; background: #00121E;">
+            <div class="device-bezel-browser" style="border-color: rgba(0,191,129,0.35);">
+              <div class="browser-top-chrome">
+                <div class="browser-dots"><span></span><span></span><span></span></div>
+                <span id="stage-shot-label">Vista: Cobro Bimoneda (NIO / USD)</span>
+              </div>
+              <img id="stage-real-img" src="media/pos_08_cobro_dolares.webp" alt="Vista real de la etapa seleccionada" class="screenshot-img" style="max-height:270px; object-fit:cover; object-position:top;" onclick="openLightbox(this.src, document.getElementById('stage-detail-title').textContent)" />
+            </div>
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 16px; display:flex; flex-direction:column; justify-content:space-between;">
+              <div>
+                <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-emerald); font-weight: 700; margin-bottom: 10px;">
+                  EJEMPLO DE REGISTRO OPERATIVO (DEMOSTRACIÓN)
+                </div>
+                <div id="stage-summary-box" style="font-family: var(--font-sans); font-size: 13px; color: #E2E8F0; line-height: 1.65;">
+                  • <strong>Factura:</strong> #004-001-000429<br>
+                  • <strong>Total orden:</strong> C$ 384.00<br>
+                  • <strong>Efectivo recibido:</strong> C$ 200.00<br>
+                  • <strong>Tarjeta BAC:</strong> US$ 5.00 (T/C 36.80)<br>
+                  • <strong>Vuelto entregado:</strong> C$ 0.00<br>
+                  • <strong>Estado:</strong> Facturado e impreso
+                </div>
+              </div>
+              <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: #94B4C7;">
+                🔍 Tocá la imagen para ver todos los detalles de la interfaz.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         H04 & H05: LIGHT CONTRAST BREAK (ROLES Y WORKFLOWS EN BLANCO)
+         ========================================================================== -->
+    <section id="producto" class="light-section" aria-labelledby="roles-title">
+      <div class="container">
+        <div style="font-family: var(--font-mono); font-size: 12px; color: var(--brand-emerald-aa); font-weight: 700; text-transform: uppercase;">
+          Equipos y Flujos en Producción
+        </div>
+        <h2 id="roles-title">Tres roles, una sola fuente de verdad sin fisuras.</h2>
+        <p class="sub">
+          Separación arquitectónica de responsabilidades: rapidez en mostrador, rigor en inventario y visión clara para la dirección del negocio.
+        </p>
+
+        <div class="light-grid-3">
+          <div class="light-card">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--brand-navy-deep); font-weight: 700; margin-bottom: 6px;">ROL 01 / CAJA</div>
+            <img src="media/pos_04_carrito_barra.webp" alt="Carrito de venta en barra" class="screenshot-img" style="border-radius:8px; max-height:190px; object-fit:cover; object-position:top; margin-bottom:14px; border:1px solid var(--border-structural);" loading="lazy" onclick="openLightbox(this.src, 'Rol 01 Caja: Carrito táctil de alta velocidad')" /><h3>Quien Cobra</h3>
+            <p style="margin-bottom: 16px;">
+              Rapidez máxima en horas pico. Registro de ventas bimoneda, modificadores ágiles y arqueo ciego al terminar el turno.
+            </p>
+            <div style="font-size: 12px; font-family: var(--font-mono); color: var(--brand-navy-deep); background: #E2E8F0; padding: 6px 10px; border-radius: 4px;">
+              ✓ Cobro bimoneda, vuelto exacto y comandas ágiles
+            </div>
+          </div>
+
+          <div class="light-card">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--brand-navy-deep); font-weight: 700; margin-bottom: 6px;">ROL 02 / CONTROL</div>
+            <img src="media/pos_13_dialogo_anular_factura.webp" alt="Anulación supervisada DGI" class="screenshot-img" style="border-radius:8px; max-height:190px; object-fit:cover; object-position:top; margin-bottom:14px; border:1px solid var(--border-structural);" loading="lazy" onclick="openLightbox(this.src, 'Rol 02 Control: Anulación DGI con PIN de supervisor')" /><h3>Quien Supervisa</h3>
+            <p style="margin-bottom: 16px;">
+              Anulación supervisada mediante Notas de Crédito, conteo físico por lotes sin detener cobro en caja y control de mermas.
+            </p>
+            <div style="font-size: 12px; font-family: var(--font-mono); color: var(--brand-navy-deep); background: #E2E8F0; padding: 6px 10px; border-radius: 4px;">
+              ✓ Recetas, conteo por lotes y Notas de Crédito DGI
+            </div>
+          </div>
+
+          <div class="light-card">
+            <div style="font-family: var(--font-mono); font-size: 11px; color: var(--brand-navy-deep); font-weight: 700; margin-bottom: 6px;">ROL 03 / ESTRATEGIA</div>
+            <img src="media/dsh_19_top_productos.webp" alt="Top productos en Owner Dashboard" class="screenshot-img" style="border-radius:8px; max-height:190px; object-fit:cover; object-position:top; margin-bottom:14px; border:1px solid var(--border-structural);" loading="lazy" onclick="openLightbox(this.src, 'Rol 03 Estrategia: Ranking de productos y participación sobre venta neta')" /><h3>Quien Dirige</h3>
+            <p style="margin-bottom: 16px;">
+              Owner Dashboard web con Ritmo de Negocio, monitor de frescura de terminales, márgenes brutos y exportación para contador.
+            </p>
+            <div style="font-size: 12px; font-family: var(--font-mono); color: var(--brand-navy-deep); background: #E2E8F0; padding: 6px 10px; border-radius: 4px;">
+              ✓ Ventas en vivo, productos líderes y reportes contables
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         H06 & H07: CONTINUIDAD Y OWNER DASHBOARD (DEEP NAVY)
+         ========================================================================== -->
+    <section class="dark-operational-section" aria-labelledby="op-title">
+      <div class="container">
+        <div class="section-tag">Continuidad & Gestión</div>
+        <h2 id="op-title" class="section-heading-dark">El internet se cae. La caja no.</h2>
+        <p class="section-intro-dark">
+          En un terminal enrolado e hidratado, la venta, el cobro y la deducción de recetas no se detienen. El dashboard web consolida y audita todo al volver la red.
+        </p>
+
+        <div class="dual-pane-dash">
+          <div class="pane-card">
+            <div class="pane-header">
+              <span style="font-size: 13px; font-weight: 700;">ESTADO DEL TERMINAL LOCAL</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: var(--brand-emerald);">CONTINUIDAD EN CAJA</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-light-muted); margin-bottom: 16px;">
+              Al perder la conexión, el terminal no muestra errores ni bloquea la fila. Emite el ticket fiscal con folio local autorizado y guarda las ventas para sincronizar automáticamente.
+            </div>
+            <div style="background: rgba(0,0,0,0.4); padding: 12px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px;">
+              • Internet: Sin señal (tu caja sigue facturando)<br>
+              • Turno de Caja: ABIERTO (#TRN-2026-04)<br>
+              • Cola de Pendientes: 12 transacciones<br>
+              • Impresora Térmica: LISTA (58mm)
+            </div>
+          </div>
+
+          <div class="pane-card">
+            <div class="pane-header">
+              <span style="font-size: 13px; font-weight: 700;">MONITOR DE FRESCURA DEL DASHBOARD</span>
+              <span style="font-family: var(--font-mono); font-size: 11px; color: #38BDF8;">PANEL DEL DUEÑO AL DÍA</span>
+            </div>
+            <div style="font-size: 13px; color: var(--text-light-muted); margin-bottom: 16px;">
+              El dueño sabe con exactitud si las cifras que está mirando en su panel web corresponden a datos en tiempo real o si hay una caja con sync pendiente.
+            </div>
+            <div style="background: rgba(0,0,0,0.4); padding: 12px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 12px;">
+              • Estado de cajas: Sincronizadas hace 24 segundos<br>
+              • Venta Neta Consolidada: C$ 41,200<br>
+              • Vouchers BAC Conciliados: 100%<br>
+              • Reporte DGI Mensual: SINCRONIZADO
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         H08: IMPLEMENTACION & SETUP CENTER
+         ========================================================================== -->
+    <section id="implementacion" class="matrix-section" aria-labelledby="matrix-title">
+      <div class="container">
+        <div class="section-tag">Despliegue Controlado</div>
+        <h2 id="matrix-title" class="section-heading-dark">Llegás a operar con el sistema probado, no improvisado.</h2>
+        <p class="section-intro-dark">
+          Plantillas por industria y un Setup Center que realiza una prueba controlada de ticket y folio antes del go-live en tu negocio.
+        </p>
+
+        <div class="matrix-grid">
+          <div class="matrix-box">
+            <div class="tag">FASE 01</div>
+            <h4 style="font-size: 15px; margin-bottom: 6px;">Catálogo Base</h4>
+            <p style="font-size: 13px; color: var(--text-light-muted);">
+              Carga rápida por plantilla de cafetería, restaurante o retail con modificadores y recetas.
+            </p>
+          </div>
+          <div class="matrix-box">
+            <div class="tag">FASE 02</div>
+            <h4 style="font-size: 15px; margin-bottom: 6px;">Parámetros DGI</h4>
+            <p style="font-size: 13px; color: var(--text-light-muted);">
+              Ingreso de resolución tributaria, prefijo autorizado y rango de folios correlativos.
+            </p>
+          </div>
+          <div class="matrix-box">
+            <div class="tag">FASE 03</div>
+            <h4 style="font-size: 15px; margin-bottom: 6px;">Setup Center</h4>
+            <p style="font-size: 13px; color: var(--text-light-muted);">
+              Venta de prueba guiada, validación de impresión térmica y confirmación de sincronización en el panel web.
+            </p>
+          </div>
+          <div class="matrix-box">
+            <div class="tag">FASE 04</div>
+            <h4 style="font-size: 15px; margin-bottom: 6px;">Go-Live</h4>
+            <p style="font-size: 13px; color: var(--text-light-muted);">
+              Puesta en marcha con el personal capacitado y canal directo de soporte activado.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         H11: FAQ TECNICA
+         ========================================================================== -->
+    <section id="recursos" class="faq-dark-section" aria-labelledby="faq-title">
+      <div class="container">
+        <div class="section-tag">Preguntas Frecuentes</div>
+        <h2 id="faq-title" class="section-heading-dark">Especificaciones claras para evaluar con rigor.</h2>
+
+        <div class="faq-grid-cols">
+          <div class="faq-card-tech">
+            <h4>¿Qué es exactamente NHILOS POS?</h4>
+            <p>
+              Un sistema de punto de venta offline-first diseñado para alta rotación comercial en Nicaragua: gestiona cobro en terminales locales y consolida la operación en un panel web para el dueño.
+            </p>
+          </div>
+
+          <div class="faq-card-tech">
+            <h4>¿Cómo opera durante una caída de internet?</h4>
+            <p>
+              Tu punto de venta guarda cada operación directamente en la memoria segura del equipo. Las ventas, cobros bimoneda y descuentos de recetas se procesan localmente sin depender de la red.
+            </p>
+          </div>
+
+          <div class="faq-card-tech">
+            <h4>¿Cómo se garantiza la correlatividad fiscal DGI?</h4>
+            <p>
+              La numeración se asigna localmente dentro del rango autorizado por la DGI (DT 09-2007). Al sincronizar con la nube, los folios conservan estricto orden cronológico.
+            </p>
+          </div>
+
+          <div class="faq-card-tech">
+            <h4>¿Cómo se solicitan las demostraciones?</h4>
+            <p>
+              Mediante el botón "Solicitar una demo": un consultor técnico prepara un escenario específico para tu tipo de menú y volumen de ventas.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         H12: FINAL CTA
+         ========================================================================== -->
+    <section id="demo" class="cta-linear" aria-labelledby="final-title">
+      <div class="container">
+        <div class="section-tag" style="margin-bottom: 12px;">Siguiente Paso</div>
+        <h2 id="final-title" style="font-size: 42px; font-weight: 800; color: var(--text-inverse); margin-bottom: 16px;">
+          Veamos cómo funciona en tu operación.
+        </h2>
+        <p style="font-size: 17px; color: var(--text-light-muted); max-width: 600px; margin: 0 auto 32px auto;">
+          Contanos cómo vendés y cuál es tu principal reto en caja. Preparamos una demo guiada con los flujos que realmente te interesan revisar.
+        </p>
+        <a href="#demo" class="btn-exec-primary" style="font-size: 15px; padding: 14px 36px;">
+          Solicitar una demo
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==========================================================================
+       H13: FOOTER
+       ========================================================================== -->
+  <footer class="footer-linear" role="contentinfo">
+    <div class="container">
+      <div class="footer-grid-linear">
+        <div>
+          <h4 style="color: var(--text-inverse); font-size: 18px; margin-bottom: 8px;">NHILOS</h4>
+          <p style="font-size: 13px; line-height: 1.5; color: var(--text-light-muted);">
+            Conectamos los hilos de tu negocio.<br>
+            Plataforma RaaS para el comercio de alta rotación en Nicaragua.
+          </p>
+        </div>
+
+        <div>
+          <h5>Producto</h5>
+          <ul>
+            <li><a href="#producto">NHILOS POS</a></li>
+            <li><a href="#hilo-inspector">Cómo funciona</a></li>
+            <li><a href="#producto">Capacidades</a></li>
+            <li><a href="#implementacion">Implementación</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h5>Recursos</h5>
+          <ul>
+            <li><a href="#recursos">Guías de Inicio</a></li>
+            <li><a href="#recursos">Cumplimiento DT 09</a></li>
+            <li><a href="#recursos">FAQ</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h5 id="nosotros">Nosotros</h5>
+          <ul>
+            <li><a href="#nosotros">Empresa</a></li>
+            <li><a href="#nosotros">Filosofía de Cuidado</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h5>Legal</h5>
+          <ul>
+            <li><a href="#privacidad">Privacidad</a></li>
+            <li><a href="#terminos">Términos</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--border-hairline); padding-top: 24px; display: flex; justify-content: space-between; font-size: 12px;">
+        <div>© 2026 NHILOS. Todos los derechos reservados.</div>
+        <div>NHILOS POS · Managua, Nicaragua</div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ==========================================================================
+       INLINE JS FOR 4-STAGE INSPECTOR & TUNING (NO EXTERNAL SCRIPTS)
+       ========================================================================== -->
+  <script>
+    const stages = {
+      1: {
+        title: "1. Cobro Bimoneda y Emisión de Factura",
+        desc: "Tu cajero recibe pagos en Córdobas, Dólares o combinados con tarjeta BAC y Banpro. El sistema calcula el vuelto exacto al instante y emite la factura con numeración correlativa autorizada según la normativa DGI DT 09-2007.",
+        meta1: "<strong>Dónde ocurre:</strong> Punto de venta en mostrador o barra",
+        meta2: "<strong>Velocidad:</strong> Inmediata, incluso si falla el internet del local",
+        meta3: "<strong>Respaldo:</strong> Folio correlativo #004-001-000429 sin saltos",
+        trackX2: 150,
+        img: "media/pos_08_cobro_dolares.webp",
+        imgLabel: "Vista: Cobro Bimoneda (NIO / USD)",
+        summary: "• <strong>Factura:</strong> #004-001-000429<br>• <strong>Total orden:</strong> C$ 384.00<br>• <strong>Efectivo recibido:</strong> C$ 200.00<br>• <strong>Tarjeta BAC:</strong> US$ 5.00 (T/C 36.80)<br>• <strong>Vuelto entregado:</strong> C$ 0.00<br>• <strong>Estado:</strong> Facturado e impreso"
+      },
+      2: {
+        title: "2. Descuento Automático de Receta y Costo Real",
+        desc: "Cada café, bebida o plato vendido descuenta al instante los insumos de su receta. Conocés cuánto te cuesta producir cada orden y podés realizar conteos físicos por lote sin detener la caja.",
+        meta1: "<strong>Dónde ocurre:</strong> Motor de Recetas e Inventario",
+        meta2: "<strong>Control:</strong> Costo promedio actualizado en cada compra",
+        meta3: "<strong>Continuidad:</strong> El conteo de bodega nunca congela la facturación",
+        trackX2: 480,
+        img: "media/dsh_16_recetas_bom.webp",
+        imgLabel: "Vista: Recetas y Costo por Plato",
+        summary: "• <strong>Plato vendido:</strong> Hamburguesa Clásica<br>• <strong>Pan Brioche:</strong> -1 unidad (Lote vigente)<br>• <strong>Carne de res:</strong> -180 gramos<br>• <strong>Queso Cheddar:</strong> -40 gramos<br>• <strong>Costo de receta:</strong> C$ 98.50<br>• <strong>Margen bruto:</strong> 68.4%"
+      },
+      3: {
+        title: "3. Cierre de Turno con Arqueo Ciego y Vouchers",
+        desc: "Al terminar el turno, el cajero cuenta el efectivo y los vouchers de BAC y Banpro sin ver el monto esperado. El sistema registra cualquier diferencia con transparencia total y sincroniza al recuperar internet.",
+        meta1: "<strong>Dónde ocurre:</strong> Cierre de Turno (Corte X / Corte Z)",
+        meta2: "<strong>Seguridad:</strong> Conteo a ciegas que evita ajustes manuales",
+        meta3: "<strong>Respaldo:</strong> Sincronización automática hacia el panel web",
+        trackX2: 850,
+        img: "media/pos_16_cierre_turno_corte_z.webp",
+        imgLabel: "Vista: Arqueo Ciego y Cierre de Turno",
+        summary: "• <strong>Turno:</strong> Cierre de Caja #04<br>• <strong>Efectivo contado:</strong> C$ 18,450.00<br>• <strong>Vouchers BAC:</strong> C$ 14,200.00 (18 lotes)<br>• <strong>Vouchers Banpro:</strong> C$ 5,770.00 (9 lotes)<br>• <strong>Diferencia de caja:</strong> C$ 0.00 (Cuadre exacto)"
+      },
+      4: {
+        title: "4. Visibilidad del Dueño y Reportes para tu Contador",
+        desc: "Desde tu teléfono o computadora ves las ventas netas, las horas pico del negocio, los productos más rentables y exportás los reportes fiscales de ventas y notas de crédito listos para tu contador.",
+        meta1: "<strong>Dónde ocurre:</strong> Panel Ejecutivo Web del Dueño",
+        meta2: "<strong>Indicador de frescura:</strong> Sabés al instante si tus cajas están al día",
+        meta3: "<strong>Contabilidad:</strong> Reportes DGI y Notas de Crédito exportables",
+        trackX2: 1172,
+        img: "media/dsh_06_fiscal.webp",
+        imgLabel: "Vista: Reportes Fiscales y Notas de Crédito",
+        summary: "• <strong>Venta Neta del Día:</strong> C$ 38,420.00<br>• <strong>Hora de mayor flujo:</strong> 12:30 PM – 1:30 PM<br>• <strong>Estado de sucursal:</strong> 2 cajas al día<br>• <strong>Notas de Crédito:</strong> Supervisadas con motivo<br>• <strong>Exportación contable:</strong> Lista en 1 clic"
+      }
+    };
+
+    function selectStage(num) {
+      for (let i = 1; i <= 4; i++) {
+        const btn = document.getElementById('btn-stage-' + i);
+        if (i === num) {
+          btn.classList.add('active');
+          btn.setAttribute('aria-selected', 'true');
+        } else {
+          btn.classList.remove('active');
+          btn.setAttribute('aria-selected', 'false');
+        }
+      }
+      const data = stages[num];
+      document.getElementById('stage-detail-title').textContent = data.title;
+      document.getElementById('stage-detail-desc').textContent = data.desc;
+      document.getElementById('stage-meta-1').innerHTML = data.meta1;
+      document.getElementById('stage-meta-2').innerHTML = data.meta2;
+      document.getElementById('stage-meta-3').innerHTML = data.meta3;
+      document.getElementById('stage-summary-box').innerHTML = data.summary;
+      document.getElementById('hilo-active-track').setAttribute('x2', data.trackX2);
+      const sImg = document.getElementById('stage-real-img');
+      const sLbl = document.getElementById('stage-shot-label');
+      if (sImg && data.img) { sImg.src = data.img; }
+      if (sLbl && data.imgLabel) { sLbl.textContent = data.imgLabel; }
+    }
+
+    function toggleDensity() {
+      isCompact = !isCompact;
+      document.getElementById('density-lbl').textContent = isCompact ? 'Compacta' : 'Estándar';
+      document.querySelectorAll('.stage-node-btn, .matrix-box, .light-card').forEach(el => {
+        el.style.padding = isCompact ? '12px' : '20px';
+      });
+    }
+
+    let isHighContrast = true;
+    function toggleContrast() {
+      isHighContrast = !isHighContrast;
+      document.getElementById('contrast-lbl').textContent = isHighContrast ? 'Alto' : 'Suave';
+      document.body.style.backgroundColor = isHighContrast ? '#001829' : '#032035';
+    }
+
+    function copyPrompt() {
+      const promptText = "Dirección 02: Precisión Ejecutiva (Linear + Lightspeed) para NHILOS POS. Fondo Deep Navy (#001829 / #00253B), rejillas hairline de 1px, acento verde esmeralda (#00BF81), conector 'Hilo Operativo' interactivo Venta -> Operación -> Control -> Visibilidad, tipografía mono técnica para payloads y tablas.";
+      navigator.clipboard.writeText(promptText).then(() => {
+        alert("Prompt copiado al portapapeles: \n\n" + promptText);
+      });
+    }
+  </script>
+
+  <!-- INTERACTIVE LIGHTBOX FOR REAL PRODUCT SCREENSHOTS -->
+  <div id="nhilos-lightbox" class="nhilos-lightbox" role="dialog" aria-modal="true" aria-label="Vista ampliada de captura de producto" onclick="if(event.target===this)closeLightbox()">
+    <div class="nhilos-lightbox-inner">
+      <div class="nhilos-lightbox-bar">
+        <span id="lightbox-caption">Captura Real Verificada — NHILOS POS</span>
+        <button type="button" class="nhilos-lightbox-close" onclick="closeLightbox()">Cerrar (Esc)</button>
+      </div>
+      <div class="nhilos-lightbox-body">
+        <img id="lightbox-img" src="media/dsh_02_kpis_ventas.webp" alt="Vista ampliada" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let lastLightboxTrigger = null;
+    function openLightbox(src, caption, triggerEl) {
+      const modal = document.getElementById('nhilos-lightbox');
+      const img = document.getElementById('lightbox-img');
+      const cap = document.getElementById('lightbox-caption');
+      const closeBtn = modal ? modal.querySelector('.nhilos-lightbox-close') : null;
+      if (!modal || !img) return;
+      lastLightboxTrigger = triggerEl || document.activeElement;
+      img.src = src;
+      cap.textContent = caption || 'Captura Real Verificada — NHILOS POS';
+      modal.classList.add('open');
+      if (closeBtn) closeBtn.focus();
+    }
+    function closeLightbox() {
+      const modal = document.getElementById('nhilos-lightbox');
+      if (modal) modal.classList.remove('open');
+      if (lastLightboxTrigger && typeof lastLightboxTrigger.focus === 'function') {
+        lastLightboxTrigger.focus();
+        lastLightboxTrigger = null;
+      }
+    }
+    function toggleMobileNav(btn) {
+      const drawer = document.getElementById('mobile-nav-drawer');
+      if (!drawer) return;
+      const isOpen = drawer.classList.toggle('open');
+      btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeLightbox();
+    });
+    function swapShot(imgId, capId, src, caption, btnEl) {
+      const img = document.getElementById(imgId);
+      const cap = capId ? document.getElementById(capId) : null;
+      const safeCap = String(caption || 'Vista del Producto — NHILOS POS');
+      if (img) {
+        img.style.opacity = '0.6';
+        setTimeout(() => {
+          try {
+            img.src = src;
+            img.onclick = function() { openLightbox(src, safeCap); };
+          } finally {
+            img.style.opacity = '1';
+          }
+        }, 90);
+      }
+      if (cap) cap.textContent = safeCap;
+      if (btnEl && btnEl.parentElement) {
+        Array.from(btnEl.parentElement.children).forEach(b => b.classList.remove('active'));
+        btnEl.classList.add('active'); btnEl.blur();
+      }
+    }
+    // Scroll Reveal Observer
+    document.addEventListener('DOMContentLoaded', function() {
+      const targets = document.querySelectorAll('section, .bento-card, .pipeline-card, .story-card, .light-card, .matrix-box, .pane-card');
+      targets.forEach(el => el.classList.add('reveal-on-scroll'));
+      if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('is-visible');
+              io.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.08 });
+        targets.forEach(el => io.observe(el));
+      } else {
+        targets.forEach(el => el.classList.add('is-visible'));
+      }
+    });
+  </script>
+
+</body>
+</html>

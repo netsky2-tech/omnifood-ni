@@ -1,0 +1,35 @@
+{
+  "title": "NHILOS Website Foundation — Homepage Directions",
+  "brief": "Tres direcciones de arquitectura visual y diseño para la homepage de NHILOS POS (H01-H13) basadas en el Manual de Marca (#003757, #00BF81, #CCCCCC), contenido nicaragüense auténtico (es-NI), capacidades evolucionadas del producto y referencias balanceadas (Square, Linear, Lightspeed, Toast).",
+  "feature": "odd/tasks/nhilos-website-foundation.md",
+  "artboards": [
+    {
+      "file": "01-claridad-comercial.html",
+      "title": "01 — Claridad Comercial & Cercanía (Square + Lightspeed Dominance)",
+      "tradeoff": "Alta luminosidad editorial (#FFFFFF / #F7F9FB), rejilla bento clara y roles interactivos; menor dramatismo técnico y contraste oscuro reservado para acentos y badges.",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "02-precision-ejecutiva.html",
+      "title": "02 — Precisión Ejecutiva & Sofisticación Técnica (Linear + Lightspeed Dominance)",
+      "tradeoff": "Alto contraste arquitectónico con secciones oscuras profundas (#00253B / #001829), rejillas hairline de 1px, conector 'Hilo Operativo' SVG e inspector interactivo de 4 etapas de una venta; exige mayor atención y rigor visual.",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "03-narrativa-operativa.html",
+      "title": "03 — Historia Comercial & Jornada en Vivo (Toast + Square Dominance)",
+      "tradeoff": "Estructura narrativa cronológica de un día real de negocio en Nicaragua (7:30 AM a 9:00 PM), tarjetas 'Situación -> Comportamiento -> Efecto' y formulario de demo contextual interactivo; mayor longitud de lectura y cadencia secuencial.",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "04-sintesis-hibrida.html",
+      "title": "04 — Síntesis Híbrida Insignia (+1 Luxury & Rigor Psicológico)",
+      "tradeoff": "Dirección insignia que fusiona el dosel arquitectónico oscuro de Linear, la claridad comercial de Square, la autoridad gerencial de Lightspeed y la narrativa Toast. Incorpora capa conmutable de rationale psicológico, simulador interactivo de continuidad offline y formulario contextual NF-13.",
+      "width": 1440,
+      "height": 900
+    }
+  ]
+}

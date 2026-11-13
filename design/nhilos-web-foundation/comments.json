@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "comments": [
+    {
+      "id": "0f1xyllm",
+      "file": "01-claridad-comercial.html",
+      "selector": "#hero01-dsh-img",
+      "excerpt": "Panel web administrativo para dueños NHILOS POS",
+      "comment": "Al darle clic a los badge para cambiar de interfaz, se queda asi la imagen, con un fondo azul encima, y no con la imagen clara como su estado iniciar. REvisemos que ese comportamiento no pase en el resto de dseños",
+      "createdAt": "2026-11-05T01:35:12.833Z",
+      "status": "resolved",
+      "sentAt": "2026-11-05T01:35:12.844Z",
+      "resolvedAt": "2026-11-05T01:36:34.804Z",
+      "screenshot": ".screenshots/0f1xyllm.png"
+    }
+  ]
+}
