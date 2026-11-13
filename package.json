@@ -2,6 +2,9 @@
   "name": "omnifood-ni",
   "private": true,
   "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build:web": "node scripts/build-nhilos-web.mjs"
+  },
   "devDependencies": {
     "ts-jest": "^29.4.9"
   }
