@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import helmet from 'helmet';
-import { Express, Request, Response, NextFunction } from 'express';
+import { json, urlencoded, Express, Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
 import { resolveCorsOrigins } from './core/config/http-security.config';
 import { resolveTrustProxyHops } from './core/config/trust-proxy.config';
@@ -49,6 +49,8 @@ async function bootstrap() {
   // Security: relaxed locally, hardened in production (HSTS + deny-by-default
   // CSP - the API serves JSON, not HTML). See core/config/helmet.config.ts.
   app.use(helmet(helmetOptions(process.env.NODE_ENV)));
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
   app.enableCors({ origin: corsOrigins, credentials: true });
   console.log(`CORS allowed origins: ${corsOrigins.join(', ')}`);
 

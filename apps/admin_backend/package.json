@@ -34,7 +34,8 @@
     "seed:test": "ts-node -r tsconfig-paths/register src/scripts/seed-test-data.ts",
     "seed:onboarding-founder-pilot": "ts-node -r tsconfig-paths/register src/scripts/seed-onboarding-founder-pilot.ts",
     "seed:soho-catalog": "ts-node -r tsconfig-paths/register src/scripts/seed-soho-catalog.ts",
-    "seed:soho-modifier-groups": "ts-node -r tsconfig-paths/register src/scripts/seed-soho-modifier-groups.ts"
+    "seed:soho-modifier-groups": "ts-node -r tsconfig-paths/register src/scripts/seed-soho-modifier-groups.ts",
+    "seed:demo": "ts-node -r tsconfig-paths/register src/scripts/seed-general-demo-tenant.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
