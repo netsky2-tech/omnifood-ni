@@ -24,6 +24,7 @@ import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
 import '../models/inventory/authority_projection_entities.dart';
 import '../models/inventory/insumo_entity.dart';
+import '../models/inventory/supplier_entity.dart';
 import '../models/inventory/batch_entity.dart';
 import '../models/inventory/recipe_entity.dart';
 import '../models/user_entity.dart';
@@ -1008,6 +1009,31 @@ class SyncService {
       if (code == 401 || code == 403) return true;
     }
     return false;
+  }
+
+  /// A 4xx the cloud will keep refusing: the record itself is wrong, so
+  /// retrying it is pointless and must not hold the rest of the outbox.
+  /// 401/403 are credentials (the whole pass is unauthorised), and 408/429 are
+  /// transient, so those stay retryable.
+  bool _isPermanentRejection(DioException e) {
+    final code = e.response?.statusCode;
+    if (code == null || code < 400 || code >= 500) return false;
+    return code != 401 && code != 403 && code != 408 && code != 429;
+  }
+
+  /// The cloud's own words for why it refused the record, when it sent any.
+  String _purchaseRejectionMessage(DioException e) {
+    final data = e.response?.data;
+    if (data is Map) {
+      final message = data['message'] ?? data['error'];
+      if (message is String && message.trim().isNotEmpty) {
+        return '${e.response?.statusCode}: ${message.trim()}';
+      }
+      if (message is List && message.isNotEmpty) {
+        return '${e.response?.statusCode}: ${message.join('; ')}';
+      }
+    }
+    return '${e.response?.statusCode}: ${e.message ?? 'rejected by the cloud'}';
   }
 
   Future<bool> _runDomain(
@@ -2167,6 +2193,22 @@ class SyncService {
           'Failed to sync purchase ${purchase.id}: ${e.message}',
           name: 'SyncService',
         );
+        if (_isPermanentRejection(e)) {
+          // The cloud refused this purchase for a reason retrying cannot fix
+          // (a malformed id, a duplicate invoice, a validation failure).
+          // Record the refusal and MOVE ON: aborting the pass here is what
+          // left every later purchase stuck in the outbox forever behind one
+          // unretryable row (found on a real device).
+          await _inventoryRepository.markMovementAsRejected(
+            purchase.id,
+            error: _purchaseRejectionMessage(e),
+          );
+          developer.log(
+            'Rejected purchase ${purchase.id}: ${_purchaseRejectionMessage(e)}',
+            name: 'SyncService',
+          );
+          continue;
+        }
         if (!_isAuthError(e)) {
           await _inventoryRepository.markMovementAsFailed(
             purchase.id,
@@ -2176,18 +2218,19 @@ class SyncService {
         rethrow;
       } catch (e, stackTrace) {
         developer.log(
-          'Skipped purchase ${purchase.id}: $e',
+          'Rejected purchase ${purchase.id}: $e',
           name: 'SyncService',
           error: e,
           stackTrace: stackTrace,
         );
-        if (!_isAuthError(e)) {
-          await _inventoryRepository.markMovementAsFailed(
-            purchase.id,
-            error: e.toString(),
-          );
-        }
-        rethrow;
+        // A locally malformed purchase (a blank supplier, a blank invoice) can
+        // never become valid by retrying: it is a permanent rejection too, and
+        // it must not stop the purchases behind it.
+        await _inventoryRepository.markMovementAsRejected(
+          purchase.id,
+          error: e.toString(),
+        );
+        continue;
       }
     }
   }
@@ -4026,6 +4069,28 @@ class SyncService {
 
         if (insumoEntities.isNotEmpty) {
           await _database!.insumoDao.insertInsumos(insumoEntities);
+        }
+
+        // 3a. Suppliers. The purchase form needs a supplier to register a
+        // receipt, and the cloud used to send none: a freshly linked terminal
+        // opened `Registro de Compras` with an empty dropdown and the operator
+        // had to create the supplier by hand.
+        final rawSuppliers =
+            rawDeltas['suppliers'] as List<dynamic>? ?? const [];
+        final supplierEntities = rawSuppliers.map<SupplierEntity>((s) {
+          final map = Map<String, dynamic>.from(s as Map);
+          return SupplierEntity(
+            id: map['id'] as String,
+            name: map['name'] as String,
+            phone: map['phone'] as String?,
+            contactPerson: map['contactPerson'] as String?,
+            creditTerms: map['creditTerms'] as String?,
+            isActive: map['isActive'] as bool? ?? true,
+          );
+        }).toList(growable: false);
+
+        if (supplierEntities.isNotEmpty) {
+          await _database!.supplierDao.insertSuppliers(supplierEntities);
         }
 
         // 3b. Direct-mapping authority insumo hydration. The authority

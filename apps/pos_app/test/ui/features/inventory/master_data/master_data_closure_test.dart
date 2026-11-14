@@ -212,6 +212,27 @@ void main() {
       },
     );
 
+    test('a locally created supplier gets a UUID id, not a timestamp', () async {
+      // The supplier id travels to the cloud as `supplierId` on every purchase
+      // recorded against it, and that column is `uuid`. A timestamp id was
+      // accepted locally and refused by PostgreSQL on sync, which the terminal
+      // then retried forever (found on a real device).
+      final viewModel = SupplierViewModel(repository);
+
+      await viewModel.saveSupplier(name: 'Proveedor Nuevo');
+
+      final saved =
+          verify(() => repository.saveSupplier(captureAny())).captured.single
+              as Supplier;
+      expect(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+        ).hasMatch(saved.id),
+        isTrue,
+        reason: 'supplier id must be a UUID, got ${saved.id}',
+      );
+    });
+
     testWidgets('keeps supplier form labels visible during BOH editing', (
       tester,
     ) async {

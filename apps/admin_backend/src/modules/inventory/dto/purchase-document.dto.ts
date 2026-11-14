@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -34,6 +35,13 @@ export const resolvePurchaseFxRateMode = (
 ): PurchaseFxRateMode => fxRateMode ?? DEFAULT_PURCHASE_FX_RATE_MODE;
 
 export class PurchaseDocumentDto {
+  // The column is `uuid`. Without this validator a malformed id reached
+  // PostgreSQL and surfaced as a 500 (`invalid input syntax for type uuid`),
+  // which the terminal read as a TRANSIENT failure: it retried the same
+  // unretryable purchase forever and, because the sync pass aborted on it, no
+  // later purchase ever reached the cloud. A 400 says "the record is wrong",
+  // which the terminal can classify as permanent and skip.
+  @IsUUID()
   @IsString()
   @IsNotEmpty()
   @Transform(({ value }: { value: unknown }) =>
@@ -41,6 +49,7 @@ export class PurchaseDocumentDto {
   )
   id: string;
 
+  @IsUUID()
   @IsString()
   @IsNotEmpty()
   @Transform(({ value }: { value: unknown }) =>
@@ -48,6 +57,7 @@ export class PurchaseDocumentDto {
   )
   insumoId: string;
 
+  @IsUUID()
   @IsString()
   @IsNotEmpty()
   @Transform(({ value }: { value: unknown }) =>

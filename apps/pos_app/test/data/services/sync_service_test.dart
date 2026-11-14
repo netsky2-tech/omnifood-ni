@@ -192,8 +192,14 @@ class MockSalesRepository implements SalesRepository {
   final appliedRemoteVoids = <String, String>{};
 
   @override
-  Future<void> voidInvoice(String invoiceId, String reasonCode,
-      {String? reasonDetail}) async => throw UnimplementedError();
+  Future<void> voidInvoice(
+    String invoiceId,
+    String reasonCode, {
+    String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
+  }) async =>
+      throw UnimplementedError();
 
   @override
   Future<void> applyRemoteVoid(String invoiceId, String voidReason) async {
@@ -226,7 +232,12 @@ class FakeAuditRepository implements AuditRepository {
   }) async {}
 
   @override
-  Future<AuditLog?> prepareLog(String action, {String? metadata}) async => null;
+  Future<AuditLog?> prepareLog(
+    String action, {
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  }) async => null;
 
   @override
   Future<List<AuditLog>> getLocalLogs({
@@ -253,6 +264,7 @@ class FakeInventoryRepository
   List<ForensicAlert> unsyncedForensicAlerts = [];
   final List<String> syncedIds = [];
   final List<String> failedIds = [];
+  final List<String> rejectedIds = [];
   final List<String> syncedPurchaseIds = [];
   final List<String> syncedCountSessionIds = [];
   final List<String> syncedRecipeVersionIds = [];
@@ -291,6 +303,11 @@ class FakeInventoryRepository
   @override
   Future<void> markMovementAsFailed(String id, {String? error}) async {
     failedIds.add(id);
+  }
+
+  @override
+  Future<void> markMovementAsRejected(String id, {String? error}) async {
+    rejectedIds.add(id);
   }
 
   @override
@@ -1371,6 +1388,102 @@ void main() {
     expect(purchaseBody.containsKey('supplierName'), isFalse);
   });
 
+  test(
+    'a purchase the cloud refuses with 4xx is rejected WITHOUT blocking the ones behind it',
+    () async {
+      // Found on a real device: one unretryable purchase (a malformed id) at
+      // the head of the outbox aborted the whole pass, so no later purchase
+      // ever reached the cloud. A 4xx means "this record is wrong, retrying
+      // cannot fix it": record the refusal and keep going.
+      Purchase purchase(String id, String invoice) => Purchase(
+        id: id,
+        insumoId: 'i-9',
+        supplierId: 'supplier-1',
+        invoiceNumber: invoice,
+        quantity: 2,
+        unitCost: 10,
+        timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        invoiceDate: DateTime(2026, 1, 1),
+        currency: 'NIO',
+        bcnRate: 1,
+      );
+      mockInventoryRepository.unsyncedPurchases = [
+        purchase('purchase-bad', 'INV-BAD'),
+        purchase('purchase-good', 'INV-GOOD'),
+      ];
+      forcedError = DioException(
+        requestOptions: RequestOptions(path: '/inventory/purchases'),
+        response: Response(
+          data: {
+            'message': ['id must be a UUID'],
+          },
+          statusCode: 400,
+          requestOptions: RequestOptions(path: '/inventory/purchases'),
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await syncService.triggerManualSync();
+
+      // BOTH were attempted: the refusal did not stop the queue.
+      final purchasePosts = capturedPosts
+          .where((post) => post.path == '/inventory/purchases')
+          .toList(growable: false);
+      expect(purchasePosts, hasLength(2));
+      expect(purchasePosts.first.body['id'], 'purchase-bad');
+      expect(purchasePosts.last.body['id'], 'purchase-good');
+      // The first is terminal (rejected, not merely failed), so it will not be
+      // re-sent; the second keeps its retryable status.
+      // The stub refuses every call, so both are rejected; what matters is
+      // that the second was still ATTEMPTED instead of being skipped.
+      expect(
+        mockInventoryRepository.rejectedIds,
+        containsAll(<String>['purchase-bad', 'purchase-good']),
+      );
+      expect(mockInventoryRepository.failedIds, isEmpty);
+    },
+  );
+
+  test(
+    'a 5xx on a purchase stays retryable and aborts the pass',
+    () async {
+      Purchase purchase(String id, String invoice) => Purchase(
+        id: id,
+        insumoId: 'i-9',
+        supplierId: 'supplier-1',
+        invoiceNumber: invoice,
+        quantity: 2,
+        unitCost: 10,
+        timestamp: DateTime.parse('2026-01-01T12:00:00Z'),
+        invoiceDate: DateTime(2026, 1, 1),
+        currency: 'NIO',
+        bcnRate: 1,
+      );
+      mockInventoryRepository.unsyncedPurchases = [
+        purchase('purchase-1', 'INV-1'),
+        purchase('purchase-2', 'INV-2'),
+      ];
+      forcedError = DioException(
+        requestOptions: RequestOptions(path: '/inventory/purchases'),
+        response: Response(
+          data: {'message': 'boom'},
+          statusCode: 500,
+          requestOptions: RequestOptions(path: '/inventory/purchases'),
+        ),
+        type: DioExceptionType.badResponse,
+      );
+
+      await syncService.triggerManualSync();
+
+      final purchasePosts = capturedPosts
+          .where((post) => post.path == '/inventory/purchases')
+          .toList(growable: false);
+      expect(purchasePosts, hasLength(1));
+      expect(mockInventoryRepository.failedIds, ['purchase-1']);
+      expect(mockInventoryRepository.rejectedIds, isEmpty);
+    },
+  );
+
   test('omits bcnRate when syncing an official FX purchase document', () async {
     mockInventoryRepository.unsynced = [
       InventoryMovement(
@@ -1450,6 +1563,16 @@ void main() {
                   expiration_date TEXT,
                   requires_batch_tracking INTEGER NOT NULL,
                   is_synced INTEGER NOT NULL DEFAULT 0
+                )
+              ''');
+              // The purchase outbox skips rows the cloud terminally rejected;
+              // that state lives in the movement sync state table, which every
+              // real database has (it predates the current schema version).
+              await database.execute('''
+                CREATE TABLE inventory_movement_sync_state (
+                  movement_id TEXT NOT NULL PRIMARY KEY,
+                  sync_status TEXT NOT NULL,
+                  last_error TEXT
                 )
               ''');
             },
@@ -1578,7 +1701,7 @@ void main() {
         isFalse,
       );
       expect(mockInventoryRepository.syncedPurchaseIds, isEmpty);
-      expect(mockInventoryRepository.failedIds, contains('purchase-legacy-1'));
+      expect(mockInventoryRepository.rejectedIds, contains('purchase-legacy-1'));
     },
   );
 

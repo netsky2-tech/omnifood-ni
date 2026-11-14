@@ -424,10 +424,29 @@ export interface InboundSyncProductModifierGroupDto {
   sortOrder: number;
 }
 
+/** The supplier directory the terminal needs to register a purchase receipt. */
+export interface InboundSyncSupplierDto {
+  id: string;
+  name: string;
+  phone: string | null;
+  contactPerson: string | null;
+  creditTerms: string | null;
+  isActive: boolean;
+  updatedAt: Date;
+}
+
 export interface InboundSyncDeltasDto {
   products: InboundSyncProductDto[];
   catalogValues: InboundSyncCatalogValueDto[];
   insumos: InboundSyncInsumoDto[];
+  /**
+   * Supplier directory. The purchase form on the terminal needs a supplier to
+   * register a receipt, and the cloud never sent one: a freshly linked device
+   * opened `Registro de Compras` with an empty dropdown and had to create the
+   * supplier by hand. Always populated by the service (empty when not
+   * requested), like the other required keys.
+   */
+  suppliers: InboundSyncSupplierDto[];
   recipes: InboundSyncRecipeDto[];
   recipeVersions: InboundSyncRecipeVersionDto[];
   users: InboundSyncUserDto[];

@@ -65,6 +65,7 @@ function buildEnvelope(overrides: {
         },
       ],
       insumos: [],
+      suppliers: [],
       recipes: [],
       recipeVersions: [],
       // Slice 5d delta keys are required on InboundSyncDeltasDto; the

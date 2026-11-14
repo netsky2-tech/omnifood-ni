@@ -6,6 +6,7 @@ import { Product, ProductType } from '../../inventory/entities/product.entity';
 import { Batch } from '../../inventory/entities/batch.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Supplier } from '../../inventory/entities/supplier.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
@@ -89,10 +90,12 @@ describe('InboundSyncService', () => {
   let productAttachmentQb: MockQueryBuilder<ProductModifierGroup>;
   let creditNoteQb: MockQueryBuilder<Invoice>;
   let batchQb: MockQueryBuilder<Batch>;
+  let supplierQb: MockQueryBuilder<Supplier>;
 
   let mockProductRepo: { createQueryBuilder: jest.Mock };
   let mockCatalogRepo: { createQueryBuilder: jest.Mock };
   let mockInsumoRepo: { createQueryBuilder: jest.Mock };
+  let mockSupplierRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeVersionRepo: { createQueryBuilder: jest.Mock };
   let mockRecipeDetailRepo: { createQueryBuilder: jest.Mock };
@@ -133,6 +136,7 @@ describe('InboundSyncService', () => {
     productAttachmentQb = createMockQueryBuilder<ProductModifierGroup>([]);
     creditNoteQb = createMockQueryBuilder<Invoice>([]);
     batchQb = createMockQueryBuilder<Batch>([]);
+    supplierQb = createMockQueryBuilder<Supplier>([]);
 
     mockProductRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(productQb),
@@ -142,6 +146,9 @@ describe('InboundSyncService', () => {
     };
     mockInsumoRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(insumoQb),
+    };
+    mockSupplierRepo = {
+      createQueryBuilder: jest.fn().mockReturnValue(supplierQb),
     };
     mockRecipeRepo = {
       createQueryBuilder: jest.fn().mockReturnValue(recipeQb),
@@ -267,6 +274,7 @@ describe('InboundSyncService', () => {
         if (entity === Product) return mockProductRepo;
         if (entity === CatalogValue) return mockCatalogRepo;
         if (entity === Insumo) return mockInsumoRepo;
+        if (entity === Supplier) return mockSupplierRepo;
         if (entity === Recipe) return mockRecipeRepo;
         if (entity === RecipeVersion) return mockRecipeVersionRepo;
         if (entity === RecipeDetail) return mockRecipeDetailRepo;

@@ -109,6 +109,11 @@ abstract class InventoryRepository {
   Future<void> markMovementAsSynced(String id);
   Future<void> markMovementAsFailed(String id, {String? error});
 
+  /// Terminal rejection: the cloud refused this record with a 4xx that
+  /// retrying cannot fix. It must stop being re-sent, and it must NOT stop
+  /// the rest of the outbox (see [MovementSyncStateStatus.rejected]).
+  Future<void> markMovementAsRejected(String id, {String? error});
+
   // Suppliers
   Future<List<Supplier>> getActiveSuppliers();
   Future<void> saveSupplier(Supplier supplier);
