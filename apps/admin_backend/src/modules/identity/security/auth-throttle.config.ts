@@ -24,9 +24,9 @@ export const ACCOUNT_THROTTLER_NAME = 'account';
 export const THROTTLE_TTL_MS = 60_000;
 
 /** Login attempts per IP per window. */
-export const LOGIN_PER_IP_LIMIT = 5;
+export const LOGIN_PER_IP_LIMIT = process.env.NODE_ENV === 'production' ? 5 : 60;
 /** Login attempts per account (tenantSlug|email) per window. */
-export const LOGIN_PER_ACCOUNT_LIMIT = 5;
+export const LOGIN_PER_ACCOUNT_LIMIT = process.env.NODE_ENV === 'production' ? 5 : 60;
 /** Refresh exchanges per IP per window (per client this is roughly hourly). */
 export const REFRESH_PER_IP_LIMIT = 15;
 /** Device-sync token renewals per IP per window (many terminals, one LAN). */
