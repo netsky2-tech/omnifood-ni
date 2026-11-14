@@ -31,5 +31,6 @@ export default defineConfig({
     ],
     testTimeout: 10000,
     css: true,
+    pool: "threads",
   },
 });

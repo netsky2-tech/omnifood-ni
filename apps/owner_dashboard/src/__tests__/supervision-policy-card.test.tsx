@@ -41,6 +41,9 @@ const defaultPolicy = {
   selfAuthorizationAllowedCashDrawer: true,
   selfAuthorizationAllowedManualDiscount: true,
   supervisorRequiredForModifierQuantity: false,
+  blindCountEnabled: true,
+  supervisorRequiredForPartialXReport: false,
+  supervisorRequiredForVoid: false,
 };
 
 const policyResponse = (overrides: Record<string, unknown> = {}) => ({
@@ -125,6 +128,9 @@ describe("SupervisionPolicyCard", () => {
           selfAuthorizationAllowedCashDrawer: true,
           selfAuthorizationAllowedManualDiscount: true,
           supervisorRequiredForModifierQuantity: false,
+          blindCountEnabled: true,
+          supervisorRequiredForPartialXReport: false,
+          supervisorRequiredForVoid: false,
         },
         configured: true,
       }),
@@ -154,6 +160,9 @@ describe("SupervisionPolicyCard", () => {
           selfAuthorizationAllowedCashDrawer: true,
           selfAuthorizationAllowedManualDiscount: false,
           supervisorRequiredForModifierQuantity: false,
+          blindCountEnabled: true,
+          supervisorRequiredForPartialXReport: false,
+          supervisorRequiredForVoid: false,
         },
         configured: true,
       }),
@@ -200,6 +209,9 @@ describe("SupervisionPolicyCard", () => {
       selfAuthorizationAllowedCashDrawer: true,
       selfAuthorizationAllowedManualDiscount: true,
       supervisorRequiredForModifierQuantity: false,
+      blindCountEnabled: true,
+      supervisorRequiredForPartialXReport: false,
+      supervisorRequiredForVoid: false,
     });
   });
 
@@ -235,5 +247,47 @@ describe("SupervisionPolicyCard", () => {
 
     const error = await screen.findByTestId("supervision-error");
     expect(error).toHaveTextContent(/siguen funcionando/i);
+  });
+
+  it("permite al owner alternar arqueo ciego, PIN en Corte X y PIN en anulaciones", async () => {
+    mockPolicy(policyResponse());
+    renderCard();
+    await screen.findByTestId("supervision-policy-card");
+
+    mockPolicy(policyResponse({ configured: true }), 200);
+
+    // Conmutar los switches de control de caja y anulaciones
+    await userEvent.click(
+      screen.getByLabelText(/Ocultar saldos esperados en el arqueo/),
+    );
+    await userEvent.click(
+      screen.getByLabelText(/Exigir PIN de supervisor para lectura parcial/),
+    );
+    await userEvent.click(
+      screen.getByLabelText(/Exigir PIN de supervisor para anular facturas/),
+    );
+
+    await userEvent.click(screen.getByTestId("supervision-save-button"));
+
+    await waitFor(() => {
+      const putCall = fetchSpy.mock.calls.find(
+        (call) => call[1]?.method === "PUT" || call[0] === "/supervision/policy",
+      );
+      expect(putCall).toBeTruthy();
+    });
+
+    const body = fetchSpy.mock.calls
+      .map((call) => call[1]?.body)
+      .find((candidate) => typeof candidate === "string");
+    expect(JSON.parse(String(body))).toEqual({
+      authorizingRoles: ["MANAGER", "OWNER"],
+      selfAuthorizationAllowedCloseBox: true,
+      selfAuthorizationAllowedCashDrawer: true,
+      selfAuthorizationAllowedManualDiscount: true,
+      supervisorRequiredForModifierQuantity: false,
+      blindCountEnabled: false,
+      supervisorRequiredForPartialXReport: true,
+      supervisorRequiredForVoid: true,
+    });
   });
 });
