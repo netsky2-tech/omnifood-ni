@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 import '../../../../domain/models/inventory/insumo.dart';
 import '../../../../domain/models/inventory/supplier.dart';
 import '../../../../domain/models/inventory/purchase.dart';
@@ -18,6 +19,58 @@ const officialBcnRateDateChangedMessage =
 const officialBcnRateManualOverrideMessage =
     'BCN rate edited manually. The rate source is now manual.';
 
+/// Whether a purchase of [insumo] must carry lot metadata.
+///
+/// WHY (#938): the outflow guard on the server reads BATCH balances
+/// (`batch-allocation.ts` fetches every batch row for the insumo and refuses
+/// the movement when the batches cannot cover it). An insumo that already has
+/// lots is therefore tracked by lot whether or not it is perishable, and a
+/// purchase that raises the aggregate stock without creating a lot leaves the
+/// two balances apart: the next sale is refused with "batch balances cannot
+/// cover the outflow", a message that names the wrong subsystem and stops the
+/// counter.
+///
+/// So the rule is not "perishable" alone: it is "perishable **or** tracked by
+/// lot". Three sources, because no single one covers every terminal:
+///  - [Insumo.isPerishable]: the catalog says so;
+///  - [Insumo.isBatchManaged]: the CLOUD says the insumo already has lots. The
+///    inbound sync sends this derived flag (`sync_service.dart`), not the batch
+///    rows, so on a freshly synced terminal the local `batches` table is EMPTY
+///    even when the cloud has lots — reading only the local table would let the
+///    operator save a lot-less purchase locally and fail later in the cloud;
+///  - [existingBatchCount]: lots this terminal created and has not synced back.
+///
+/// Nit: NIC 2 §23-24 — non-interchangeable goods require specific
+/// identification, and the lot is that identification.
+bool purchaseNeedsLotMetadata({
+  required Insumo insumo,
+  required int existingBatchCount,
+}) =>
+    insumo.isPerishable || insumo.isBatchManaged || existingBatchCount > 0;
+
+/// The refusal a purchase without lot metadata gets, naming the REAL cause.
+String purchaseLotMetadataRequiredMessage({
+  required bool becauseExistingBatches,
+}) => becauseExistingBatches
+    ? 'This item is already tracked by lot: lot code, received date, and '
+          'expiration date are required so the lot balance does not fall '
+          'behind the aggregate stock.'
+    : 'Lot code, received date, and expiration date are required for '
+          'batch-managed items.';
+
+/// The lot a purchase stores when the insumo is tracked by lot.
+class PurchaseLotMetadata {
+  const PurchaseLotMetadata({
+    required this.batchNumber,
+    required this.receivedDate,
+    required this.expirationDate,
+  });
+
+  final String batchNumber;
+  final DateTime receivedDate;
+  final DateTime expirationDate;
+}
+
 class PurchaseReviewData {
   const PurchaseReviewData({
     required this.quantityInBaseUnit,
@@ -26,6 +79,7 @@ class PurchaseReviewData {
     required this.previousCppNio,
     required this.projectedCppNio,
     required this.requiresBatchTracking,
+    this.trackedByExistingBatches = false,
   });
 
   final double quantityInBaseUnit;
@@ -34,6 +88,11 @@ class PurchaseReviewData {
   final double previousCppNio;
   final double projectedCppNio;
   final bool requiresBatchTracking;
+
+  /// True when the lot requirement comes from lots ALREADY recorded on the
+  /// insumo rather than from `is_perishable`. The form says so, because a
+  /// non-perishable insumo suddenly asking for a lot is otherwise surprising.
+  final bool trackedByExistingBatches;
 }
 
 class PurchaseFifoRow {
@@ -74,6 +133,10 @@ class PurchaseViewModel with ChangeNotifier {
   List<PurchaseFifoRow> _fifoRows = [];
   List<PurchaseFifoRow> get fifoRows => _fifoRows;
 
+  /// The insumo [fifoRows] belong to. Without it a selection change would let
+  /// a previous insumo's lots decide the CURRENT one's lot requirement.
+  String? _fifoInsumoId;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -105,6 +168,7 @@ class PurchaseViewModel with ChangeNotifier {
     _insumos = await repository.getActiveInsumos();
     _suppliers = await repository.getActiveSuppliers();
     _defaultBcnRate = await repository.getCachedOfficialBcnRate();
+    _fifoInsumoId = insumoId;
     if (insumoId != null) {
       final list = await repository.getConversionsByInsumoId(insumoId);
       if (list.isEmpty) {
@@ -129,6 +193,8 @@ class PurchaseViewModel with ChangeNotifier {
         _conversions = list;
       }
       _fifoRows = await _loadFifoRows(insumoId);
+    } else {
+      _fifoRows = [];
     }
 
     _isLoading = false;
@@ -158,6 +224,10 @@ class PurchaseViewModel with ChangeNotifier {
       final normalizedSupplierId = supplierId.trim();
       final normalizedInvoiceNumber = invoiceNumber.trim();
       final normalizedFiscalAuthorizationCode = fiscalAuthorizationCode?.trim();
+      // A lot code of only whitespace is NO lot: the form does not trim, and a
+      // `'   '` batch number would pass the missing-lot check while storing a
+      // lot nobody can read back (#938).
+      final normalizedLotCode = _normalizeLotCode(lotCode);
 
       if (normalizedInvoiceNumber.isEmpty) {
         throw ArgumentError('Invoice number is required.');
@@ -176,19 +246,38 @@ class PurchaseViewModel with ChangeNotifier {
         currency: currency,
         bcnRate: bcnRate,
       );
-      final purchaseId = DateTime.now().millisecondsSinceEpoch.toString();
+      // A UUID, not `millisecondsSinceEpoch`: the cloud column
+      // (`inventory_purchase_documents.id`) is `uuid`, so a numeric id made
+      // EVERY purchase fail the sync with a 500
+      // (`invalid input syntax for type uuid`) and the terminal retried it in a
+      // loop forever — the purchase existed locally and never reached the
+      // cloud. Found on a real device; no unit test could see it because every
+      // spec passed a UUID.
+      final purchaseId = const Uuid().v4();
       final entryTimestamp = DateTime.now();
 
-      if (review.requiresBatchTracking) {
-        if (lotCode == null ||
-            lotCode.isEmpty ||
-            receivedDate == null ||
-            expirationDate == null) {
-          throw ArgumentError(
-            'Lot code, received date, and expiration date are required for batch-managed items.',
-          );
-        }
-      }
+      // #938: the lot requirement is decided HERE, against the repository, not
+      // from the preview flag the form happened to render. The preview can be
+      // stale (another terminal parked a lot a second ago); the aggregate it
+      // would raise is not.
+      final insumo = _requireInsumo(insumoId);
+      final existingBatchCount =
+          (await repository.getBatchesByInsumoId(insumoId)).length;
+      final requiresLotMetadata = purchaseNeedsLotMetadata(
+        insumo: insumo,
+        existingBatchCount: existingBatchCount,
+      );
+
+      // Refuses BEFORE the movement engine raises the aggregate: throwing
+      // after it would leave the two balances apart, the very divergence this
+      // guard exists to prevent.
+      final lotMetadata = _resolveLotMetadata(
+        requiresLotMetadata: requiresLotMetadata,
+        becauseExistingBatches: !insumo.isPerishable,
+        lotCode: normalizedLotCode,
+        receivedDate: receivedDate,
+        expirationDate: expirationDate,
+      );
 
       await movementEngine.recordPurchase(
         insumoId,
@@ -219,30 +308,30 @@ class PurchaseViewModel with ChangeNotifier {
         unitCostNio: review.unitCostNio,
         cppBeforeNio: review.previousCppNio,
         projectedCppNio: review.projectedCppNio,
-        lotCode: lotCode,
+        lotCode: normalizedLotCode,
         receivedDate: receivedDate,
         expirationDate: expirationDate,
-        requiresBatchTracking: review.requiresBatchTracking,
+        requiresBatchTracking: requiresLotMetadata,
       );
       await repository.queuePurchaseSync(purchase);
 
-      if (review.requiresBatchTracking &&
-          lotCode != null &&
-          receivedDate != null &&
-          expirationDate != null) {
+      // #938: an insumo already tracked by lot gets its lot here too —
+      // otherwise the aggregate rises and the batch balance stays behind.
+      if (lotMetadata != null) {
         await repository.saveBatch(
           Batch(
             id: purchaseId,
             insumoId: insumoId,
-            batchNumber: lotCode,
-            receivedDate: receivedDate,
-            expirationDate: expirationDate,
+            batchNumber: lotMetadata.batchNumber,
+            receivedDate: lotMetadata.receivedDate,
+            expirationDate: lotMetadata.expirationDate,
             remainingStock: review.quantityInBaseUnit,
             cost: review.unitCostNio,
           ),
         );
       }
 
+      _fifoInsumoId = insumoId;
       _fifoRows = await _loadFifoRows(insumoId);
 
       _isLoading = false;
@@ -255,6 +344,44 @@ class PurchaseViewModel with ChangeNotifier {
     }
   }
 
+  String? _normalizeLotCode(String? lotCode) {
+    final trimmed = lotCode?.trim();
+    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  /// Returns the lot to store, or null when this purchase needs no lot.
+  ///
+  /// Throws when the insumo IS tracked by lot and the purchase arrives without
+  /// it: raising the aggregate then would leave `insumos.stock` above the sum
+  /// of `batches.remaining_stock`, and the next outflow would be refused by the
+  /// batch guard with a message that names the wrong subsystem (#938).
+  PurchaseLotMetadata? _resolveLotMetadata({
+    required bool requiresLotMetadata,
+    required bool becauseExistingBatches,
+    required String? lotCode,
+    required DateTime? receivedDate,
+    required DateTime? expirationDate,
+  }) {
+    if (!requiresLotMetadata) return null;
+
+    if (lotCode == null ||
+        lotCode.isEmpty ||
+        receivedDate == null ||
+        expirationDate == null) {
+      throw ArgumentError(
+        purchaseLotMetadataRequiredMessage(
+          becauseExistingBatches: becauseExistingBatches,
+        ),
+      );
+    }
+
+    return PurchaseLotMetadata(
+      batchNumber: lotCode,
+      receivedDate: receivedDate,
+      expirationDate: expirationDate,
+    );
+  }
+
   PurchaseReviewData buildPurchaseReview({
     required String insumoId,
     required String uomConversionId,
@@ -263,10 +390,7 @@ class PurchaseViewModel with ChangeNotifier {
     required String currency,
     double? bcnRate,
   }) {
-    final insumo = _insumos.firstWhere(
-      (item) => item.id == insumoId,
-      orElse: () => throw ArgumentError('Invalid insumo ID: $insumoId'),
-    );
+    final insumo = _requireInsumo(insumoId);
     final conversion = _conversions.firstWhere(
       (c) => c.id == uomConversionId,
       orElse: () =>
@@ -289,15 +413,33 @@ class PurchaseViewModel with ChangeNotifier {
         ? 0
         : (previousTotalCost + purchaseTotalCost) / projectedStock;
 
+    // The preview reads the lots already loaded for THIS insumo. When the
+    // form has not loaded them yet the flag can under-report, and `
+    // recordPurchase` still refuses at save time: the guard is authoritative
+    // there, the preview only shapes the form.
+    final existingBatchCount = _fifoInsumoId == insumoId
+        ? _fifoRows.length
+        : 0;
+
     return PurchaseReviewData(
       quantityInBaseUnit: quantityInBaseUnit,
       bcnRate: resolvedBcnRate,
       unitCostNio: double.parse(unitCostNio.toStringAsFixed(4)),
       previousCppNio: double.parse(insumo.averageCost.toStringAsFixed(4)),
       projectedCppNio: double.parse(projectedCpp.toStringAsFixed(4)),
-      requiresBatchTracking: insumo.isPerishable,
+      requiresBatchTracking: purchaseNeedsLotMetadata(
+        insumo: insumo,
+        existingBatchCount: existingBatchCount,
+      ),
+      trackedByExistingBatches: !insumo.isPerishable &&
+          (insumo.isBatchManaged || existingBatchCount > 0),
     );
   }
+
+  Insumo _requireInsumo(String insumoId) => _insumos.firstWhere(
+    (item) => item.id == insumoId,
+    orElse: () => throw ArgumentError('Invalid insumo ID: $insumoId'),
+  );
 
   Future<double?> fetchOfficialBcnRate(DateTime invoiceDate) async {
     _isFetchingOfficialBcnRate = true;

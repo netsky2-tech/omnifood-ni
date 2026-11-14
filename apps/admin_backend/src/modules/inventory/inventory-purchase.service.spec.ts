@@ -32,6 +32,7 @@ describe('InventoryPurchaseService', () => {
     createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
+    count: jest.fn(),
     query: jest.fn(),
     save: jest.fn(),
     create: jest.fn(),
@@ -66,6 +67,9 @@ describe('InventoryPurchaseService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     manager.createQueryBuilder.mockReturnValue(queryBuilder);
+    // #938: the lot requirement also asks how many batches the insumo already
+    // has. Zero keeps every pre-existing case on its old path.
+    manager.count.mockResolvedValue(0);
     transaction.mockImplementation(
       (
         a: string | ((entityManager: typeof manager) => unknown),
@@ -773,6 +777,141 @@ describe('InventoryPurchaseService', () => {
       }),
     ).rejects.toThrow(
       'Batch-managed purchases require lotCode, receivedDate, and expirationDate',
+    );
+  });
+
+  // #938 (Bloque 4): the lot requirement is not `is_perishable` alone. The
+  // outflow guard reads every batch row of the insumo, so an insumo that
+  // already has lots is tracked by lot whatever its perishable flag says —
+  // and a purchase that raised the aggregate without a lot left the two
+  // balances apart, blocking the next sale with a batch error.
+  it('requires lot metadata on a NON-perishable insumo that already has batches', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) return Promise.resolve(supplier);
+      if (entity === PurchaseDocument) return Promise.resolve(null);
+      if (entity === Insumo) {
+        return Promise.resolve({ ...perishableInsumo, is_perishable: false });
+      }
+      return Promise.resolve(null);
+    });
+    manager.count.mockResolvedValue(1);
+
+    const preview = await service.previewPurchase({
+      id: 'preview-doc-938',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-938-PREVIEW',
+      quantity: 5,
+      unitCost: 20,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T10:00:00.000Z',
+    });
+
+    expect(preview.requiresBatchTracking).toBe(true);
+  });
+
+  it('does not require lot metadata on a NON-perishable insumo with no batches', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+    manager.findOne.mockImplementation((entity: unknown) => {
+      if (entity === Supplier) return Promise.resolve(supplier);
+      if (entity === PurchaseDocument) return Promise.resolve(null);
+      if (entity === Insumo) {
+        return Promise.resolve({ ...perishableInsumo, is_perishable: false });
+      }
+      return Promise.resolve(null);
+    });
+    manager.count.mockResolvedValue(0);
+
+    const preview = await service.previewPurchase({
+      id: 'preview-doc-938b',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-938-PREVIEW-2',
+      quantity: 5,
+      unitCost: 20,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T10:00:00.000Z',
+    });
+
+    expect(preview.requiresBatchTracking).toBe(false);
+  });
+
+  it('refuses a purchase without lot on a NON-perishable insumo that already has batches, without touching the aggregate', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+    manager.count.mockResolvedValue(1);
+
+    await expect(
+      service.recordPurchase({
+        id: 'purchase-doc-938',
+        tenantId: 'tenant-A',
+        insumoId: 'ins-1',
+        supplierId: 'sup-1',
+        invoiceNumber: 'INV-938-1',
+        quantity: 5,
+        unitCost: 20,
+        currency: CURRENCY.NIO,
+        invoiceDate: '2026-01-03',
+        entryTimestamp: '2026-01-03T10:00:00.000Z',
+      }),
+    ).rejects.toThrow(
+      'This item is already tracked by lot: lotCode, receivedDate, and expirationDate are required so the batch balances do not fall behind the aggregate stock',
+    );
+
+    // The refusal has to land BEFORE the stock moves: a purchase document or
+    // a movement saved here would BE the divergence this guard prevents.
+    expect(manager.save).not.toHaveBeenCalledWith(
+      PurchaseDocument,
+      expect.anything(),
+    );
+    expect(manager.save).not.toHaveBeenCalledWith(
+      InventoryMovement,
+      expect.anything(),
+    );
+  });
+
+  it('records the lot of a non-perishable insumo that already has batches', async () => {
+    queryBuilder.getOne.mockResolvedValue({
+      ...perishableInsumo,
+      is_perishable: false,
+    });
+    manager.count.mockResolvedValue(1);
+
+    await service.recordPurchase({
+      id: 'purchase-doc-938b',
+      tenantId: 'tenant-A',
+      insumoId: 'ins-1',
+      supplierId: 'sup-1',
+      invoiceNumber: 'INV-938-2',
+      quantity: 5,
+      unitCost: 20,
+      currency: CURRENCY.NIO,
+      invoiceDate: '2026-01-03',
+      entryTimestamp: '2026-01-03T10:00:00.000Z',
+      lotCode: 'LOT-938',
+      receivedDate: '2026-01-03',
+      expirationDate: '2026-06-03',
+    });
+
+    expect(manager.save).toHaveBeenCalledWith(
+      Batch,
+      expect.objectContaining({
+        batch_number: 'LOT-938',
+        remaining_stock: 5,
+      }),
     );
   });
 

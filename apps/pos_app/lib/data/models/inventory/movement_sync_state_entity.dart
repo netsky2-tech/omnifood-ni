@@ -8,6 +8,14 @@ class MovementSyncStateStatus {
   static const String pending = 'pending';
   static const String synced = 'synced';
   static const String failed = 'failed';
+
+  /// The cloud REFUSED this record for a reason retrying cannot fix (a 4xx:
+  /// a malformed id, a duplicate invoice, a validation failure). Kept apart
+  /// from [failed] on purpose: [failed] is retried on the next pass, while a
+  /// rejection is terminal and must stop being re-sent — an unretryable row
+  /// at the head of the purchase outbox blocked every later purchase from
+  /// ever reaching the cloud (found on a real device).
+  static const String rejected = 'rejected';
 }
 
 @Entity(

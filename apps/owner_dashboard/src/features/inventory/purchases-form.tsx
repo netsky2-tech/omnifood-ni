@@ -103,6 +103,17 @@ export function PurchasesForm({
   const insumoList = insumos ?? [];
   const selectedInsumo = insumoList.find((i) => i.id === form.insumoId);
   const isPerishable = Boolean(selectedInsumo?.is_perishable);
+  // #938: the backend owns the rule (perishable OR already tracked by lot) and
+  // reports it on the preview. The two sources are OR'd, never subtracted: a
+  // perishable insumo keeps its lot requirement even if the preview says
+  // otherwise (an older backend, or a flag lost on the wire), and the preview
+  // ADDS the requirement for a non-perishable insumo that already has lots —
+  // otherwise the aggregate stock rises while the batch balances stay behind,
+  // and the next sale is refused by the outflow guard.
+  const requiresBatchTracking =
+    isPerishable || Boolean(preview?.requiresBatchTracking);
+  const trackedByExistingBatches =
+    requiresBatchTracking && !isPerishable && preview !== null;
   const isUsd = form.currency === "USD";
   const insumoIvaRate = Number(selectedInsumo?.ivaRatePct ?? 0);
   const hasIvaRate = insumoIvaRate > 0;
@@ -138,12 +149,15 @@ export function PurchasesForm({
     if (!form.invoiceDate) return "Ingresa la fecha de la factura.";
     if (isUsd && (!form.bcnRate.trim() || Number.isNaN(bcnRate) || bcnRate <= 0))
       return "Las compras en USD requieren la tasa de cambio del BCN.";
-    if (isPerishable) {
-      if (!form.lotCode.trim()) return "Los insumos perecederos requieren el código de lote.";
+    if (requiresBatchTracking) {
+      if (!form.lotCode.trim())
+        return trackedByExistingBatches
+          ? "Este insumo ya se gestiona por lote: ingresa el código de lote de la compra."
+          : "Los insumos perecederos requieren el código de lote.";
       if (!form.receivedDate)
-        return "Los insumos perecederos requieren la fecha de recepción.";
+        return "Los insumos gestionados por lote requieren la fecha de recepción.";
       if (!form.expirationDate)
-        return "Los insumos perecederos requieren la fecha de vencimiento.";
+        return "Los insumos gestionados por lote requieren la fecha de vencimiento.";
     }
     if (hasIvaRate) {
       if (form.costIncludesIva === null)
@@ -152,7 +166,7 @@ export function PurchasesForm({
         return `El costo debe ser neto de IVA. Ingrese el costo neto dividiendo entre ${(1 + insumoIvaRate / 100).toFixed(4)}.`;
     }
     return null;
-  }, [form, quantity, unitCost, bcnRate, isUsd, isPerishable, hasIvaRate, insumoIvaRate]);
+  }, [form, quantity, unitCost, bcnRate, isUsd, requiresBatchTracking, trackedByExistingBatches, hasIvaRate, insumoIvaRate]);
 
   /** Payload for the live CPP preview (no batch fields needed for preview). */
   const previewPayload = useMemo((): ManualPurchaseInput | null => {
@@ -253,9 +267,9 @@ export function PurchasesForm({
     try {
       await createPurchase.mutateAsync({
         ...previewPayload,
-        lotCode: isPerishable ? form.lotCode.trim() : undefined,
-        receivedDate: isPerishable ? form.receivedDate : undefined,
-        expirationDate: isPerishable ? form.expirationDate : undefined,
+        lotCode: requiresBatchTracking ? form.lotCode.trim() : undefined,
+        receivedDate: requiresBatchTracking ? form.receivedDate : undefined,
+        expirationDate: requiresBatchTracking ? form.expirationDate : undefined,
         costIncludesIva: hasIvaRate ? (form.costIncludesIva ?? undefined) : undefined,
       });
       toast({
@@ -752,11 +766,12 @@ export function PurchasesForm({
               </div>
             </div>
 
-            {isPerishable && (
+            {requiresBatchTracking && (
               <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
                 <p className="text-xs text-amber-800 dark:text-amber-300">
-                  Insumo perecedero: el backend exige lote y vencimiento para
-                  el control FIFO.
+                  {trackedByExistingBatches
+                    ? "Este insumo ya se gestiona por lote: registra el lote de esta compra para que el saldo por lote no quede atrás del inventario total."
+                    : "Insumo perecedero: el backend exige lote y vencimiento para el control FIFO."}
                 </p>
                 <div className="space-y-1">
                   <Label htmlFor="purchase_lot" className="text-xs">

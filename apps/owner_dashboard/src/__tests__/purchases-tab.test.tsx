@@ -721,6 +721,54 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
     });
   });
 
+  it("requires batch metadata when the insumo already has lots (#938)", async () => {
+    // The backend owns the rule (perishable OR already tracked by lot) and
+    // reports it on the preview. A non-perishable insumo that already has
+    // lots must carry one too: the aggregate stock rises while the batch
+    // balances stay behind, and the outflow guard then refuses the next sale.
+    vi.mocked(fetchPurchasePreview).mockResolvedValue({
+      ...PREVIEW_RESULT,
+      requiresBatchTracking: true,
+    });
+    const mutateAsync = mockCreatePurchase();
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+    // Café en Grano is NOT perishable: the lot fields can only come from the
+    // backend's verdict on the lots it already carries.
+    await pickSelect(user, "purchases-form-insumo", "Café en Grano");
+    await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+    await user.type(screen.getByTestId("purchases-form-quantity"), "2");
+    await user.type(screen.getByTestId("purchases-form-unit-cost"), "100");
+    await user.type(screen.getByTestId("purchases-form-invoice-number"), "F-LOT");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-lot")).toBeInTheDocument();
+    });
+    expect(
+      screen.getByText(/Este insumo ya se gestiona por lote/),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("purchases-form-submit")).toBeDisabled();
+
+    await user.type(screen.getByTestId("purchases-form-lot"), "L-938");
+    await user.type(screen.getByTestId("purchases-form-received"), "2026-09-30");
+    await user.type(screen.getByTestId("purchases-form-expiration"), "2026-10-30");
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+    await user.click(screen.getByTestId("purchases-form-submit"));
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lotCode: "L-938",
+          receivedDate: "2026-09-30",
+          expirationDate: "2026-10-30",
+        }),
+      );
+    });
+  });
+
   it("allows explicit acknowledgement when the preview fails, instead of submitting blind (§49)", async () => {
     vi.mocked(fetchPurchasePreview).mockRejectedValue({
       status: 500,

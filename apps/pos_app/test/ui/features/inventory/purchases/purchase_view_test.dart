@@ -14,25 +14,34 @@ import 'package:pos_app/ui/features/inventory/purchases/purchase_view.dart';
 import 'package:pos_app/ui/features/inventory/purchases/purchase_view_model.dart';
 
 class _FakeInventoryRepository implements InventoryRepository {
-  _FakeInventoryRepository({this.officialBcnRate, this.officialBcnRateError});
+  _FakeInventoryRepository({
+    this.officialBcnRate,
+    this.officialBcnRateError,
+    this.insumos,
+    this.batchesByInsumoId,
+  });
 
   final double? officialBcnRate;
   final Exception? officialBcnRateError;
+  final List<Insumo>? insumos;
+  final Map<String, List<Batch>>? batchesByInsumoId;
 
   @override
   get database => throw UnimplementedError();
 
   @override
-  Future<List<Insumo>> getActiveInsumos() async => const [
-    Insumo(
-      id: 'i1',
-      name: 'Yogurt',
-      consumptionUom: 'ml',
-      stock: 100,
-      averageCost: 2,
-      isPerishable: true,
-    ),
-  ];
+  Future<List<Insumo>> getActiveInsumos() async =>
+      insumos ??
+      const [
+        Insumo(
+          id: 'i1',
+          name: 'Yogurt',
+          consumptionUom: 'ml',
+          stock: 100,
+          averageCost: 2,
+          isPerishable: true,
+        ),
+      ];
 
   @override
   Future<List<Supplier>> getActiveSuppliers() async => const [
@@ -46,7 +55,8 @@ class _FakeInventoryRepository implements InventoryRepository {
       ];
 
   @override
-  Future<List<Batch>> getBatchesByInsumoId(String insumoId) async => const [];
+  Future<List<Batch>> getBatchesByInsumoId(String insumoId) async =>
+      batchesByInsumoId?[insumoId] ?? const [];
 
   @override
   Future<void> queuePurchaseSync(Purchase purchase) async {}
@@ -613,6 +623,106 @@ void main() {
       expect(find.text('Ingresá una tasa BCN válida'), findsOneWidget);
       expect(find.text('Confirmar registro'), findsNothing);
       expect(engine.recordPurchaseCalls, 0);
+    },
+  );
+
+  // #938: a non-perishable insumo that ALREADY has lots must record one too —
+  // the aggregate stock and the batch balances are kept in step by this lot,
+  // and the outflow guard reads the batches. The form says why, because lot
+  // fields appearing on a non-perishable insumo is otherwise surprising.
+  // Two separate tests, not one with two pumps: pumping a second tree of the
+  // same widget type reuses the existing State, so `initState` — and with it
+  // the second view model's `loadInitialData` — never runs.
+  testWidgets(
+    'warns that a non-perishable insumo already is managed by lot',
+    (tester) async {
+      final viewModel = PurchaseViewModel(
+        _FakeInventoryRepository(
+          insumos: const [
+            Insumo(
+              id: 'i1',
+              name: 'Arroz',
+              consumptionUom: 'kg',
+              stock: 50,
+              averageCost: 30,
+              isPerishable: false,
+            ),
+          ],
+          batchesByInsumoId: {
+            'i1': [
+              Batch(
+                id: 'b1',
+                insumoId: 'i1',
+                batchNumber: 'LOT-EXISTING',
+                receivedDate: DateTime(2026, 1, 1),
+                expirationDate: DateTime(2026, 12, 31),
+                remainingStock: 50,
+                cost: 30,
+              ),
+            ],
+          },
+        ),
+        _FakeMovementEngine(),
+      );
+
+      await _pumpPurchaseView(tester, viewModel);
+      await _selectDropdownValue(tester, index: 0, value: 'Arroz');
+      await _selectDropdownValue(tester, index: 1, value: 'Caja');
+      await _selectDropdownValue(tester, index: 2, value: 'Proveedor 1');
+      await _fillRequiredPurchaseInputs(
+        tester,
+        invoiceNumber: 'INV-500',
+        quantity: '5',
+        unitCost: '25',
+      );
+
+      expect(
+        find.text(
+          'Este insumo ya se gestiona por lotes. Debe registrar el lote para que el saldo de lotes coincida con el inventario total y evitar rechazos en las ventas.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Código de lote'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'does not warn about lot tracking on a non-perishable insumo with no lots',
+    (tester) async {
+      final viewModel = PurchaseViewModel(
+        _FakeInventoryRepository(
+          insumos: const [
+            Insumo(
+              id: 'i1',
+              name: 'Arroz',
+              consumptionUom: 'kg',
+              stock: 50,
+              averageCost: 30,
+              isPerishable: false,
+            ),
+          ],
+        ),
+        _FakeMovementEngine(),
+      );
+
+      await _pumpPurchaseView(tester, viewModel);
+      await _selectDropdownValue(tester, index: 0, value: 'Arroz');
+      await _selectDropdownValue(tester, index: 1, value: 'Caja');
+      await _selectDropdownValue(tester, index: 2, value: 'Proveedor 1');
+      await _fillRequiredPurchaseInputs(
+        tester,
+        invoiceNumber: 'INV-501',
+        quantity: '5',
+        unitCost: '25',
+      );
+
+      expect(
+        find.text(
+          'Este insumo ya se gestiona por lotes. Debe registrar el lote para que el saldo de lotes coincida con el inventario total y evitar rechazos en las ventas.',
+        ),
+        findsNothing,
+      );
+      expect(find.text('Código de lote'), findsNothing);
     },
   );
 }

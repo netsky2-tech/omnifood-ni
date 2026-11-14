@@ -2750,7 +2750,7 @@ class _$PurchaseDao extends PurchaseDao {
   @override
   Future<List<PurchaseEntity>> findUnsyncedPurchases() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM purchases WHERE is_synced = 0',
+        'SELECT * FROM purchases     WHERE is_synced = 0       AND id NOT IN (         SELECT movement_id FROM inventory_movement_sync_state         WHERE sync_status = \'rejected\'       )',
         mapper: (Map<String, Object?> row) => PurchaseEntity(
             id: row['id'] as String,
             insumoId: row['insumo_id'] as String,

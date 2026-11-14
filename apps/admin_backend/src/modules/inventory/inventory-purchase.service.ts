@@ -318,12 +318,26 @@ export class InventoryPurchaseService {
     // Issue #512 slice 1 part A: the preview read of `insumos` rides one
     // tenant-bound transaction and resolves the entity from that exact
     // manager — the pooled `dataSource.getRepository` path is gone.
-    const insumo = await runInTenantTransaction(
+    //
+    // #938: the lot requirement is not `is_perishable` alone. The outflow
+    // guard (`batch-allocation.ts`) reads every batch row of the insumo, so an
+    // insumo that already has lots is tracked by lot whether or not it is
+    // perishable — and a purchase that raises `insumos.stock` without creating
+    // a lot leaves the aggregate above the batch balances. The count rides the
+    // same transaction as the insumo read, so both answer for one snapshot.
+    const { insumo, existingBatchCount } = await runInTenantTransaction(
       this.dataSource,
       tenantId,
-      (manager) => this.loadInsumo(manager, tenantId, input.insumoId),
+      async (manager) => ({
+        insumo: await this.loadInsumo(manager, tenantId, input.insumoId),
+        existingBatchCount: await this.countExistingBatches(
+          manager,
+          tenantId,
+          input.insumoId,
+        ),
+      }),
     );
-    return this.buildPreview(input, insumo);
+    return this.buildPreview(input, insumo, existingBatchCount);
   }
 
   async recordPurchase(input: {
@@ -442,10 +456,23 @@ export class InventoryPurchaseService {
                 );
           }
 
-          const preview = await this.buildPreview(input, insumo);
+          const preview = await this.buildPreview(
+            input,
+            insumo,
+            await this.countExistingBatches(
+              manager,
+              tenantId,
+              input.insumoId,
+            ),
+          );
 
           if (preview.requiresBatchTracking) {
-            this.assertBatchMetadata(input);
+            this.assertBatchMetadata(input, {
+              // #938: name the REAL cause. "Batch-managed" would send the
+              // operator looking for a perishable flag when the actual reason
+              // is that the insumo already carries lots.
+              becauseExistingBatches: !insumo.is_perishable,
+            });
           }
 
           const entryTimestamp = new Date(input.entryTimestamp);
@@ -504,7 +531,7 @@ export class InventoryPurchaseService {
             const batch = manager.create(Batch, {
               tenant_id: tenantId,
               insumo_id: insumo.id,
-              batch_number: input.lotCode,
+              batch_number: input.lotCode?.trim(),
               received_date: toCalendarDay(input.receivedDate),
               expiration_date: toCalendarDay(input.expirationDate),
               remaining_stock: preview.entryQuantityConsumption,
@@ -762,6 +789,7 @@ export class InventoryPurchaseService {
       bcnRate?: number;
     },
     insumo: Insumo,
+    existingBatchCount: number,
   ): Promise<PurchasePreview> {
     const rateResolution = await this.resolveBcnRate({
       currency: input.currency,
@@ -808,8 +836,24 @@ export class InventoryPurchaseService {
       projectedCppNio: cpp.projectedCppNio,
       previousStock: cpp.previousStock,
       projectedStock: cpp.projectedStock,
-      requiresBatchTracking: Boolean(insumo.is_perishable),
+      requiresBatchTracking:
+        Boolean(insumo.is_perishable) || existingBatchCount > 0,
     };
+  }
+
+  /**
+   * Every batch row of the insumo, consumed lots included: a lot whose
+   * `remaining_stock` reached 0 is still proof the insumo is tracked by lot,
+   * and the outflow guard keeps reading it.
+   */
+  private countExistingBatches(
+    manager: EntityManager,
+    tenantId: string,
+    insumoId: string,
+  ): Promise<number> {
+    return manager.count(Batch, {
+      where: { tenant_id: tenantId, insumo_id: insumoId },
+    });
   }
 
   private async resolveBcnRate(input: {
@@ -865,14 +909,27 @@ export class InventoryPurchaseService {
     return isoDate ? isoDate[1] : trimmedInvoiceDate;
   }
 
-  private assertBatchMetadata(input: {
-    lotCode?: string;
-    receivedDate?: string;
-    expirationDate?: string;
-  }): void {
-    if (!input.lotCode || !input.receivedDate || !input.expirationDate) {
+  private assertBatchMetadata(
+    input: {
+      lotCode?: string;
+      receivedDate?: string;
+      expirationDate?: string;
+    },
+    options: { becauseExistingBatches: boolean } = {
+      becauseExistingBatches: false,
+    },
+  ): void {
+    // A lot code of only whitespace is NO lot: it would pass a truthiness check
+    // while storing a batch number nobody can read back (#938).
+    const lotCode = input.lotCode?.trim();
+    if (!lotCode || !input.receivedDate || !input.expirationDate) {
+      // #938: two different causes, two different messages. The second one is
+      // the case that used to be silent: nothing stopped a purchase from
+      // raising the aggregate of an insumo that already carried lots.
       throw new BadRequestException(
-        'Batch-managed purchases require lotCode, receivedDate, and expirationDate',
+        options.becauseExistingBatches
+          ? 'This item is already tracked by lot: lotCode, receivedDate, and expirationDate are required so the batch balances do not fall behind the aggregate stock'
+          : 'Batch-managed purchases require lotCode, receivedDate, and expirationDate',
       );
     }
   }

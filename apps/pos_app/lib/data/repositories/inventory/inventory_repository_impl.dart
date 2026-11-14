@@ -514,11 +514,32 @@ class InventoryRepositoryImpl
 
   @override
   Future<void> markMovementAsFailed(String id, {String? error}) {
+    return _recordMovementSyncState(
+      id,
+      status: MovementSyncStateStatus.failed,
+      error: error,
+    );
+  }
+
+  @override
+  Future<void> markMovementAsRejected(String id, {String? error}) {
+    return _recordMovementSyncState(
+      id,
+      status: MovementSyncStateStatus.rejected,
+      error: error,
+    );
+  }
+
+  Future<void> _recordMovementSyncState(
+    String id, {
+    required String status,
+    String? error,
+  }) {
     return movementSyncStateDao.findByMovementId(id).then((existing) {
       return movementSyncStateDao.upsertSyncState(
         MovementSyncStateEntity(
           movementId: id,
-          syncStatus: MovementSyncStateStatus.failed,
+          syncStatus: status,
           lastAttemptedAt: DateTime.now().toUtc().toIso8601String(),
           lastError: error,
           terminalId: existing?.terminalId,

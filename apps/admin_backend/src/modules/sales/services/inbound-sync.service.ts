@@ -20,6 +20,7 @@ import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Supplier } from '../../inventory/entities/supplier.entity';
 import { Batch } from '../../inventory/entities/batch.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import {
@@ -51,6 +52,7 @@ import {
   InboundSyncRecipeDto,
   InboundSyncRecipeVersionDto,
   InboundSyncUserDto,
+  InboundSyncSupplierDto,
   InboundSyncForensicAlertDto,
   InboundSyncLoyaltyProgramDto,
   InboundSyncLoyaltyRewardDto,
@@ -194,6 +196,9 @@ export class InboundSyncService {
           : [],
       insumos: requestedTypes.has('insumos')
         ? await this.fetchInsumoDeltas(tenantId, sinceDate, entityManager)
+        : [],
+      suppliers: requestedTypes.has('suppliers')
+        ? await this.fetchSupplierDeltas(tenantId, sinceDate, entityManager)
         : [],
       recipes: requestedTypes.has('recipes')
         ? await this.fetchRecipeDeltas(tenantId, sinceDate, entityManager)
@@ -570,6 +575,7 @@ export class InboundSyncService {
         'catalog_values',
         'categories',
         'insumos',
+        'suppliers',
         'recipes',
         'recipeversions',
         'recipe_versions',
@@ -858,6 +864,41 @@ export class InboundSyncService {
       tenantId: i.tenant_id,
       createdAt: i.created_at,
       updatedAt: i.updated_at,
+    }));
+  }
+
+  private async fetchSupplierDeltas(
+    tenantId: string,
+    sinceDate: Date | null,
+    entityManager?: EntityManager,
+  ): Promise<InboundSyncSupplierDto[]> {
+    // Tenant-protected table: require the bound manager, same rule as the
+    // insumos and products deltas.
+    if (!entityManager) {
+      throw new InternalServerErrorException(
+        'Inbound supplier sync requires a tenant-bound transaction manager (app.tenant_id binding)',
+      );
+    }
+    const supplierRepository = entityManager.getRepository(Supplier);
+    const qb = supplierRepository
+      .createQueryBuilder('supplier')
+      .where('supplier.tenant_id = :tenantId', { tenantId });
+
+    if (sinceDate) {
+      qb.andWhere('supplier.updated_at > :sinceDate', { sinceDate });
+    }
+
+    qb.orderBy('supplier.name', 'ASC');
+
+    const items = await qb.getMany();
+    return items.map((s) => ({
+      id: s.id,
+      name: s.name,
+      phone: s.phone ?? null,
+      contactPerson: s.contact_person ?? null,
+      creditTerms: s.credit_terms ?? null,
+      isActive: s.is_active,
+      updatedAt: s.updated_at,
     }));
   }
 
