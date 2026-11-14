@@ -1,16 +1,16 @@
 # NHILOS — Product Claim Audit / OD-02
 
 **Documento:** `product_claim_audit_od02_v1.3.md`  
-**Versión:** 1.3 (Reconciliación Normativa + Re-anclaje + Adenda de Lealtad)  
-**Estado:** `CLOSED / VERIFIED / RE-ANCHORED — ANCLAJE PROVISIONAL`
-**Anclaje:** `b4b5ad27` (`origin/main`, 2026-10-08). **Provisional**: existe una línea de trabajo en curso (auditoría P3 de descuentos y promociones e2e) que cambia comportamiento publicado. Los claims en riesgo y la obligación de re-anclaje están listados en `nhilos_branding_document_governance_v1.0.md` [Estado de anclaje y obligación de re-anclaje](../gobernanza/nhilos_branding_document_governance_v1.0.md#7-estado-de-anclaje-y-obligación-de-re-anclaje).  
+**Versión:** 1.3 (Reconciliación Normativa + Re-anclaje a 951d4f13 + Extensión de Capacidades Evolucionadas)  
+**Estado:** `CLOSED / VERIFIED / RE-ANCHORED`  
+**Anclaje:** `951d4f13` (`origin/main`, 2026-10-26; re-anclado desde `b4b5ad27` tras verificar el cierre de la línea de promociones/lealtad e incorporar las 6 áreas evolucionadas del producto).  
 **Gate:** OD-02 — Product Claim Inventory  
 **Scope:** NHILOS POS public website  
 **Upstream authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0)  
 **Downstream:** `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md`  
 **Gobernanza de cadena:** según `nhilos_branding_document_governance_v1.0.md` ([Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)), este documento es la autoridad de claims y el Marketing Brief es downstream de él.  
-**Fecha de reconciliación:** 2026-10-08  
-**Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording); extensión FOH `PC-FOH-01..03` — **Claim count vigente: 43** (34 originales + 6 loyalty + 3 FOH)  
+**Fecha de reconciliación:** 2026-10-26  
+**Reconciliation resolutions:** `OD-02-R01` (Claim count 40 — 34 originales + 6 loyalty `PC-LOY-01..06`), `OD-02-R02` (Fiscal conditioning), `OD-02-R03` (Hardened offline wording); extensión FOH `PC-FOH-01..03`; extensión capacidades evolucionadas `PC-DASH-05`, `PC-CAT-01`, `PC-INV-07`, `PC-FISC-05`, `PC-OPS-01` — **Claim count vigente: 48** (34 originales + 6 loyalty + 3 FOH + 5 capacidades evolucionadas)  
 
 ---
 
@@ -51,8 +51,8 @@ AUTHORITATIVE INPUT FOR IA v1.0 RECONCILIATION
 ```text
 repository:       netsky2-tech/omnifood-ni (NHILOS POS)
 branch/tag:       origin/main
-commit_sha:       b4b5ad27 (re-anclaje 2026-10-08; auditoría original 7af1521ea077ce8bc1faed1aa7189a6186eac515, 2026-09-26)
-audit_date:       2026-10-08
+commit_sha:       951d4f13 (re-anclaje 2026-10-26; auditoría previa b4b5ad27, 2026-10-08; auditoría original 7af1521ea077ce8bc1faed1aa7189a6186eac515, 2026-09-26)
+audit_date:       2026-10-26
 environment:      Production-grade Local Monorepo
 components:
   - POS Mobile / Terminal (Flutter 3.x, Dart, SQLite Floor v65)
@@ -68,7 +68,7 @@ components:
 
 ---
 
-# 4. Primary Audit Matrix (D1) — 43 Claims Auditados (34 originales + 6 loyalty `OD-02-R01` + 3 FOH `PC-FOH-01..03`)
+# 4. Primary Audit Matrix (D1) — 48 Claims Auditados (34 originales + 6 loyalty `OD-02-R01` + 3 FOH `PC-FOH-01..03` + 5 capacidades evolucionadas `PC-DASH-05`, `PC-CAT-01`, `PC-INV-07`, `PC-FISC-05`, `PC-OPS-01`)
 
 | ID | Claim | Class | Scope | Code Evidence | Test Evidence | Limitations | Technical Status | Public Status | Website Treatment |
 |---|---|---|---|---|---|---|---|---|---|
@@ -115,6 +115,11 @@ components:
 | **PC-FOH-01** | Retención de cuentas abiertas: park de órdenes por mesa, listado de todas las cuentas abiertas, recuperación, reemplazo y fusión (merge), con mapa de mesas que renderiza los tickets retenidos por mesa | `WORKFLOW` | FOH / Table Service | `apps/pos_app/lib/domain/services/sales/table_order_service.dart` (parkOrder, getAllOpenOrders, replaceOrderItems, mergeOrders), `apps/pos_app/lib/ui/features/sales/tables/table_layout_view.dart`, `apps/pos_app/lib/ui/features/sales/tables/table_layout_view_model.dart`, `apps/pos_app/lib/domain/services/sales/waiter_settlement_service.dart` | `apps/pos_app/test/domain/services/sales/table_order_service_test.dart`, `apps/pos_app/test/domain/services/sales/waiter_settlement_service_test.dart`, `apps/pos_app/test/ui/features/sales/table_layout_view_model_test.dart`, `apps/pos_app/test/ui/features/sales/table_layout_view_test.dart` | Requiere un modo de negocio que habilite servicio de mesa. El cierre de turno no procede mientras existan cuentas abiertas (verificación de cuentas abiertas en el cierre; `OpenTablesPendingException` en liquidación de mesero). La retención es por terminal local (multi-dispositivo fuera de alcance, ver PC-OFF-05). El registro de retención lleva versión optimista para concurrencia. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 | **PC-FOH-02** | Grupos de modificadores y opciones configurables por producto, ofrecidos al operador y aplicados al ticket con su ajuste de precio; administración desde el backoffice | `WORKFLOW` | FOH / Product Configuration | `apps/pos_app/lib/ui/features/sales/sale_view.dart` (diálogo de opciones por `availableModifierGroups`, aplicación de `priceDelta`), `apps/pos_app/lib/ui/features/inventory/items/item_options_editor.dart`, `apps/admin_backend/src/modules/modifiers/` (administración de grupos y opciones) | `apps/pos_app/test/ui/features/sales/product_options_grouped_modifiers_test.dart`, `apps/pos_app/test/data/services/modifier_resolution_service_test.dart`, `apps/pos_app/test/ui/features/inventory/items/item_options_editor_readonly_test.dart`, `apps/admin_backend/src/modules/modifiers/services/modifiers.service.spec.ts` | Los modificadores deben estar configurados previamente para aparecer en el POS. Un producto sin grupos configurados se comporta como antes (sin diálogo de opciones). | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 | **PC-FOH-03** | Visibilidad operativa en mostrador: el POS muestra al operador su estado de conectividad y el conteo de documentos pendientes de sincronizar | `DATA / VISIBILITY` | FOH / Operational Status | `apps/pos_app/lib/ui/features/sales/widgets/cloud_sync_status_badge.dart` (cadenas offline y conteo pendiente, incluido conteo de auditoría degradada), `apps/pos_app/lib/data/services/sync_service.dart` (fuente del conteo de outbox pendiente) | `apps/pos_app/test/ui/features/sales/cloud_sync_status_badge_test.dart` | La visibilidad cubre únicamente el estado que la app rastrea hoy (online/offline, error de sincronización, conteo de outbox y auditoría pendiente); no constituye una auditoría general de todos los estados pendientes del sistema. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-DASH-05** | Inteligencia operativa multitemporal y ritmo semanal de demanda en el Owner Dashboard | `DATA / VISIBILITY` | Analytics / Executive Intelligence | `apps/owner_dashboard/src/features/dashboard/weekly-rhythm-chart.tsx`, `hourly-sales-chart.tsx`, `domain/comparison-period.ts`, `domain/navigation-context.ts` | `apps/owner_dashboard/src/__tests__/dashboard-a11y-compliance.spec.tsx`, `apps/owner_dashboard/src/__tests__/dashboard-v2-presentation.spec.tsx` | *Works when:* Conexión web activa al backend con rango de fechas multi-día seleccionado (Lunes a Domingo con pico semanal y concentración de fin de semana). *Does not work when:* En selección de un solo día el gráfico semanal muestra mensaje invitando a seleccionar rango de varios días; no opera offline en el navegador. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-CAT-01** | Menú QR digital autogestionado con codificación local sin conexión tras carga de página | `WORKFLOW` | Catalog / Digital Menu | `apps/owner_dashboard/src/features/menu-qr/menu-qr-page.tsx`, `qr-encode.ts`, `use-menu-qr.ts` | `apps/owner_dashboard/src/__tests__/menu-qr-page.test.tsx`, `features/menu-qr/qr-encode.test.ts` | *Works when:* Administrador ingresa URL pública válida (http/https o Google Drive); la codificación y descarga PNG operan en memoria del navegador sin depender de red externa ni generar URLs blob bloqueadas por CSP. *Does not work when:* Menú QR no aloja un catálogo dinámico editable dentro de la app (redirige a la URL configurada por el cliente). | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-INV-07** | Continuidad fiscal ante discrepancias de stock y conciliación trazable por lote/sobrante | `CONTINUITY` | Inventory Continuity / Physical Audit | `apps/admin_backend/src/modules/inventory/services/inventory-divergence.service.ts`, `apps/owner_dashboard/src/features/inventory/divergence-panel.tsx`, `apps/pos_app/lib/ui/features/inventory/counts/physical_count_view_model.dart` | `apps/admin_backend/test/q80-reconnect-inventory-outcome.e2e-spec.ts`, `apps/owner_dashboard/src/features/inventory/divergence-panel.test.tsx`, `apps/pos_app/test/ui/features/inventory/counts/physical_count_view_model_test.dart` | *Works when:* La venta en caja nunca se bloquea por falta de stock teórico en la nube (la factura siempre se asienta bajo DT 09-2007 y la diferencia de stock/lote se declara para auditoría posterior en el dashboard); en conteo físico POS, insumos por lote exigen asignar lote al registrar sobrante antes del posteo. *Does not work when:* La discrepancia no borra ni altera la venta original; requiere conciliación explícita posterior por el supervisor o responsable de compras. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-FISC-05** | Flujo administrativo de anulación de facturas y emisión de Notas de Crédito DGI con reversión trazable de inventario | `FISCAL / COMPLIANCE` | Backoffice / Fiscal Governance | `apps/admin_backend/src/modules/sales/services/invoices.service.ts` (`voidAdminInvoice`, `createAdminCreditNote`), `apps/owner_dashboard/src/features/fiscal/fiscal-page.tsx` | `apps/admin_backend/src/modules/sales/services/invoices.service.admin-void.spec.ts`, `invoices.service.admin-credit-note.spec.ts`, `apps/owner_dashboard/src/__tests__/w4-fiscal.test.tsx` | *Works when:* Operado por usuario con rol `OWNER` o `MANAGER` sobre facturas vigentes no anuladas; requiere motivo obligatorio, reversión controlada de recetas/movimientos en Kardex y asignación correlativa de folio de Nota de Crédito. *Does not work when:* No permite eliminación física de registros (inmutabilidad estricta DT 09-2007); no emite factura electrónica en línea con XML/CUFE. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
+| **PC-OPS-01** | Gestión de flota de terminales, monitoreo de frescura por dispositivo y saneamiento administrativo de turnos huérfanos | `OPERATIONAL` | Device Fleet & Shift Governance | `apps/owner_dashboard/src/features/devices/devices-page.tsx`, `revoke-device-modal.tsx`, `apps/pos_app/lib/ui/features/cash/cash_shift_view_model.dart`, `widgets/device_shifts_dialog.dart` | `apps/owner_dashboard/src/features/devices/revoke-device-modal.spec.tsx`, `devices-api.spec.ts`, `apps/pos_app/test/ui/features/cash/device_shifts_dialog_test.dart`, `pos_orphan_shifts_e2e_real_test.dart` | *Works when:* El dueño monitorea estado de cada terminal (Activo, Revocado, Retirado) y frescura de sincronización (En sincronía, Parcial, Desactualizado, Pendiente); el supervisor en terminal puede identificar y cerrar turnos huérfanos con motivo obligatorio emitiendo Corte Z. *Does not work when:* Un dispositivo revocado no sincroniza hasta re-enrolamiento; el saneamiento de turnos requiere clave de supervisor. | `VERIFIED_BY_TEST` | `APPROVED_WEBSITE` | `PUBLIC_APPROVED_WITH_LIMITATION` |
 
 ### 4.1 Loyalty — lo que el producto NO hace y por lo tanto no debe prometerse
 
@@ -179,6 +184,15 @@ Claims rigurosamente autorizados y condicionados para el Website de Marketing de
 - ✅ **"Pantalla digital de cocina (KDS) con alerta visual de tiempos de preparación por color."** (PC-HW-03).
 - ✅ **"Panel web para dueños con métricas en tiempo real de ventas netas, horas pico y productos top."** (PC-DASH-01 y PC-DASH-03).
 - ✅ **"Monitor de frescura: comprobá al instante si tus cajas están sincronizadas con la nube."** (PC-DASH-02).
+- ✅ **"Ritmo semanal de demanda y análisis multitemporal en el panel del dueño para entender la concentración de flujo entre semana y fines de semana."** (PC-DASH-05).
+- ✅ **"Gestión central de flota de terminales con estado de sincronización por dispositivo y retiro o revocación controlada."** (PC-OPS-01).
+
+### Menú Digital y Continuidad de Inventario
+- ✅ **"Generá el código QR escaneable de tu menú para que los clientes vean tu catálogo en su celular; la generación y descarga operan en el navegador sin depender de conexión."** (PC-CAT-01).
+- ✅ **"Continuidad fiscal sin bloqueos: si el stock teórico en la nube discrepa de la venta, la factura se emite siempre conforme a la DGI y la diferencia queda declarada para conciliación posterior."** (PC-INV-07).
+- ✅ **"Conteo físico con selección explícita de lote y resolución mandatoria de sobrantes antes de asentar ajustes."** (PC-INV-07).
+- ✅ **"Anulación administrativa de facturas y emisión de Notas de Crédito DGI con reversión trazable de recetas y movimientos en Kardex desde el panel web."** (PC-FISC-05).
+- ✅ **"Saneamiento y cierre administrativo de turnos huérfanos o bloqueados en terminal con motivo de auditoría y emisión de Corte Z."** (PC-OPS-01).
 
 ### Lealtad y Promociones (`PC-LOY-01..06`)
 - ✅ **"Tus clientes acumulan puntos automáticamente en cada venta, incluso sin internet; el canje es un descuento con salvaguardas en caja y todo sincroniza a la nube sin doble conteo."** (PC-LOY-01, PC-LOY-02, PC-LOY-03; condicionado a cliente seleccionado, venta guardada local y consistencia eventual en la nube).
@@ -226,8 +240,8 @@ Funcionalidades implementadas en código que requieren evidencia visual antes de
 
 # 10. Exit Criteria Sign-off
 
-- [x] El codebase auditado está identificado por commit/versión (`b4b5ad27`, re-anclaje 2026-10-08).
-- [x] Se construyó el universo completo de claims candidatos (**43 claims analizados**: 34 originales + 6 loyalty `PC-LOY-01..06`, resolución `OD-02-R01`, + 3 FOH `PC-FOH-01..03`).
+- [x] El codebase auditado está identificado por commit/versión (`951d4f13`, re-anclaje 2026-10-26; previo `b4b5ad27`, 2026-10-08).
+- [x] Se construyó el universo completo de claims candidatos (**48 claims analizados**: 34 originales + 6 loyalty `PC-LOY-01..06`, resolución `OD-02-R01`, + 3 FOH `PC-FOH-01..03` + 5 capacidades evolucionadas `PC-DASH-05`, `PC-CAT-01`, `PC-INV-07`, `PC-FISC-05`, `PC-OPS-01`).
 - [x] Claims compuestos fueron desagregados en claims unitarios atómicos.
 - [x] Claims funcionales relevantes tienen evidencia concreta de implementación en código (E3).
 - [x] Claims relevantes tienen tests automatizados verificables (E4).
@@ -253,7 +267,21 @@ Según la cadena de autoridad de `nhilos_branding_document_governance_v1.0.md` (
 
 ---
 
-# Reconciliación v1.2–v1.3 — Re-anclaje a b4b5ad27 y adenda de lealtad
+# Reconciliación v1.3 — Re-anclaje a 951d4f13 y extensión de capacidades evolucionadas
+
+Resultado headline: el registro asciende hoy a **48 claims** (34 originales + 6 loyalty + 3 FOH + 5 capacidades evolucionadas). Tras verificar el estado en el commit `951d4f13` (2026-10-26), la línea de lealtad y promociones cerró con cobertura RLS, selectores gobernados y cálculo profit-aware (`apps/owner_dashboard/src/features/loyalty/reward-profit-aware-dialog.tsx`, `apps/owner_dashboard/src/features/promotions/PromotionForm.tsx`). Se incorporaron formalmente 5 nuevos claims técnicos auditados con evidencia de código y tests:
+
+| Claim | Área Evolucionada | Evidencia en Código | Evidencia en Tests | Límite Técnico |
+|---|---|---|---|---|
+| `PC-DASH-05` | Ritmo semanal e inteligencia operativa | `features/dashboard/weekly-rhythm-chart.tsx`, `domain/comparison-period.ts` | `__tests__/dashboard-a11y-compliance.spec.tsx` | Requiere selección multi-día; en día individual solicita rango amplio. |
+| `PC-CAT-01` | Menú QR digital autogestionado | `features/menu-qr/menu-qr-page.tsx`, `qr-encode.ts` | `__tests__/menu-qr-page.test.tsx`, `features/menu-qr/qr-encode.test.ts` | Enlace a URL pública configurada; no almacena catálogo web dinámico propio. |
+| `PC-INV-07` | Continuidad de stock y conciliación de lotes | `modules/inventory/services/inventory-divergence.service.ts`, `divergence-panel.tsx`, `physical_count_view_model.dart` | `q80-reconnect-inventory-outcome.e2e-spec.ts`, `divergence-panel.test.tsx`, `physical_count_view_model_test.dart` | Venta asienta siempre; diferencias se concilian en dashboard; sobrantes por lote exigen lote. |
+| `PC-FISC-05` | Anulación administrativa y Notas de Crédito DGI | `modules/sales/services/invoices.service.ts`, `fiscal-page.tsx` | `invoices.service.admin-void.spec.ts`, `invoices.service.admin-credit-note.spec.ts`, `w4-fiscal.test.tsx` | Requiere rol OWNER/MANAGER y motivo obligatorio; revierte Kardex; no borra facturas. |
+| `PC-OPS-01` | Flota de terminales y turnos huérfanos | `features/devices/devices-page.tsx`, `cash_shift_view_model.dart`, `device_shifts_dialog.dart` | `revoke-device-modal.spec.tsx`, `device_shifts_dialog_test.dart`, `pos_orphan_shifts_e2e_real_test.dart` | Dispositivo revocado no sincroniza hasta re-enrolar; cierre de turno huérfano exige supervisor y motivo. |
+
+---
+
+# Reconciliación histórica v1.2–v1.3 — Re-anclaje a b4b5ad27 y adenda de lealtad
 
 Resultado headline: de los 34 claims auditados en el re-anclaje original (el registro asciende hoy a 43 con las extensiones loyalty `PC-LOY-01..06` y FOH `PC-FOH-01..03`), **31 sin cambio, 3 con deriva, 0 ya no sostenibles** tras 575 commits (`7af1521…` → `b4b5ad27`, 2026-10-08).
 
@@ -325,3 +353,8 @@ Resultado headline: de los 34 claims auditados en el re-anclaje original (el reg
 | PC-FOH-01 | — | PC-002, CW-005 | citado |
 | PC-FOH-02 | HM-11 | CW-002 | citado |
 | PC-FOH-03 | HM-20, HM-31 | CT-005 | citado |
+| PC-DASH-05 | HM-13, HM-21 | CW-006, RL-003 | citado |
+| PC-CAT-01 | — | PC-005 | citado |
+| PC-INV-07 | HM-12 | CV-007 | citado |
+| PC-FISC-05 | HM-05, HM-23 | FI-004 | citado |
+| PC-OPS-01 | HM-15, HM-22 | RL-005 | citado |

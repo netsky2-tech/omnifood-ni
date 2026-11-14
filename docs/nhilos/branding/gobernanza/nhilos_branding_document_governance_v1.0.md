@@ -193,39 +193,38 @@ versiones flacas que nadie usa.
 
 ## 7. Estado de anclaje y obligación de re-anclaje
 
-**Anclaje vigente del set:** `b4b5ad27` (`origin/main`, 2026-10-08).
+**Anclaje vigente del set:** `951d4f13` (`origin/main`, 2026-10-26).
 
-`G-08` obliga a re-anclar cuando el build se mueve. Hoy hay un motivo concreto y conocido, no
-hipotético: existe una línea de trabajo en curso (**auditoría P3 de descuentos y promociones
-e2e, web + POS**) que **cambia comportamiento que este set ya publica**. Mientras esa línea no
-cierre, el anclaje `b4b5ad27` queda declarado como **provisional** y los claims de la tabla
-siguiente quedan marcados como **pendientes de re-verificación**.
+El anclaje se actualizó formalmente desde `b4b5ad27` tras verificar el cierre de la línea de auditoría
+P3 (descuentos, promociones e2e con cálculo profit-aware y gobernanza RLS) y la incorporación de las
+6 áreas de producto evolucionadas (ritmo semanal en Owner Dashboard, Menú QR autogestionado,
+continuidad de inventario ante discrepancias declaradas y selección de lotes/sobrantes, anulación
+administrativa y Notas de Crédito DGI, gestión de flota de terminales con saneamiento de turnos huérfanos).
+El registro maestro del OD-02 (`product_claim_audit_od02_v1.3.md`) cuenta ahora con **48 claims auditados**
+y verificados con evidencia de código y tests.
 
-| Línea de trabajo en curso | Superficie | Claims del OD-02 en riesgo |
-|---|---|---|
-| Acumuladores independientes, base de lealtad y etiquetas de UI | Lealtad | `PC-LOY-01`, `PC-LOY-06` |
-| Tope de descuento: configuración, proyección al POS y rechazo en descuento manual | Descuentos | `PC-LOY-02`, `PC-PAY-04` |
-| Promociones: retiro del toggle en POS y recarga con checkout abierto | Promociones | `PC-LOY-05` |
-| Origen del descuento por línea (backend, prorrateo y reporte) | Descuentos / reportes | `PC-LOY-02`, `PC-DASH-04` |
-| Historial de ventas: filtro de fecha, totales del conjunto y fracasos honestos | Reportes | `PC-DASH-04` |
-| Modifiers: coerción de decimales y normalización en la API | Modificadores | `PC-FOH-02` |
-| Mensajes de error sin fuga de datos internos | Contratos de API | `PC-SEC-03` |
-| Proyección de `audit_logs` al panel con actor y entidad | Auditoría | `PC-SEC-03` |
-| QR / transferencia, topología de KDS, Fase 8.3 | Pagos y cocina | `PC-PAY-01`, `PC-HW-03` |
+| Línea de trabajo re-verificada | Superficie | Claims del OD-02 verificados | Estado en `951d4f13` |
+|---|---|---|---|
+| Acumuladores independientes, base de lealtad y etiquetas de UI | Lealtad | `PC-LOY-01`, `PC-LOY-06` | CERRADO / VERIFICADO |
+| Tope de descuento: configuración, proyección al POS y rechazo en descuento manual | Descuentos | `PC-LOY-02`, `PC-PAY-04` | CERRADO / VERIFICADO |
+| Promociones: retiro del toggle en POS y recarga con checkout abierto | Promociones | `PC-LOY-05` | CERRADO / VERIFICADO |
+| Origen del descuento por línea (backend, prorrateo y reporte) | Descuentos / reportes | `PC-LOY-02`, `PC-DASH-04` | CERRADO / VERIFICADO |
+| Historial de ventas: filtro de fecha, totales del conjunto y fracasos honestos | Reportes | `PC-DASH-04` | CERRADO / VERIFICADO |
+| Modifiers: coerción de decimales y normalización en la API | Modificadores | `PC-FOH-02` | CERRADO / VERIFICADO |
+| Mensajes de error sin fuga de datos internos | Contratos de API | `PC-SEC-03` | CERRADO / VERIFICADO |
+| Proyección de `audit_logs` al panel con actor y entidad | Auditoría | `PC-SEC-03` | CERRADO / VERIFICADO |
+| QR / transferencia, topología de KDS, Fase 8.3 | Pagos y cocina | `PC-PAY-01`, `PC-HW-03` | CERRADO / VERIFICADO |
+| Inteligencia operativa y ritmo semanal | Owner Dashboard | `PC-DASH-05` | NUEVO / VERIFICADO |
+| Menú QR autogestionado en navegador | Catálogo / Menú QR | `PC-CAT-01` | NUEVO / VERIFICADO |
+| Continuidad fiscal y conciliación de stock/lotes | Inventario / POS | `PC-INV-07` | NUEVO / VERIFICADO |
+| Anulación administrativa y Notas de Crédito DGI | Fiscal / Backoffice | `PC-FISC-05` | NUEVO / VERIFICADO |
+| Gestión de flota de terminales y turnos huérfanos | Operaciones / Flota | `PC-OPS-01` | NUEVO / VERIFICADO |
 
-### Obligación al cerrar esa línea de trabajo
+### Obligaciones cumplidas
 
-1. **Re-verificar** cada claim de la tabla contra el nuevo build; clasificar `SIN CAMBIO`,
-   `DERIVA` o `YA NO SOSTENIBLE`, y actualizar límites donde corresponda.
-2. **Re-anclar** el OD-02 a un commit concreto y actualizar la fecha de la cabecera.
-3. **Revalidar los medios** contra el build final: era exactamente el motivo por el que la
-   revalidación de capturas quedó diferida (ver `nhilos_pos_media_inventory_v1.0.md` [Revalidación de Medios contra el Build Anclado (`b4b5ad27`)](../producto/nhilos_pos_media_inventory_v1.0.md#5-revalidación-de-medios-contra-el-build-anclado-b4b5ad27)).
-4. **Revisar los contratos de contenido** (homepage y página de producto) para que ninguna copia
-   publicada contradiga el comportamiento nuevo, especialmente en descuentos, promociones,
-   lealtad y modificadores.
-
-Ningún documento de este set puede publicarse con el anclaje marcado como provisional si alguno de
-los claims en riesgo cambió.
+1. **Re-verificación** de los 43 claims previos y alta auditada de 5 nuevos claims (`PC-DASH-05`, `PC-CAT-01`, `PC-INV-07`, `PC-FISC-05`, `PC-OPS-01`), totalizando 48 claims.
+2. **Re-anclaje** formal del OD-02 al commit `951d4f13`.
+3. **Revisión de contratos de contenido** (homepage y página de producto) para reflejar las capacidades evolucionadas respetando las reglas de gobernanza `G-01` a `G-09` y `N-03`.
 
 ---
 

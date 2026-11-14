@@ -9,7 +9,7 @@
 **Date:** 2026-10-02  
 **Authority:** Contrato de contenido aprobado para la página profunda de producto.  
 **Nota de revisión interna (post-aprobación, sin bump de versión):** tras la aprobación de v1.1 se añadieron dos secciones como extensiones trazadas: Loyalty & Promotions (Section 13, [Loyalty & Promotions](#15-section-13--loyalty--promotions)) y Cumplimiento Fiscal DGI (Section 14, [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007), añadida en esta revisión). Como consecuencia, las secciones de cierre del documento se renumeraron y sus referencias internas se actualizaron. La versión formal permanece `1.1`; esta nota existe para que la adición posterior a la aprobación no se pierda.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0) → `nhilos_website_homepage_content_v1.1.md` (v1.1)  
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`):** `product_claim_audit_od02_v1.3.md` (v1.3, re-anclado a `951d4f13`) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0) → `nhilos_website_homepage_content_v1.1.md` (v1.1)  
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): la demo se prepara según el contexto que el prospecto comparte (Sección 12), y los estados de éxito y error le devuelven un siguiente paso definido.  
 **DEPENDENCIA SATISFECHA:** `nhilos_website_homepage_content_v1.1.md` (v1.1) existe ahora en el repositorio como contrato de contenido de la homepage. La dependencia de creación está cerrada en esa versión; lo que permanece pendiente es el contraste cruzado de Gate E contra dicho documento (OD-PP-12) y la verificación de capacidades contra builds y evidencia vigentes, que siguen siendo gates separados de publicación.
 **GATE DE PUBLICACIÓN:** la publicación de esta página requiere (a) el Gate E ejecutado y documentado: contraste cruzado contra `nhilos_website_homepage_content_v1.1.md` v1.1 (división de labores, terminología y CTAs), y (b) la verificación de capacidades contra el build vigente; la revalidación de medios permanece trackada por separado en Gate D (OD-PP-06).
@@ -252,6 +252,7 @@ No mostrar simultáneamente interfaces de prototipos, versiones antiguas y produ
 | PC-002 | El POS contempla cuentas abiertas o mesas en modalidades soportadas. | Pruebas de flujo y alcance por modalidad. | Product |
 | PC-003 | Las ventas pueden relacionarse con movimientos de inventario configurados. | Prueba de venta a Kardex/stock. | Product |
 | PC-004 | La experiencia mostrada corresponde a la versión vigente. | Inventario de capturas y build identificable. | Product / Content |
+| PC-005 | Menú QR digital autogestionado con generación y descarga local en navegador. | Flujo de generación QR y prueba de descarga PNG sin conexión tras carga. | Product |
 
 &nbsp;
 
@@ -560,6 +561,7 @@ No afirmar:
 | CV-004 | La información presentada refleja su frescura y alcance. | Contrato de sincronización y copy de estados. | Product / Operations |
 | CV-005 | Los indicadores y términos públicos tienen semántica aprobada. | Diccionario de KPI y revisión de negocio. | Product / Finance |
 | CV-006 | Las órdenes de producción y pre-elaboración batch para sub-recetas registran el consumo de insumos base y el incremento del stock pre-elaborado. | Flujo de orden de producción y prueba de descuento/incremento en almacén. | Product |
+| CV-007 | Continuidad de facturación ante discrepancias de stock teórico con panel de conciliación y conteo físico con lote/sobrante. | Flujo de no bloqueo en venta, panel de discrepancias en dashboard y asignación de lote en sobrante. | Product / Inventory |
 
 &nbsp;
 
@@ -646,6 +648,7 @@ Mostrar cómo distintas personas interactúan con el producto desde sus responsa
 | RL-002 | Existen permisos diferenciados para acciones específicas. | Matriz RBAC vigente y pruebas. | Security / Product |
 | RL-003 | Existen superficies de consulta para responsables del negocio. | Backoffice vigente y roles habilitados. | Product |
 | RL-004 | Las capacidades mostradas corresponden a los permisos reales. | Validación por rol y captura. | Product / Security |
+| RL-005 | Gestión de flota de terminales con estado de sincronización y saneamiento administrativo de turnos huérfanos. | Panel de dispositivos en backoffice y diálogo de turnos en POS con Corte Z y motivo. | Product / Operations |
 
 &nbsp;
 
@@ -1303,6 +1306,7 @@ No publicar sin evidencia adicional, ni insinuar:
 | FI-001 | El POS emite facturas con consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial previamente configurados y autorizados por la DGI. | PC-FISC-01 | Flujo de emisión demostrable sobre la parametrización autorizada; prueba de correlatividad sin saltos ni duplicados. | Product / Legal |
 | FI-002 | Las facturas no se eliminan; la anulación se realiza exclusivamente vía Nota de Crédito con autorización de supervisor y evento trazable. | PC-FISC-02 | Demostración de ausencia de borrado físico, flujo de Nota de Crédito con PIN de supervisor y registro inmutable del evento. | Product / Legal |
 | FI-003 | El sistema valida sintácticamente Cédula y RUC nicaragüense (Personas Naturales y Jurídicas) para prevenir errores tipográficos, sin consulta en vivo al padrón DGI. | PC-FISC-03 | Prueba del validador por tipo de documento; evidencia de que no existe consulta online al padrón. | Product |
+| FI-004 | Flujo administrativo de anulación de facturas y emisión de Notas de Crédito DGI desde el panel web con reversión en Kardex y motivo de auditoría. | PC-FISC-05 | Pruebas de servicio admin-void y admin-credit-note, vista fiscal en dashboard y reversión en inventario. | Product / Compliance |
 
 &nbsp;
 
@@ -1328,6 +1332,7 @@ Este registro consolida los claims mínimos de la página y sirve como base para
 | DM-001–DM-004 | Demo CTA | Conversión y tratamiento de datos | Web / Commercial / Legal |
 | LY-001–LY-006 | Loyalty & Promotions ([Loyalty & Promotions](#15-section-13--loyalty--promotions)) | Identificación de cliente, puntos, canje y promociones | Product / Engineering |
 | FI-001–FI-003 | Cumplimiento Fiscal DGI ([Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007)) | Numeración correlativa DT 09-2007, inmutabilidad de facturas y validación fiscal | Product / Legal |
+| FI-004 | Cumplimiento Fiscal DGI ([Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007)) | Anulación administrativa y emisión de Notas de Crédito DGI con reversión en Kardex | Product / Compliance |
 
 &nbsp;
 
@@ -1606,7 +1611,7 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 | CW-003 | [Core Workflows](#5-section-03--core-workflows) | Registra pagos con los métodos disponibles. | PC-PAY-01, PC-PAY-04, PC-PAY-06 | TÉCNICO | RESPALDADO |
 | CW-004 | [Core Workflows](#5-section-03--core-workflows) | El esquema de tarjeta puede requerir confirmación manual posterior al datáfono. | PC-PAY-01 | TÉCNICO | RESPALDADO |
 | CW-005 | [Core Workflows](#5-section-03--core-workflows) | Existen cuentas abiertas/retención en modalidades soportadas. | PC-FOH-01 | TÉCNICO | RESPALDADO |
-| CW-006 | [Core Workflows](#5-section-03--core-workflows) | Existen superficies de consulta para información operativa. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| CW-006 | [Core Workflows](#5-section-03--core-workflows) | Existen superficies de consulta para información operativa, KPIs y ritmo de demanda. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04, PC-DASH-05 | TÉCNICO | RESPALDADO |
 | CT-001 | [Continuity](#6-section-04--continuity) | Enfoque offline-first en los escenarios definidos. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
 | CT-002 | [Continuity](#6-section-04--continuity) | Determinadas operaciones pueden continuar localmente durante una desconexión soportada. | PC-OFF-01 | TÉCNICO | RESPALDADO |
 | CT-003 | [Continuity](#6-section-04--continuity) | Existe sincronización posterior de información pendiente. | PC-OFF-03 | TÉCNICO | RESPALDADO |
@@ -1619,7 +1624,7 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 | CV-005 | [Control / Visibility](#7-section-05--control--visibility) | Los indicadores y términos públicos tienen semántica aprobada. | N/A | MARKETING | MARKETING |
 | RL-001 | [Roles](#8-section-06--roles) | El POS soporta tareas de venta y cobro. | PC-OFF-01, PC-PAY-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
 | RL-002 | [Roles](#8-section-06--roles) | Existen permisos diferenciados para acciones específicas. | PC-SEC-02 | TÉCNICO | RESPALDADO |
-| RL-003 | [Roles](#8-section-06--roles) | Existen superficies de consulta para responsables del negocio. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04 | TÉCNICO | RESPALDADO |
+| RL-003 | [Roles](#8-section-06--roles) | Existen superficies de consulta para responsables del negocio y análisis de ritmo de demanda. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-04, PC-DASH-05 | TÉCNICO | RESPALDADO |
 | RL-004 | [Roles](#8-section-06--roles) | Las capacidades mostradas corresponden a los permisos reales. | N/A | MARKETING | MARKETING |
 | GL-001 | [Gallery](#9-section-07--gallery) | Las capturas corresponden al producto vigente. | N/A | MARKETING | MARKETING |
 | GL-002 | [Gallery](#9-section-07--gallery) | Cada imagen representa el workflow indicado. | N/A | MARKETING | MARKETING |
@@ -1654,6 +1659,10 @@ Mientras alguna de estas condiciones permanezca abierta, este documento permanec
 | FI-001 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Consecutivos fiscales correlativos e inalterables bajo DT 09-2007, con prefijo y folio inicial autorizados por la DGI. | PC-FISC-01 | TÉCNICO | RESPALDADO |
 | FI-002 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Inmutabilidad de facturas; anulación exclusiva vía Nota de Crédito con autorización de supervisor. | PC-FISC-02 | TÉCNICO | RESPALDADO |
 | FI-003 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Validación sintáctica de Cédula y RUC nicaragüense, sin consulta en vivo al padrón DGI. | PC-FISC-03 | TÉCNICO | RESPALDADO |
+| PC-005 | [Product in Context](#4-section-02--product-in-context) | Menú QR digital autogestionado con generación y descarga local en navegador. | PC-CAT-01 | TÉCNICO | RESPALDADO |
+| CV-007 | [Control / Visibility](#7-section-05--control--visibility) | Continuidad fiscal ante discrepancias de stock, panel de conciliación y conteo con lote/sobrante. | PC-INV-07 | TÉCNICO | RESPALDADO |
+| FI-004 | [Cumplimiento Fiscal DGI (DT 09-2007)](#16-section-14--cumplimiento-fiscal-dgi-dt-09-2007) Cumplimiento Fiscal DGI | Flujo administrativo de anulación de facturas y Notas de Crédito DGI con reversión de inventario. | PC-FISC-05 | TÉCNICO | RESPALDADO |
+| RL-005 | [Roles](#8-section-06--roles) | Gestión de flota de terminales, monitoreo por dispositivo y saneamiento de turnos huérfanos con Corte Z. | PC-OPS-01 | TÉCNICO | RESPALDADO |
 
 Notas de la matriz:
 

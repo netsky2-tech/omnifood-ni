@@ -8,7 +8,7 @@
 **Version:** 1.1  
 **Date:** 2026-10-08  
 **Authority:** Contrato de contenido aprobado para la homepage. La versión se numera 1.1 para coincidir con la referencia de dependencia declarada en `nhilos_pos_product_page_content_v1.1.md`.  
-**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`, [Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)):** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3) → `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
+**Upstream chain (per `nhilos_branding_document_governance_v1.0.md`, [Cadena de autoridad (lineal, sin ciclos)](../gobernanza/nhilos_branding_document_governance_v1.0.md#3-cadena-de-autoridad-lineal-sin-ciclos)):** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3, re-anclado a `951d4f13`) → `nhilos_website_product_marketing_brief_v1.0.md` (v1.0) → `nhilos_website_information_architecture_content_wireframe_v1.0.md` (v1.0)  
 **Downstream:** `nhilos_pos_product_page_content_v1.1.md` — contrato de contenido de la página profunda de producto; este documento es su referencia de contraste en el Gate E.  
 **Referencia técnica transversal:** `nhilos_website_non_functional_spec_v1.0.md` (v1.0) — gates heredados, no redefinidos aquí.  
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): el hero entrega un siguiente paso real (Ver cómo funciona), la FAQ reduce fricción de evaluación y el CTA final conduce a una demo preparada según el contexto que el prospecto comparta.  
@@ -173,7 +173,7 @@ Responder rápidamente qué es, para quién y por qué importa. El hero no se co
 | :---- | :---- | :---- | :---- |
 | HM-03 | NHILOS POS sigue operando en caja cuando se cae el internet (terminal enrolado e hidratado). | PC-OFF-01, PC-OFF-02 | Product |
 | HM-04 | Se puede cobrar y facturar offline; al volver la conexión, ventas e inventarios sincronizan con la nube. | PC-OFF-01, PC-OFF-02, PC-OFF-03 | Product / Engineering |
-| HM-05 | La facturación respeta la numeración correlativa de la DT 09-2007 (Sistemas Computarizados de Facturación), con prefijo y folio autorizados por la DGI. | PC-FISC-01, PC-FISC-02 | Product / Compliance |
+| HM-05 | La facturación respeta la numeración correlativa de la DT 09-2007 (Sistemas Computarizados de Facturación), con prefijo y folio autorizados por la DGI; anulación supervisada vía Notas de Crédito. | PC-FISC-01, PC-FISC-02, PC-FISC-05 | Product / Compliance |
 | HM-06 | Cobro bimoneda nativo (NIO/USD) y conciliación de vouchers de tarjeta BAC y Banpro al cierre de turno. | PC-PAY-04, PC-PAY-01, PC-PAY-02 | Product / Payments |
 | HM-07 | El dueño monitorea sus ventas desde cualquier dispositivo con internet. | PC-DASH-01, PC-DASH-02 | Product |
 
@@ -279,8 +279,8 @@ Demostrar el producto mediante tres trabajos reales — vender, controlar, super
 | ID | Claim | OD-02 source | Gate |
 | :---- | :---- | :---- | :---- |
 | HM-11 | El flujo de venta incluye selección, modificadores configurados y cobro. | PC-OFF-01, PC-FOH-02 | Product |
-| HM-12 | La venta descuenta insumos por receta (BOM) y registra movimientos en un Kardex inmutable, con tolerancia a stock negativo en offline. | PC-INV-01, PC-INV-02, PC-INV-04 | Product |
-| HM-13 | El dashboard muestra KPIs de venta neta, horas pico y ranking de productos, con indicador de frescura de sincronización. | PC-DASH-01, PC-DASH-02, PC-DASH-03 | Product |
+| HM-12 | La venta descuenta insumos por receta (BOM) y registra movimientos en un Kardex inmutable; la continuidad fiscal no se bloquea ante discrepancias de stock teórico y opera con tolerancia a stock negativo en offline. | PC-INV-01, PC-INV-02, PC-INV-04, PC-INV-07 | Product |
+| HM-13 | El dashboard muestra KPIs de venta neta, horas pico, ritmo semanal y ranking de productos, con indicador de frescura de sincronización. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-05 | Product |
 
 ## Restrictions
 
@@ -331,7 +331,7 @@ Permitir que distintos visitantes reconozcan su contexto operativo desde trabajo
 | ID | Claim | OD-02 source | Gate |
 | :---- | :---- | :---- | :---- |
 | HM-14 | Quien cobra registra ventas y cobros —incluido el cobro bimoneda— en el terminal. | PC-OFF-01, PC-PAY-04 | Product |
-| HM-15 | Quien gestiona cuenta con permisos diferenciados, supervisión de anulaciones e información de inventario. | PC-SEC-02, PC-INV-02 | Product / Security |
+| HM-15 | Quien gestiona cuenta con permisos diferenciados, supervisión de anulaciones, inventario de flota y saneamiento de turnos. | PC-SEC-02, PC-INV-02, PC-OPS-01 | Product / Security |
 | HM-16 | Quien dirige consulta la venta neta y el ranking de productos desde el panel web. | PC-DASH-01, PC-DASH-03 | Product |
 
 ## Restrictions
@@ -446,9 +446,9 @@ Mostrar la transición de la operación a los datos: qué información consolida
 
 | ID | Claim | OD-02 source | Gate |
 | :---- | :---- | :---- | :---- |
-| HM-21 | El dashboard web ejecutivo muestra venta neta, horas pico y ranking de productos con participación calculada. | PC-DASH-01, PC-DASH-03 | Product |
-| HM-22 | El monitor de frescura indica si los datos mostrados están al día o si hay terminales con sync retrasado. | PC-DASH-02 | Product |
-| HM-23 | Los reportes de ventas, notas de crédito y cumplimiento DGI se exportan con filtros por fecha, turno y estado fiscal. | PC-DASH-04 | Product |
+| HM-21 | El dashboard web ejecutivo muestra venta neta, horas pico, ritmo semanal de demanda y ranking de productos con participación calculada. | PC-DASH-01, PC-DASH-03, PC-DASH-05 | Product |
+| HM-22 | El monitor de frescura indica si los datos mostrados están al día o si hay terminales con sync retrasado, con visibilidad de flota por dispositivo. | PC-DASH-02, PC-OPS-01 | Product |
+| HM-23 | Los reportes de ventas, notas de crédito y cumplimiento DGI se exportan con filtros por fecha, turno y estado fiscal, incluyendo anulaciones administrativas. | PC-DASH-04, PC-FISC-05 | Product |
 
 ## Restrictions
 
@@ -786,25 +786,25 @@ Registro de trazabilidad exigido por `G-04` de `nhilos_branding_document_governa
 | HM-02 | H01 Header | CTA primario único `Solicitar una demo`. | N/A | MARKETING | MARKETING |
 | HM-03 | H02 Hero | Sigue operando en caja cuando se cae el internet. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
 | HM-04 | H02 Hero | Cobro y facturación offline; sincronización al volver la conexión. | PC-OFF-01, PC-OFF-02, PC-OFF-03 | TÉCNICO | RESPALDADO |
-| HM-05 | H02 Hero | Numeración correlativa DT 09-2007 con prefijo/folio autorizados. | PC-FISC-01, PC-FISC-02 | TÉCNICO | RESPALDADO |
+| HM-05 | H02 Hero | Numeración correlativa DT 09-2007 con prefijo/folio autorizados y anulación vía Notas de Crédito. | PC-FISC-01, PC-FISC-02, PC-FISC-05 | TÉCNICO | RESPALDADO |
 | HM-06 | H02 Hero | Bimoneda NIO/USD y conciliación de vouchers BAC/Banpro. | PC-PAY-04, PC-PAY-01, PC-PAY-02 | TÉCNICO | RESPALDADO |
 | HM-07 | H02 Hero | Monitoreo de ventas desde cualquier dispositivo con internet. | PC-DASH-01, PC-DASH-02 | TÉCNICO | RESPALDADO |
 | HM-08 | H03 Operating idea | Base local SQLite como fuente de verdad en caja. | PC-OFF-02 | TÉCNICO | RESPALDADO |
 | HM-09 | H03 Operating idea | Aislamiento estricto por inquilino en la nube (RLS). | PC-SEC-01 | TÉCNICO | RESPALDADO |
 | HM-10 | H03 Operating idea | Sincronización bidireccional asíncrona por deltas. | PC-OFF-03 | TÉCNICO | RESPALDADO |
 | HM-11 | H04 Product in Motion | Flujo de venta con selección, modificadores y cobro. | PC-OFF-01, PC-FOH-02 | TÉCNICO | RESPALDADO |
-| HM-12 | H04 Product in Motion | Descuento de insumos por receta, Kardex inmutable, tolerancia a stock negativo. | PC-INV-01, PC-INV-02, PC-INV-04 | TÉCNICO | RESPALDADO |
-| HM-13 | H04 Product in Motion | Dashboard con KPIs, ranking y frescura. | PC-DASH-01, PC-DASH-02, PC-DASH-03 | TÉCNICO | RESPALDADO |
+| HM-12 | H04 Product in Motion | Descuento de insumos por receta, Kardex inmutable, tolerancia a stock negativo y continuidad ante discrepancias. | PC-INV-01, PC-INV-02, PC-INV-04, PC-INV-07 | TÉCNICO | RESPALDADO |
+| HM-13 | H04 Product in Motion | Dashboard con KPIs, ranking, ritmo semanal y frescura. | PC-DASH-01, PC-DASH-02, PC-DASH-03, PC-DASH-05 | TÉCNICO | RESPALDADO |
 | HM-14 | H05 Roles | Quien cobra registra ventas y cobros bimoneda. | PC-OFF-01, PC-PAY-04 | TÉCNICO | RESPALDADO |
-| HM-15 | H05 Roles | Quien gestiona: permisos diferenciados, anulaciones supervisadas, inventario. | PC-SEC-02, PC-INV-02 | TÉCNICO | RESPALDADO |
+| HM-15 | H05 Roles | Quien gestiona: permisos diferenciados, anulaciones supervisadas, inventario, flota y turnos. | PC-SEC-02, PC-INV-02, PC-OPS-01 | TÉCNICO | RESPALDADO |
 | HM-16 | H05 Roles | Quien dirige: venta neta y ranking desde el panel web. | PC-DASH-01, PC-DASH-03 | TÉCNICO | RESPALDADO |
 | HM-17 | H06 Continuidad | Operación de caja offline en terminal enrolado e hidratado. | PC-OFF-01, PC-OFF-02 | TÉCNICO | RESPALDADO |
 | HM-18 | H06 Continuidad | Acceso y cambio de cajero por PIN cifrado sin internet (tras login en línea previo). | PC-OFF-04 | TÉCNICO | RESPALDADO |
 | HM-19 | H06 Continuidad | Sincronización de pendientes al restaurar conectividad. | PC-OFF-03 | TÉCNICO | RESPALDADO |
 | HM-20 | H06 Continuidad | Visibilidad de estado de conexión y pendientes en pantalla. | PC-FOH-03 | TÉCNICO | RESPALDADO |
-| HM-21 | H07 Control | Dashboard: venta neta, horas pico, ranking con participación. | PC-DASH-01, PC-DASH-03 | TÉCNICO | RESPALDADO |
-| HM-22 | H07 Control | Monitor de frescura de sincronización. | PC-DASH-02 | TÉCNICO | RESPALDADO |
-| HM-23 | H07 Control | Exportación de reportes de ventas, notas de crédito y cumplimiento DGI. | PC-DASH-04 | TÉCNICO | RESPALDADO |
+| HM-21 | H07 Control | Dashboard: venta neta, horas pico, ritmo semanal y ranking con participación. | PC-DASH-01, PC-DASH-03, PC-DASH-05 | TÉCNICO | RESPALDADO |
+| HM-22 | H07 Control | Monitor de frescura de sincronización y estado de dispositivos de flota. | PC-DASH-02, PC-OPS-01 | TÉCNICO | RESPALDADO |
+| HM-23 | H07 Control | Exportación de reportes de ventas, notas de crédito DGI y anulaciones administrativas. | PC-DASH-04, PC-FISC-05 | TÉCNICO | RESPALDADO |
 | HM-24 | H08 Implementation | Plantillas por industria y Setup Center con verificación de activación. | PC-ONB-01, PC-ONB-03 | TÉCNICO | RESPALDADO |
 | HM-25 | H08 Implementation | Tiempos y alcance de implementación definidos por acuerdo comercial. | N/A | MARKETING | MARKETING |
 | HM-26 | H09 Evidence | Media publicada corresponde al producto vigente con provenance. | N/A | MARKETING | MARKETING |
