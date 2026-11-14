@@ -5944,26 +5944,98 @@
     let continuityCurrentScene = 1;
     let localTicketCounter = 483;
     let pendingOutboxTicketsCount = 1;
+    let continuityBlobUrl = null;
+    let continuityBlobPromise = null;
+    let continuitySeekPending = false;
+    let continuitySeekToken = 0;
 
     function jumpToContinuityScene(sceneNum) {
-      const vid = document.getElementById('continuityVideo');
       continuityCurrentScene = sceneNum;
       updateSceneTabs(sceneNum);
-
-      if (vid) {
-        if (sceneNum === 1) vid.currentTime = 0.0;
-        else if (sceneNum === 2) vid.currentTime = 4.2;
-        else if (sceneNum === 3) vid.currentTime = 7.0;
-        if (prefersReducedMotion()) {
-          vid.pause();
-        } else {
-          vid.play().catch(e => console.log('Autoplay handled', e));
-        }
-      }
       renderLedgerForScene(sceneNum);
+      seekContinuityScene(sceneNum);
+    }
+
+    function waitForContinuityMetadata(vid) {
+      if (vid.readyState >= 1) return Promise.resolve();
+      return new Promise(resolve => {
+        const timeout = setTimeout(finish, 3000);
+        function finish() {
+          clearTimeout(timeout);
+          vid.removeEventListener('loadedmetadata', finish);
+          resolve();
+        }
+        vid.addEventListener('loadedmetadata', finish, { once: true });
+      });
+    }
+
+    function getContinuitySeekableSource(vid) {
+      if (continuityBlobUrl) return Promise.resolve(continuityBlobUrl);
+      if (continuityBlobPromise) return continuityBlobPromise;
+
+      const source = vid.currentSrc || vid.src;
+      if (!source) return Promise.resolve(null);
+
+      continuityBlobPromise = fetch(new URL(source, window.location.href), { cache: 'force-cache' })
+        .then(response => {
+          if (!response.ok) throw new Error('Video fetch failed: ' + response.status);
+          return response.blob();
+        })
+        .then(blob => {
+          continuityBlobUrl = URL.createObjectURL(blob);
+          return continuityBlobUrl;
+        })
+        .catch(error => {
+          continuityBlobPromise = null;
+          console.warn('Continuity video seek fallback:', error);
+          return null;
+        });
+
+      return continuityBlobPromise;
+    }
+
+    async function seekContinuityScene(sceneNum) {
+      const vid = document.getElementById('continuityVideo');
+      if (!vid) return;
+
+      const target = sceneNum === 2 ? 4.2 : sceneNum === 3 ? 7.0 : 0.0;
+      const token = ++continuitySeekToken;
+      continuitySeekPending = true;
+
+      if (sceneNum === 1 && !continuityBlobUrl) {
+        vid.currentTime = target;
+        if (prefersReducedMotion()) vid.pause();
+        else vid.play().catch(() => {});
+        continuitySeekPending = false;
+        return;
+      }
+
+      vid.pause();
+      try {
+        const blobUrl = await getContinuitySeekableSource(vid);
+        if (token !== continuitySeekToken) return;
+
+        if (blobUrl && vid.src !== blobUrl) {
+          vid.src = blobUrl;
+          vid.load();
+          await waitForContinuityMetadata(vid);
+          if (token !== continuitySeekToken) return;
+        }
+
+        vid.currentTime = target;
+        if (prefersReducedMotion()) vid.pause();
+        else await vid.play().catch(() => {});
+      } catch (error) {
+        if (token === continuitySeekToken) {
+          try { vid.currentTime = target; } catch {}
+        }
+      } finally {
+        if (token === continuitySeekToken) continuitySeekPending = false;
+      }
     }
 
     function handleContinuityVideoProgress() {
+      if (continuitySeekPending) return;
       const vid = document.getElementById('continuityVideo');
       if (!vid) return;
       const t = vid.currentTime;
