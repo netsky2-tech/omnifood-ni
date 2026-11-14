@@ -389,6 +389,15 @@ class _PurchaseViewState extends State<PurchaseView> {
                             review.projectedCppNio.toStringAsFixed(4),
                           ),
                           if (review.requiresBatchTracking) ...[
+                            if (review.trackedByExistingBatches) ...[
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Este insumo ya se gestiona por lotes. Debe registrar el lote para que el saldo de lotes coincida con el inventario total y evitar rechazos en las ventas.',
+                                style: TextStyle(
+                                  color: Color(0xFF9A3412),
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _lotCodeController,
