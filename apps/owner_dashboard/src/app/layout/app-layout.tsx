@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Outlet, Navigate, useLocation } from "react-router-dom";
+import { Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { useTenantContext } from "@/lib/tenant";
@@ -15,7 +15,17 @@ export function AppLayout() {
   const clearTenant = useTenantContext((s) => s.clear);
   const queryClient = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
   const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!hydrated || !isAuthenticated) return;
+    const target = sessionStorage.getItem("oc_nav_target");
+    if (target) {
+      sessionStorage.removeItem("oc_nav_target");
+      navigate(target, { replace: true });
+    }
+  }, [hydrated, isAuthenticated, navigate]);
 
   // Reset any browser window scroll (e.g. from mobile keyboard on login) and main container scroll
   useEffect(() => {

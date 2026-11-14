@@ -97,7 +97,9 @@ export function SalesTrendChart({
       <circle
         {...rest}
         r={4}
-        strokeWidth={1}
+        stroke="#0284c7"
+        strokeWidth={2}
+        fill="#ffffff"
         role="button"
         tabIndex={0}
         data-testid={`trend-dot-${date}`}
@@ -184,8 +186,8 @@ export function SalesTrendChart({
       linkAriaLabel="Ver resumen detallado de ventas"
     >
       <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1" data-testid="trend-legend">
-        <span className="flex items-center gap-1.5 text-xs text-card-foreground">
-          <span aria-hidden="true" className="inline-block h-0.5 w-4 bg-[#013a57]" />
+        <span className="flex items-center gap-1.5 text-xs text-card-foreground font-medium">
+          <span aria-hidden="true" className="inline-block h-1 w-5 rounded-full bg-[#0284c7]" />
           Ventas netas — periodo actual
         </span>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -217,21 +219,24 @@ export function SalesTrendChart({
               type="monotone"
               dataKey="current"
               name="Ventas netas — periodo actual"
-              stroke="var(--color-primary, #013a57)"
-              strokeWidth={2}
+              stroke="#0284c7"
+              strokeWidth={3}
               dot={clickableDot}
               activeDot={false}
+              isAnimationActive={false}
+              connectNulls
             />
             <Line
               type="monotone"
               dataKey="previous"
               name="Periodo anterior (comparación)"
-              stroke="var(--color-muted-foreground, #64748b)"
+              stroke="#64748b"
               strokeWidth={1.5}
               strokeDasharray="6 4"
               dot={false}
               activeDot={false}
               connectNulls
+              isAnimationActive={false}
             />
           </LineChart>
         </ResponsiveContainer>

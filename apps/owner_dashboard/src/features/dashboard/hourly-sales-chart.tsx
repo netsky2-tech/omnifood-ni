@@ -79,7 +79,7 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
         fill={
           isPeak
             ? "var(--color-primary, #013a57)"
-            : "color-mix(in srgb, var(--color-primary, #013a57) 75%, transparent)"
+            : "color-mix(in srgb, var(--color-primary, #013a57) 85%, #000)"
         }
         className="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         onKeyDown={(e) => {
@@ -114,7 +114,7 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
           : `Día: ${query.data.date || start}`;
       body = (
         <>
-          <p data-testid="hourly-caption" className="mb-1.5 text-xs text-muted-foreground">
+          <p data-testid="hourly-caption" className="mb-1.5 text-xs font-medium text-foreground/85">
             {rangeCaption} · Horario con actividad: {String(firstActiveHour).padStart(2, "0")}:00 –{" "}
             {String(lastActiveHour).padStart(2, "0")}:00
           </p>
@@ -123,18 +123,18 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
               {peaks.lunchPeakHour !== null && (
                 <span
                   data-testid="peak-lunch-badge"
-                  className="inline-flex items-center gap-1 rounded bg-amber-50 px-2 py-0.5 font-medium text-amber-800 border border-amber-200/60 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/60"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-950 border border-amber-300 dark:bg-amber-950/80 dark:text-amber-100 dark:border-amber-600 shadow-2xs"
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  <span className="h-2 w-2 rounded-full bg-amber-600 shrink-0" />
                   Almuerzo · Pico {String(peaks.lunchPeakHour).padStart(2, "0")}:00 ({formatNio(peaks.lunchSales)})
                 </span>
               )}
               {peaks.dinnerPeakHour !== null && (
                 <span
                   data-testid="peak-dinner-badge"
-                  className="inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 font-medium text-indigo-800 border border-indigo-200/60 dark:bg-indigo-950/40 dark:text-indigo-200 dark:border-indigo-800/60"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-950 border border-indigo-300 dark:bg-indigo-950/80 dark:text-indigo-100 dark:border-indigo-600 shadow-2xs"
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                  <span className="h-2 w-2 rounded-full bg-indigo-600 shrink-0" />
                   Cena · Pico {String(peaks.dinnerPeakHour).padStart(2, "0")}:00 ({formatNio(peaks.dinnerSales)})
                 </span>
               )}
@@ -177,6 +177,7 @@ export function HourlySalesChart({ start, end }: { start: string; end: string })
                   fill="var(--color-primary, #013a57)"
                   radius={[2, 2, 0, 0]}
                   shape={clickableBarShape}
+                  isAnimationActive={false}
                   onClick={(data) => {
                     const hour = Number((data as { payload?: { hour?: unknown } }).payload?.hour);
                     if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {

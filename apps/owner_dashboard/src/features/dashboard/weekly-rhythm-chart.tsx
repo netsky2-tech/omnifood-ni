@@ -72,8 +72,8 @@ export function WeeklyRhythmChart({ start, end }: { start: string; end: string }
         aria-label={`Ventas de ${dayName}`}
         fill={
           isPeak
-            ? "var(--color-primary, #013a57)"
-            : "color-mix(in srgb, var(--color-primary, #013a57) 70%, transparent)"
+            ? "#003757"
+            : "#0284c7"
         }
         className="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         onClick={() => navigate(drilldownUrl)}
@@ -166,6 +166,7 @@ export function WeeklyRhythmChart({ start, end }: { start: string; end: string }
                   fill="var(--color-primary, #013a57)"
                   radius={[2, 2, 0, 0]}
                   shape={clickableBarShape}
+                  isAnimationActive={false}
                 />
               </BarChart>
             </ResponsiveContainer>
