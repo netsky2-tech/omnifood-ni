@@ -152,6 +152,10 @@ export class SupervisionPolicyService {
               policy.selfAuthorizationAllowedManualDiscount,
             supervisorRequiredForModifierQuantity:
               policy.supervisorRequiredForModifierQuantity,
+            blindCountEnabled: policy.blindCountEnabled,
+            supervisorRequiredForPartialXReport:
+              policy.supervisorRequiredForPartialXReport,
+            supervisorRequiredForVoid: policy.supervisorRequiredForVoid,
           }),
         )
       : null;

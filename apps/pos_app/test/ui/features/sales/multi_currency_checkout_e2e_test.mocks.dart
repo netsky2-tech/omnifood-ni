@@ -165,12 +165,18 @@ class MockAuditRepository extends _i1.Mock implements _i2.AuditRepository {
   _i7.Future<_i8.AuditLog?> prepareLog(
     String? action, {
     String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
           #prepareLog,
           [action],
-          {#metadata: metadata},
+          {
+            #metadata: metadata,
+            #metodoAutorizacion: metodoAutorizacion,
+            #usuarioAutorizadorId: usuarioAutorizadorId,
+          },
         ),
         returnValue: _i7.Future<_i8.AuditLog?>.value(),
       ) as _i7.Future<_i8.AuditLog?>);
@@ -594,6 +600,21 @@ class MockInventoryRepository extends _i1.Mock
       (super.noSuchMethod(
         Invocation.method(
           #markMovementAsFailed,
+          [id],
+          {#error: error},
+        ),
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
+
+  @override
+  _i7.Future<void> markMovementAsRejected(
+    String? id, {
+    String? error,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsRejected,
           [id],
           {#error: error},
         ),

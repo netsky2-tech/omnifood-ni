@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:provider/provider.dart';
 import 'package:pos_app/data/daos/sales/cash_movement_dao.dart';
 import 'package:pos_app/data/daos/sales/cashier_session_dao.dart';
@@ -10,6 +11,36 @@ import 'package:pos_app/domain/models/sales/hold_ticket.dart';
 import 'package:pos_app/ui/features/cash/cash_shift_view.dart';
 import 'package:pos_app/ui/features/cash/cash_shift_view_model.dart';
 import 'package:pos_app/ui/features/cash/widgets/x_report_dialog.dart';
+import 'package:pos_app/domain/models/config/supervision_policy.dart';
+import 'package:pos_app/domain/models/config/tenant_operation_mode.dart';
+import 'package:pos_app/domain/services/config/tenant_config_service.dart';
+
+/// CashShiftView now resolves the tenant's supervision policy from the
+/// provider tree (supervisor_authorization.dart). The food-park preset keeps a
+/// partial X report open to any role, so this test stays about the
+/// open-accounts gate instead of drifting into an authorization modal.
+class _StubTenantConfigService extends Mock implements TenantConfigService {}
+
+/// CashShiftView resolves the supervision policy from the provider tree, so
+/// every harness that pumps it must supply TenantConfigService. The food-park
+/// preset keeps a partial X report open to any role, so the gate tests stay
+/// about the open-accounts behaviour instead of an authorization modal.
+Widget wrapCashShiftView(CashShiftViewModel vm) {
+  final configService = _StubTenantConfigService();
+  when(
+    () => configService.getSupervisionPolicy(),
+  ).thenAnswer(
+    (_) async =>
+        SupervisionPolicy.forOperationMode(TenantOperationMode.foodparkQsr),
+  );
+  return MultiProvider(
+    providers: [
+      Provider<TenantConfigService>.value(value: configService),
+      ChangeNotifierProvider<CashShiftViewModel>.value(value: vm),
+    ],
+    child: const MaterialApp(home: CashShiftView()),
+  );
+}
 
 /// T8/T9 UI: the Control de Caja entry must surface the open-accounts hard
 /// block (listing each account with line count and total, no continuation),
@@ -153,12 +184,7 @@ void main() {
         stubbedOpenAccounts: [_account()],
       );
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider<CashShiftViewModel>.value(
-          value: vm,
-          child: const MaterialApp(home: CashShiftView()),
-        ),
-      );
+      await tester.pumpWidget(wrapCashShiftView(vm));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Cerrar Turno (Corte Z)'));
@@ -189,12 +215,7 @@ void main() {
         (tester) async {
       final vm = _UnverifiedStubCashShiftViewModel();
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider<CashShiftViewModel>.value(
-          value: vm,
-          child: const MaterialApp(home: CashShiftView()),
-        ),
-      );
+      await tester.pumpWidget(wrapCashShiftView(vm));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Cerrar Turno (Corte Z)'));
@@ -292,12 +313,7 @@ void main() {
         (tester) async {
       final vm = _UnverifiedStubCashShiftViewModel();
 
-      await tester.pumpWidget(
-        ChangeNotifierProvider<CashShiftViewModel>.value(
-          value: vm,
-          child: const MaterialApp(home: CashShiftView()),
-        ),
-      );
+      await tester.pumpWidget(wrapCashShiftView(vm));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Lectura Parcial (Corte X)'));

@@ -117,31 +117,42 @@ class XReportDialog extends StatelessWidget {
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: NhilosColors.brandPrimary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Text(
-                            'CORTE X (TURNO EN CURSO)',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: NhilosColors.brandPrimary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'CORTE X (TURNO EN CURSO)',
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                                letterSpacing: 0.3,
+                              ),
                             ),
                           ),
                         ),
+                        const SizedBox(width: 8),
                         Text(
                           nowStr,
                           style: const TextStyle(
-                              fontSize: 11, color: NhilosColors.textSecondary),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: NhilosColors.textSecondary,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    _buildRow('Terminal POS', shift.terminalId),
+                    const SizedBox(height: 10),
+                    _buildRow('Terminal POS', shift.terminalId, isMono: true),
                     // D-14: a person's name where the id used to be shown.
                     _buildRow('Cajero', cashierName ?? kUnresolvedUserNameLabel),
                     _buildRow('Fecha/Hora Apertura', openedStr),
@@ -309,16 +320,36 @@ class XReportDialog extends StatelessWidget {
     );
   }
 
-  Widget _buildRow(String label, String value) {
+  Widget _buildRow(String label, String value, {bool isMono = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 12, color: NhilosColors.textSecondary)),
-          Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: NhilosColors.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: NhilosColors.textPrimary,
+                fontFamily: isMono ? 'monospace' : null,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
         ],
       ),
     );

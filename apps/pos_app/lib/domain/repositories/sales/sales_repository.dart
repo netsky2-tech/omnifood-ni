@@ -83,6 +83,8 @@ abstract class SalesRepository {
     String invoiceId,
     String reasonCode, {
     String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
   });
 
   /// #937 T5: Applies an administrative void received from Backoffice via inbound sync.

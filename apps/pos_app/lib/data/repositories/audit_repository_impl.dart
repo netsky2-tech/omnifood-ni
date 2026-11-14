@@ -78,7 +78,12 @@ class AuditRepositoryImpl implements AuditRepository {
   }
 
   @override
-  Future<AuditLog?> prepareLog(String action, {String? metadata}) async {
+  Future<AuditLog?> prepareLog(
+    String action, {
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  }) async {
     final user = await _authRepository.getCurrentUser();
     final tenantId = user?.tenantId;
     if (user == null || tenantId == null || tenantId.isEmpty) return null;
@@ -95,6 +100,8 @@ class AuditRepositoryImpl implements AuditRepository {
         sequenceNo: (head?.sequenceNo ?? 0) + 1,
         prevHash: head?.entryHash ?? 'GENESIS',
         metadata: metadata,
+        metodoAutorizacion: metodoAutorizacion,
+        usuarioAutorizadorId: usuarioAutorizadorId,
       ),
     );
   }

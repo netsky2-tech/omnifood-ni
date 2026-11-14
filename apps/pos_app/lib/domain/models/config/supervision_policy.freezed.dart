@@ -42,6 +42,23 @@ mixin _$SupervisionPolicy {
   bool get supervisorRequiredForModifierQuantity =>
       throw _privateConstructorUsedError;
 
+  /// Whether blind count (conteo ciego) is active for cash drawer operations.
+  /// When true, operational roles (cashiers) cannot see the expected drawer cash
+  /// on screen or in reports before closing.
+  bool get blindCountEnabled => throw _privateConstructorUsedError;
+
+  /// Whether viewing or printing a partial X report (Corte X) requires supervisor
+  /// authorization. Required in controlled environments to prevent cashiers from
+  /// uncovering expected drawer balances before closing.
+  bool get supervisorRequiredForPartialXReport =>
+      throw _privateConstructorUsedError;
+
+  /// Whether voiding an invoice requires supervisor authorization.
+  /// In fast counter environments (Foodpark QSR), cashiers can void directly
+  /// without supervisor PIN to avoid holding up the queue.
+  /// In controlled environments (Restaurant/Hybrid), a supervisor PIN is required.
+  bool get supervisorRequiredForVoid => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $SupervisionPolicyCopyWith<SupervisionPolicy> get copyWith =>
@@ -59,7 +76,10 @@ abstract class $SupervisionPolicyCopyWith<$Res> {
       bool selfAuthorizationAllowedCloseBox,
       bool selfAuthorizationAllowedCashDrawer,
       bool selfAuthorizationAllowedManualDiscount,
-      bool supervisorRequiredForModifierQuantity});
+      bool supervisorRequiredForModifierQuantity,
+      bool blindCountEnabled,
+      bool supervisorRequiredForPartialXReport,
+      bool supervisorRequiredForVoid});
 }
 
 /// @nodoc
@@ -80,6 +100,9 @@ class _$SupervisionPolicyCopyWithImpl<$Res, $Val extends SupervisionPolicy>
     Object? selfAuthorizationAllowedCashDrawer = null,
     Object? selfAuthorizationAllowedManualDiscount = null,
     Object? supervisorRequiredForModifierQuantity = null,
+    Object? blindCountEnabled = null,
+    Object? supervisorRequiredForPartialXReport = null,
+    Object? supervisorRequiredForVoid = null,
   }) {
     return _then(_value.copyWith(
       authorizingRoles: null == authorizingRoles
@@ -105,6 +128,19 @@ class _$SupervisionPolicyCopyWithImpl<$Res, $Val extends SupervisionPolicy>
           ? _value.supervisorRequiredForModifierQuantity
           : supervisorRequiredForModifierQuantity // ignore: cast_nullable_to_non_nullable
               as bool,
+      blindCountEnabled: null == blindCountEnabled
+          ? _value.blindCountEnabled
+          : blindCountEnabled // ignore: cast_nullable_to_non_nullable
+              as bool,
+      supervisorRequiredForPartialXReport: null ==
+              supervisorRequiredForPartialXReport
+          ? _value.supervisorRequiredForPartialXReport
+          : supervisorRequiredForPartialXReport // ignore: cast_nullable_to_non_nullable
+              as bool,
+      supervisorRequiredForVoid: null == supervisorRequiredForVoid
+          ? _value.supervisorRequiredForVoid
+          : supervisorRequiredForVoid // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 }
@@ -122,7 +158,10 @@ abstract class _$$SupervisionPolicyImplCopyWith<$Res>
       bool selfAuthorizationAllowedCloseBox,
       bool selfAuthorizationAllowedCashDrawer,
       bool selfAuthorizationAllowedManualDiscount,
-      bool supervisorRequiredForModifierQuantity});
+      bool supervisorRequiredForModifierQuantity,
+      bool blindCountEnabled,
+      bool supervisorRequiredForPartialXReport,
+      bool supervisorRequiredForVoid});
 }
 
 /// @nodoc
@@ -141,6 +180,9 @@ class __$$SupervisionPolicyImplCopyWithImpl<$Res>
     Object? selfAuthorizationAllowedCashDrawer = null,
     Object? selfAuthorizationAllowedManualDiscount = null,
     Object? supervisorRequiredForModifierQuantity = null,
+    Object? blindCountEnabled = null,
+    Object? supervisorRequiredForPartialXReport = null,
+    Object? supervisorRequiredForVoid = null,
   }) {
     return _then(_$SupervisionPolicyImpl(
       authorizingRoles: null == authorizingRoles
@@ -166,6 +208,19 @@ class __$$SupervisionPolicyImplCopyWithImpl<$Res>
           ? _value.supervisorRequiredForModifierQuantity
           : supervisorRequiredForModifierQuantity // ignore: cast_nullable_to_non_nullable
               as bool,
+      blindCountEnabled: null == blindCountEnabled
+          ? _value.blindCountEnabled
+          : blindCountEnabled // ignore: cast_nullable_to_non_nullable
+              as bool,
+      supervisorRequiredForPartialXReport: null ==
+              supervisorRequiredForPartialXReport
+          ? _value.supervisorRequiredForPartialXReport
+          : supervisorRequiredForPartialXReport // ignore: cast_nullable_to_non_nullable
+              as bool,
+      supervisorRequiredForVoid: null == supervisorRequiredForVoid
+          ? _value.supervisorRequiredForVoid
+          : supervisorRequiredForVoid // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -178,7 +233,10 @@ class _$SupervisionPolicyImpl implements _SupervisionPolicy {
       this.selfAuthorizationAllowedCloseBox = true,
       this.selfAuthorizationAllowedCashDrawer = false,
       this.selfAuthorizationAllowedManualDiscount = false,
-      this.supervisorRequiredForModifierQuantity = false})
+      this.supervisorRequiredForModifierQuantity = false,
+      this.blindCountEnabled = false,
+      this.supervisorRequiredForPartialXReport = false,
+      this.supervisorRequiredForVoid = false})
       : _authorizingRoles = authorizingRoles;
 
   factory _$SupervisionPolicyImpl.fromJson(Map<String, dynamic> json) =>
@@ -219,9 +277,31 @@ class _$SupervisionPolicyImpl implements _SupervisionPolicy {
   @JsonKey()
   final bool supervisorRequiredForModifierQuantity;
 
+  /// Whether blind count (conteo ciego) is active for cash drawer operations.
+  /// When true, operational roles (cashiers) cannot see the expected drawer cash
+  /// on screen or in reports before closing.
+  @override
+  @JsonKey()
+  final bool blindCountEnabled;
+
+  /// Whether viewing or printing a partial X report (Corte X) requires supervisor
+  /// authorization. Required in controlled environments to prevent cashiers from
+  /// uncovering expected drawer balances before closing.
+  @override
+  @JsonKey()
+  final bool supervisorRequiredForPartialXReport;
+
+  /// Whether voiding an invoice requires supervisor authorization.
+  /// In fast counter environments (Foodpark QSR), cashiers can void directly
+  /// without supervisor PIN to avoid holding up the queue.
+  /// In controlled environments (Restaurant/Hybrid), a supervisor PIN is required.
+  @override
+  @JsonKey()
+  final bool supervisorRequiredForVoid;
+
   @override
   String toString() {
-    return 'SupervisionPolicy(authorizingRoles: $authorizingRoles, selfAuthorizationAllowedCloseBox: $selfAuthorizationAllowedCloseBox, selfAuthorizationAllowedCashDrawer: $selfAuthorizationAllowedCashDrawer, selfAuthorizationAllowedManualDiscount: $selfAuthorizationAllowedManualDiscount, supervisorRequiredForModifierQuantity: $supervisorRequiredForModifierQuantity)';
+    return 'SupervisionPolicy(authorizingRoles: $authorizingRoles, selfAuthorizationAllowedCloseBox: $selfAuthorizationAllowedCloseBox, selfAuthorizationAllowedCashDrawer: $selfAuthorizationAllowedCashDrawer, selfAuthorizationAllowedManualDiscount: $selfAuthorizationAllowedManualDiscount, supervisorRequiredForModifierQuantity: $supervisorRequiredForModifierQuantity, blindCountEnabled: $blindCountEnabled, supervisorRequiredForPartialXReport: $supervisorRequiredForPartialXReport, supervisorRequiredForVoid: $supervisorRequiredForVoid)';
   }
 
   @override
@@ -231,8 +311,7 @@ class _$SupervisionPolicyImpl implements _SupervisionPolicy {
             other is _$SupervisionPolicyImpl &&
             const DeepCollectionEquality()
                 .equals(other._authorizingRoles, _authorizingRoles) &&
-            (identical(other.selfAuthorizationAllowedCloseBox,
-                    selfAuthorizationAllowedCloseBox) ||
+            (identical(other.selfAuthorizationAllowedCloseBox, selfAuthorizationAllowedCloseBox) ||
                 other.selfAuthorizationAllowedCloseBox ==
                     selfAuthorizationAllowedCloseBox) &&
             (identical(other.selfAuthorizationAllowedCashDrawer,
@@ -246,7 +325,16 @@ class _$SupervisionPolicyImpl implements _SupervisionPolicy {
             (identical(other.supervisorRequiredForModifierQuantity,
                     supervisorRequiredForModifierQuantity) ||
                 other.supervisorRequiredForModifierQuantity ==
-                    supervisorRequiredForModifierQuantity));
+                    supervisorRequiredForModifierQuantity) &&
+            (identical(other.blindCountEnabled, blindCountEnabled) ||
+                other.blindCountEnabled == blindCountEnabled) &&
+            (identical(other.supervisorRequiredForPartialXReport,
+                    supervisorRequiredForPartialXReport) ||
+                other.supervisorRequiredForPartialXReport ==
+                    supervisorRequiredForPartialXReport) &&
+            (identical(
+                    other.supervisorRequiredForVoid, supervisorRequiredForVoid) ||
+                other.supervisorRequiredForVoid == supervisorRequiredForVoid));
   }
 
   @JsonKey(ignore: true)
@@ -257,7 +345,10 @@ class _$SupervisionPolicyImpl implements _SupervisionPolicy {
       selfAuthorizationAllowedCloseBox,
       selfAuthorizationAllowedCashDrawer,
       selfAuthorizationAllowedManualDiscount,
-      supervisorRequiredForModifierQuantity);
+      supervisorRequiredForModifierQuantity,
+      blindCountEnabled,
+      supervisorRequiredForPartialXReport,
+      supervisorRequiredForVoid);
 
   @JsonKey(ignore: true)
   @override
@@ -276,12 +367,14 @@ class _$SupervisionPolicyImpl implements _SupervisionPolicy {
 
 abstract class _SupervisionPolicy implements SupervisionPolicy {
   const factory _SupervisionPolicy(
-          {final Set<String> authorizingRoles,
-          final bool selfAuthorizationAllowedCloseBox,
-          final bool selfAuthorizationAllowedCashDrawer,
-          final bool selfAuthorizationAllowedManualDiscount,
-          final bool supervisorRequiredForModifierQuantity}) =
-      _$SupervisionPolicyImpl;
+      {final Set<String> authorizingRoles,
+      final bool selfAuthorizationAllowedCloseBox,
+      final bool selfAuthorizationAllowedCashDrawer,
+      final bool selfAuthorizationAllowedManualDiscount,
+      final bool supervisorRequiredForModifierQuantity,
+      final bool blindCountEnabled,
+      final bool supervisorRequiredForPartialXReport,
+      final bool supervisorRequiredForVoid}) = _$SupervisionPolicyImpl;
 
   factory _SupervisionPolicy.fromJson(Map<String, dynamic> json) =
       _$SupervisionPolicyImpl.fromJson;
@@ -309,6 +402,25 @@ abstract class _SupervisionPolicy implements SupervisionPolicy {
   /// The quantity an extra takes out of the stock: a DATA question, not a
   /// control one. The evidence (who, how much, why) is the control.
   bool get supervisorRequiredForModifierQuantity;
+  @override
+
+  /// Whether blind count (conteo ciego) is active for cash drawer operations.
+  /// When true, operational roles (cashiers) cannot see the expected drawer cash
+  /// on screen or in reports before closing.
+  bool get blindCountEnabled;
+  @override
+
+  /// Whether viewing or printing a partial X report (Corte X) requires supervisor
+  /// authorization. Required in controlled environments to prevent cashiers from
+  /// uncovering expected drawer balances before closing.
+  bool get supervisorRequiredForPartialXReport;
+  @override
+
+  /// Whether voiding an invoice requires supervisor authorization.
+  /// In fast counter environments (Foodpark QSR), cashiers can void directly
+  /// without supervisor PIN to avoid holding up the queue.
+  /// In controlled environments (Restaurant/Hybrid), a supervisor PIN is required.
+  bool get supervisorRequiredForVoid;
   @override
   @JsonKey(ignore: true)
   _$$SupervisionPolicyImplCopyWith<_$SupervisionPolicyImpl> get copyWith =>

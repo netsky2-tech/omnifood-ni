@@ -87,6 +87,10 @@ class TenantConfigService {
               policy.selfAuthorizationAllowedManualDiscount,
           'supervisorRequiredForModifierQuantity':
               policy.supervisorRequiredForModifierQuantity,
+          'blindCountEnabled': policy.blindCountEnabled,
+          'supervisorRequiredForPartialXReport':
+              policy.supervisorRequiredForPartialXReport,
+          'supervisorRequiredForVoid': policy.supervisorRequiredForVoid,
         }),
         description: 'Supervision policy (who authorizes, and what accepts a self-authorization)',
       ),

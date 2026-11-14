@@ -49,7 +49,12 @@ abstract class AuditRepository {
   /// with the audited business write.
   ///
   /// Returns `null` when there is no current user, mirroring [log].
-  Future<AuditLog?> prepareLog(String action, {String? metadata});
+  Future<AuditLog?> prepareLog(
+    String action, {
+    String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
+  });
   Future<void> logForensic(
     String action, {
     String? metadata,

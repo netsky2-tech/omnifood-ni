@@ -1267,6 +1267,8 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
     String? invoiceId,
     String? reasonCode, {
     String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1275,7 +1277,11 @@ class MockSaleViewModel extends _i1.Mock implements _i10.SaleViewModel {
             invoiceId,
             reasonCode,
           ],
-          {#reasonDetail: reasonDetail},
+          {
+            #reasonDetail: reasonDetail,
+            #supervisorId: supervisorId,
+            #authMethod: authMethod,
+          },
         ),
         returnValue: _i17.Future<bool>.value(false),
         returnValueForMissingStub: _i17.Future<bool>.value(false),

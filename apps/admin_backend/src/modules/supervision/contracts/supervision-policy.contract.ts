@@ -115,6 +115,9 @@ export interface SupervisionPolicy {
   readonly selfAuthorizationAllowedCashDrawer: boolean;
   readonly selfAuthorizationAllowedManualDiscount: boolean;
   readonly supervisorRequiredForModifierQuantity: boolean;
+  readonly blindCountEnabled: boolean;
+  readonly supervisorRequiredForPartialXReport: boolean;
+  readonly supervisorRequiredForVoid: boolean;
 }
 
 const USER_ROLE_VALUES: readonly string[] = Object.values(UserRole);
@@ -151,6 +154,9 @@ export function defaultSupervisionPolicy(
     selfAuthorizationAllowedCashDrawer: isFoodParkQsr,
     selfAuthorizationAllowedManualDiscount: isFoodParkQsr,
     supervisorRequiredForModifierQuantity: false,
+    blindCountEnabled: true,
+    supervisorRequiredForPartialXReport: !isFoodParkQsr,
+    supervisorRequiredForVoid: !isFoodParkQsr,
   };
 }
 
@@ -184,12 +190,25 @@ export function parseSupervisionPolicy(raw: unknown): SupervisionPolicy | null {
     return null;
   }
 
+  const blindCount = isBoolean(raw['blindCountEnabled'])
+    ? raw['blindCountEnabled']
+    : false;
+  const partialX = isBoolean(raw['supervisorRequiredForPartialXReport'])
+    ? raw['supervisorRequiredForPartialXReport']
+    : false;
+  const invoiceVoid = isBoolean(raw['supervisorRequiredForVoid'])
+    ? raw['supervisorRequiredForVoid']
+    : false;
+
   return {
     authorizingRoles,
     selfAuthorizationAllowedCloseBox: closeBox,
     selfAuthorizationAllowedCashDrawer: cashDrawer,
     selfAuthorizationAllowedManualDiscount: manualDiscount,
     supervisorRequiredForModifierQuantity: modifierQuantity,
+    blindCountEnabled: blindCount,
+    supervisorRequiredForPartialXReport: partialX,
+    supervisorRequiredForVoid: invoiceVoid,
   };
 }
 
@@ -207,6 +226,9 @@ export function supervisionPolicyToJson(policy: {
   readonly selfAuthorizationAllowedCashDrawer: boolean;
   readonly selfAuthorizationAllowedManualDiscount: boolean;
   readonly supervisorRequiredForModifierQuantity: boolean;
+  readonly blindCountEnabled?: boolean;
+  readonly supervisorRequiredForPartialXReport?: boolean;
+  readonly supervisorRequiredForVoid?: boolean;
 }): Record<string, unknown> {
   return {
     authorizingRoles: Array.from(new Set(policy.authorizingRoles)).sort(),
@@ -217,6 +239,10 @@ export function supervisionPolicyToJson(policy: {
       policy.selfAuthorizationAllowedManualDiscount,
     supervisorRequiredForModifierQuantity:
       policy.supervisorRequiredForModifierQuantity,
+    blindCountEnabled: policy.blindCountEnabled ?? false,
+    supervisorRequiredForPartialXReport:
+      policy.supervisorRequiredForPartialXReport ?? false,
+    supervisorRequiredForVoid: policy.supervisorRequiredForVoid ?? false,
   };
 }
 

@@ -492,5 +492,30 @@ void main() {
       final customerRow = await database.customerDao.getCustomerById('cust-1');
       expect(customerRow!.pointsBalance, 500);
     });
+
+    test('voidInvoice propaga atribución forense de supervisor (metodoAutorizacion y usuarioAutorizadorId)', () async {
+      await seedInvoice();
+      when(auditRepository.prepareLog(
+        any,
+        metadata: anyNamed('metadata'),
+        metodoAutorizacion: anyNamed('metodoAutorizacion'),
+        usuarioAutorizadorId: anyNamed('usuarioAutorizadorId'),
+      )).thenAnswer((_) async => null);
+
+      await repository.voidInvoice(
+        'inv-void-1',
+        'ERR_SELECTION',
+        reasonDetail: 'Supervisor autorizó corrección',
+        supervisorId: 'sup-manager-99',
+        authMethod: 'PIN',
+      );
+
+      verify(auditRepository.prepareLog(
+        'SALE_VOIDED',
+        metadata: anyNamed('metadata'),
+        metodoAutorizacion: 'PIN',
+        usuarioAutorizadorId: 'sup-manager-99',
+      )).called(1);
+    });
   });
 }

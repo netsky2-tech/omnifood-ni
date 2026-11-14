@@ -15,6 +15,9 @@ const completePolicy = (
   selfAuthorizationAllowedCashDrawer: false,
   selfAuthorizationAllowedManualDiscount: false,
   supervisorRequiredForModifierQuantity: false,
+  blindCountEnabled: true,
+  supervisorRequiredForPartialXReport: false,
+  supervisorRequiredForVoid: false,
   ...overrides,
 });
 
@@ -27,6 +30,9 @@ describe('SupervisionPolicy contract', () => {
       expect(policy.selfAuthorizationAllowedCashDrawer).toBe(true);
       expect(policy.selfAuthorizationAllowedManualDiscount).toBe(true);
       expect(policy.supervisorRequiredForModifierQuantity).toBe(false);
+      expect(policy.blindCountEnabled).toBe(true);
+      expect(policy.supervisorRequiredForPartialXReport).toBe(false);
+      expect(policy.supervisorRequiredForVoid).toBe(false);
       expect(policy.authorizingRoles).toEqual([
         UserRole.MANAGER,
         UserRole.OWNER,
@@ -39,6 +45,9 @@ describe('SupervisionPolicy contract', () => {
       expect(policy.selfAuthorizationAllowedCloseBox).toBe(true);
       expect(policy.selfAuthorizationAllowedCashDrawer).toBe(false);
       expect(policy.selfAuthorizationAllowedManualDiscount).toBe(false);
+      expect(policy.blindCountEnabled).toBe(true);
+      expect(policy.supervisorRequiredForPartialXReport).toBe(true);
+      expect(policy.supervisorRequiredForVoid).toBe(true);
     });
 
     it('never dead-ends the shift close, in any mode', () => {
@@ -57,6 +66,9 @@ describe('SupervisionPolicy contract', () => {
         selfAuthorizationAllowedCashDrawer: true,
         selfAuthorizationAllowedManualDiscount: false,
         supervisorRequiredForModifierQuantity: false,
+        blindCountEnabled: true,
+        supervisorRequiredForPartialXReport: true,
+        supervisorRequiredForVoid: true,
       });
 
       expect(parsed).toEqual({
@@ -65,6 +77,9 @@ describe('SupervisionPolicy contract', () => {
         selfAuthorizationAllowedCashDrawer: true,
         selfAuthorizationAllowedManualDiscount: false,
         supervisorRequiredForModifierQuantity: false,
+        blindCountEnabled: true,
+        supervisorRequiredForPartialXReport: true,
+        supervisorRequiredForVoid: true,
       });
     });
 
@@ -181,6 +196,9 @@ describe('SupervisionPolicy contract', () => {
         selfAuthorizationAllowedCashDrawer: false,
         selfAuthorizationAllowedManualDiscount: false,
         supervisorRequiredForModifierQuantity: false,
+        blindCountEnabled: true,
+        supervisorRequiredForPartialXReport: false,
+        supervisorRequiredForVoid: false,
       });
     });
   });

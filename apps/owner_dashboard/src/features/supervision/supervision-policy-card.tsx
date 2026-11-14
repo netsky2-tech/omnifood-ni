@@ -69,6 +69,9 @@ export function SupervisionPolicyCard() {
       selfAuthorizationAllowedCashDrawer: false,
       selfAuthorizationAllowedManualDiscount: false,
       supervisorRequiredForModifierQuantity: false,
+      blindCountEnabled: true,
+      supervisorRequiredForPartialXReport: false,
+      supervisorRequiredForVoid: false,
     },
   });
 
@@ -91,6 +94,10 @@ export function SupervisionPolicyCard() {
       selfAuthorizationAllowedManualDiscount: effective.selfAuthorizationAllowedManualDiscount,
       supervisorRequiredForModifierQuantity:
         effective.supervisorRequiredForModifierQuantity,
+      blindCountEnabled: effective.blindCountEnabled,
+      supervisorRequiredForPartialXReport:
+        effective.supervisorRequiredForPartialXReport,
+      supervisorRequiredForVoid: effective.supervisorRequiredForVoid,
     });
   }, [data, reset]);
 
@@ -132,6 +139,10 @@ export function SupervisionPolicyCard() {
       selfAuthorizationAllowedManualDiscount: formValues.selfAuthorizationAllowedManualDiscount,
       supervisorRequiredForModifierQuantity:
         formValues.supervisorRequiredForModifierQuantity,
+      blindCountEnabled: formValues.blindCountEnabled,
+      supervisorRequiredForPartialXReport:
+        formValues.supervisorRequiredForPartialXReport,
+      supervisorRequiredForVoid: formValues.supervisorRequiredForVoid,
     });
   };
 
@@ -357,6 +368,75 @@ export function SupervisionPolicyCard() {
                   checked={values.supervisorRequiredForModifierQuantity}
                   onCheckedChange={(checked) =>
                     setValue("supervisorRequiredForModifierQuantity", checked, {
+                      shouldDirty: true,
+                    })
+                  }
+                />
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-3 border rounded-lg p-4 bg-card">
+              <legend className="text-sm font-medium text-foreground px-1">
+                Control de caja y anulaciones
+              </legend>
+              <p className="text-xs text-muted-foreground">
+                Reglas para proteger los montos de efectivo esperados y controlar cancelaciones de ventas en mostrador.
+              </p>
+
+              <div className="flex items-start justify-between gap-4 pt-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="blindCountEnabled" className="text-sm font-medium">
+                    Ocultar saldos esperados en el arqueo (Arqueo ciego)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Los cajeros ven saldos ocultos (••••••) en pantalla y deben contar el efectivo físico a ciegas al cerrar turno.
+                  </p>
+                </div>
+                <Switch
+                  id="blindCountEnabled"
+                  checked={values.blindCountEnabled}
+                  onCheckedChange={(checked) =>
+                    setValue("blindCountEnabled", checked, {
+                      shouldDirty: true,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="supervisorRequiredForPartialXReport" className="text-sm font-medium">
+                    Exigir PIN de supervisor para lectura parcial (Corte X)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Evita que los cajeros consulten el acumulado de ventas antes del cierre para anticipar el saldo esperado.
+                  </p>
+                </div>
+                <Switch
+                  id="supervisorRequiredForPartialXReport"
+                  checked={values.supervisorRequiredForPartialXReport}
+                  onCheckedChange={(checked) =>
+                    setValue("supervisorRequiredForPartialXReport", checked, {
+                      shouldDirty: true,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="supervisorRequiredForVoid" className="text-sm font-medium">
+                    Exigir PIN de supervisor para anular facturas
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Solicita autorización obligatoria de un supervisor mediante PIN para cancelar cualquier factura emitida.
+                  </p>
+                </div>
+                <Switch
+                  id="supervisorRequiredForVoid"
+                  checked={values.supervisorRequiredForVoid}
+                  onCheckedChange={(checked) =>
+                    setValue("supervisorRequiredForVoid", checked, {
                       shouldDirty: true,
                     })
                   }

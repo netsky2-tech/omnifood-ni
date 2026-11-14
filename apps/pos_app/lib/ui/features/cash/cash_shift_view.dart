@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,11 @@ import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../../core/localization/display_name_resolver.dart';
 import '../../../../core/localization/label_map.dart';
 import '../../../data/database/app_database.dart';
+import '../../../domain/models/config/supervision_policy.dart';
+import '../../../domain/repositories/auth_repository.dart';
+import '../../../domain/repositories/audit_repository.dart';
+import '../identity/supervisor_authorization.dart';
+import '../identity/supervisor_override_modal.dart';
 
 class CashShiftView extends StatefulWidget {
   const CashShiftView({super.key});
@@ -30,6 +36,7 @@ class _CashShiftViewState extends State<CashShiftView> {
   /// attribution). Empty when the database is unavailable (isolated test
   /// harnesses); rows then render the honest fallback, never the raw id.
   Map<String, String> _usersById = const {};
+  SupervisionPolicy? _policy;
 
   @override
   void initState() {
@@ -37,6 +44,7 @@ class _CashShiftViewState extends State<CashShiftView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _loadUsers();
+        _loadPolicy();
         final cashVm = context.read<CashShiftViewModel>();
         try {
           final saleVm = context.read<SaleViewModel>();
@@ -49,6 +57,25 @@ class _CashShiftViewState extends State<CashShiftView> {
         cashVm.init();
       }
     });
+  }
+
+  Future<void> _loadPolicy() async {
+    try {
+      final policy = await tenantSupervisionPolicy(context);
+      if (mounted) {
+        setState(() {
+          _policy = policy;
+        });
+      }
+    } catch (_) {
+      // Default to null if provider or database is unavailable
+    }
+  }
+
+  bool _canViewExpectedCash(CashShiftViewModel vm) {
+    if (_policy == null) return true;
+    final role = vm.currentUserRole?.name.toUpperCase();
+    return _policy!.canViewExpectedCash(role);
   }
 
   Future<void> _loadUsers() async {
@@ -375,6 +402,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                       final itemWidth = constraints.maxWidth > 600
                           ? (constraints.maxWidth - 36) / 4
                           : (constraints.maxWidth - 12) / 2;
+                      final canViewExpected = _canViewExpectedCash(vm);
                       return Wrap(
                         spacing: 12,
                         runSpacing: 12,
@@ -400,23 +428,31 @@ class _CashShiftViewState extends State<CashShiftView> {
                           SizedBox(
                             width: itemWidth,
                             child: _buildMetricTile(
-                              // D-9: the drawer expectation is the persisted base
-                              // plus this shift's net cash sales. Showing the raw
-                              // `shift.expectedNio` understated the drawer by every
-                              // cash sale and made a blind count look short.
+                              // D-9 / Arqueo Ciego: the drawer expectation is
+                              // obscured when blind count is active for the acting role.
                               title: 'Esperado en Gaveta (C\$)',
-                              value: _formatNio(vm.effectiveExpectedNio),
-                              icon: Icons.payments,
+                              value: canViewExpected
+                                  ? _formatNio(vm.effectiveExpectedNio)
+                                  : 'C\$ ••••••',
+                              icon: canViewExpected
+                                  ? Icons.payments
+                                  : Icons.visibility_off,
                               color: NhilosColors.brandPrimary,
+                              isObscured: !canViewExpected,
                             ),
                           ),
                           SizedBox(
                             width: itemWidth,
                             child: _buildMetricTile(
                               title: 'Esperado en Gaveta (\$ USD)',
-                              value: _formatUsd(vm.effectiveExpectedUsd),
-                              icon: Icons.monetization_on,
+                              value: canViewExpected
+                                  ? _formatUsd(vm.effectiveExpectedUsd)
+                                  : '\$ ••••',
+                              icon: canViewExpected
+                                  ? Icons.monetization_on
+                                  : Icons.visibility_off,
                               color: NhilosColors.brandNavy,
+                              isObscured: !canViewExpected,
                             ),
                           ),
                         ],
@@ -505,28 +541,7 @@ class _CashShiftViewState extends State<CashShiftView> {
                       ),
                     ),
                   OutlinedButton.icon(
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (_) => XReportDialog(
-                        shift: shift,
-                        movements: vm.movements,
-                        // D-14: person name, resolved from the id→name map.
-                        cashierName:
-                            shift.cashierName ?? _userName(shift.userId),
-                        // D-9: the X must report the same expectation the
-                        // blind count and the Z close use.
-                        effectiveExpectedNio: vm.effectiveExpectedNio,
-                        effectiveExpectedUsd: vm.effectiveExpectedUsd,
-                        // T9 (cuentas abiertas): informational line, fed by
-                        // the same loader the Z gate re-checks. The verified
-                        // flag travels too, so an unverified read renders the
-                        // honest "No se pudieron verificar" row instead of a
-                        // silent report that implies zero accounts.
-                        openAccountsVerified: vm.openAccountsVerified,
-                        openAccountsCount: vm.openAccountsCount,
-                        openAccountsTotalNio: vm.openAccountsTotalNio,
-                      ),
-                    ),
+                    onPressed: () => _handleXReport(context, vm, shift),
                     icon: const Icon(Icons.assessment_outlined),
                     label: const Text('Lectura Parcial (Corte X)'),
                     style: OutlinedButton.styleFrom(
@@ -654,11 +669,71 @@ class _CashShiftViewState extends State<CashShiftView> {
     );
   }
 
+  Future<void> _handleXReport(
+    BuildContext context,
+    CashShiftViewModel vm,
+    dynamic shift,
+  ) async {
+    final policy = _policy ?? await tenantSupervisionPolicy(context);
+    final userRole = vm.currentUserRole?.name.toUpperCase() ?? '';
+    final isAuthorizing = policy.authorizes(userRole);
+
+    if (policy.supervisorRequiredForPartialXReport && !isAuthorizing) {
+      final authRepo = context.read<AuthRepository>();
+      final outcome = await showDialog<SupervisorOverrideOutcome>(
+        context: context,
+        builder: (dialogContext) => SupervisorOverrideModal(
+          onAuthorize: (request) => authorizeWithPolicy(
+            authRepository: authRepo,
+            policy: policy,
+            request: request,
+            selfAuthorizationAllowed: false,
+          ),
+        ),
+      );
+
+      if (!context.mounted || outcome == null || !outcome.authorized) {
+        return;
+      }
+
+      try {
+        final auditRepo = context.read<AuditRepository>();
+        await auditRepo.logForensic(
+          'SUPERVISOR_OVERRIDE_X_REPORT',
+          metodoAutorizacion: outcome.method,
+          usuarioAutorizadorId: outcome.userId,
+          metadata: jsonEncode({
+            'action': 'view_x_report',
+            'shift_id': shift.id,
+            'blind_count_protected': policy.blindCountEnabled,
+          }),
+        );
+      } catch (_) {}
+    }
+
+    if (!context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (_) => XReportDialog(
+        shift: shift,
+        movements: vm.movements,
+        cashierName: shift.cashierName ?? _userName(shift.userId),
+        effectiveExpectedNio: vm.effectiveExpectedNio,
+        effectiveExpectedUsd: vm.effectiveExpectedUsd,
+        openAccountsVerified: vm.openAccountsVerified,
+        openAccountsCount: vm.openAccountsCount,
+        openAccountsTotalNio: vm.openAccountsTotalNio,
+      ),
+    );
+  }
+
   Widget _buildMetricTile({
     required String title,
     required String value,
     required IconData icon,
     required Color color,
+    bool isObscured = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -693,10 +768,21 @@ class _CashShiftViewState extends State<CashShiftView> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: isObscured ? NhilosColors.textSecondary : color,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
+          if (isObscured) ...[
+            const SizedBox(height: 2),
+            const Text(
+              'Oculto por política de control',
+              style: TextStyle(
+                fontSize: 10,
+                color: NhilosColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
         ],
       ),
     );

@@ -58,6 +58,9 @@ export interface SupervisionPolicy {
   selfAuthorizationAllowedCashDrawer: boolean;
   selfAuthorizationAllowedManualDiscount: boolean;
   supervisorRequiredForModifierQuantity: boolean;
+  blindCountEnabled: boolean;
+  supervisorRequiredForPartialXReport: boolean;
+  supervisorRequiredForVoid: boolean;
 }
 
 export interface SupervisionPolicyResponse {
@@ -84,6 +87,9 @@ export const supervisionPolicySchema = z.object({
   selfAuthorizationAllowedCashDrawer: z.boolean(),
   selfAuthorizationAllowedManualDiscount: z.boolean(),
   supervisorRequiredForModifierQuantity: z.boolean(),
+  blindCountEnabled: z.boolean(),
+  supervisorRequiredForPartialXReport: z.boolean(),
+  supervisorRequiredForVoid: z.boolean(),
 });
 
 export type SupervisionPolicyFormValues = z.infer<typeof supervisionPolicySchema>;
@@ -122,6 +128,15 @@ export function resolveSupervisionPolicy(
     selfAuthorizationAllowedCashDrawer: object.selfAuthorizationAllowedCashDrawer as boolean,
     selfAuthorizationAllowedManualDiscount: object.selfAuthorizationAllowedManualDiscount as boolean,
     supervisorRequiredForModifierQuantity: object.supervisorRequiredForModifierQuantity as boolean,
+    blindCountEnabled: typeof object.blindCountEnabled === "boolean"
+      ? object.blindCountEnabled
+      : fallback.blindCountEnabled ?? false,
+    supervisorRequiredForPartialXReport: typeof object.supervisorRequiredForPartialXReport === "boolean"
+      ? object.supervisorRequiredForPartialXReport
+      : fallback.supervisorRequiredForPartialXReport ?? false,
+    supervisorRequiredForVoid: typeof object.supervisorRequiredForVoid === "boolean"
+      ? object.supervisorRequiredForVoid
+      : fallback.supervisorRequiredForVoid ?? false,
   };
 }
 
@@ -140,6 +155,9 @@ export function validateSupervisionPolicyForm(values: {
   selfAuthorizationAllowedCashDrawer: boolean;
   selfAuthorizationAllowedManualDiscount: boolean;
   supervisorRequiredForModifierQuantity: boolean;
+  blindCountEnabled?: boolean;
+  supervisorRequiredForPartialXReport?: boolean;
+  supervisorRequiredForVoid?: boolean;
 }): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];

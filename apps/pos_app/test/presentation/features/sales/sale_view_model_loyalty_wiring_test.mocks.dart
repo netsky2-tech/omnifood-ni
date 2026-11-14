@@ -919,6 +919,8 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
     String? invoiceId,
     String? reasonCode, {
     String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -927,7 +929,28 @@ class MockSalesRepository extends _i1.Mock implements _i2.SalesRepository {
             invoiceId,
             reasonCode,
           ],
-          {#reasonDetail: reasonDetail},
+          {
+            #reasonDetail: reasonDetail,
+            #supervisorId: supervisorId,
+            #authMethod: authMethod,
+          },
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
+  _i56.Future<void> applyRemoteVoid(
+    String? invoiceId,
+    String? voidReason,
+  ) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #applyRemoteVoid,
+          [
+            invoiceId,
+            voidReason,
+          ],
         ),
         returnValue: _i56.Future<void>.value(),
         returnValueForMissingStub: _i56.Future<void>.value(),
@@ -1345,6 +1368,21 @@ class MockInventoryRepository extends _i1.Mock
       (super.noSuchMethod(
         Invocation.method(
           #markMovementAsFailed,
+          [id],
+          {#error: error},
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
+
+  @override
+  _i56.Future<void> markMovementAsRejected(
+    String? id, {
+    String? error,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #markMovementAsRejected,
           [id],
           {#error: error},
         ),

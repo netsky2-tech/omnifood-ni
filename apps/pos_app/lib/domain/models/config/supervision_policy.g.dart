@@ -21,6 +21,11 @@ _$SupervisionPolicyImpl _$$SupervisionPolicyImplFromJson(
           json['selfAuthorizationAllowedManualDiscount'] as bool? ?? false,
       supervisorRequiredForModifierQuantity:
           json['supervisorRequiredForModifierQuantity'] as bool? ?? false,
+      blindCountEnabled: json['blindCountEnabled'] as bool? ?? false,
+      supervisorRequiredForPartialXReport:
+          json['supervisorRequiredForPartialXReport'] as bool? ?? false,
+      supervisorRequiredForVoid:
+          json['supervisorRequiredForVoid'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$$SupervisionPolicyImplToJson(
@@ -35,4 +40,8 @@ Map<String, dynamic> _$$SupervisionPolicyImplToJson(
           instance.selfAuthorizationAllowedManualDiscount,
       'supervisorRequiredForModifierQuantity':
           instance.supervisorRequiredForModifierQuantity,
+      'blindCountEnabled': instance.blindCountEnabled,
+      'supervisorRequiredForPartialXReport':
+          instance.supervisorRequiredForPartialXReport,
+      'supervisorRequiredForVoid': instance.supervisorRequiredForVoid,
     };
