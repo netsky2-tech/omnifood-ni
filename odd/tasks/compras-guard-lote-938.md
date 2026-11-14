@@ -227,3 +227,11 @@ compra — exactamente el bloqueo que acabamos de destrabar. Quedan como ruido i
 tenant `demo`: ambos insumos tienen 0 mapeos a productos, así que no se pueden vender.
 Orden correcto si se quiere limpiar: dispositivo primero (ajuste de stock a 0 y borrado en
 `Ítems`/`Proveedores`), después la nube.
+
+## Entrega
+
+- PR **#977** (`fix/compras-guard-lote-938` → `main`), 4 slices: `9b70b806` (sync P0), `330aa68d` (guard POS), `b20e5438` (guard backend), `3d21bc49` (dashboard + esta tarea).
+- Merge `--merge` en `7326053` (2026-11-14).
+- Issue **#938** cerrada: la parte 1 (código de error de lealtad) ya estaba resuelta en el código
+  (`BatchAllocationConflictException` → `INVENTORY_BATCH_BALANCE_INSUFFICIENT`), la parte 2 la
+  resolvió este PR. No se abrió issue de seguimiento porque no queda nada pendiente de #938.
