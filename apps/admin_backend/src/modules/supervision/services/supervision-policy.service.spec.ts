@@ -164,6 +164,9 @@ describe('SupervisionPolicyService', () => {
         selfAuthorizationAllowedCashDrawer: true,
         selfAuthorizationAllowedManualDiscount: false,
         supervisorRequiredForModifierQuantity: false,
+        blindCountEnabled: false,
+        supervisorRequiredForPartialXReport: false,
+        supervisorRequiredForVoid: false,
       });
       // The revision bump is what makes the terminals pick it up.
       expect(

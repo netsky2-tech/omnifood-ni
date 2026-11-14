@@ -73,6 +73,18 @@ export class SupervisionPolicyDto {
 
   @IsBoolean()
   supervisorRequiredForModifierQuantity!: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  blindCountEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  supervisorRequiredForPartialXReport?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  supervisorRequiredForVoid?: boolean;
 }
 
 /**
