@@ -10,12 +10,12 @@ import { OwnerDashboardOutroScene } from '../scenes/owner_dashboard/OwnerDashboa
  *
  * Estructura de Escenas y Sincronización:
  * - Escenas 1 y 2 (f0 - f315, 315f / 10.50s):
- *   - f0 - f45 (1.5s): Frame 0 Live Action — cursor pulsando "Stock crítico · 4 productos" ("Revisar críticos") en Atención Requerida.
- *   - f45 - f315 (9.0s): Corte de atención (scale 1.0 -> 1.07) hacia Cabecera Ejecutiva (Layer 1) y Atención Requerida (Layer 3).
+ *   - f0 - f45 (1.5s): Frame 0 Live Action — cursor pulsando "Ver productos →" en Atención Requerida.
+ *   - f45 - f315 (9.0s): Corte de atención (scale 1.0 -> 1.06) hacia Cabecera Ejecutiva (Layer 1) y Atención Requerida (Layer 3).
  * - Escena 3 (f315 - f660, 345f / 11.50s):
- *   - Navegación contextual a /inventory?status=CRITICAL&source=dashboard mostrando los 4 insumos críticos ya filtrados y clic en "← Volver al Dashboard".
+ *   - Navegación contextual a /inventory?source=dashboard&sourceWidget=attention&severity=CRITICAL&status=CRITICAL&tab=alerts mostrando las 4 alertas críticas ya filtradas; retorno con el Back del navegador.
  * - Escena 4 (f660 - f980, 320f / 10.67s):
- *   - Retorno al Dashboard conservando el período "1–15 de noviembre de 2026 (vs. 1–15 oct)", cursor sobre indicador "Datos actualizados" y KPI "Margen Bruto 38.4%".
+ *   - Retorno al Dashboard conservando el período "07/10/2026 — 05/11/2026", cursor sobre el indicador de frescura y el KPI "Margen Bruto 38.4%".
  * - Escena 5 (f980 - f1220, 240f / 8.00s):
  *   - Cierre canónico en #003757 con logo oficial, "NHILOS POS", y botón "Comenta DEMO".
  */

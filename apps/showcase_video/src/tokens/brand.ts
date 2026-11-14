@@ -88,4 +88,25 @@ export const COMPOSITION_PRESETS = {
     fps: VIDEO_FPS,
     durationInFrames: 1220, // 40.67 segundos (315 + 345 + 320 + 240 = 1220 frames)
   },
+  voidAuditReel: {
+    id: 'VoidAuditReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 975, // 32.5 segundos (510 + 240 + 225 = 975 frames) con locución natural (-2%)
+  },
+  multiCurrencyReel: {
+    id: 'MultiCurrencyReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1110, // 37.0 segundos (645 + 240 + 225 = 1110 frames) con locución natural (-2%)
+  },
+  kardexAuditReel: {
+    id: 'KardexAuditReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 1110, // 37.0 segundos (885 + 225 = 1110 frames) con locución natural (-2%)
+  },
 } as const;

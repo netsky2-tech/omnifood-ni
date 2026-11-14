@@ -8,6 +8,9 @@ import { OfflineReel } from './compositions/OfflineReel';
 import { BlindAuditReel } from './compositions/BlindAuditReel';
 import { HoldOrdersReel } from './compositions/HoldOrdersReel';
 import { OwnerDashboardReel } from './compositions/OwnerDashboardReel';
+import { VoidAuditReel } from './compositions/VoidAuditReel';
+import { MultiCurrencyReel } from './compositions/MultiCurrencyReel';
+import { KardexAuditReel } from './compositions/KardexAuditReel';
 import { MetricsShowcase } from './compositions/MetricsShowcase';
 import { COMPOSITION_PRESETS } from './tokens/brand';
 import './styles/global.css';
@@ -103,6 +106,36 @@ export const RemotionRoot: React.FC = () => {
         fps={COMPOSITION_PRESETS.ownerDashboardReel.fps}
         width={COMPOSITION_PRESETS.ownerDashboardReel.width}
         height={COMPOSITION_PRESETS.ownerDashboardReel.height}
+      />
+
+      {/* 10. Reel Vertical 9:16 - Semana 3 Martes: Anulaciones con PIN y Auditoría DGI */}
+      <Composition
+        id={COMPOSITION_PRESETS.voidAuditReel.id}
+        component={VoidAuditReel}
+        durationInFrames={COMPOSITION_PRESETS.voidAuditReel.durationInFrames}
+        fps={COMPOSITION_PRESETS.voidAuditReel.fps}
+        width={COMPOSITION_PRESETS.voidAuditReel.width}
+        height={COMPOSITION_PRESETS.voidAuditReel.height}
+      />
+
+      {/* 11. Reel Vertical 9:16 - Semana 3 Jueves: Cobro Multimoneda y Vuelto Exacto */}
+      <Composition
+        id={COMPOSITION_PRESETS.multiCurrencyReel.id}
+        component={MultiCurrencyReel}
+        durationInFrames={COMPOSITION_PRESETS.multiCurrencyReel.durationInFrames}
+        fps={COMPOSITION_PRESETS.multiCurrencyReel.fps}
+        width={COMPOSITION_PRESETS.multiCurrencyReel.width}
+        height={COMPOSITION_PRESETS.multiCurrencyReel.height}
+      />
+
+      {/* 12. Reel Vertical 9:16 - Semana 3 Viernes: Kardex y Movimiento de Stock */}
+      <Composition
+        id={COMPOSITION_PRESETS.kardexAuditReel.id}
+        component={KardexAuditReel}
+        durationInFrames={COMPOSITION_PRESETS.kardexAuditReel.durationInFrames}
+        fps={COMPOSITION_PRESETS.kardexAuditReel.fps}
+        width={COMPOSITION_PRESETS.kardexAuditReel.width}
+        height={COMPOSITION_PRESETS.kardexAuditReel.height}
       />
     </>
   );

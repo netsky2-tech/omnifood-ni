@@ -15,6 +15,9 @@
     "build:blind": "remotion render src/index.ts BlindAuditReel out/nhilos_pos_cierre_arqueo_ciego.mp4",
     "build:hold": "remotion render src/index.ts HoldOrdersReel out/nhilos_pos_cuentas_espera_variantes.mp4",
     "build:owner": "remotion render src/index.ts OwnerDashboardReel out/nhilos_pos_owner_dashboard_navegacion_contextual.mp4",
+    "build:void-audit": "remotion render src/index.ts VoidAuditReel out/nhilos_pos_anulaciones_pin_auditoria.mp4",
+    "build:multi-currency": "remotion render src/index.ts MultiCurrencyReel out/nhilos_pos_cobro_multimoneda_vuelto_exacto.mp4",
+    "build:kardex": "remotion render src/index.ts KardexAuditReel out/nhilos_pos_kardex_movimiento_stock.mp4",
     "build:square": "remotion render src/index.ts SocialSquare out/social-square.mp4",
     "generate:voiceover": "python3 scripts/generate-voiceover.py",
     "typecheck": "tsc --noEmit"
