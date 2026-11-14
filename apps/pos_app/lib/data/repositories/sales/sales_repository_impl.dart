@@ -843,6 +843,8 @@ class SalesRepositoryImpl implements SalesRepository {
     String invoiceId,
     String reasonCode, {
     String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
   }) async {
     // D-15/#525 AC-6: the reason is mandatory at the repository boundary.
     // This throws BEFORE any read or write: an unreasoned void must never
@@ -978,6 +980,8 @@ class SalesRepositoryImpl implements SalesRepository {
         if (trimmedDetail != null && trimmedDetail.isNotEmpty)
           'reason_detail': trimmedDetail,
       }),
+      metodoAutorizacion: authMethod,
+      usuarioAutorizadorId: supervisorId,
     );
     final auditEntity = preparedAudit == null
         ? null

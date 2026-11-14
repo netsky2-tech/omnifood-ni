@@ -3168,6 +3168,8 @@ class SaleViewModel extends ChangeNotifier {
     String invoiceId,
     String reasonCode, {
     String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
   }) async {
     final currentUser = await _authRepository.getCurrentUser();
     if (currentUser == null) {
@@ -3219,6 +3221,8 @@ class SaleViewModel extends ChangeNotifier {
         invoiceId,
         reasonCode,
         reasonDetail: reasonDetail,
+        supervisorId: supervisorId,
+        authMethod: authMethod,
       );
 
       // AC-10: print the ANULADO copy on the same printer path the sale

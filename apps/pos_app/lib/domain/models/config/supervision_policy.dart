@@ -45,6 +45,22 @@ class SupervisionPolicy with _$SupervisionPolicy {
     /// The quantity an extra takes out of the stock: a DATA question, not a
     /// control one. The evidence (who, how much, why) is the control.
     @Default(false) bool supervisorRequiredForModifierQuantity,
+
+    /// Whether blind count (conteo ciego) is active for cash drawer operations.
+    /// When true, operational roles (cashiers) cannot see the expected drawer cash
+    /// on screen or in reports before closing.
+    @Default(false) bool blindCountEnabled,
+
+    /// Whether viewing or printing a partial X report (Corte X) requires supervisor
+    /// authorization. Required in controlled environments to prevent cashiers from
+    /// uncovering expected drawer balances before closing.
+    @Default(false) bool supervisorRequiredForPartialXReport,
+
+    /// Whether voiding an invoice requires supervisor authorization.
+    /// In fast counter environments (Foodpark QSR), cashiers can void directly
+    /// without supervisor PIN to avoid holding up the queue.
+    /// In controlled environments (Restaurant/Hybrid), a supervisor PIN is required.
+    @Default(false) bool supervisorRequiredForVoid,
   }) = _SupervisionPolicy;
 
   factory SupervisionPolicy.fromJson(Map<String, dynamic> json) =>
@@ -87,12 +103,19 @@ class SupervisionPolicy with _$SupervisionPolicy {
       return null;
     }
 
+    final blindCount = readFlag('blindCountEnabled') ?? false;
+    final partialX = readFlag('supervisorRequiredForPartialXReport') ?? false;
+    final invoiceVoid = readFlag('supervisorRequiredForVoid') ?? false;
+
     return SupervisionPolicy(
       authorizingRoles: parsedRoles,
       selfAuthorizationAllowedCloseBox: closeBox,
       selfAuthorizationAllowedCashDrawer: cashDrawer,
       selfAuthorizationAllowedManualDiscount: manualDiscount,
       supervisorRequiredForModifierQuantity: modifierQuantity,
+      blindCountEnabled: blindCount,
+      supervisorRequiredForPartialXReport: partialX,
+      supervisorRequiredForVoid: invoiceVoid,
     );
   }
 
@@ -109,6 +132,9 @@ class SupervisionPolicy with _$SupervisionPolicy {
       selfAuthorizationAllowedCashDrawer: isQsr,
       selfAuthorizationAllowedManualDiscount: isQsr,
       supervisorRequiredForModifierQuantity: false,
+      blindCountEnabled: true,
+      supervisorRequiredForPartialXReport: !isQsr,
+      supervisorRequiredForVoid: !isQsr,
     );
   }
 }
@@ -118,6 +144,24 @@ extension SupervisionPolicyRules on SupervisionPolicy {
   /// Whether [role] is one of the roles that can authorize here.
   bool authorizes(String role) =>
       authorizingRoles.map((r) => r.toUpperCase()).contains(role.toUpperCase());
+
+  /// Whether [role] is permitted to see expected cash figures in the cash drawer.
+  /// If blind count is disabled, any role can see expected balances.
+  /// If blind count is enabled, only authorizing roles (supervisors/owners) can see them.
+  bool canViewExpectedCash(String? role) {
+    if (!blindCountEnabled) return true;
+    if (role == null) return false;
+    return authorizes(role);
+  }
+
+  /// Whether voiding an invoice requires supervisor authorization for [role].
+  /// If supervisorRequiredForVoid is false, anyone can void directly.
+  /// If true, only non-authorizing roles require supervisor authorization.
+  bool requiresSupervisorForVoid(String? role) {
+    if (!supervisorRequiredForVoid) return false;
+    if (role == null) return true;
+    return !authorizes(role);
+  }
 
   /// Whether applying this policy would leave the shift close IMPOSSIBLE.
   ///

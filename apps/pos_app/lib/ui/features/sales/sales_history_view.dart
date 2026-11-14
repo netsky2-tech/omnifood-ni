@@ -6,6 +6,10 @@ import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/sales/invoice.dart';
 import '../../../domain/models/sales/invoice_item.dart';
 import '../../../domain/usecases/sales/void_decision.dart';
+import '../../../domain/models/config/supervision_policy.dart';
+import '../../../domain/repositories/auth_repository.dart';
+import '../identity/supervisor_authorization.dart';
+import '../identity/supervisor_override_modal.dart';
 // ReprintReasonCodes and the snapshot-unavailable copy live in the same module.
 import '../../../core/localization/label_map.dart';
 import '../../design_system/design_system.dart';
@@ -1066,10 +1070,56 @@ class InvoiceDetailsPanel extends StatelessWidget {
                       final saleViewModel = context.read<SaleViewModel>();
                       final messenger = ScaffoldMessenger.of(context);
                       final detail = detailController.text.trim();
+
+                      String? supervisorId;
+                      String? authMethod;
+                      try {
+                        final authRepo = context.read<AuthRepository>();
+                        final policy = await tenantSupervisionPolicy(context);
+                        final currentUser = await authRepo.getCurrentUser();
+                        final userRole = currentUser?.role.name.toUpperCase();
+
+                        if (policy.requiresSupervisorForVoid(userRole)) {
+                          final outcome =
+                              await showDialog<SupervisorOverrideOutcome>(
+                            context: context,
+                            builder: (dialogCtx) => SupervisorOverrideModal(
+                              onAuthorize: (request) => authorizeWithPolicy(
+                                authRepository: authRepo,
+                                policy: policy,
+                                request: request,
+                                selfAuthorizationAllowed: false,
+                              ),
+                            ),
+                          );
+
+                          if (outcome == null || !outcome.authorized) {
+                            if (context.mounted) {
+                              setDialogState(() => submitting = false);
+                              messenger.showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Anulación cancelada: requiere autorización de supervisor.',
+                                  ),
+                                ),
+                              );
+                            }
+                            return;
+                          }
+
+                          supervisorId = outcome.userId;
+                          authMethod = outcome.method;
+                        }
+                      } catch (_) {
+                        // Si falla la consulta de supervisión, se continúa con el flujo estándar de anulación
+                      }
+
                       final ok = await saleViewModel.voidInvoice(
                         invoice.id,
                         selectedCode!,
                         reasonDetail: detail.isEmpty ? null : detail,
+                        supervisorId: supervisorId,
+                        authMethod: authMethod,
                       );
                       // Audit #79: the void's print outcome is a TRI-STATE.
                       // The fiscal void is the fact; the print is derivative

@@ -1289,6 +1289,8 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
     String? invoiceId,
     String? reasonCode, {
     String? reasonDetail,
+    String? supervisorId,
+    String? authMethod,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
@@ -1297,7 +1299,11 @@ class MockSaleViewModel extends _i1.Mock implements _i11.SaleViewModel {
             invoiceId,
             reasonCode,
           ],
-          {#reasonDetail: reasonDetail},
+          {
+            #reasonDetail: reasonDetail,
+            #supervisorId: supervisorId,
+            #authMethod: authMethod,
+          },
         ),
         returnValue: _i18.Future<bool>.value(false),
         returnValueForMissingStub: _i18.Future<bool>.value(false),
@@ -1596,12 +1602,18 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
   _i18.Future<_i27.AuditLog?> prepareLog(
     String? action, {
     String? metadata,
+    String? metodoAutorizacion,
+    String? usuarioAutorizadorId,
   }) =>
       (super.noSuchMethod(
         Invocation.method(
           #prepareLog,
           [action],
-          {#metadata: metadata},
+          {
+            #metadata: metadata,
+            #metodoAutorizacion: metodoAutorizacion,
+            #usuarioAutorizadorId: usuarioAutorizadorId,
+          },
         ),
         returnValue: _i18.Future<_i27.AuditLog?>.value(),
         returnValueForMissingStub: _i18.Future<_i27.AuditLog?>.value(),
