@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = path.join(ROOT, "design/nhilos-web-foundation");
 const ENTRY = "04-sintesis-hibrida.html";
+const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
 const PUBLIC_DIRS = ["media", "fonts"];
 const INTERNAL_ENTRIES = [
@@ -50,6 +51,9 @@ function walk(dir) {
 if (!existsSync(path.join(SOURCE, ENTRY))) {
   fail(`missing source artboard: ${path.join(SOURCE, ENTRY)}`);
 }
+if (!existsSync(path.join(SOURCE, NOT_FOUND))) {
+  fail(`missing 404 page: ${path.join(SOURCE, NOT_FOUND)}`);
+}
 for (const dir of PUBLIC_DIRS) {
   if (!existsSync(path.join(SOURCE, dir))) {
     fail(`missing public asset directory: ${path.join(SOURCE, dir)}`);
@@ -60,6 +64,7 @@ rmSync(OUTPUT, { recursive: true, force: true });
 mkdirSync(OUTPUT, { recursive: true });
 
 copyFileSync(path.join(SOURCE, ENTRY), path.join(OUTPUT, "index.html"));
+copyFileSync(path.join(SOURCE, NOT_FOUND), path.join(OUTPUT, NOT_FOUND));
 for (const dir of PUBLIC_DIRS) {
   cpSync(path.join(SOURCE, dir), path.join(OUTPUT, dir), { recursive: true });
 }
@@ -106,4 +111,4 @@ if (!html.includes("NHILOS POS")) {
 console.log(`[nhilos-web] Source: ${path.relative(ROOT, SOURCE)}/${ENTRY}`);
 console.log(`[nhilos-web] Output: ${path.relative(ROOT, OUTPUT)} (${files.length} files, ${bytes(total)})`);
 console.log(`[nhilos-web] Largest asset: ${path.relative(OUTPUT, largest.file)} (${bytes(largest.size)})`);
-console.log("[nhilos-web] Public build contains index.html, media/, fonts/, _headers, _redirects and robots.txt only.");
+console.log("[nhilos-web] Public build contains index.html, 404.html, media/, fonts/, _headers, _redirects and robots.txt only.");
