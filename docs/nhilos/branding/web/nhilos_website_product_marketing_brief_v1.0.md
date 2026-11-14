@@ -3,7 +3,7 @@
 **Documento:** `nhilos_website_product_marketing_brief_v1.0.md`  
 **Versión:** 1.0 (Autorizado para Producción)  
 **Estado:** `APPROVED / READY FOR WEBSITE IA PROMOTION & COPYWRITING`  
-**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
+**Upstream Authority:** `nhilos_brand_experience_principles_v1.0.md` (v1.0) → `product_claim_audit_od02_v1.3.md` (v1.3, re-anclado a `951d4f13`, `CLOSED / VERIFIED / RE-ANCHORED`), según la cadena de `nhilos_branding_document_governance_v1.0.md`
 **NHILOS +1:** Este documento honra el principio `NHILOS +1` (`nhilos_brand_experience_principles_v1.0.md` [NHILOS +1](../../nhilos_brand_experience_principles_v1.0.md#11-nhilos-1)): la demo se prepara y comienza por la operación del propio prospecto (ver Regla de Oro y Sección 5.1).  
   
 **Downstream Gate:** `nhilos_website_information_architecture_content_wireframe_v1.0.md` — dueño de la navegación y las rutas; consume los mensajes de este Brief (ver `nhilos_branding_document_governance_v1.0.md` [Control de cambios](../gobernanza/nhilos_branding_document_governance_v1.0.md#6-control-de-cambios))  
@@ -147,13 +147,17 @@ profundas que la IA defina; ninguna es un destino de navegación de primer nivel
   - **Impresoras de Cocina:** Compatibilidad con ticketeras de red local ESC/POS (LAN/Ethernet, driver `ESCPOS_NETWORK`) para barra y cocina. *Works when:* impresora ESC/POS estándar con IP estática fija en la misma subred. *Does not work when:* red local sin IP fija o impresoras no ESC/POS.
   - **Tablets Android:** Soporte para tablets táctiles estándar en barra o punto fijo, incluida la pantalla de cocina (KDS) (`kitchen_display_view.dart`).
 
-### 5.6 Capacidad: Owner Dashboard
-- **Foco:** Control sin estar metido en la cocina.
+### 5.6 Capacidad: Owner Dashboard y Operaciones
+- **Foco:** Control y ritmo operativo sin estar físicamente en el local.
 - **Módulos destacados:**
-  - Venta neta consolidada y horas de mayor flujo de clientes.
-  - Ranking de productos más vendidos y su porcentaje de contribución.
-  - Monitor de frescura (Sync Freshness Badge) para ver terminales conectados.
-  - Histórico de turnos y arqueos X/Z de caja, y conciliación manual de vouchers de tarjetas BAC/Banpro con un ítem de atención de vouchers pendientes. No existe conciliación bancaria automática: la conciliación de vouchers es manual y desacoplada (`OD-02` PC-PAY-02, LIM-02).
+  - Venta neta consolidada, horas de mayor flujo de clientes y ritmo semanal de demanda (`PC-DASH-01`, `PC-DASH-05`). El análisis multitemporal Lunes a Domingo permite identificar picos semanales y concentración de fin de semana en rangos multi-día.
+  - Ranking de productos más vendidos y su porcentaje de contribución (`PC-DASH-03`).
+  - Monitor de frescura (Sync Freshness Badge) e inventario de flota de terminales (`PC-DASH-02`, `PC-OPS-01`) para conocer el estado de sincronización por dispositivo y revocar terminales si es necesario.
+  - Saneamiento administrativo de turnos huérfanos o bloqueados en el POS (`PC-OPS-01`), permitiendo a supervisores emitir Corte Z con motivo auditable.
+  - Histórico de turnos y arqueos X/Z de caja, y conciliación manual de vouchers de tarjetas BAC/Banpro con un ítem de atención de vouchers pendientes (`PC-PAY-02`). No existe conciliación bancaria automática: la conciliación de vouchers es manual y desacoplada (`OD-02` LIM-02).
+  - Generador de Menú QR digital autogestionado (`PC-CAT-01`): crea y descarga códigos QR escaneables en memoria del navegador sin depender de red tras la carga.
+  - Panel de discrepancias declaradas de inventario (`PC-INV-07`): la facturación nunca se interrumpe por stock teórico; las diferencias se asientan y concilian en el backoffice.
+  - Gestión fiscal administrativa (`PC-FISC-05`): anulación de facturas y emisión de Notas de Crédito DGI con motivo obligatorio y reversión en Kardex.
 
 ---
 
