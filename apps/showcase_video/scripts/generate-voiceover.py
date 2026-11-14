@@ -208,6 +208,107 @@ SCENES = [
         "rate": "-4%",
         "pitch": "+0Hz",
     },
+    # --- Parte 9: Control de Anulaciones con PIN y Auditoría DGI (VoidAuditReel 9:16 - Semana 3 Clip 1) ---
+    {
+        "filename": "void_1_hook.mp3",
+        "text": "¿Borraron una factura hoy? Cobran en efectivo, anulan el ticket y tu dinero desaparece.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+0%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "void_2_pos.mp3",
+        "text": "En Nilos POS ninguna factura desaparece. Toda anulación requiere autorización, motivo justificado y conserva su número correlativo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "void_3_dashboard.mp3",
+        "text": "Al instante, el movimiento queda auditado en tu panel gerencial con hora exacta, monto y quién lo autorizó.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "void_4_outro.mp3",
+        "text": "Cierra la puerta al robo hormiga. Comenta CONTROL abajo para enviarte el acceso directo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    # --- Parte 10: Cobro Multimoneda y Vuelto Exacto al Centavo (MultiCurrencyReel 9:16 - Semana 3 Clip 2) ---
+    {
+        "filename": "fx_1_hook.mp3",
+        "text": "¿Te pagan con billetes en dólares y pierdes dinero dando mal el vuelto?",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+0%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "fx_2_context.mp3",
+        "text": "En plena fila, usar una calculadora aparte con el tipo de cambio provoca pérdidas en cada turno.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "fx_3_mixed.mp3",
+        "text": "En Nilos POS recibes córdobas, dólares o pagos mixtos en una sola pantalla. El sistema calcula el vuelto exacto al centavo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "fx_4_ticket.mp3",
+        "text": "Cada dólar recibido queda separado en la gaveta virtual para que el arqueo ciego cuadre sin sorpresas al cerrar el día.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "fx_5_outro.mp3",
+        "text": "Elimina los descuadres por tipo de cambio. Comenta DEMO abajo para enviarte el acceso directo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    # --- Parte 11: Trazabilidad de Inventario (Kardex) y Auditoría de Ajustes (KardexAuditReel 9:16 - Semana 3 Clip 3) ---
+    {
+        "filename": "kardex_1_hook.mp3",
+        "text": "¿Te falta mercadería del estante y nadie sabe en qué turno salió?",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+0%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "kardex_2_context.mp3",
+        "text": "Llevar el inventario a ojo o en cuadernos permite que el robo hormiga pase desapercibido.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "kardex_3_audit.mp3",
+        "text": "En Nilos cada producto tiene un historial inalterable: sabes qué entró por compra, qué se vendió en caja y quién hizo un ajuste.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "kardex_4_return.mp3",
+        "text": "Ningún artículo desaparece sin dejar rastro. Controla tus existencias y protege el margen real de tu negocio.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "kardex_5_outro.mp3",
+        "text": "Frena la pérdida de inventario hoy. Comenta CONTROL abajo para enviarte el acceso directo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
 ]
 
 async def generate_all(only: str = ""):
@@ -223,8 +324,16 @@ async def generate_all(only: str = ""):
         scene_rate = scene.get("rate", "+8%")
         scene_pitch = scene.get("pitch", "+0Hz")
         print(f"  -> [{idx}/{len(selected)}] Generando {scene['filename']} (voice={scene_voice}, rate={scene_rate}, pitch={scene_pitch})...")
-        communicate = edge_tts.Communicate(text=scene["text"], voice=scene_voice, rate=scene_rate, pitch=scene_pitch)
-        await communicate.save(target_path)
+        for attempt in range(4):
+            try:
+                communicate = edge_tts.Communicate(text=scene["text"], voice=scene_voice, rate=scene_rate, pitch=scene_pitch)
+                await communicate.save(target_path)
+                break
+            except Exception as err:
+                if attempt == 3:
+                    raise
+                print(f"     Reintentando {scene['filename']} ({attempt + 1}/3): {err}")
+                await asyncio.sleep(1.5 * (attempt + 1))
         size_kb = os.path.getsize(target_path) / 1024
         print(f"     Listo ({size_kb:.1f} KB) -> {target_path}")
         await asyncio.sleep(0.4)
