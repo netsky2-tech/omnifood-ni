@@ -2,8 +2,8 @@
 
 - **Issue:** [#984](https://github.com/netsky2-tech/omnifood-ni/issues/984)
 - **Authority:** `docs/finance/estrategia_precios_nhilos_pos_v1.md`; planes Esencial, Operación y Pro con packs Retail y Cocina.
-- **Estado:** especificación de capacidades **congelada** (`docs/plans/entitlements/catalogo_capacidades_v1.md`)
-  con las tres decisiones estructurales confirmadas; ENT-01 en curso.
+- **Estado:** especificación **congelada** con las tres decisiones estructurales confirmadas;
+  ENT-01 entregado y verificado. ENT-02 es el siguiente slice.
 - **Riesgo:** medio-alto. Toca backend, dashboard y POS; un error puede bloquear ventas.
 
 ## Specs
@@ -112,12 +112,18 @@ cambio. Las claves de capacidad que usan están congeladas en el catálogo (S9).
 
 ### ENT-01 — Catálogo, tablas y migración
 
-Status: pending.
+Status: done (`e9450e65`).
 
-- Crear `plan_capability`, `tenant_subscription`, `tenant_entitlement_override` y auditoría.
-- Definir claves de capacidad en un registro de código.
-- RLS, índices y migración inicial.
-- Pruebas de aislamiento y de migración de SOHO.
+- `plan_capability` (global), `tenant_subscription`, `tenant_entitlement_override` y
+  `tenant_entitlement_change_history` (append-only) en
+  `1810400000000-CreateEntitlementsTables.ts`.
+- Registro de claves en código: `capability-registry.ts` (10 de núcleo, 2 packs, 3
+  transversales, 2 límites; `support.priority` fuera por ser SLA).
+- ENABLE + FORCE RLS con política por comando en las tres tablas del tenant; catálogo global
+  declarado en el manifest de cobertura.
+- Seed idempotente del mapeo plan→capacidad (51 filas, una por plan y clave).
+- Pruebas: registro y matriz (13), aislamiento cross-tenant y re-ejecución de la migración (7
+  con base real y rol NOSUPERUSER NOBYPASSRLS). La migración de la data de SOHO queda en ENT-06.
 
 ### ENT-02 — Servicio y API de entitlements
 
@@ -196,6 +202,26 @@ Hallazgos que cambian el plan de implementación:
 - Proveedores tiene tabla y RLS pero no CRUD propio; combos y menú QR están a medias. No se
   gatean hasta que la función exista (§8 del catálogo).
 
+### Evidencia de ENT-01 (`e9450e65`)
+
+| Check | Comando | Resultado |
+|---|---|---|
+| Tipos | `npx tsc --noEmit` | exit 0 |
+| Lint | `npx eslint src/modules/entitlements src/migrations/1810400000000-CreateEntitlementsTables.ts` | exit 0 |
+| Unitario | `npx jest src/modules/entitlements --runInBand` | 13/13 |
+| Regresión RLS | `npx jest src/core/database/tenant-rls-coverage --runInBand` | 35/35 (el manifest editado parsea limpio) |
+| Base real | `npm run test:db -- src/modules/entitlements` | 7/7 |
+
+Nota de entorno: el worktree no tenía `node_modules`; se verificó con un symlink temporal al
+`node_modules` del checkout principal (lockfiles byte-idénticos) y se eliminó después. No se
+corrió la suite completa.
+
+Dos correcciones durante la verificación, ambas en el spec nuevo (no en la migración): una
+anotación `readonly` para que compile `includes()`, y el patrón *unbound* del spec de RLS —
+`RESET app.tenant_id` sobre un GUC propio deja cadena vacía y `''::uuid` lanza error de cast en
+lugar de denegar, así que la rama sin bind no toca el GUC y hace `SET ROLE` al rol restringido.
+Es un matiz del helper RLS del repo, no de esta migración.
+
 ## Log
 
 - **L1 (solicitud del usuario):** continuar con #984 tras diferir la entrega de #983 por falta
@@ -208,6 +234,9 @@ Hallazgos que cambian el plan de implementación:
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L6 (ENT-01 entregado):** registro, entidades, migración con RLS y seed, con 55 pruebas
+  verdes (13 unitarias + 7 con base real + 35 de regresión de cobertura RLS) y `tsc`/`eslint`
+  limpios. Commit `e9450e65`.
 - **L5 (decisiones del dueño del producto, 2026-11-17):** (1) `core.customers` es núcleo;
   (2) kardex de movimientos en `inventory.retail` y valorizado/COGS/márgenes en
   `reports.margins`; (3) `limits.terminals` bloquea el enrolamiento de un terminal nuevo pero
