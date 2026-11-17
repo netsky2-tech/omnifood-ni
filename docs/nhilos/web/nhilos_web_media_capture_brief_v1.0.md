@@ -119,3 +119,23 @@ La suite `scripts/__tests__/nhilos-home-artboard.test.mjs` valida existencia del
 - Sin datos personales reales; placeholders del tipo "Ej. John Doe".
 - Sin promesas que el producto no cumple: nada de "factura electrónica", "autorizado por la DGI" ni "cero multas".
 - Todo recurso con datos de demostración conserva su etiqueta visible.
+
+## Nombres de archivo y caché
+
+`dist/nhilos-web/_headers` sirve `/media/*` con `Cache-Control: public, max-age=604800`.
+Un recurso que se reemplaza conservando el nombre queda cacheado hasta siete días en
+el navegador y en el borde de Cloudflare, y el cambio no llega a nadie aunque el deploy
+haya subido los bytes nuevos. Paso a paso: se confirmó con `curl` que el borde servía
+591.632 bytes mientras el archivo desplegado pesaba 804.717.
+
+Regla: todo recurso que cambie de contenido cambia de nombre e incluye los primeros
+ocho caracteres de su `sha256` antes de la extensión.
+
+```
+pos_offline_cola_sync_loop.97aa1094.mp4
+pos_offline_cola_sync_poster.cf458b78.webp
+```
+
+Al reemplazar un recurso, actualizar las referencias en el artboard y comprobar con
+`curl` que el borde devuelve el tamaño nuevo. Una verificación con `?v=aleatorio`
+no cuenta: esquiva la caché que ve el visitante.
