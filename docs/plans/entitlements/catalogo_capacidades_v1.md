@@ -3,7 +3,7 @@
 - **Issue:** [#984](https://github.com/netsky2-tech/omnifood-ni/issues/984)
 - **Autoridad comercial:** `docs/finance/estrategia_precios_nhilos_pos_v1.md` §4 (planes, packs, add-ons y matriz de capacidades).
 - **Ejecución:** `odd/tasks/plan-entitlements-tenant-capabilities.md` (slices ENT-01 … ENT-06).
-- **Estado:** propuesta congelable. Tres decisiones marcadas **⟶ confirmar** (#1, #2, #3) requieren visto bueno antes de ENT-01, porque la migración las codifica.
+- **Estado:** **congelado**. Las tres decisiones estructurales (#1 clientes, #2 kardex, #3 límite de terminales) fueron confirmadas por el dueño del producto el 2026-11-17 y se codifican en ENT-01.
 
 ## 1. Propósito
 
@@ -155,19 +155,19 @@ Regla: la clave se agrega al catálogo **cuando la función existe y se puede de
 - `limits` con valor `null` significa ilimitado.
 - El POS guarda el snapshot en SQLite y **nunca** decide la venta por él.
 
-## 10. Decisiones que requieren confirmación
+## 10. Decisiones confirmadas
 
-### ⟶ #1 — `core.customers` es núcleo, no premium
+### ✔ #1 — `core.customers` es núcleo, no premium
 
-La autoridad se contradice: la fila de `OPERACION` en §4 lista "clientes" como agregado del plan, pero la matriz de capacidades los marca "Sí" en los tres planes. **Decisión propuesta: núcleo.** Razón: el nombre y RUC del cliente se imprimen en la factura fiscal; gatearlo convierte una decisión comercial en un riesgo DGI. Un tenant `ESENCIAL` que no puede registrar al cliente no puede emitir la factura que el Estado le exige.
+La autoridad se contradice: la fila de `OPERACION` en §4 lista "clientes" como agregado del plan, pero la matriz de capacidades los marca "Sí" en los tres planes. **Confirmada: núcleo.** Razón: el nombre y RUC del cliente se imprimen en la factura fiscal; gatearlo convierte una decisión comercial en un riesgo DGI. Un tenant `ESENCIAL` que no puede registrar al cliente no puede emitir la factura que el Estado le exige.
 
-### ⟶ #2 — Kardex: movimientos en el pack, valorización en Pro
+### ✔ #2 — Kardex: movimientos en el pack, valorización en Pro
 
-El issue pone "kardex" en `inventory.retail` y la autoridad pone "kardex valorizado" en `reports.margins` (Pro). **Decisión propuesta:** el **kardex de movimientos** (entradas, salidas, saldos) va con `inventory.retail`; el **kardex valorizado, COGS y márgenes** van con `reports.margins`. Son dos productos distintos: uno dice qué se movió, el otro cuánto costó.
+El issue pone "kardex" en `inventory.retail` y la autoridad pone "kardex valorizado" en `reports.margins` (Pro). **Confirmada:** el **kardex de movimientos** (entradas, salidas, saldos) va con `inventory.retail`; el **kardex valorizado, COGS y márgenes** van con `reports.margins`. Son dos productos distintos: uno dice qué se movió, el otro cuánto costó.
 
-### ⟶ #3 — Límite de terminales: bloquear enrolamiento, nunca la venta
+### ✔ #3 — Límite de terminales: bloquear enrolamiento, nunca la venta
 
-`limits.terminals` no existe como cuota en el código; el fleet sí. **Decisión propuesta:** al superar el límite, el backend **rechaza enrolar un terminal nuevo** (mensaje de upgrade), pero un terminal ya enrolado y activo **sigue vendiendo aunque el plan esté vencido o el snapshot falte**. Nunca se revoca un terminal en operación por plan: dejar a un negocio sin facturar es peor que el ingreso no cobrado.
+`limits.terminals` no existe como cuota en el código; el fleet sí. **Confirmada:** al superar el límite, el backend **rechaza enrolar un terminal nuevo** (mensaje de upgrade), pero un terminal ya enrolado y activo **sigue vendiendo aunque el plan esté vencido o el snapshot falte**. Nunca se revoca un terminal en operación por plan: dejar a un negocio sin facturar es peor que el ingreso no cobrado.
 
 ## 11. Fuera de alcance
 

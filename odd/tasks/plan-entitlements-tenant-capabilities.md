@@ -2,8 +2,8 @@
 
 - **Issue:** [#984](https://github.com/netsky2-tech/omnifood-ni/issues/984)
 - **Authority:** `docs/finance/estrategia_precios_nhilos_pos_v1.md`; planes Esencial, Operación y Pro con packs Retail y Cocina.
-- **Estado:** especificación de capacidades congelada (`docs/plans/entitlements/catalogo_capacidades_v1.md`),
-  tres decisiones pendientes de confirmación; implementación sin empezar.
+- **Estado:** especificación de capacidades **congelada** (`docs/plans/entitlements/catalogo_capacidades_v1.md`)
+  con las tres decisiones estructurales confirmadas; ENT-01 en curso.
 - **Riesgo:** medio-alto. Toca backend, dashboard y POS; un error puede bloquear ventas.
 
 ## Specs
@@ -208,6 +208,10 @@ Hallazgos que cambian el plan de implementación:
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L5 (decisiones del dueño del producto, 2026-11-17):** (1) `core.customers` es núcleo;
+  (2) kardex de movimientos en `inventory.retail` y valorizado/COGS/márgenes en
+  `reports.margins`; (3) `limits.terminals` bloquea el enrolamiento de un terminal nuevo pero
+  nunca revoca ni bloquea la venta de un terminal en operación. Se codifican en ENT-01.
 
 ## Riesgos
 - Bloquear ventas por un plan vencido.
