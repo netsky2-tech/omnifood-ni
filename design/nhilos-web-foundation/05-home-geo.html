@@ -269,6 +269,7 @@
 
     .container { max-width: var(--container-max); margin: 0 auto; padding-inline: clamp(1.25rem, 4vw, 3rem); }
     .section { padding-block: var(--space-12); }
+    @media (max-width: 640px) { .section { padding-block: var(--space-10); } }
     .section-subtle { background: var(--web-bg-subtle); }
     .section-dark { background: var(--web-navy-950); color: var(--web-text-on-dark); }
     .section-dark p { color: var(--web-text-on-dark-muted); }
@@ -315,7 +316,16 @@
     /* Fix de especificidad: .site-nav a vence a .btn-primary — forzar color del botón CTA */
     .site-nav .btn-primary, .site-nav a.btn-primary { color: #FFFFFF; }
     .site-nav .btn-primary:hover { color: #FFFFFF; }
-    @media (max-width: 720px) { .site-nav a:not(.btn) { display: none; } }
+    /* Mobile menu (hamburguesa, accesible) */
+    .mobile-menu-btn { display: none; min-width: 44px; min-height: 44px; background: transparent; border: 1px solid var(--web-border-manual); border-radius: var(--radius-sm); color: var(--web-text-primary); cursor: pointer; align-items: center; justify-content: center; transition: background-color var(--motion-fast) var(--ease-out); }
+    .mobile-menu-btn:hover { background: var(--web-bg-elevated); }
+    @media (max-width: 900px) {
+      .site-nav { position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: var(--space-1); background: #FFFFFF; padding: var(--space-4) var(--space-6) var(--space-6); border-bottom: 1px solid var(--web-border-hairline); box-shadow: 0 18px 40px rgba(0, 24, 41, 0.12); display: none; }
+      .site-nav.is-open { display: flex; }
+      .site-nav a:not(.btn) { display: inline-flex; min-height: 48px; align-items: center; border-bottom: 1px solid var(--web-border-hairline); font-size: 1rem; }
+      .site-nav .btn { margin-top: var(--space-4); justify-content: center; }
+      .mobile-menu-btn { display: inline-flex; }
+    }
 
     /* HERO — split (S1) */
     .hero { padding-block: var(--space-10) var(--space-12); overflow: hidden; }
@@ -335,7 +345,7 @@
     .device video { width: 100%; height: 100%; object-fit: contain; border-radius: 27px; background: var(--web-navy-950); }
 
     /* Hero media: terminal en mano con fondo transparente (flota sobre el canvas, como la referencia) */
-    .hero-media { margin: 0; position: relative; width: min(260px, 100%); }
+    .hero-media { margin: 0 auto; position: relative; width: min(260px, 74vw); }
     .hero-media img { display: block; width: 100%; height: auto; filter: drop-shadow(0 28px 32px rgba(0, 24, 41, 0.18)); }
 
     .chip { position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 10px 14px; font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
@@ -346,7 +356,7 @@
     .chip-b { bottom: 20%; left: -6%; }
     @media (max-width: 1024px) {
       .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
-      .device-wrap { order: 2; margin-top: var(--space-6); }
+      .device-wrap { order: 2; margin-top: var(--space-4); justify-content: center; }
       .chip-a { right: 2%; } .chip-b { left: 2%; }
     }
 
@@ -365,7 +375,7 @@
     /* ===== Section: Offline (dark) ===== */
     .offline-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-10); align-items: center; }
     .offline-grid .copy .h-lg { color: var(--web-text-on-dark); margin-bottom: var(--space-4); }
-    .offline-device { width: min(300px, 74vw); margin: 0 auto; }
+    .offline-device { width: min(260px, 70vw); margin: 0 auto; }
     @media (max-width: 1024px) { .offline-grid { grid-template-columns: 1fr; gap: var(--space-8); } }
 
     /* ===== Section: Cómo funciona (hilo) ===== */
@@ -421,7 +431,8 @@
     /* ===== FAQ unificado (estilo taste: un contenedor, celdas con hairlines internas) ===== */
     .faq-wrap { margin: var(--space-8) auto 0; max-width: 1080px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
     .faq-cells { display: grid; grid-template-columns: 1fr 1fr; }
-    .faq-cell { padding: var(--space-6) var(--space-6); border-top: 1px solid var(--web-border-hairline); }
+    .faq-cell { padding: var(--space-5) var(--space-5); border-top: 1px solid var(--web-border-hairline); }
+    @media (max-width: 640px) { .faq-cell { padding: var(--space-4) var(--space-4); } }
     .faq-cell:nth-child(-n+2) { border-top: 0; }
     .faq-cell:nth-child(odd) { border-right: 1px solid var(--web-border-hairline); }
     .faq-cell h3 { font-family: var(--font-subheading); font-size: 1.0625rem; font-weight: 600; line-height: 1.4; margin-bottom: var(--space-3); color: var(--web-text-primary); }
@@ -465,6 +476,7 @@
     .demo-alt a:hover { text-decoration: underline; }
 
     .demo-form { background: #FFFFFF; border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: 0 24px 48px -16px rgba(0, 24, 41, 0.35); }
+    @media (max-width: 640px) { .demo-form { padding: var(--space-5) var(--space-4); } }
     .demo-form .form-legend { font-family: var(--font-subheading); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); margin: 0 0 var(--space-5); }
     .form-field { border: 0; padding: 0; margin: 0 0 var(--space-5); min-width: 0; }
     .form-label { display: block; font-family: var(--font-subheading); font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); margin-bottom: var(--space-2); }
@@ -592,7 +604,10 @@
   <header class="site-header">
     <div class="container site-header-inner">
       <a class="wordmark" href="#inicio"><img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
-      <nav class="site-nav" aria-label="Navegación principal">
+      <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
         <a href="#que-es">Producto</a>
         <a href="#precios">Precios</a>
         <a href="#faq">FAQ</a>
@@ -793,7 +808,7 @@
             <p class="lead" style="margin-top: var(--space-3);">El cliente paga como quiera; el cuadre del cierre sale exacto, no aproximado.</p>
           </div>
           <div class="reveal">
-            <div class="device" style="width: min(280px, 70vw); margin: 0 auto;">
+            <div class="device" style="width: min(240px, 64vw); margin: 0 auto;">
               <video src="media/pos_caja_step1_loop.mp4" muted playsinline preload="metadata" loop disablepictureinpicture title="Cobro bimoneda en la terminal NHILOS POS"></video>
             </div>
             <span class="demo-tag">Cobro real en la terminal · datos de demostración</span>
@@ -1106,6 +1121,32 @@
       }
       window.addEventListener('scroll', onScroll, { passive: true });
       onScroll();
+
+      /* ---- Menú móvil accesible ---- */
+      var menuBtn = document.querySelector('.mobile-menu-btn');
+      var nav = document.getElementById('siteNav');
+      if (menuBtn && nav) {
+        function setMenu(open) {
+          nav.classList.toggle('is-open', open);
+          menuBtn.setAttribute('aria-expanded', String(open));
+          menuBtn.setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
+        }
+        menuBtn.addEventListener('click', function () {
+          setMenu(!nav.classList.contains('is-open'));
+        });
+        nav.addEventListener('click', function (e) {
+          if (e.target.closest('a')) setMenu(false);
+        });
+        document.addEventListener('click', function (e) {
+          if (nav.classList.contains('is-open') && !e.target.closest('.site-header')) setMenu(false);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && nav.classList.contains('is-open')) { setMenu(false); menuBtn.focus(); }
+        });
+        window.addEventListener('resize', function () {
+          if (window.innerWidth > 900 && nav.classList.contains('is-open')) setMenu(false);
+        });
+      }
     })();
 
     /* ---- Spine: índice tipo libro (ubicación + navegación) ---- */
