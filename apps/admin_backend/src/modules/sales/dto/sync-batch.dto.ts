@@ -272,6 +272,23 @@ export class SyncMovementDeltaDto {
   @IsString()
   @IsOptional()
   sourceDocumentId?: string;
+
+  /**
+   * Operator who recorded the movement on the terminal (issue #988).
+   *
+   * The POS has been stamping this on shrinkage deltas since #653/#535, but the
+   * contract never declared it, so `forbidNonWhitelisted` rejected the whole
+   * batch with 400 and no shrinkage ever reached the ledger.
+   *
+   * It is accepted as declared payload, NOT trusted for attribution: the
+   * ledger's `autorizado_por_usuario_id` means "who authorized" (an approval),
+   * and the actor identity the cloud can prove comes from the authenticated
+   * device, not from a client-supplied field. Persisting it here would let a
+   * terminal attribute a movement to any user.
+   */
+  @IsString()
+  @IsOptional()
+  userId?: string;
 }
 
 export class SyncFulfillmentDto {
