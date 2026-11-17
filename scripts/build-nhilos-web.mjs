@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = path.join(ROOT, "design/nhilos-web-foundation");
-const ENTRY = "04-sintesis-hibrida.html";
+const ENTRY = "05-home-geo.html";
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
 const PUBLIC_DIRS = ["media", "fonts"];
