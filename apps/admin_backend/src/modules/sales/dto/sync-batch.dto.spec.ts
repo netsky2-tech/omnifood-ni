@@ -71,6 +71,62 @@ describe('SyncBatchEnvelopeDto', () => {
     });
   });
 
+  it('accepts the operator userId the terminal stamps on shrinkage deltas (#988)', () => {
+    // #988: the POS has sent `userId` on shrinkage movements since #653/#535,
+    // but the contract never declared it, so the runtime pipe
+    // (forbidNonWhitelisted, src/main.ts) rejected the whole batch with 400 and
+    // no SHRINKAGE movement ever reached the kardex.
+    const shrinkage = {
+      ...validRecord,
+      documentType: 'SHRINKAGE',
+      movements: [
+        {
+          insumoId: 'ins-1',
+          quantity: -500,
+          userId: 'user-1',
+          sourceDocumentType: 'SHRINKAGE',
+        },
+      ],
+    };
+    const dto = plainToInstance(SyncBatchEnvelopeDto, { records: [shrinkage] });
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      forbidUnknownValues: false,
+    });
+
+    expect(errors).toHaveLength(0);
+    expect(dto.records[0].movements?.[0]).toMatchObject({
+      insumoId: 'ins-1',
+      quantity: -500,
+      userId: 'user-1',
+    });
+  });
+
+  it('still rejects undeclared movement properties at the same boundary', () => {
+    const withUnknown = {
+      ...validRecord,
+      movements: [
+        {
+          insumoId: 'ins-1',
+          quantity: 2,
+          stockAfter: 10,
+        },
+      ],
+    };
+    const dto = plainToInstance(SyncBatchEnvelopeDto, {
+      records: [withUnknown],
+    });
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      forbidUnknownValues: false,
+    });
+
+    expect(errors.length).toBeGreaterThan(0);
+    expect(JSON.stringify(errors)).toContain('stockAfter');
+  });
+
   it('rejects absolute stock fields at the DTO boundary', () => {
     const dto = plainToInstance(SyncBatchEnvelopeDto, {
       records: [
