@@ -113,10 +113,20 @@ interface BcnFxRateResponseBody {
   statusCode?: number;
 }
 
+// The device posting route (PurchaseDocumentDto) validates @IsUUID() on id,
+// insumoId and supplierId (commit 9b70b806): those ids travel into `uuid`
+// columns (inventory_purchase_documents.insumo_id/supplier_id are uuid; see
+// migration 1776000000000), so the terminal sends real UUIDs, not literals.
+const VALID_PURCHASE_DOCUMENT_UUID = 'd2c7f90e-3a4b-4c1a-8a1b-5f2e6d7c8a90';
+const VALID_INSUMO_UUID = '3f8b4a2c-9d1e-4f6a-b7c3-2e5d4a6b8c90';
+const VALID_SUPPLIER_UUID = '7a1d4f6b-2c3e-4b8a-9f0d-5e6c7a8b9d01';
+const OFFICIAL_MODE_PURCHASE_DOCUMENT_UUID =
+  'c4e2a1d3-5b6c-4f7e-a9b0-1d2e3f4a5b6c';
+
 const validPurchasePayload = {
-  id: 'purchase-doc-1',
-  insumoId: 'ins-1',
-  supplierId: 'sup-1',
+  id: VALID_PURCHASE_DOCUMENT_UUID,
+  insumoId: VALID_INSUMO_UUID,
+  supplierId: VALID_SUPPLIER_UUID,
   invoiceNumber: 'INV-1001',
   fiscalAuthorizationCode: 'CAE-ABC-123',
   quantity: 2,
@@ -129,7 +139,7 @@ const validPurchasePayload = {
 
 const officialModePurchasePayload = {
   ...validPurchasePayload,
-  id: 'purchase-doc-official-1',
+  id: OFFICIAL_MODE_PURCHASE_DOCUMENT_UUID,
   invoiceNumber: 'INV-2001',
   invoiceDate: '2026-01-06',
   entryTimestamp: '2026-01-06T08:15:00.000Z',
@@ -230,6 +240,7 @@ describe('Inventory purchase routes (integration)', () => {
     createQueryBuilder: jest.fn(),
     findOne: jest.fn(),
     find: jest.fn(),
+    count: jest.fn().mockResolvedValue(0),
     query: jest.fn(),
     save: jest.fn(),
     create: jest.fn(),
@@ -632,7 +643,7 @@ describe('Inventory purchase routes (integration)', () => {
     // manager, tenant-scoped; the pooled repository path is gone.
     expect(manager.findOne).toHaveBeenCalledWith(Insumo, {
       where: {
-        id: validPurchasePayload.insumoId,
+        id: validPurchasePreviewPayload.insumoId,
         tenant_id: 'tenant-XYZ',
       },
     });
@@ -698,7 +709,7 @@ describe('Inventory purchase routes (integration)', () => {
     // manager, tenant-scoped; the pooled repository path is gone.
     expect(manager.findOne).toHaveBeenCalledWith(Insumo, {
       where: {
-        id: officialModePurchasePayload.insumoId,
+        id: officialModePurchasePreviewPayload.insumoId,
         tenant_id: 'tenant-A',
       },
     });
@@ -907,7 +918,7 @@ describe('Inventory purchase routes (integration)', () => {
 
     const body = response.body as ConflictResponseBody;
     expect(body.message).toBe(
-      'Purchase invoice INV-1001 is already registered for supplier sup-1',
+      `Purchase invoice INV-1001 is already registered for supplier ${VALID_SUPPLIER_UUID}`,
     );
     expect(body.statusCode).toBe(409);
     expect(manager.findOne).toHaveBeenCalledWith(
