@@ -912,6 +912,26 @@
 
     @media (max-width: 1100px) {
       .main-nav { display: none !important; }
+      .main-nav.is-open {
+        display: flex !important;
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: var(--web-navy-950);
+        padding: var(--space-5) var(--space-6);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+        max-height: calc(100vh - 72px);
+        max-height: calc(100dvh - 72px);
+        overflow-y: auto;
+      }
+      .main-nav.is-open .nav-link {
+        padding: var(--space-3) 0;
+      }
       .mobile-menu-btn { display: flex !important; }
     }
 
@@ -4033,7 +4053,7 @@
           <span class="brand-wordmark">NHILOS <span style="color: var(--web-emerald-400); font-size: 0.82em; font-weight: 600; letter-spacing: 0.04em;">POS</span></span>
         </a>
 
-        <nav class="main-nav" aria-label="Navegación principal">
+        <nav class="main-nav" id="mainNav" aria-label="Navegación principal">
           <a href="#pos" class="nav-link">Punto de Venta</a>
           <a href="#problema" class="nav-link">Continuidad</a>
           <a href="#backoffice" class="nav-link">Backoffice</a>
@@ -4044,7 +4064,7 @@
 
         <div class="header-actions">
           <a href="#demo" class="cta-button cta-button-emerald">Solicitar una demo</a>
-          <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" onclick="toggleMobileNav()">
+          <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="mainNav" aria-expanded="false" onclick="toggleMobileNav()">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
         </div>
@@ -4180,7 +4200,7 @@
             <div style="display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--web-navy-900); padding-top: 16px; border-top: 1px dashed var(--web-border-hairline);">
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="color: var(--web-emerald-600); font-weight: 700;">✓</span>
-                <span>Cumplimiento fiscal DGI DT 09-2007</span>
+                <span>Estructura fiscal DT 09-2007 (autorización DGI del negocio)</span>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
                 <span style="color: var(--web-emerald-600); font-weight: 700;">✓</span>
@@ -4641,7 +4661,7 @@
                       <span style="color: #64748B;">└──</span>
                       <span style="color: #38BDF8; font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700;">[DGI]</span>
                       <strong style="color: #FFFFFF;">Auditoría:</strong>
-                      <span style="color: #94A3B8;">Cumplimiento fiscal DGI DT 09-2007</span>
+                      <span style="color: #94A3B8;">Estructura fiscal DT 09-2007</span>
                     </div>
                   </div>
                 </div>
@@ -4725,10 +4745,10 @@
               </div>
               <h3 class="section-title" style="font-size: 1.35rem; margin-bottom: 10px;">Historial de comprobantes inalterables y auditoría fiscal DGI.</h3>
               <p class="section-lead" style="font-size: 0.9375rem; margin-bottom: 16px;">
-                Cumplimiento riguroso de la Disposición Técnica 09-2007: numeración correlativa continua sin saltos, prohibición de borrado físico, motivo formal auditado para cada anulación y libro de ventas diario exportable para tu contador.
+                Cumplimiento riguroso de la Disposición Técnica 09-2007: numeración correlativa continua sin saltos, prohibición de borrado físico, motivo formal auditado para cada anulación y libro de ventas diario exportable para tu contador. La autorización formal ante la DGI —carta, código y numeración autorizada— corresponde a cada negocio contribuyente; NHILOS garantiza la mecánica normativa que esa autorización exige.
               </p>
               <div class="claim-pill-group">
-                <span class="claim-pill claim-emerald">Normativa DGI DT 09-2007</span>
+                <span class="claim-pill claim-emerald">Mecánica normativa DT 09-2007</span>
                 <span class="claim-pill">Comprobantes Inalterables</span>
               </div>
               <div class="pinned-chapter-inline-media" style="background: #F8FAFC;">
@@ -4890,7 +4910,7 @@
             <div>
               <span class="impl-step-day">PASO 04 · REGLAS DGI</span>
               <h3 class="idea-card-title">4. Configura impuestos y bimoneda</h3>
-              <p class="idea-card-body">Registra tu RUC y régimen fiscal DT 09-2007. Define la tasa de cambio oficial BCN y la tasa comercial para cobro transparente en córdobas y dólares sin descuadres.</p>
+              <p class="idea-card-body">Registra tu RUC y tu autorización DGI vigente (la carta de autorización, el código y la numeración autorizada son tuyos como contribuyente). NHILOS garantiza la mecánica: consecutivo inalterable y anulaciones con motivo formal. Define la tasa de cambio oficial BCN y la tasa comercial para cobro transparente en córdobas y dólares sin descuadres.</p>
             </div>
             <span class="impl-step-pill">DGI DT 09-2007 & BCN</span>
           </div>
@@ -4970,9 +4990,9 @@
           <div class="security-card">
             <div class="security-card-header">
               <span class="security-card-title"><span style="color: var(--web-emerald-400); font-family: var(--font-mono); font-size: 0.75rem;">[DGI]</span> Facturación inmutable</span>
-              <span class="security-card-badge">Norma DGI DT 09-2007</span>
+              <span class="security-card-badge">Mecánica normativa DT 09-2007</span>
             </div>
-            <p class="security-card-body">Prohibición estricta de borrado físico de comprobantes. En estricto apego a la ley nicaragüense, toda anulación exige registrar un motivo formal auditado y preserva la correlatividad consecutiva de la serie fiscal.</p>
+            <p class="security-card-body">Prohibición estricta de borrado físico de comprobantes. En estricto apego a la ley nicaragüense, toda anulación exige registrar un motivo formal auditado y preserva la correlatividad consecutiva de la serie fiscal. La autorización DGI del contribuyente (carta, código y numeración) pertenece a tu negocio; NHILOS la sostiene con estructura técnica conforme.</p>
           </div>
 
           <div class="security-card">
@@ -5082,7 +5102,7 @@
               <span class="faq-icon">+</span>
             </button>
             <div class="faq-answer-panel">
-              <div class="faq-answer-inner">Sí. NHILOS POS opera bajo los requerimientos fiscales de la Disposición Técnica 09-2007 de la DGI (consecutivos inalterables, prohibición de borrado físico y anulación auditada de facturas). El sistema proporciona reportes de ventas, arqueos y correlativos DGI exportables a Excel/CSV para tu contabilidad, facilitando la conciliación periódica con tu contador o despacho externo.
+              <div class="faq-answer-inner">Sí. NHILOS POS opera bajo los requerimientos fiscales de la Disposición Técnica 09-2007 de la DGI (consecutivos inalterables, prohibición de borrado físico y anulación auditada de facturas). El sistema proporciona reportes de ventas, arqueos y correlativos exportables a Excel/CSV para tu contabilidad, facilitando la conciliación periódica con tu contador o despacho externo. Nota precisa: la autorización formal ante la DGI (carta de autorización, código y numeración autorizada) la obtiene y posee cada negocio contribuyente; NHILOS garantiza la mecánica normativa que esa autorización exige.
               </div>
             </div>
           </div>
@@ -5337,7 +5357,7 @@
 
       <div class="footer-bottom-bar">
         <div>
-          © 2026 NHILOS. Todos los derechos reservados. Cumplimiento normativo DGI Disposición Técnica 09-2007.
+          © 2026 NHILOS. Todos los derechos reservados. Estructura de facturación conforme a la Disposición Técnica 09-2007; la autorización DGI corresponde a cada contribuyente.
         </div>
         <div>
           <a href="#inicio" style="color: var(--web-emerald-400); font-weight: 600;">Volver arriba ↑</a>
@@ -6298,7 +6318,7 @@
         desc: 'Cumplimiento riguroso de la Disposición Técnica 09-2007: numeración correlativa continua sin saltos, prohibición de borrado físico, motivo formal auditado para cada anulación y libro de ventas diario exportable para tu contador.',
         img: 'media/dsh_03_historial_comprobantes.webp',
         video: null,
-        claim: 'Normativa DGI DT 09-2007',
+        claim: 'Mecánica normativa DT 09-2007',
         claimSecondary: 'Comprobantes Inalterables'
       },
       {
@@ -6652,23 +6672,33 @@
     });
 
     // 9. MOBILE NAVIGATION DRAWER
+    function setMobileNavOpen(isOpen) {
+      const nav = document.querySelector('.main-nav');
+      const btn = document.querySelector('.mobile-menu-btn');
+      if (!nav || !btn) return;
+      nav.classList.toggle('is-open', isOpen);
+      btn.setAttribute('aria-expanded', String(isOpen));
+      btn.setAttribute('aria-label', isOpen ? 'Cerrar menú' : 'Abrir menú');
+    }
+
     function toggleMobileNav() {
       const nav = document.querySelector('.main-nav');
       if (!nav) return;
-      if (nav.style.display === 'flex') {
-        nav.style.display = 'none';
-      } else {
-        nav.style.display = 'flex';
-        nav.style.flexDirection = 'column';
-        nav.style.position = 'absolute';
-        nav.style.top = '72px';
-        nav.style.left = '0';
-        nav.style.right = '0';
-        nav.style.background = 'var(--web-navy-950)';
-        nav.style.padding = '24px';
-        nav.style.borderBottom = '1px solid rgba(255,255,255,0.1)';
-      }
+      setMobileNavOpen(!nav.classList.contains('is-open'));
     }
+
+    document.querySelectorAll('.main-nav a').forEach((link) => {
+      link.addEventListener('click', () => setMobileNavOpen(false));
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') setMobileNavOpen(false);
+    });
+
+    const mobileNavBreakpoint = window.matchMedia('(min-width: 1101px)');
+    mobileNavBreakpoint.addEventListener('change', (event) => {
+      if (event.matches) setMobileNavOpen(false);
+    });
   </script>
 </body>
 </html>
