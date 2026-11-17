@@ -319,7 +319,7 @@
 
     /* HERO — split (S1) */
     .hero { padding-block: var(--space-10) var(--space-12); overflow: hidden; }
-    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: var(--space-10); align-items: center; }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-10); align-items: center; }
     .hero h1 { font-size: var(--text-display-xl); line-height: 1.08; font-weight: 700; letter-spacing: -0.03em; margin-bottom: var(--space-5); }
     .hero h1 em { font-style: normal; color: var(--web-navy-800); position: relative; }
     .hero .lead { margin-bottom: var(--space-6); }
@@ -334,12 +334,16 @@
     .device::after { content: ""; position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 84px; height: 8px; border-radius: var(--radius-full); background: rgba(255,255,255,0.12); z-index: 2; }
     .device video { width: 100%; height: 100%; object-fit: contain; border-radius: 27px; background: var(--web-navy-950); }
 
+    /* Hero media: dispositivo en mano (el video ya trae el dispositivo, sin bezel CSS) */
+    .hero-media { margin: 0; position: relative; width: min(400px, 100%); border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 32px 64px -16px rgba(0, 24, 41, 0.4), 0 4px 12px rgba(0, 24, 41, 0.15); }
+    .hero-media video { display: block; width: 100%; height: auto; aspect-ratio: 480 / 854; object-fit: cover; object-position: 50% 35%; }
+
     .chip { position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 10px 14px; font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
     .chip .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
     .chip-ok::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--web-status-ok); }
     .chip-warn::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--web-status-warn); }
-    .chip-a { top: 14%; right: -4%; }
-    .chip-b { bottom: 16%; left: -6%; }
+    .chip-a { top: 12%; right: -6%; }
+    .chip-b { bottom: 18%; left: -8%; }
     @media (max-width: 1024px) {
       .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
       .device-wrap { order: 2; margin-top: var(--space-6); }
@@ -610,13 +614,13 @@
             <a class="btn btn-primary" href="https://wa.me/50581948526">Solicitar una demo</a>
             <a class="btn btn-secondary" href="#como-funciona">Ver cómo funciona</a>
           </div>
-          <p class="hero-proof-note hero-in" style="--hero-delay: 360ms;">Operación real capturada de NHILOS Market &amp; Café · datos de demostración.</p>
+          <p class="hero-proof-note hero-in" style="--hero-delay: 360ms;">Interfaz real de NHILOS POS en demostración · datos de demostración.</p>
         </div>
         <div class="device-wrap">
-          <div class="device">
-            <video src="media/pos_hero_live_loop.mp4" muted playsinline preload="metadata" loop disablepictureinpicture title="NHILOS POS: cobro en la terminal"></video>
-          </div>
-          <span class="chip chip-a chip-ok"><span class="mono">C$153.06</span> ticket cuadrado</span>
+          <figure class="hero-media" aria-label="Mano sujetando una terminal con la interfaz de NHILOS POS mientras un cliente agrega un Capuchino al carrito">
+            <video src="media/pos_on_hand_hero.mp4" muted playsinline preload="metadata" loop disablepictureinpicture poster="media/pos_on_hand_poster.webp" title="NHILOS POS en mano: menú de café, agregado al carrito y confirmación"></video>
+          </figure>
+          <span class="chip chip-a chip-ok"><span class="mono">C$125.00</span> pedido en carrito</span>
           <span class="chip chip-b chip-warn"><span class="mono">Offline</span> cobro local activo</span>
         </div>
       </div>
