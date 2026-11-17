@@ -46,3 +46,11 @@ Rediseño de la home de nhilospos.com como nuevo artboard independiente (no dest
   - D1: NOTA — el diff de 04-sintesis-hibrida.html es el trabajo fiscal previo intencional sin commitear (no defecto de 05); decisión de commit del usuario.
   - Deudas de documentación (a)-(h) del verificador absorbidas en copy v1.5.
 - **L8**: Test de regresión durable creado: `scripts/__tests__/nhilos-home-artboard.test.mjs` (15 tests, `node --test`) — cubre H1 único, claims, FAQ unificado con paridad schema/página, entity-first, meta limits, integridad JSON-LD, anchors, em-dash, media+labels, WhatsApp, debris, depth rule, form anti-default, datos personales. Estado final: 15/15 PASS.
+- **L9**: Auditoría de medios por sección (excluyendo hero). Hallazgos y correcciones:
+  - §5 Fiscal: el recurso usado (`dsh_03_historial_comprobantes.webp`) mostraba el resumen de Ventas, no comprobantes; el rótulo del navegador declaraba un contenido falso. Sustituido por `dsh_06_fiscal.webp` (módulo Fiscal, correlatividad, IVA, pestañas Anulaciones / Auditoría de secuencia) con rótulo y alt corregidos.
+  - §7 Bimoneda: el clip (`pos_caja_step1_loop.mp4`) era catálogo y carrito, sin ninguna moneda. Sustituido por `pos_06_pantalla_cobro.webp` (total C$140.00 / $3.82 USD, TC BCN 36.6241, pago y vuelto en NIO/USD), nativo 1080x2316, encaja exacto en el marco `.device`.
+  - §2 Offline: recurso real pero testigo ilegible al tamaño de despliegue (~8 px) y sin venta ni sincronización. Decisión del founder: nueva captura limpia en dispositivo (opción C).
+  - §6 Inventario: recurso parcial (prueba receta y costo, no descuento ni merma). `dsh_20_kardex_delta_ledger` está en estado vacío. Decisión: nueva captura del Kardex poblado.
+  - Descartados: reels de `Pictures/nhilos/Clips/` (9:16 con copy de marca incrustado) y `pos_offline_narrative_loop.mp4` (scroll sin cambio de estado).
+  - Brief de captura creado: `docs/nhilos/web/nhilos_web_media_capture_brief_v1.0.md` (formatos, secuencias, criterios de aceptación, puntos de integración).
+  - Commit: fdd140fd. Suite 15/15 PASS.
