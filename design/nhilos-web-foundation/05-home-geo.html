@@ -334,16 +334,16 @@
     .device::after { content: ""; position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 84px; height: 8px; border-radius: var(--radius-full); background: rgba(255,255,255,0.12); z-index: 2; }
     .device video { width: 100%; height: 100%; object-fit: contain; border-radius: 27px; background: var(--web-navy-950); }
 
-    /* Hero media: dispositivo en mano (el video ya trae el dispositivo, sin bezel CSS) */
-    .hero-media { margin: 0; position: relative; width: min(400px, 100%); border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 32px 64px -16px rgba(0, 24, 41, 0.4), 0 4px 12px rgba(0, 24, 41, 0.15); }
-    .hero-media video { display: block; width: 100%; height: auto; aspect-ratio: 480 / 854; object-fit: cover; object-position: 50% 35%; }
+    /* Hero media: terminal en mano con fondo transparente (flota sobre el canvas, como la referencia) */
+    .hero-media { margin: 0; position: relative; width: min(380px, 100%); }
+    .hero-media img { display: block; width: 100%; height: auto; filter: drop-shadow(0 28px 32px rgba(0, 24, 41, 0.18)); }
 
     .chip { position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 10px 14px; font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
     .chip .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
     .chip-ok::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--web-status-ok); }
     .chip-warn::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--web-status-warn); }
-    .chip-a { top: 12%; right: -6%; }
-    .chip-b { bottom: 18%; left: -8%; }
+    .chip-a { top: 16%; right: -2%; }
+    .chip-b { bottom: 22%; left: -4%; }
     @media (max-width: 1024px) {
       .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
       .device-wrap { order: 2; margin-top: var(--space-6); }
@@ -614,11 +614,11 @@
             <a class="btn btn-primary" href="https://wa.me/50581948526">Solicitar una demo</a>
             <a class="btn btn-secondary" href="#como-funciona">Ver cómo funciona</a>
           </div>
-          <p class="hero-proof-note hero-in" style="--hero-delay: 360ms;">Interfaz real de NHILOS POS en demostración · datos de demostración.</p>
+          <p class="hero-proof-note hero-in" style="--hero-delay: 360ms;">Terminal con la interfaz real de NHILOS POS · datos de demostración.</p>
         </div>
         <div class="device-wrap">
-          <figure class="hero-media" aria-label="Mano sujetando una terminal con la interfaz de NHILOS POS mientras un cliente agrega un Capuchino al carrito">
-            <video src="media/pos_on_hand_hero.mp4" muted playsinline preload="metadata" loop disablepictureinpicture poster="media/pos_on_hand_poster.webp" title="NHILOS POS en mano: menú de café, agregado al carrito y confirmación"></video>
+          <figure class="hero-media" aria-label="Mano sujetando una terminal de punto de venta con impresora integrada mostrando la interfaz de NHILOS POS">
+            <img src="media/pos_hand_device_transparent.webp" width="768" height="1376" alt="Terminal de punto de venta NHILOS POS en mano con el menú de café, precios en córdobas y barra de carrito en pantalla" loading="eager" fetchpriority="high" title="NHILOS POS: terminal con impresora integrada">
           </figure>
           <span class="chip chip-a chip-ok"><span class="mono">C$125.00</span> pedido en carrito</span>
           <span class="chip chip-b chip-warn"><span class="mono">Offline</span> cobro local activo</span>
