@@ -23,15 +23,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@react-three/fiber": "^8.17.10",
-    "@remotion/three": "^4.0.280",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "remotion": "^4.0.280",
-    "tailwind-merge": "^3.3.0",
-    "three": "^0.180.0"
+    "tailwind-merge": "^3.3.0"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.280",

@@ -25,21 +25,31 @@ import { Semana4Q80ScreenAsset } from '../scenes/semana4_fisico/Semana4Q80Screen
  * referencia de la industria (todos ARGUMENTAN y defienden una tesis), la
  * pieza ahora es un argumento con CINCO tiempos:
  *
- *   1. Argumento (f0..f78):    tipografía a todo lo ancho. "20 ventas al
- *                              día con billete de $20." → "Si el redondeo
- *                              te cuesta C$1 en cada una…"
+ *   1. Argumento (f0..f78):    la PÉRDIDA y el CONDICIONAL entran en el
+ *                              primer fotograma: "Si cada vuelto de $20 te
+ *                              cuesta C$1." El "si" no es adorno: sin él la
+ *                              pieza afirmaría una pérdida universal que el
+ *                              material no puede sostener. No se
+ *                              abre con una premisa neutra — la Compuerta 1
+ *                              del Creative Critic lo vetó y tenía razón.
  *   2. La multiplicación       los números SON el elemento visual:
- *      (f78..f195)             "C$1 × 20" → "= C$20 al día" → "= C$600 al
- *                              mes" (ámbar = pérdida hipotética; el
- *                              esmeralda se reserva para la resolución).
+ *      (f78..f195)             "C$1 × 20" → "= C$20 al día" → "× 30 días"
+ *                              → "= C$600 al mes" (ámbar = pérdida
+ *                              hipotética). El paso de día a mes es
+ *                              VISIBLE: sin él el salto a C$600 es
+ *                              atacable y el argumento se cae.
  *   3. Prueba (f195..f345):    la pantalla real del checkout bimoneda con
  *                              la tasa real; banda esmeralda "Vuelto
  *                              exacto C$607.49" + "Calculado al tipo de
  *                              cambio del día". El producto es el
  *                              mecanismo, no la estrella.
- *   4. Resolución (f345..f450): tipografía con contraste. "Sin redondear.
- *                              Sin calcular a ojo." El número hipotético
- *                              ámbar se resuelve a esmeralda.
+ *   4. Resolución (f345..f450): tipografía con contraste. Una sola
+ *                              afirmación ("Sin calcular a ojo.") y el
+ *                              número ámbar resuelto a esmeralda:
+ *                              "C$0 de redondeo" + "en cada cobro". Acotado
+ *                              a cada transacción porque una sola
+ *                              transacción grabada no sostiene un cero
+ *                              mensual.
  *   5. Cierre (f450..f540):    logo, NHILOS POS, CTA, sitio; el contenido
  *                              sale en f522..f534 y los frames finales son
  *                              el mismo fondo del arranque (f539 == f0).
@@ -80,7 +90,53 @@ const CLOSE_EXIT_START = 522;
 const CLOSE_EXIT_END = 534;
 
 /* ------------------------------------------------------------------ */
-/* Tipografía protagonista: bloque a todo lo ancho, llegada dura       */
+/* Fondo de producto: la pantalla real del checkout detrás del tipo.
+ * Ampliada más allá del borde del cuadro (recortada), difuminada y muy
+ * atenuada: debe leerse como TEXTURA, no como texto — ningún rótulo de la
+ * UI es legible detrás del tipo (blur 18px + velo navy fuerte). Deriva
+ * despacio para que se sienta viva y no pegada. En el frame local 0 está
+ * en opacity 0 → el frame 0 global sigue siendo fondo limpio (loop).
+ * ------------------------------------------------------------------ */
+const BackdropScreen: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  // Fade de entrada: en el frame local 0 está en 0 → el frame 0 global
+  // sigue siendo fondo limpio y el loop se sostiene.
+  const fadeIn = interpolate(frame, [0, 6], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const drift = interpolate(frame, [0, durationInFrames], [0, 46], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  const zoom = interpolate(frame, [0, durationInFrames], [1.32, 1.37], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
+  return (
+    <AbsoluteFill style={{ opacity: fadeIn, zIndex: 0, pointerEvents: 'none' }}>
+      {/* Pantalla ampliada más allá del cuadro (recorte central que llena
+          todo el alto) y derivando hacia abajo muy despacio. */}
+      {/* Blur fuerte: la UI se vuelve textura — sin texto legible detrás
+          del tipo (revisión de legibilidad 360px). */}
+      <div style={{ opacity: 0.24, filter: 'blur(18px)' }}>
+        <DeviceScreen network="online" zoom={zoom} zoomOrigin="50% 50%" shift={drift} />
+      </div>
+      {/* Velo navy fuerte: la pantalla queda como sugerencia de textura. */}
+      <AbsoluteFill
+        style={{
+          background:
+            'linear-gradient(to bottom, rgba(0,31,51,0.82) 0%, rgba(0,31,51,0.72) 40%, rgba(0,31,51,0.92) 100%)',
+        }}
+      />
+    </AbsoluteFill>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Tipografía protagonista: línea a todo lo ancho, llegada dura.       */
+/* Cada línea recibe su propio tamaño para llenar el ancho objetivo.   */
 /* ------------------------------------------------------------------ */
 const SlamType: React.FC<{
   appearAt: number;
@@ -108,6 +164,7 @@ const SlamType: React.FC<{
         right: 120,
         display: 'flex',
         justifyContent: 'center',
+        zIndex: 10,
         opacity: interpolate(frame, [appearAt, appearAt + 2], [0, 1], {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
@@ -257,7 +314,7 @@ const PersistentCTA: React.FC = () => {
     <div
       style={{
         position: 'absolute',
-        top: 128,
+        top: 140,
         left: 0,
         right: 0,
         display: 'flex',
@@ -313,17 +370,18 @@ const PersistentCTA: React.FC = () => {
 const ArgumentBeat: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: BG }}>
-      {/* Línea 1: f1..f38 (~1.2s); f0 queda fondo vacío para el loop */}
-      <SlamType appearAt={1} disappearAt={39} top={420} fontSize={96}>
-        20 ventas al día
-        <br />
-        con billete de <span style={{ color: colors.green }}>$20.</span>
+      {/* La pantalla real detrás del tipo: evidencia de producto desde f0 */}
+      <BackdropScreen />
+      {/* Un solo enunciado en tres líneas (mismas palabras, mismo orden):
+          112 es el tamaño máximo que respeta el área segura x∈[90,960]. */}
+      <SlamType appearAt={1} top={360} fontSize={112}>
+        Si cada vuelto
       </SlamType>
-      {/* Línea 2: f39..f78 (~1.3s); el C$1 queda en ámbar — es la pérdida */}
-      <SlamType appearAt={39} top={420} fontSize={78}>
-        Si el redondeo te cuesta
-        <br />
-        <span style={{ color: AMBER }}>C$1</span> en cada una…
+      <SlamType appearAt={1} top={500} fontSize={112}>
+        de <span style={{ color: colors.green }}>$20</span>
+      </SlamType>
+      <SlamType appearAt={1} top={640} fontSize={112}>
+        te cuesta <span style={{ color: AMBER }}>C$1.</span>
       </SlamType>
     </AbsoluteFill>
   );
@@ -337,19 +395,30 @@ const ArgumentBeat: React.FC = () => {
 const MultiplicationBeat: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: BG }}>
-      <SlamType appearAt={6} top={560} fontSize={128}>
+      {/* La pantalla real detrás de los números */}
+      <BackdropScreen />
+      {/* Cadena de cuatro tiempos, retemporizada: la cifra climax aterriza
+          en el frame local 64 y aguanta 53f (1.77s ≥ 1.5s) antes del
+          corte. El paso de día a mes ES VISIBLE: sin C$20 × 30 el salto a
+          C$600 es atacable y el argumento se cae. */}
+      <SlamType appearAt={6} top={380} fontSize={176}>
         <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>C$1 × 20</span>
       </SlamType>
-      <SlamType appearAt={32} top={760} fontSize={80}>
+      <SlamType appearAt={26} top={600} fontSize={132}>
         <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>= C$20 al día</span>
       </SlamType>
+      <SlamType appearAt={45} top={800} fontSize={110}>
+        <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>× 30 días</span>
+      </SlamType>
       {/* Aterriza y se queda: es la cifra que sostiene el argumento */}
-      <SlamType appearAt={64} top={920} fontSize={112}>
+      <SlamType appearAt={64} top={970} fontSize={121}>
         <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>= C$600 al mes</span>
       </SlamType>
-      <SlamType appearAt={74} top={1110} fontSize={38}>
+      {/* Caption condicional: entra 14f después de la cifra (sin colisión,
+          queda hasta el corte del beat). */}
+      <SlamType appearAt={78} top={1150} fontSize={40}>
         <span style={{ color: colors.gray, fontWeight: 700, letterSpacing: 0 }}>
-          si cada venta pierde C$1
+          si cada vuelto te cuesta C$1
         </span>
       </SlamType>
     </AbsoluteFill>
@@ -382,14 +451,17 @@ const ProofBeat: React.FC = () => {
   });
   return (
     <AbsoluteFill style={{ background: BG }}>
-      {/* +60px: baja la pantalla para que la banda superior (CTA en y128)
+      {/* +60px: baja la pantalla para que la banda superior (CTA en y140)
           no pise el chip "Factura #00893" de la UI real. */}
       <DeviceScreen network="online" zoom={zoom} zoomOrigin="50% 25%" />
-      {/* Banda esmeralda a todo lo ancho: contraste duro sobre la pantalla */}
+      {/* Banda esmeralda: subida para respetar la zona segura inferior
+          (borde inferior ≤ y1640) y dejar aire para el caption debajo, sin
+          tapar el bloque "VUELTO EXACTO A ENTREGAR" de la UI (termina
+          ~y1350 a esta escala). */}
       <div
         style={{
           position: 'absolute',
-          top: 1600,
+          top: 1396,
           left: 120,
           right: 120,
           background: colors.green,
@@ -413,7 +485,11 @@ const ProofBeat: React.FC = () => {
           Vuelto exacto C${vuelto}
         </span>
       </div>
-      <SlamType appearAt={56} top={1740} fontSize={38}>
+      {/* Caption del tipo de cambio: entra CON la banda (f14 local =
+          f209 global; antes aparecía en f251 y a las 8.33s aún no estaba
+          en cuadro) y a 50px para que sobreviva al ancho de feed
+          (340px ≈ 15px en pantalla). Borde inferior ~y1634 ≤ y1640. */}
+      <SlamType appearAt={14} top={1578} fontSize={50}>
         <span style={{ color: colors.gray, fontWeight: 700, letterSpacing: 0 }}>
           Calculado al tipo de cambio del día
         </span>
@@ -436,26 +512,35 @@ const ResolutionBeat: React.FC = () => {
     extrapolateRight: 'clamp',
     easing: Easing.out(Easing.cubic),
   });
+  // Salida en CROSSFADE con la entrada del cierre (f444..f456 global): el
+  // contenido se funde mientras el logo crece — nunca hay frame vacío
+  // entre el tiempo 4 y el tiempo 5. El fondo es el mismo BG del padre,
+  // así que desvanecerlo no cambia el campo base.
+  const exitFade = interpolate(frame, [99, 111], [1, 0], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
   return (
-    <AbsoluteFill style={{ background: BG }}>
-      <SlamType appearAt={8} top={420} fontSize={100}>
-        Sin redondear.
-      </SlamType>
-      <SlamType appearAt={30} top={560} fontSize={100}>
+    <AbsoluteFill style={{ background: BG, opacity: exitFade }}>
+      {/* Recorte tenue de la pantalla real detrás del contraste */}
+      <BackdropScreen />
+      {/* Una sola afirmación: la otra decía lo mismo que la cifra del beat. */}
+      <SlamType appearAt={8} top={400} fontSize={104}>
         Sin calcular a ojo.
       </SlamType>
       {/* Número resuelto: ámbar → esmeralda */}
       <div
         style={{
           position: 'absolute',
-          top: 820,
+          top: 800,
           left: 120,
           right: 120,
           display: 'flex',
           justifyContent: 'center',
+          zIndex: 10,
         }}
       >
-        <div style={{ position: 'relative', width: 640, height: 150 }}>
+        <div style={{ position: 'relative', width: 920, height: 160 }}>
           <span
             style={{
               position: 'absolute',
@@ -465,9 +550,10 @@ const ResolutionBeat: React.FC = () => {
               justifyContent: 'center',
               fontFamily: RENOGARE,
               fontWeight: 900,
-              fontSize: 96,
+              fontSize: 90,
               color: AMBER,
               fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
               opacity: 1 - resolved,
             }}
           >
@@ -482,13 +568,14 @@ const ResolutionBeat: React.FC = () => {
               justifyContent: 'center',
               fontFamily: RENOGARE,
               fontWeight: 900,
-              fontSize: 96,
+              fontSize: 90,
               color: colors.green,
               fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
               opacity: resolved,
             }}
           >
-            C$0 al mes
+            C$0 de redondeo
           </span>
         </div>
       </div>
@@ -536,7 +623,7 @@ const ResolutionBeat: React.FC = () => {
               opacity: resolved,
             }}
           >
-            si el vuelto se calcula solo
+            en cada cobro
           </span>
         </div>
       </div>
@@ -558,8 +645,16 @@ const CloseBeat: React.FC = () => {
     extrapolateRight: 'clamp',
   });
 
-  const logoScale = spring({ frame, fps, config: { damping: 14, mass: 0.9 } });
-  const textOpacity = interpolate(frame, [6, 16], [0, 1], {
+  // Sin fondo propio: el AbsoluteFill padre ya pinta el BG, y dejar el
+  // fondo del cierre transparente permite el crossfade con el tiempo 4
+  // durante f450..f456 (sin frame vacío entre resolución y cierre).
+  const logoScale = spring({
+    frame,
+    fps,
+    config: { damping: 14, mass: 0.9 },
+    durationInFrames: 16,
+  });
+  const textOpacity = interpolate(frame, [4, 12], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -572,7 +667,7 @@ const CloseBeat: React.FC = () => {
   return (
     <div
       className="w-full h-full flex flex-col items-center justify-center p-12 relative overflow-hidden text-center font-sans"
-      style={{ background: BG }}
+      style={{ background: 'transparent' }}
     >
       <div
         style={{
@@ -656,7 +751,7 @@ export const Semana4Pieza2Digital: React.FC = () => {
       <Sequence from={195} durationInFrames={150}>
         <ProofBeat />
       </Sequence>
-      <Sequence from={345} durationInFrames={105}>
+      <Sequence from={345} durationInFrames={117}>
         <ResolutionBeat />
       </Sequence>
       <Sequence from={450} durationInFrames={90}>

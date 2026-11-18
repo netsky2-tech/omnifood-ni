@@ -158,4 +158,11 @@ export const COMPOSITION_PRESETS = {
     fps: VIDEO_FPS,
     durationInFrames: 540, // 18s @ 30fps: cinco tiempos de argumento (tipo a todo lo ancho, la multiplicación en ámbar, pantalla real con la tasa, resolución ámbar→esmeralda, cierre de marca); locución regenerada desde f0 (15.86s, sin loop); el cierre y el chip CTA salen en f522..f534 para que el frame final loopee al arranque (f539 == f0); sin ticket ni claims falsos
   },
+  viernes20CafeteriaCodigo: {
+    id: 'Viernes20CafeteriaCodigoReel',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 750, // 25.0s @ 30fps: hook G4 Macro-Zoom f1 (1.75x) + aritmética condicional T2 + UI real Handheld SKU 104 + cobro C$ 200 -> Vuelto C$ 100 + resolución esmeralda + cierre/loop f749==f0
+  },
 } as const;

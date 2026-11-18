@@ -15,6 +15,7 @@ import { Semana4Carrusel } from './compositions/Semana4Carrusel';
 import { Semana4CarruselVertical } from './compositions/Semana4CarruselVertical';
 import { Semana4PosScreen, Semana4Ticket80mm, Semana4Overlays, Semana4HeroSalesScreen } from './compositions/Semana4AssetKit';
 import { Semana4Pieza2Digital } from './compositions/Semana4Pieza2Digital';
+import { Viernes20CafeteriaCodigoReel } from './compositions/Viernes20CafeteriaCodigoReel';
 import { MetricsShowcase } from './compositions/MetricsShowcase';
 import { COMPOSITION_PRESETS } from './tokens/brand';
 import './styles/global.css';
@@ -206,6 +207,16 @@ export const RemotionRoot: React.FC = () => {
         fps={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.fps}
         width={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.width}
         height={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.height}
+      />
+
+      {/* 18. Viernes 20/11 - Cafetería Búsqueda por Código + Venta Rápida (25s): hook G4 Macro-Zoom f1 + aritmética T2 + UI real Handheld SKU 104 + Cobro rápido C$ 100.00 vuelto */}
+      <Composition
+        id={COMPOSITION_PRESETS.viernes20CafeteriaCodigo.id}
+        component={Viernes20CafeteriaCodigoReel}
+        durationInFrames={COMPOSITION_PRESETS.viernes20CafeteriaCodigo.durationInFrames}
+        fps={COMPOSITION_PRESETS.viernes20CafeteriaCodigo.fps}
+        width={COMPOSITION_PRESETS.viernes20CafeteriaCodigo.width}
+        height={COMPOSITION_PRESETS.viernes20CafeteriaCodigo.height}
       />
     </>
   );
