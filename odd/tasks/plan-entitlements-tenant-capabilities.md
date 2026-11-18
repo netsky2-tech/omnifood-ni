@@ -202,12 +202,25 @@ Notas de ejecución:
 
 ### ENT-05 — Dashboard y POS UI
 
-Status: pending.
+Status: done (`4e29a4d5` POS, `85387137` dashboard).
 
-- `useCapabilities()` y `CapabilityGate`.
-- Mostrar plan vigente y límites.
-- Mensajes de upgrade claros.
-- Pruebas de renderizado y accesibilidad.
+- POS: `PremiumLockedView` y `BohRouteGuard(capability: …)`. El permiso por rol se evalúa primero y
+  gana; solo después la capacidad. Sin snapshot en contexto falla cerrado, y las rutas de núcleo no
+  reciben `capability`, así que la venta y la caja no pasan por este camino.
+- Dashboard: `useEntitlements()` con TTL de 24 h y sin reintentos en 4xx (un rechazo de plan es una
+  respuesta, no una falla); cualquier error cae a "sin capacidades premium", nunca a "todo
+  permitido". `evaluateRouteAccess` devuelve primero la denegación por rol y después la de plan.
+- Mensaje contractual único en ambas apps:
+  `La función requiere el plan o el complemento que incluye "<key>". Actualice su plan para usarla.`
+- Cubierto: compras, proveedores, conteos, merma, alertas, kardex (`inventory.retail`); recetas,
+  comparación de versiones, producción y costo por plato (`inventory.cooking`); valorización, COGS
+  y márgenes (`reports.margins`); convenios B2B (`promotions.convenio`).
+- Pruebas que fallan si alguna vez se mapea una clave `core.*` a una ruta, si un permiso denegado
+  deja de ganarle a una capacidad concedida, o si el copy contractual cambia.
+
+Nota: el worker de ENT-05b declaró un hueco — el tab de valorización tenía el mapeo pero no el gate,
+porque cablearlo rompía el fixture `w3-inventory`, que afirmaba la tabla sin stubear entitlements.
+Lo cerró el padre: el tab quedó cableado y el fixture ahora stub de entitlements como concedido.
 
 ### ENT-06 — Overrides y operación
 
@@ -317,6 +330,10 @@ multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L12 (ENT-05 entregado, `4e29a4d5` + `85387137`):** gating de UI en las dos apps, compuesto con
+  el RBAC existente y con el mensaje contractual único. POS 15/15 pruebas propias; dashboard con
+  `tsc` 0, oxlint sin errores y 1911/1911 en la suite completa. Con esto los seis slices del feature
+  quedan entregados salvo ENT-06 (overrides y operación).
 - **L11 (ENT-04 entregado, `fcfac970` + `a07ee9f9` + `1616b9ad`):** el POS cachea el snapshot con
   TTL y un rechazo de plan deja de confundirse con una sesión caída. Un dominio bloqueado por
   plan retiene sus filas y se libera solo ante un cambio real del plan. Evidencia: 601/601 en
