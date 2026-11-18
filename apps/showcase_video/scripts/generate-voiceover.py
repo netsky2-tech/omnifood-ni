@@ -309,6 +309,16 @@ SCENES = [
         "rate": "-2%",
         "pitch": "+0Hz",
     },
+    # ================================================================
+    # PARTE 12: Semana 4 - Pieza 2 (Jueves 19/11) Video Físico en Mostrador
+    # ================================================================
+    {
+        "filename": "fisico_1_vo.mp3",
+        "text": "Así cobra Nilos POS en un teléfono normal: dólares, vuelto exacto en córdobas, y la venta sigue aunque se caiga el internet. Comenta DEMO y te paso el acceso.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
 ]
 
 async def generate_all(only: str = ""):

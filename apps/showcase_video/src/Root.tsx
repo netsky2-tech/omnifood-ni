@@ -11,6 +11,10 @@ import { OwnerDashboardReel } from './compositions/OwnerDashboardReel';
 import { VoidAuditReel } from './compositions/VoidAuditReel';
 import { MultiCurrencyReel } from './compositions/MultiCurrencyReel';
 import { KardexAuditReel } from './compositions/KardexAuditReel';
+import { Semana4Carrusel } from './compositions/Semana4Carrusel';
+import { Semana4CarruselVertical } from './compositions/Semana4CarruselVertical';
+import { Semana4PosScreen, Semana4Ticket80mm, Semana4Overlays, Semana4HeroSalesScreen } from './compositions/Semana4AssetKit';
+import { Semana4Pieza2Digital } from './compositions/Semana4Pieza2Digital';
 import { MetricsShowcase } from './compositions/MetricsShowcase';
 import { COMPOSITION_PRESETS } from './tokens/brand';
 import './styles/global.css';
@@ -136,6 +140,72 @@ export const RemotionRoot: React.FC = () => {
         fps={COMPOSITION_PRESETS.kardexAuditReel.fps}
         width={COMPOSITION_PRESETS.kardexAuditReel.width}
         height={COMPOSITION_PRESETS.kardexAuditReel.height}
+      />
+
+      {/* 13. Carrusel Estático 4:5 - Semana 4 Martes: 3 Fugas de Efectivo (4 láminas) */}
+      <Composition
+        id={COMPOSITION_PRESETS.semana4Carrusel.id}
+        component={Semana4Carrusel}
+        durationInFrames={COMPOSITION_PRESETS.semana4Carrusel.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4Carrusel.fps}
+        width={COMPOSITION_PRESETS.semana4Carrusel.width}
+        height={COMPOSITION_PRESETS.semana4Carrusel.height}
+      />
+
+      {/* 14. Carrusel Estático 9:16 - Semana 4 Martes: variante nativa TikTok Photo Mode */}
+      <Composition
+        id={COMPOSITION_PRESETS.semana4CarruselVertical.id}
+        component={Semana4CarruselVertical}
+        durationInFrames={COMPOSITION_PRESETS.semana4CarruselVertical.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4CarruselVertical.fps}
+        width={COMPOSITION_PRESETS.semana4CarruselVertical.width}
+        height={COMPOSITION_PRESETS.semana4CarruselVertical.height}
+      />
+
+      {/* 15. Asset Kit Video Físico - Semana 4 Jueves: pantalla Q80, ticket 80mm y overlays alpha */}
+      <Composition
+        id={COMPOSITION_PRESETS.semana4PosScreenAsset.id}
+        component={Semana4PosScreen}
+        durationInFrames={COMPOSITION_PRESETS.semana4PosScreenAsset.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4PosScreenAsset.fps}
+        width={COMPOSITION_PRESETS.semana4PosScreenAsset.width}
+        height={COMPOSITION_PRESETS.semana4PosScreenAsset.height}
+      />
+      <Composition
+        id={COMPOSITION_PRESETS.semana4Ticket80mmAsset.id}
+        component={Semana4Ticket80mm}
+        durationInFrames={COMPOSITION_PRESETS.semana4Ticket80mmAsset.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4Ticket80mmAsset.fps}
+        width={COMPOSITION_PRESETS.semana4Ticket80mmAsset.width}
+        height={COMPOSITION_PRESETS.semana4Ticket80mmAsset.height}
+      />
+      <Composition
+        id={COMPOSITION_PRESETS.semana4OverlaysAsset.id}
+        component={Semana4Overlays}
+        durationInFrames={COMPOSITION_PRESETS.semana4OverlaysAsset.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4OverlaysAsset.fps}
+        width={COMPOSITION_PRESETS.semana4OverlaysAsset.width}
+        height={COMPOSITION_PRESETS.semana4OverlaysAsset.height}
+      />
+
+      {/* 16. Web Hero - pantalla de ventas real para montaje en dispositivo (referencia PayOne) */}
+      <Composition
+        id={COMPOSITION_PRESETS.semana4HeroSalesScreenAsset.id}
+        component={Semana4HeroSalesScreen}
+        durationInFrames={COMPOSITION_PRESETS.semana4HeroSalesScreenAsset.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4HeroSalesScreenAsset.fps}
+        width={COMPOSITION_PRESETS.semana4HeroSalesScreenAsset.width}
+        height={COMPOSITION_PRESETS.semana4HeroSalesScreenAsset.height}
+      />
+
+      {/* 17. Demo 100% Digital - Cobro Bimoneda (Jueves 19/11): seis tiempos, 14.7s, payoff front-loaded, loop; sin ticket ni claims falsos */}
+      <Composition
+        id={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.id}
+        component={Semana4Pieza2Digital}
+        durationInFrames={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.durationInFrames}
+        fps={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.fps}
+        width={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.width}
+        height={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.height}
       />
     </>
   );

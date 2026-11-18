@@ -109,4 +109,53 @@ export const COMPOSITION_PRESETS = {
     fps: VIDEO_FPS,
     durationInFrames: 1110, // 37.0 segundos (885 + 225 = 1110 frames) con locución natural (-2%)
   },
+  semana4Carrusel: {
+    id: 'Semana4Carrusel',
+    width: 1080,
+    height: 1350,
+    fps: VIDEO_FPS,
+    durationInFrames: 4, // 1 frame por lámina (portada + 3 fugas); exporta con remotion still
+  },
+  semana4CarruselVertical: {
+    id: 'Semana4CarruselVertical',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 4, // variante TikTok Photo Mode 9:16; pie sobre la UI inferior (~300px)
+  },
+  semana4PosScreenAsset: {
+    id: 'Semana4PosScreen',
+    width: 1600,
+    height: 2560,
+    fps: VIDEO_FPS,
+    durationInFrames: 1, // asset estático: pantalla Q80 800x1280 @2x para composite
+  },
+  semana4Ticket80mmAsset: {
+    id: 'Semana4Ticket80mm',
+    width: 945,
+    height: 1256,
+    fps: VIDEO_FPS,
+    durationInFrames: 1, // asset estático: ticket 80mm a 300 dpi imprimible/compusable
+  },
+  semana4OverlaysAsset: {
+    id: 'Semana4Overlays',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 4, // overlays PNG alpha (f0..f3): 3 textos + cierre de marca
+  },
+  semana4HeroSalesScreenAsset: {
+    id: 'Semana4HeroSalesScreen',
+    width: 1600,
+    height: 2560,
+    fps: VIDEO_FPS,
+    durationInFrames: 1, // web hero: pantalla de ventas real (SaleView) para montaje en dispositivo
+  },
+  semana4Pieza2DigitalAsset: {
+    id: 'Semana4Pieza2Digital',
+    width: 1080,
+    height: 1920,
+    fps: VIDEO_FPS,
+    durationInFrames: 440, // 14.67s @ 30fps: seis tiempos desiguales, payoff antes de f90, cierre que loopea al gancho; sin ticket ni claims falsos
+  },
 } as const;
