@@ -14,7 +14,8 @@ import { EntitlementsService } from './entitlements.service';
  * (subscription, override, change history) with RLS.
  * ENT-02: effective-capability resolution (`entitlement-resolution.ts`, pure)
  * served through `GET /api/tenant/entitlements`.
- * Guards (`CapabilitiesGuard` / `@RequireCapability`) and the administrative
+ * ENT-03: `CapabilitiesGuard` / `@RequireCapability` gate the PREMIUM
+ * endpoints of other modules (which import this module); the administrative
  * write paths land in later slices and are deliberately absent here.
  */
 @Module({
