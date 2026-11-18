@@ -59,6 +59,7 @@ import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
+import 'domain/services/entitlements/entitlement_snapshot_service.dart';
 import 'core/di/ota_providers.dart';
 import 'domain/services/update/ota_discovery_service.dart';
 import 'domain/services/update/ota_update_coordinator.dart';
@@ -274,6 +275,19 @@ void main() async {
     configDao: database.localConfigDao,
     clock: StopwatchMonotonicClock(),
     bootSessionId: const Uuid().v4(),
+  );
+  // ENT-04: offline entitlement snapshot cache (catalog §6). Same storage
+  // precedent as the capability cache above: a JSON payload under
+  // `local_configs` keyed `entitlements:<tenantId>`, no Floor entity. It
+  // rides the human app client (Bearer token) and never gates the sale path.
+  final entitlementSnapshotService = EntitlementSnapshotService(
+    configDao: database.localConfigDao,
+    dio: dio,
+    resolveTenantId: () async =>
+        (await database.localConfigDao.getConfigByKey(
+          TenantConfigService.tenantIdKey,
+        ))
+            ?.value,
   );
   final credentialStore = FlutterSecureCloudCredentialStore();
   final barrierStore = SharedPreferencesCloudRevocationBarrierStore();
@@ -529,6 +543,9 @@ void main() async {
     // same acting-operator identity the cash path uses
     // (AuthRepository.getCurrentUser). Optional callback, sync-time call.
     resolveActingUserId: () async => (await authRepository.getCurrentUser())?.id,
+    // ENT-04 (catalog §6.3): plan refusals are recorded here and released
+    // when the snapshot changes; the UI (ENT-05) watches the same service.
+    entitlements: entitlementSnapshotService,
   );
   activeSyncService = syncService;
 
@@ -541,6 +558,11 @@ void main() async {
   final isTerminalLinked = initialRoute == '/';
   if (isTerminalLinked) {
     connectivityService.start();
+    // ENT-04: load the last stored snapshot (local SQLite, cheap, awaited)
+    // and fire-and-forget the backend refresh so the first frame never waits
+    // on the network. Both calls swallow their own failures by contract.
+    await entitlementSnapshotService.load();
+    unawaited(entitlementSnapshotService.refresh());
     syncService.start();
 
     // #528 R1+R2: the retention/lifecycle trigger. The purge existed inside
