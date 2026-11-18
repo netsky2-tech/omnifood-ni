@@ -23,10 +23,40 @@ export const ACCOUNT_THROTTLER_NAME = 'account';
 /** Milliseconds in the fixed throttle window (1 minute). */
 export const THROTTLE_TTL_MS = 60_000;
 
+/**
+ * Test-only override for both login budgets. Honored ONLY outside
+ * `NODE_ENV=production` and consumed by the e2e throttle contract
+ * (`test/identity/login-throttle.e2e-spec.ts`), which pins it to the
+ * production number so the full app enforces the real budget under test.
+ * In production this variable is ignored: an environment leak can never
+ * loosen the brute-force budget.
+ */
+export const LOGIN_THROTTLE_LIMIT_ENV = 'LOGIN_THROTTLE_LIMIT';
+
+/** Login budget outside production when no override is set (local dev). */
+export const DEV_LOGIN_LIMIT = 60;
+
+function resolveLoginLimit(productionLimit: number): number {
+  if (process.env.NODE_ENV === 'production') return productionLimit;
+  const raw = process.env[LOGIN_THROTTLE_LIMIT_ENV];
+  if (raw === undefined) return DEV_LOGIN_LIMIT;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEV_LOGIN_LIMIT;
+}
+
+/** Login attempts per IP per window in production (the security contract). */
+export const PRODUCTION_LOGIN_PER_IP_LIMIT = 5;
+/** Login attempts per account (tenantSlug|email) per window in production. */
+export const PRODUCTION_LOGIN_PER_ACCOUNT_LIMIT = 5;
+
 /** Login attempts per IP per window. */
-export const LOGIN_PER_IP_LIMIT = process.env.NODE_ENV === 'production' ? 5 : 60;
+export const LOGIN_PER_IP_LIMIT = resolveLoginLimit(
+  PRODUCTION_LOGIN_PER_IP_LIMIT,
+);
 /** Login attempts per account (tenantSlug|email) per window. */
-export const LOGIN_PER_ACCOUNT_LIMIT = process.env.NODE_ENV === 'production' ? 5 : 60;
+export const LOGIN_PER_ACCOUNT_LIMIT = resolveLoginLimit(
+  PRODUCTION_LOGIN_PER_ACCOUNT_LIMIT,
+);
 /** Refresh exchanges per IP per window (per client this is roughly hourly). */
 export const REFRESH_PER_IP_LIMIT = 15;
 /** Device-sync token renewals per IP per window (many terminals, one LAN). */
