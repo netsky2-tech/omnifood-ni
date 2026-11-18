@@ -6,6 +6,7 @@ import { TenantEntitlementOverride } from './entities/tenant-entitlement-overrid
 import { TenantEntitlementChangeHistory } from './entities/tenant-entitlement-change-history.entity';
 import { EntitlementsController } from './entitlements.controller';
 import { EntitlementsService } from './entitlements.service';
+import { TenantQuotaService } from './tenant-quota.service';
 
 /**
  * Issue #984 entitlements.
@@ -17,6 +18,9 @@ import { EntitlementsService } from './entitlements.service';
  * ENT-03: `CapabilitiesGuard` / `@RequireCapability` gate the PREMIUM
  * endpoints of other modules (which import this module); the administrative
  * write paths land in later slices and are deliberately absent here.
+ * ENT-03b: `TenantQuotaService` counts seats (`limits.terminals`) and owner
+ * accounts (`limits.owner_accounts`) — a count that blocks enrolment only,
+ * never the sale (catalog §6.2).
  */
 @Module({
   imports: [
@@ -28,7 +32,7 @@ import { EntitlementsService } from './entitlements.service';
     ]),
   ],
   controllers: [EntitlementsController],
-  providers: [EntitlementsService],
-  exports: [EntitlementsService],
+  providers: [EntitlementsService, TenantQuotaService],
+  exports: [EntitlementsService, TenantQuotaService],
 })
 export class EntitlementsModule {}

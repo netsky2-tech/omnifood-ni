@@ -84,3 +84,49 @@ describe('fiscal and transactional paths never carry @RequireCapability', () => 
     },
   );
 });
+
+describe('ENT-03b: the seat quota never touches renewal, baja or sync', () => {
+  // Catalog §6.2: nothing of the quota applies to token renewal, sync or the
+  // credential baja — the baja must work even over quota, because a tenant
+  // must always be able to free a seat. If any of these files ever starts
+  // consulting TenantQuotaService, this spec fails before production does.
+  const NEVER_QUOTA_CHECKED_FILES = [
+    'modules/identity/controllers/device-sync-token.controller.ts',
+    'modules/identity/controllers/device-sync-revocation.controller.ts',
+    'modules/identity/services/device-sync-credential.service.ts',
+  ];
+
+  it('the net actually covers the files it claims to protect', () => {
+    for (const relativePath of NEVER_QUOTA_CHECKED_FILES) {
+      expect(() =>
+        readFileSync(join(SRC_DIR, relativePath), 'utf-8'),
+      ).not.toThrow();
+    }
+  });
+
+  it.each(NEVER_QUOTA_CHECKED_FILES)(
+    '%s is never quota-checked',
+    (relativePath) => {
+      const source = readFileSync(join(SRC_DIR, relativePath), 'utf-8');
+      expect(source).not.toContain('TenantQuotaService');
+      expect(source).not.toContain('assertCanEnrollTerminal');
+      expect(source).not.toContain('assertCanAddOwnerAccount');
+    },
+  );
+
+  it('the activation controller gates exactly the two enrolment endpoints, never the confirm flows', () => {
+    const source = readFileSync(
+      join(SRC_DIR, 'modules/onboarding/controllers/activation.controller.ts'),
+      'utf-8',
+    );
+    // provisionDeviceSyncCredential + provisionBootstrapDeviceSyncCredential.
+    expect(source.match(/assertCanEnrollTerminal/g)?.length).toBe(2);
+    // The confirm flows and every other endpoint stay ungated: confirming an
+    // already-provisioned credential must never be refused by the quota.
+    const confirmMethod = source.match(
+      /async confirmDeviceSyncCredential\([\s\S]*?\n {2}\}/,
+    )?.[0];
+    expect(confirmMethod).toBeDefined();
+    expect(confirmMethod).not.toContain('assertCanEnrollTerminal');
+  });
+});
