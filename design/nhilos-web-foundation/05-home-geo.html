@@ -118,7 +118,7 @@
           "name": "¿Cuánto cuesta NHILOS POS?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "NHILOS POS se cotiza según tu operación en Nicaragua: número de terminales, locales y si activas recetas. No se vende por licencia de pago único; es cobro mensual por terminal. Como referencia, los POS para restaurantes suelen publicar planes de entrada entre $21 y $50 USD al mes. La cotización sale de una demo o de WhatsApp, sin compromiso."
+            "text": "NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US$149, Operación US$89 con setup de US$250 y Pro US$149 con setup de US$450; Enterprise se cotiza según la operación. No se vende por licencia de pago único: es suscripción mensual por negocio, con packs de capacidad de US$39 al mes. La cotización final sale de una demo o de WhatsApp, sin compromiso."
           }
         },
         {
@@ -440,10 +440,37 @@
     @media (max-width: 1024px) { .seg-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 520px) { .seg-grid { grid-template-columns: 1fr; } }
 
-    /* ===== Precios ===== */
-    .pricing-note { margin-top: var(--space-5); display: grid; gap: var(--space-3); }
-    .pricing-note li { list-style: none; display: grid; grid-template-columns: 18px 1fr; gap: var(--space-2); color: var(--web-text-secondary); }
-    .pricing-note li::before { content: "✓"; color: var(--web-status-ok); font-weight: 700; }
+    /* ===== Precios: planes, packs y letra pequeña ===== */
+    .plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); margin-top: var(--space-8); align-items: stretch; }
+    .plan-card { display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-card); }
+    .plan-name { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); }
+    .plan-price { margin-top: var(--space-3); display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+    .plan-amount { font-family: var(--font-display); font-size: clamp(2.25rem, 3.2vw, 2.75rem); line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: var(--web-navy-900); font-variant-numeric: tabular-nums; }
+    .plan-per { font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-muted); }
+    .plan-setup { margin-top: var(--space-2); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--web-text-muted); }
+    .plan-for { margin-top: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .plan-list { list-style: none; margin: var(--space-4) 0 0; padding: var(--space-4) 0 0; border-top: 1px solid var(--web-border-hairline); display: grid; gap: var(--space-2); }
+    .plan-list li { display: grid; grid-template-columns: 16px 1fr; gap: var(--space-2); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .plan-list li::before { content: "✓"; color: var(--web-status-ok); font-weight: 700; }
+    .pack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); margin-top: var(--space-6); }
+    .pack-card { background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); }
+    .pack-card h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+    .pack-price { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500; color: var(--web-text-muted); }
+    .pack-card p { margin-top: var(--space-3); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .pack-note { margin-top: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .pack-addons { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--web-border-hairline); display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5); font-size: var(--text-body-sm); color: var(--web-text-secondary); align-items: baseline; }
+    .pack-addons strong { font-family: var(--font-subheading); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--web-emerald-700); }
+    .plan-enterprise { margin-top: var(--space-5); display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-4) var(--space-5); box-shadow: var(--shadow-card); }
+    .plan-enterprise h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; }
+    .plan-enterprise .ent-price { font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; color: var(--web-navy-900); font-size: var(--text-heading-sm); }
+    .plan-enterprise p:last-child { font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .section-condiciones { padding-block: var(--space-8); }
+    .fineprint { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); }
+    .fineprint-title { font-family: var(--font-subheading); font-size: var(--text-eyebrow); font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--web-text-primary); }
+    .fineprint-list { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; gap: var(--space-3); }
+    .fineprint-list li { font-size: var(--text-body-sm); line-height: 1.6; color: var(--web-text-muted); padding-left: 16px; position: relative; }
+    .fineprint-list li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-navy-100); }
+    @media (max-width: 720px) { .plan-grid { grid-template-columns: 1fr; } .pack-grid { grid-template-columns: 1fr; } }
 
     /* ===== FAQ unificado (estilo taste: un contenedor, celdas con hairlines internas) ===== */
     .faq-wrap { margin: var(--space-8) auto 0; max-width: 1080px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
@@ -834,14 +861,101 @@
       </div>
     </section>
 
-    <!-- 8 · PRECIOS -->
+    <!-- 8 · PRECIOS: PLANES -->
     <section class="section section-subtle" id="precios" aria-labelledby="precios-title">
       <div class="container reveal">
-        <p class="eyebrow">Inversión</p>
+        <p class="eyebrow">Precios</p>
         <h2 class="h-lg" id="precios-title">¿Cuánto cuesta un sistema POS para restaurante en Nicaragua?</h2>
-        <p class="lead" style="margin-top: var(--space-4);">Depende de tu operación: terminales, locales y si activas recetas. Cotización sin compromiso por WhatsApp o demo, sin licencias pesadas de una vez.</p>
-        <h3 class="h-md" style="margin-top: var(--space-8);">La implementación depende de tu catálogo</h3>
-        <p class="lead" style="margin-top: var(--space-3);">Un mostrador simple arranca en días; un restaurante con recetas toma un poco más, porque cada receta se define con precisión. Te decimos el cronograma real en la cotización.</p>
+        <p class="lead" style="margin-top: var(--space-4);">Planes mensuales por negocio; el setup se cobra una vez.</p>
+        <div class="plan-grid stagger">
+          <article class="plan-card">
+            <h3 class="plan-name">Esencial</h3>
+            <p class="plan-price"><span class="plan-amount">US$49</span><span class="plan-per">/mes</span></p>
+            <p class="plan-setup">Setup: US$149</p>
+            <p class="plan-for">Pulperías, kioscos, food trucks, cafeterías pequeñas</p>
+            <ul class="plan-list">
+              <li>1 terminal incluida</li>
+              <li>Catálogo, caja y turnos</li>
+              <li>Doble tipo de cambio</li>
+              <li>Inventario simple</li>
+              <li>Reportes esenciales</li>
+              <li>Portal del propietario</li>
+              <li>Usuarios POS ilimitados</li>
+              <li>2 cuentas de propietario</li>
+            </ul>
+          </article>
+          <article class="plan-card">
+            <h3 class="plan-name">Operación</h3>
+            <p class="plan-price"><span class="plan-amount">US$89</span><span class="plan-per">/mes</span></p>
+            <p class="plan-setup">Setup: US$250</p>
+            <p class="plan-for">Food parks, bares, cafeterías con mesa, tiendas medianas</p>
+            <ul class="plan-list">
+              <li>Todo lo de Esencial</li>
+              <li>1 pack a elección</li>
+              <li>Clientes, promociones y lealtad</li>
+              <li>Reportes operativos</li>
+            </ul>
+          </article>
+          <article class="plan-card">
+            <h3 class="plan-name">Pro</h3>
+            <p class="plan-price"><span class="plan-amount">US$149</span><span class="plan-per">/mes</span></p>
+            <p class="plan-setup">Setup: US$450</p>
+            <p class="plan-for">Restaurantes, minimarkets, farmacias piloto, alto flujo</p>
+            <ul class="plan-list">
+              <li>Todo lo de Operación</li>
+              <li>Ambos packs incluidos</li>
+              <li>2 terminales incluidas</li>
+              <li>4 cuentas de propietario</li>
+              <li>Reportes de margen y kardex valorizado</li>
+              <li>Soporte prioritario</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8b · PRECIOS: PACKS Y ADD-ONS -->
+    <section class="section section-subtle" id="packs" aria-labelledby="packs-title">
+      <div class="container reveal">
+        <h2 class="h-md" id="packs-title">Packs y add-ons</h2>
+        <p class="lead" style="margin-top: var(--space-3);">Dos packs de capacidad: se elige por tu operación, no por tu rubro.</p>
+        <div class="pack-grid stagger">
+          <article class="pack-card">
+            <h3>Retail <span class="pack-price">US$39/mes</span></h3>
+            <p>Kardex valorado, costo promedio, proveedores, compras, conteos, mermas, alertas de stock, código de barras, lotes y vencimiento.</p>
+          </article>
+          <article class="pack-card">
+            <h3>Cocina <span class="pack-price">US$39/mes</span></h3>
+            <p>Recetas y BOM, subrecetas, modificadores, producción, combos, márgenes por plato, menú QR.</p>
+          </article>
+        </div>
+        <p class="pack-note">Operación incluye un pack a elección; Pro incluye ambos.</p>
+        <div class="pack-addons">
+          <strong>Add-ons</strong>
+          <span>Terminal adicional: US$40/mes (US$29 en Pro).</span>
+          <span>Cuenta de propietario adicional: US$10/mes.</span>
+        </div>
+        <div class="plan-enterprise">
+          <h3>Enterprise</h3>
+          <p class="ent-price">Cotización</p>
+          <p>Cadenas y requerimientos a medida · setup por cotización.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8c · PRECIOS: CONDICIONES -->
+    <section class="section section-condiciones" id="condiciones" aria-labelledby="condiciones-title">
+      <div class="container reveal">
+        <div class="fineprint">
+          <h2 class="fineprint-title" id="condiciones-title">La letra pequeña</h2>
+          <ul class="fineprint-list">
+            <!-- CLAIM GUARD (#983): el documento de precios lista "facturación impresa DGI" en Esencial, pero la impresión genérica (adaptador ESC/POS) es el issue #983 y sigue abierta. "Facturación impresa" vuelve a esta sección cuando #983 cierre. No publicar la mecánica como "electrónica" ni como "autorizada por la DGI": la autorización pertenece al contribuyente, no al software. -->
+            <li>Facturación: todos los planes emiten factura con la mecánica que exige la DT 09-2007: consecutivo inalterable, anulación solo con motivo auditado y libros de ventas exportables.</li>
+            <li>El hardware se cobra aparte, como kit o aprovisionamiento, nunca dentro de la mensualidad.</li>
+            <li>Precios netos: el IVA y cualquier tributo aplicable se agregan según la ley y el comprobante correspondiente.</li>
+            <li>La aplicación de los planes depende de los entitlements (issue #984); el plan contratado puede tardar en reflejarse módulo por módulo, sin fechas prometidas.</li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -860,7 +974,7 @@
           </div>
           <div class="faq-cell">
             <h3>¿Cuánto cuesta NHILOS POS?</h3>
-            <p>NHILOS POS se cotiza según tu operación en Nicaragua: número de terminales, locales y si activas recetas. No se vende por licencia de pago único; es cobro mensual por terminal. Como referencia, los POS para restaurantes suelen publicar planes de entrada entre $21 y $50 USD al mes. La cotización sale de una demo o de WhatsApp, sin compromiso.</p>
+            <p>NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US$149, Operación US$89 con setup de US$250 y Pro US$149 con setup de US$450; Enterprise se cotiza según la operación. No se vende por licencia de pago único: es suscripción mensual por negocio, con packs de capacidad de US$39 al mes. La cotización final sale de una demo o de WhatsApp, sin compromiso.</p>
           </div>
           <div class="faq-cell">
             <h3>¿NHILOS POS funciona sin internet?</h3>

@@ -25,7 +25,7 @@
 
 1. **Este copy manda sobre el texto actual del artboard.** Las secciones visuales (clips, capturas) se reubican según esta estructura, no al revés.
 2. **Claims bloqueados** en cualquier edición: "factura electrónica", "cero multas", "sistema autorizado por la DGI", "nunca pierdes una venta", "100% sincronizado", "solución integral", "transformación digital", "ecosistema".
-3. **`[PRECIO: pendiente]`** marca los únicos puntos que falta decidir. No publicar sin resolverlos o manteniendo el texto de cotización.
+3. **`[PRECIO: pendiente]`** marcaba los puntos que faltaban decidir; resueltos en v1.6 con los precios congelados de `docs/finance/estrategia_precios_nhilos_pos_v1.md`. No publicar precios que no estén en ese documento.
 4. Los datos de capturas/clips son **datos de demostración** y llevan su etiqueta (regla de evidencia).
 5. Meta sugerida (title ≤ 60, description ≤ 155):
    - **Title:** `NHILOS POS · Sistema POS en Nicaragua`
@@ -118,7 +118,9 @@ El cliente paga como quiera; el cuadre del cierre sale exacto, no aproximado.
 
 Depende de tu operación: terminales, locales y si activas recetas. Cotización sin compromiso por WhatsApp o demo — sin licencias pesadas de una vez.
 
-[PRECIO: pendiente — al definir valores, tabla de planes con benchmark del mercado ($21–50/mes de entrada).]
+Precios definidos y congelados (v1.6, fuente: `docs/finance/estrategia_precios_nhilos_pos_v1.md`, sección 4). Se publican como tres secciones contiguas (cada una ≤120 palabras, regla de profundidad): `#precios` (planes Esencial US$49/Operación US$89/Pro US$149, setup US$149/US$250/US$450), `#packs` (Retail y Cocina US$39/mes; add-ons terminal adicional US$40/mes, US$29 en Pro; cuenta de propietario adicional US$10/mes; Enterprise por cotización) y `#condiciones` (letra pequeña: mecánica DT 09-2007, hardware aparte, precios netos, entitlements #984). La capacidad fiscal se publica como "factura con la mecánica que exige la DT 09-2007", nunca "facturación impresa" (el adaptador ESC/POS genérico, issue #983, sigue abierto) ni "factura electrónica".
+
+> El benchmark del mercado ($21–50/mes de entrada) era referencia de mercado, no precio propio; se retiró del texto público al publicar precios reales.
 
 #### H3: La implementación depende de tu catálogo
 Un mostrador simple arranca en días; un restaurante con recetas toma un poco más — porque cada receta se define con precisión. Te decimos el cronograma real en la cotización.
@@ -133,7 +135,7 @@ Un mostrador simple arranca en días; un restaurante con recetas toma un poco m�
 Sí. La terminal cobra y emite tickets con correlativo sin conexión; al volver la red, todo se sincroniza solo.
 
 **¿Cuánto cuesta?**
-Se cotiza según tu operación. Sin licencias de una vez ni letra pequeña. [PRECIO: pendiente]
+Esencial US$49 al mes (setup US$149), Operación US$89 (setup US$250), Pro US$149 (setup US$450). Enterprise por cotización. Suscripción mensual por negocio; packs de US$39/mes. Cotización final por demo o WhatsApp.
 
 **¿Sirve para la DGI?**
 NHILOS garantiza la mecánica que exige la DT 09-2007: consecutivo inalterable, anulación solo con motivo auditado y libros exportables. La autorización —carta, código y numeración— la posee tu negocio como contribuyente.
@@ -190,7 +192,7 @@ NHILOS POS es un sistema de punto de venta para Nicaragua que funciona primero e
 
 **2. ¿Cuánto cuesta NHILOS POS?**
 
-NHILOS POS se cotiza según tu operación en Nicaragua: número de terminales, locales y si activas recetas. No se vende por licencia de pago único; es cobro mensual por terminal. Como referencia, los POS para restaurantes suelen publicar planes de entrada entre $21 y $50 USD al mes. La cotización sale de una demo o de WhatsApp, sin compromiso.
+NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US$149, Operación US$89 con setup de US$250 y Pro US$149 con setup de US$450; Enterprise se cotiza según la operación. No se vende por licencia de pago único: es suscripción mensual por negocio, con packs de capacidad de US$39 al mes. La cotización final sale de una demo o de WhatsApp, sin compromiso.
 
 **3. ¿NHILOS POS funciona sin internet?**
 
@@ -228,7 +230,7 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
 
 1. **JSON-LD:** las 16 preguntas totales (6 del FAQ humano + 10 de este bloque) van en un solo schema `FAQPage` — o en dos bloques separados por sección. Pregunta exacta como `name`, respuesta íntegra (sin HTML de formato) como `text`.
 > 2. **Consistencia de entidad:** en todo el sitio, el nombre completo es "NHILOS POS" y el mercado es "Nicaragua" — los LLMs construyen la ficha de la entidad con la repetición consistente nombre + mercado + categoría.
-> 3. **Contenido citable adicional:** esta página ya tiene los hechos que los LLMs buscan para responder sobre el mercado nicaragüense: el régimen real de facturación (SFC/DT 09-2007, no factura electrónica), el rango de precios del mercado ($21–50/mes) y la división autorización/meánica. Mantenerlos estables entre páginas; si cambian, cambiarlos en todas a la vez.
+> 3. **Contenido citable adicional:** esta página ya tiene los hechos que los LLMs buscan para responder sobre el mercado nicaragüense: el régimen real de facturación (SFC/DT 09-2007, no factura electrónica), los precios propios publicados (Esencial US$49, Operación US$89, Pro US$149 al mes; packs US$39) y la división autorización/meánica. Mantenerlos estables entre páginas; si cambian, cambiarlos en todas a la vez.
 > 4. **Anchor del bloque:** id `#faq-geo` al final de la página, después del CTA de demo, con un H2 visible para el usuario (sugerido: "Preguntas que nos hacen sobre NHILOS POS").
 
 ---
@@ -247,7 +249,7 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
 
 **Reglas de integridad del schema (vinculantes):**
 
-1. **Cero datos inventados:** sin `aggregateRating`, sin `review`, sin `offers.price` hasta que los precios estén definidos (el `offers` entra al resolver `[PRECIO: pendiente]`).
+1. **Cero datos inventados:** sin `aggregateRating`, sin `review`, sin `offers.price` en el JSON-LD (la decisión v1.6 fue publicar precios solo como texto visible, no como datos estructurados de oferta).
 2. **Sin dirección física** → el `Organization` lleva `areaServed` (Managua/Nicaragua) y `contactPoint`, no `address` postal.
 3. **"Siempre abierto"** se declara como disponibilidad del servicio por WhatsApp/online (`hoursAvailable` 24/7 en el contactPoint), no como horario de un local.
 4. `sameAs` enlaza las 3 redes con URL absoluta — es el hilo que conecta la ficha de entidad entre Google y los LLMs.
@@ -322,7 +324,7 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
         {
           "@type": "Question",
           "name": "¿Cuánto cuesta NHILOS POS?",
-          "acceptedAnswer": { "@type": "Answer", "text": "NHILOS POS se cotiza según tu operación: número de terminales, número de locales y si activas el control de recetas. No se vende por licencia de pago único (como los sistemas instalados tradicionales en Nicaragua, que cuestan cientos de dólares de una vez); es un cobro mensual por terminal. Para referencia, los sistemas POS para restaurantes en Nicaragua suelen publicar planes de entrada entre $21 y $50 USD al mes. La cotización de NHILOS sale de una demo o de WhatsApp, sin compromiso, e incluye el cronograma de implementación." }
+          "acceptedAnswer": { "@type": "Answer", "text": "NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US$149, Operación US$89 con setup de US$250 y Pro US$149 con setup de US$450; Enterprise se cotiza según la operación. No se vende por licencia de pago único: es suscripción mensual por negocio, con packs de capacidad de US$39 al mes. La cotización final sale de una demo o de WhatsApp, sin compromiso." }
         },
         {
           "@type": "Question",
@@ -421,3 +423,4 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
 | 1.5 | 2026-11-17 | Unificación FAQ (10 GEO como único bloque, decisión founder), paridad schema/página con entity-first 10/10, meta description ≤155, bullets demo aprobados, provenance NHILOS Market & Café aprobado, placeholder John Doe; test de regresión agregado | Equipo NHILOS |
 | 1.4 | 2026-11-16 | H1 generalizado a "Sistema POS en Nicaragua que sigue vendiendo sin internet" (title, og y JSON-LD sincronizados); long-tail restaurante reservada para /software-pos/restaurantes/ | Equipo NHILOS |
 | 1.3 | 2026-11-16 | JSON-LD completo definido: @graph con Organization (sin address, área de servicio, redes en sameAs) + SoftwareApplication (Android, featureList) + FAQPage (10 preguntas GEO); reglas de integridad y extensiones pendientes (offers al definir precios) | Equipo NHILOS |
+| 1.6 | 2026-11-18 | Precios reales publicados según `docs/finance/estrategia_precios_nhilos_pos_v1.md` (congelado): planes Esencial/Operación/Pro + Enterprise, packs US$39, add-ons y letra pequeña en tres secciones ≤120 palabras; FAQ G2 actualizado (texto visible = JSON-LD); benchmark $21–50 retirado del texto público; capacidad fiscal publicada solo como mecánica DT 09-2007 (impresión pendiente en #983) | Equipo NHILOS |
