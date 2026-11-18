@@ -14,8 +14,12 @@ import { Tenant } from '../../tenant/entities/tenant.entity';
  * One table for both change kinds, discriminated by `change_type`, so every
  * commercial exception over the frozen catalog has exactly one auditable
  * home: who did it (actor), why (reason), what changed (the jsonb payloads).
- * No UPDATE and no DELETE policy exists on this table (manifest class
- * `direct:SI`): rows are written once and never mutated.
+ * Rows are written once and never mutated, and that is enforced by the
+ * database, not by convention: migration
+ * 1810600000000-HardenEntitlementChangeHistory installs a trigger that rejects
+ * UPDATE, DELETE and TRUNCATE with `restrict_violation`. The policies of the
+ * ENT-01 migration still list those verbs (hence manifest class `direct:SI`),
+ * so the trigger is what makes the append-only claim true.
  */
 @Entity('tenant_entitlement_change_history')
 export class TenantEntitlementChangeHistory {
