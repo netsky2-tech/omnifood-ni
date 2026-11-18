@@ -112,7 +112,7 @@ cambio. Las claves de capacidad que usan están congeladas en el catálogo (S9).
 
 ### ENT-01 — Catálogo, tablas y migración
 
-Status: done (`e9450e65`).
+Status: done (`3bcc032f`).
 
 - `plan_capability` (global), `tenant_subscription`, `tenant_entitlement_override` y
   `tenant_entitlement_change_history` (append-only) en
@@ -127,7 +127,7 @@ Status: done (`e9450e65`).
 
 ### ENT-02 — Servicio y API de entitlements
 
-Status: done (`fad61f49` reglas, `71799113` endpoint).
+Status: done (`fb240ac1` reglas, `43bd2528` endpoint).
 
 - `entitlement-resolution.ts`: resolución pura de §6 (plan ∪ add-ons ∪ overrides vigentes) sin
   base de datos, reloj ni contexto de Nest. Falla cerrada ante plan, add-on, clave u override
@@ -142,7 +142,7 @@ Status: done (`fad61f49` reglas, `71799113` endpoint).
 
 ### ENT-03 — Guards de backend
 
-Status: done (`f599f53c` mecanismo, `4c557a89` aplicación).
+Status: done (`34beadb8` mecanismo, `71135bbd` aplicación).
 
 - `@RequireCapability(...keys)` + `CapabilitiesGuard` con snapshot memoizado por request
   (WeakMap sobre el objeto request: sin caché entre requests ni TTL) y tenant tomado de las
@@ -161,7 +161,7 @@ conteo y bloqueo de enrolamiento, no gating de función; van en ENT-03b.
 
 ### ENT-03b — Cuotas de terminales y cuentas owner
 
-Status: done (`a51307f1` servicio, `c847f996` aplicación).
+Status: done (`bcb8093e` servicio, `cb882c89` aplicación).
 
 - `TenantQuotaService`: asiento ocupado = credencial no dada de baja con actividad
   `GREATEST(issued_at, rotated_at)` dentro de 30 días; la baja explícita libera de inmediato; límite
@@ -180,7 +180,7 @@ que normalizarlo cuando ese spec se pueda tocar.
 
 ### ENT-04 — Snapshot offline del POS
 
-Status: done (`fcfac970` códigos del backend, `a07ee9f9` snapshot, `1616b9ad` reclasificación).
+Status: done (`1e9f26ef` códigos del backend, `5269e257` snapshot, `2999a6c4` reclasificación).
 
 - Backend: 403 `CAPABILITY_REQUIRED` con `missingCapabilities` y 409 `QUOTA_EXCEEDED` con
   `limitKey`/`limit`/`occupied`, para que el POS no dependa de la prosa (ENT-04a).
@@ -202,7 +202,7 @@ Notas de ejecución:
 
 ### ENT-05 — Dashboard y POS UI
 
-Status: done (`4e29a4d5` POS, `85387137` dashboard).
+Status: done (`79ba10d3` POS, `a5e542cb` dashboard).
 
 - POS: `PremiumLockedView` y `BohRouteGuard(capability: …)`. El permiso por rol se evalúa primero y
   gana; solo después la capacidad. Sin snapshot en contexto falla cerrado, y las rutas de núcleo no
@@ -265,7 +265,7 @@ Hallazgos que cambian el plan de implementación:
 - Proveedores tiene tabla y RLS pero no CRUD propio; combos y menú QR están a medias. No se
   gatean hasta que la función exista (§8 del catálogo).
 
-### Evidencia de ENT-01 (`e9450e65`)
+### Evidencia de ENT-01 (`3bcc032f`)
 
 | Check | Comando | Resultado |
 |---|---|---|
@@ -330,21 +330,21 @@ multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
-- **L12 (ENT-05 entregado, `4e29a4d5` + `85387137`):** gating de UI en las dos apps, compuesto con
+- **L12 (ENT-05 entregado, `79ba10d3` + `a5e542cb`):** gating de UI en las dos apps, compuesto con
   el RBAC existente y con el mensaje contractual único. POS 15/15 pruebas propias; dashboard con
   `tsc` 0, oxlint sin errores y 1911/1911 en la suite completa. Con esto los seis slices del feature
   quedan entregados salvo ENT-06 (overrides y operación).
-- **L11 (ENT-04 entregado, `fcfac970` + `a07ee9f9` + `1616b9ad`):** el POS cachea el snapshot con
+- **L11 (ENT-04 entregado, `1e9f26ef` + `5269e257` + `2999a6c4`):** el POS cachea el snapshot con
   TTL y un rechazo de plan deja de confundirse con una sesión caída. Un dominio bloqueado por
   plan retiene sus filas y se libera solo ante un cambio real del plan. Evidencia: 601/601 en
   `test/data/services`, 35/35 en las suites nuevas, `flutter analyze` limpio, y 95/95 + 1541/1541
   del lado backend.
-- **L10 (ENT-03b entregado, `a51307f1` + `c847f996`):** cuotas de asientos con ventana de gracia.
+- **L10 (ENT-03b entregado, `bcb8093e` + `cb882c89`):** cuotas de asientos con ventana de gracia.
   Decisión del dueño: cuenta el equipo activo; la baja libera al instante; el que murió se libera
   solo a los 30 días. Corrección del padre en la revisión: el conteo excluye el asiento del mismo
   intento, para no romper la idempotencia del aprovisionamiento. 1600/1600 unitarias, 19/19 con
   base real, 35/35 cobertura.
-- **L9 (ENT-03 entregado, `f599f53c` + `4c557a89`):** guard y decorador aplicados a todos los
+- **L9 (ENT-03 entregado, `34beadb8` + `71135bbd`):** guard y decorador aplicados a todos los
   endpoints premium, con red de regresión que protege el camino fiscal y de sincronización.
   Corrección del padre durante la revisión: el chequeo de convenios pasa a decidir por el tipo
   efectivo, porque un PATCH sin `type` dejaba editar un convenio existente sin el bundle.
@@ -352,13 +352,13 @@ multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
 - **L8 (catálogo v1.1):** auditoría de huecos de pricing y cierre con tres bundles y la clave
   `promotions.convenio`. 41 pruebas unitarias y 14 con base real verdes; la migración de semilla
   es idempotente y reversible.
-- **L7 (ENT-02 entregado, `fad61f49` + `71799113`):** resolución de §6 como función pura y `GET
+- **L7 (ENT-02 entregado, `fb240ac1` + `43bd2528`):** resolución de §6 como función pura y `GET
   /api/tenant/entitlements` con contrato v1 de nueve campos y TTL de 24 h. 40 pruebas verdes (21
   unitarias nuevas, 6 con base real y 13 heredadas entre unitarias y de base). El catálogo se
   amplió con §6.1 para fijar qué límites ve un plan suspendido y qué suelo tiene `sin_plan`.
 - **L6 (ENT-01 entregado):** registro, entidades, migración con RLS y seed, con 55 pruebas
   verdes (13 unitarias + 7 con base real + 35 de regresión de cobertura RLS) y `tsc`/`eslint`
-  limpios. Commit `e9450e65`.
+  limpios. Commit `3bcc032f`.
 - **L5 (decisiones del dueño del producto, 2026-11-17):** (1) `core.customers` es núcleo;
   (2) kardex de movimientos en `inventory.retail` y valorizado/COGS/márgenes en
   `reports.margins`; (3) `limits.terminals` bloquea el enrolamiento de un terminal nuevo pero
