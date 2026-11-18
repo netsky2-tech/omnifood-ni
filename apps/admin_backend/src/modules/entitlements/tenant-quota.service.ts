@@ -111,6 +111,36 @@ export const ownerQuotaExceededMessage = (limit: number): string =>
     ? 'Su plan permite 1 cuenta de propietario y ya está ocupada por las cuentas owner incluidas. Desactive una cuenta de propietario e intente de nuevo, o adquiera el complemento owner.account.extra para agregar más.'
     : `Su plan permite ${limit} cuentas de propietario y ya están ocupadas por las cuentas owner incluidas. Desactive una cuenta de propietario e intente de nuevo, o adquiera el complemento owner.account.extra para agregar más.`;
 
+/**
+ * Machine-readable quota refusal code. Same reason as
+ * `CAPABILITY_REQUIRED`: the POS stores the operation and shows the upgrade
+ * message, so it must distinguish "quota exhausted" from an auth failure
+ * without reading the copy.
+ */
+export const QUOTA_EXCEEDED_CODE = 'QUOTA_EXCEEDED';
+
+/** The 409 body: code + copy + the numbers the client needs to explain it. */
+export const quotaExceededBody = (input: {
+  message: string;
+  limitKey: string;
+  limit: number;
+  occupied: number;
+}): {
+  statusCode: number;
+  code: string;
+  message: string;
+  limitKey: string;
+  limit: number;
+  occupied: number;
+} => ({
+  statusCode: 409,
+  code: QUOTA_EXCEEDED_CODE,
+  message: input.message,
+  limitKey: input.limitKey,
+  limit: input.limit,
+  occupied: input.occupied,
+});
+
 @Injectable()
 export class TenantQuotaService {
   constructor(
@@ -139,7 +169,12 @@ export class TenantQuotaService {
     );
     if (occupied >= limit) {
       throw new HttpException(
-        terminalQuotaExceededMessage(limit),
+        quotaExceededBody({
+          message: terminalQuotaExceededMessage(limit),
+          limitKey: LIMIT_TERMINALS_KEY,
+          limit,
+          occupied,
+        }),
         HttpStatus.CONFLICT,
       );
     }
@@ -165,7 +200,12 @@ export class TenantQuotaService {
     const activeOwners = await this.countActiveOwnerAccounts(tenantId);
     if (activeOwners >= limit) {
       throw new HttpException(
-        ownerQuotaExceededMessage(limit),
+        quotaExceededBody({
+          message: ownerQuotaExceededMessage(limit),
+          limitKey: LIMIT_OWNER_ACCOUNTS_KEY,
+          limit,
+          occupied: activeOwners,
+        }),
         HttpStatus.CONFLICT,
       );
     }

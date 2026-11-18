@@ -13,6 +13,15 @@
 import { ForbiddenException } from '@nestjs/common';
 
 /**
+ * Machine-readable refusal code. The offline POS must tell "your plan does
+ * not include this" from "your session or device is invalid": today both are
+ * HTTP 403, and keying that decision off the Spanish prose would break the
+ * moment the copy changes. Programmatic clients read `code`, humans read
+ * `message`.
+ */
+export const CAPABILITY_REQUIRED_CODE = 'CAPABILITY_REQUIRED';
+
+/**
  * The user-facing 403 copy. Names exactly the missing capability and the
  * upgrade path, with the formal "usted" register.
  */
@@ -24,6 +33,25 @@ export const capabilityUpgradeMessage = (
 };
 
 /**
+ * The denial body. `code` is the contract the POS reads; `message` is the copy
+ * the owner reads; `missingCapabilities` lets the POS name what to buy without
+ * parsing prose.
+ */
+export function capabilityDeniedBody(missing: readonly string[]): {
+  statusCode: number;
+  code: string;
+  message: string;
+  missingCapabilities: string[];
+} {
+  return {
+    statusCode: 403,
+    code: CAPABILITY_REQUIRED_CODE,
+    message: capabilityUpgradeMessage(missing),
+    missingCapabilities: [...missing],
+  };
+}
+
+/**
  * Throws `ForbiddenException` unless every required key is in the tenant's
  * effective capabilities. Empty `requiredKeys` grants (no requirement).
  */
@@ -33,6 +61,6 @@ export function assertCapabilitiesGranted(
 ): void {
   const missing = requiredKeys.filter((key) => !capabilities.includes(key));
   if (missing.length > 0) {
-    throw new ForbiddenException(capabilityUpgradeMessage(missing));
+    throw new ForbiddenException(capabilityDeniedBody(missing));
   }
 }
