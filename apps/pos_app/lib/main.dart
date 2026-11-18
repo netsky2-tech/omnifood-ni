@@ -854,6 +854,13 @@ void main() async {
         Provider<SalesRepositoryImpl>.value(value: salesRepository),
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
+        // ENT-05: the plan snapshot the BohRouteGuard reads to decide the
+        // premium-locked state. `load()` already ran at startup (before
+        // runApp, awaited when linked; failures degrade to `empty()`), so
+        // the first frame already knows the plan without blocking the UI.
+        Provider<EntitlementSnapshotService>.value(
+          value: entitlementSnapshotService,
+        ),
         Provider<DeviceSyncBootstrapCoordinator>.value(
           value: deviceSyncBootstrapCoordinator,
         ),
@@ -1018,6 +1025,9 @@ class MyApp extends StatelessWidget {
           '/inventory/suppliers': (context) => const BohRouteGuard(
             permission: BohPermission.shell,
             featureLabel: 'Proveedores',
+            // ENT-05: premium (catalog §3 — suppliers CRUD is deferred but
+            // the directory belongs to the retail pack).
+            capability: 'inventory.retail',
             child: SupplierView(),
           ),
           '/inventory/warehouses': (context) => const BohRouteGuard(
@@ -1028,51 +1038,61 @@ class MyApp extends StatelessWidget {
           '/inventory/purchases': (context) => const BohRouteGuard(
             permission: BohPermission.purchasesView,
             featureLabel: 'Compras',
+            capability: 'inventory.retail',
             child: PurchaseView(),
           ),
           '/inventory/shrinkage': (context) => const BohRouteGuard(
             permission: BohPermission.shrinkageView,
             featureLabel: 'Mermas',
+            capability: 'inventory.retail',
             child: ShrinkageView(),
           ),
           '/inventory/alerts': (context) => const BohRouteGuard(
             permission: BohPermission.alertsView,
             featureLabel: 'Alertas',
+            capability: 'inventory.retail',
             child: ForensicAlertView(),
           ),
           '/inventory/alerts/stock': (context) => const BohRouteGuard(
             permission: BohPermission.alertsView,
             featureLabel: 'Alertas de Stock',
+            capability: 'inventory.retail',
             child: StockAlertsView(),
           ),
           '/inventory/counts': (context) => const BohRouteGuard(
             permission: BohPermission.countsView,
             featureLabel: 'Conteos y ajustes',
+            capability: 'inventory.retail',
             child: PhysicalCountView(),
           ),
           '/inventory/kardex': (context) => const BohRouteGuard(
             permission: BohPermission.kardexView,
             featureLabel: 'Kardex',
+            capability: 'inventory.retail',
             child: KardexView(),
           ),
           '/inventory/production': (context) => const BohRouteGuard(
             permission: BohPermission.productionView,
             featureLabel: 'Producción',
+            capability: 'inventory.cooking',
             child: ProductionOrderView(),
           ),
           '/inventory/recipes': (context) => const BohRouteGuard(
             permission: BohPermission.recipesView,
             featureLabel: 'Recetas',
+            capability: 'inventory.cooking',
             child: RecipeView(),
           ),
           '/inventory/reports/valuation': (context) => const BohRouteGuard(
             permission: BohPermission.valuationView,
             featureLabel: 'Existencias & Valorización',
+            capability: 'reports.margins',
             child: InventoryValuationView(),
           ),
           '/inventory/reports/cogs': (context) => const BohRouteGuard(
             permission: BohPermission.cogsView,
             featureLabel: 'Costo de Ventas (COGS)',
+            capability: 'reports.margins',
             child: CogsReportView(),
           ),
           '/sales/tables': (context) => const TableLayoutView(),
