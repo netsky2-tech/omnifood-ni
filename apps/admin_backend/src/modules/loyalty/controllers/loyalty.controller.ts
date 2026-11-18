@@ -44,6 +44,8 @@ import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../../identity/entities/user.entity';
 import { LoyaltyProgramStatus } from '../entities/loyalty-program.entity';
+import { CapabilitiesGuard } from '../../entitlements/guards/capabilities.guard';
+import { RequireCapability } from '../../entitlements/decorators/require-capability.decorator';
 
 const LOYALTY_PROGRAM_STATUSES: readonly string[] =
   Object.values(LoyaltyProgramStatus);
@@ -65,8 +67,13 @@ function parseLoyaltyProgramStatus(
 }
 
 @Controller('loyalty')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
 @UseInterceptors(TenantInterceptor)
+// ENT-03 (issue #984): loyalty is a transversal premium capability
+// (catalog §3/§4) — every verb of this DASHBOARD controller is gated.
+// The POS point-transaction sync path stays in loyalty-sync.controller.ts,
+// which must NEVER carry a capability guard (catalog §7 / fiscal net).
+@RequireCapability('loyalty')
 export class LoyaltyController {
   constructor(
     private readonly loyaltyService: LoyaltyService,

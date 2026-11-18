@@ -19,10 +19,16 @@ import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
 import { Roles } from '../../../core/decorators/roles.decorator';
 import { UserRole } from '../../identity/entities/user.entity';
+import { CapabilitiesGuard } from '../../entitlements/guards/capabilities.guard';
+import { RequireCapability } from '../../entitlements/decorators/require-capability.decorator';
 
 @Controller('promotions')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
 @UseInterceptors(TenantInterceptor)
+// ENT-03 (issue #984): promotions is a transversal premium capability
+// (catalog §3/§4) — every verb of this controller is gated. The B2B
+// `promotions.convenio` requirement is enforced in the service, not here.
+@RequireCapability('promotions')
 export class PromotionsController {
   constructor(private readonly promotionsService: PromotionsService) {}
 

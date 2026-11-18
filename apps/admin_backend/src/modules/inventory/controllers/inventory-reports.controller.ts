@@ -30,9 +30,11 @@ import {
   InventoryValuationReportDto,
   KardexReportDto,
 } from '../dto/inventory-reports.dto';
+import { CapabilitiesGuard } from '../../entitlements/guards/capabilities.guard';
+import { RequireCapability } from '../../entitlements/decorators/require-capability.decorator';
 
 @Controller('inventory/reports')
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
 @UseInterceptors(TenantInterceptor)
 export class InventoryReportsController {
   constructor(
@@ -44,6 +46,9 @@ export class InventoryReportsController {
 
   @Get('valuation')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): valuation and COGS are `reports.margins`
+  // (catalog §3, decisión #2: kardex valorizado va con reports.margins).
+  @RequireCapability('reports.margins')
   async getValuationReport(
     @GetTenantId() tenantId: string,
   ): Promise<InventoryValuationReportDto> {
@@ -57,6 +62,10 @@ export class InventoryReportsController {
    */
   @Get('dish-margins')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): dish cost is a RECIPE feature → `inventory.cooking`,
+  // not `reports.margins` — claiming it in two keys was a double-gating hole
+  // (catalog v1.1, H3).
+  @RequireCapability('inventory.cooking')
   async getDishMargins(
     @GetTenantId() tenantId: string,
     // R28 / M5: the period of the SECOND figure (what the dishes actually
@@ -70,6 +79,8 @@ export class InventoryReportsController {
 
   @Get('theoretical-cost')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): recipe pricing → `inventory.cooking` (catalog v1.1, H3).
+  @RequireCapability('inventory.cooking')
   async getTheoreticalCost(
     @GetTenantId() tenantId: string,
     @Query('productId') productId: string,
@@ -88,6 +99,9 @@ export class InventoryReportsController {
    */
   @Post('valuation/market-price')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): the market-price write is part of the valuation
+  // function → `reports.margins`.
+  @RequireCapability('reports.margins')
   async setMarketPrice(
     @GetTenantId() tenantId: string,
     @Body() dto: SetMarketPriceDto,
@@ -103,6 +117,9 @@ export class InventoryReportsController {
 
   @Post('valuation/writedown')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): the lower-of-cost-or-market writedown is part of
+  // the valuation function → `reports.margins`.
+  @RequireCapability('reports.margins')
   async applyValuationWritedown(
     @GetTenantId() tenantId: string,
     @Body() dto: ApplyValuationWritedownDto,
@@ -115,6 +132,8 @@ export class InventoryReportsController {
 
   @Get('cogs')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): COGS de inventario → `reports.margins` (decisión #2).
+  @RequireCapability('reports.margins')
   async getCogsReport(
     @GetTenantId() tenantId: string,
     @Query('from') fromDate?: string,
@@ -125,6 +144,10 @@ export class InventoryReportsController {
 
   @Get('kardex')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): the movement kardex travels with `inventory.retail`
+  // (decisión #2: el kardex de movimientos va con el pack; el valorizado con
+  // reports.margins).
+  @RequireCapability('inventory.retail')
   async getKardexReport(
     @GetTenantId() tenantId: string,
     @Query('from') from?: string,
@@ -148,6 +171,8 @@ export class InventoryReportsController {
 
   @Get('alerts')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): inventory alerts → `inventory.retail` (catalog §3).
+  @RequireCapability('inventory.retail')
   async getAlertsSummaryReport(
     @GetTenantId() tenantId: string,
   ): Promise<InventoryAlertsSummaryDto> {
@@ -165,6 +190,8 @@ export class InventoryReportsController {
    */
   @Get('count-sessions/:sessionId/printable-list')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): counts are a `inventory.retail` function (catalog §3).
+  @RequireCapability('inventory.retail')
   async getCountSessionPrintableList(
     @GetTenantId() tenantId: string,
     @Param('sessionId') sessionId: string,

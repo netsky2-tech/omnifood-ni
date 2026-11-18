@@ -1,10 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../../core/database/tenant-transaction';
 import { PromotionsService } from './promotions.service';
 import { Promotion, PromotionType } from '../entities/promotion.entity';
+import { EntitlementsService } from '../../entitlements/entitlements.service';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Customer } from '../../customers/entities/customer.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
@@ -36,6 +41,10 @@ describe('PromotionsService', () => {
     getRepository: jest.Mock;
   };
   let transactionalDataSource: { transaction: jest.Mock };
+  // ENT-03: the service resolves the tenant snapshot when a payload is a
+  // B2B convenio; the default mock carries the bundle so existing behavior
+  // assertions keep working unchanged.
+  let entitlements: { snapshot: jest.Mock };
 
   const mockPromotion = (overrides: Partial<Promotion> = {}): Promotion =>
     ({
@@ -72,6 +81,14 @@ describe('PromotionsService', () => {
       findOne: jest.fn().mockResolvedValue(null),
     };
 
+    // ENT-03: default tenant carries promotions + the convenio bundle, so
+    // pre-existing tests exercise the same service paths as before.
+    entitlements = {
+      snapshot: jest.fn().mockResolvedValue({
+        capabilities: ['promotions', 'promotions.convenio'],
+      }),
+    };
+
     transactionalManager = {
       query: jest.fn(async () => []),
       getRepository: jest.fn((entity: unknown) =>
@@ -97,6 +114,10 @@ describe('PromotionsService', () => {
           useValue: repo,
         },
         { provide: DataSource, useValue: transactionalDataSource },
+        {
+          provide: EntitlementsService,
+          useValue: entitlements,
+        },
       ],
     }).compile();
 
@@ -350,6 +371,10 @@ describe('PromotionsService', () => {
             useValue: pooledPromotion,
           },
           { provide: DataSource, useValue: boundDataSource },
+          {
+            provide: EntitlementsService,
+            useValue: entitlements,
+          },
         ],
       }).compile();
       const bound = module.get<PromotionsService>(PromotionsService);
@@ -513,6 +538,87 @@ describe('PromotionsService', () => {
       });
 
       expect(repo.save).toHaveBeenCalled();
+    });
+  });
+
+  // ENT-03 (issue #984): the B2B convenio gate. The controller decorator
+  // covers `promotions`; THIS service check adds `promotions.convenio` when
+  // the payload IS a convenio, with the same 403 copy as the guard.
+  describe('convenio capability requirement (ENT-03)', () => {
+    const CUSTOMER_ID = '88888888-8888-4888-8888-888888888888';
+
+    const convenioDto = {
+      name: 'Convenio ACME',
+      type: PromotionType.CONVENIO,
+      target_customer_id: CUSTOMER_ID,
+      code: 'CONV-A',
+      restriction_type: 'customer' as const,
+      discount_value: 15,
+    };
+
+    beforeEach(() => {
+      customerRepo.findOne.mockResolvedValue({
+        id: CUSTOMER_ID,
+        tenant_id: 'tenant-1',
+        is_active: true,
+      });
+    });
+
+    it('denies a convenio CREATE when the tenant lacks the promotions.convenio bundle', async () => {
+      entitlements.snapshot.mockResolvedValue({ capabilities: ['promotions'] });
+
+      await expect(
+        service.create('tenant-1', { ...convenioDto }),
+      ).rejects.toThrow(
+        'La función requiere el plan o el complemento que incluye "promotions.convenio". Actualice su plan para usarla.',
+      );
+      // Fail closed: no row was written.
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(entitlements.snapshot).toHaveBeenCalledWith('tenant-1');
+    });
+
+    it('allows a convenio CREATE when the bundle is active', async () => {
+      await expect(
+        service.create('tenant-1', { ...convenioDto }),
+      ).resolves.toBeTruthy();
+      expect(repo.save).toHaveBeenCalled();
+    });
+
+    it('denies switching a promotion TO convenio when the bundle is missing', async () => {
+      repo.findOne.mockResolvedValueOnce(
+        mockPromotion({ type: PromotionType.PERCENTAGE_DISCOUNT }),
+      );
+      entitlements.snapshot.mockResolvedValue({ capabilities: ['promotions'] });
+
+      await expect(
+        service.update('tenant-1', 'promo-uuid-1', {
+          type: PromotionType.CONVENIO,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('denies editing an existing convenio when the payload omits its type', async () => {
+      // The PATCH that changes only the discount does not resend `type`.
+      repo.findOne.mockResolvedValueOnce(
+        mockPromotion({ type: PromotionType.CONVENIO }),
+      );
+      entitlements.snapshot.mockResolvedValue({ capabilities: ['promotions'] });
+
+      await expect(
+        service.update('tenant-1', 'promo-uuid-1', {
+          name: 'Convenio editado',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('does not consult entitlements for a non-convenio payload', async () => {
+      await service.create('tenant-1', {
+        name: '2x1',
+        type: PromotionType.BUY_X_GET_Y_FREE,
+      });
+      expect(entitlements.snapshot).not.toHaveBeenCalled();
     });
   });
 });

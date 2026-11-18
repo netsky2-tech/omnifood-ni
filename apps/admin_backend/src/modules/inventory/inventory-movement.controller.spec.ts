@@ -16,6 +16,7 @@ import {
 import { AuthGuard } from '../identity/guards/auth.guard';
 import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
 import { RolesGuard } from '../identity/guards/roles.guard';
+import { CapabilitiesGuard } from '../entitlements/guards/capabilities.guard';
 import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
 import {
   IDENTITY_JWT_CONFIG,
@@ -31,6 +32,7 @@ import { RecipeService } from './recipe.service';
 import { CountSessionService } from './count-session.service';
 import { ProductionService } from './production.service';
 import { InventoryReportsService } from './services/inventory-reports.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import { UserRole } from '../identity/entities/user.entity';
 import { CreateShrinkageDto } from './dto/create-shrinkage.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
@@ -101,6 +103,13 @@ describe('InventoryMovementController device transport routes', () => {
         AuthoritativeCurrentUserGuard,
         RolesGuard,
         {
+          // ENT-03: the route-level capability guard keeps its collaborators
+          // mocked so the metadata assertions keep passing; its behavior has
+          // its own spec in src/modules/entitlements.
+          provide: EntitlementsService,
+          useValue: { snapshot: jest.fn() },
+        },
+        {
           provide: CurrentUserAuthorizationService,
           useValue: { authorize: jest.fn((token: unknown) => token) },
         },
@@ -159,6 +168,9 @@ describe('InventoryMovementController device transport routes', () => {
 
       expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([
         SyncTransportGuard,
+        // ENT-03: the capability gate runs after the transport guard; it
+        // reads the tenant from the device principal.
+        CapabilitiesGuard,
       ]);
       expect(Reflect.getMetadata(SYNC_SCOPES_KEY, handler)).toEqual([
         'sync:push',

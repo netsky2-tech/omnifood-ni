@@ -12,6 +12,8 @@ import { CATALOG_TYPE } from '../../catalog/catalog-type';
 import { Customer } from '../../customers/entities/customer.entity';
 import { CreatePromotionDto } from '../dto/create-promotion.dto';
 import { UpdatePromotionDto } from '../dto/update-promotion.dto';
+import { EntitlementsService } from '../../entitlements/entitlements.service';
+import { assertCapabilitiesGranted } from '../../entitlements/capability-enforcement';
 
 /** A uuid string only — the same shape the DTOs enforce with @IsUUID. */
 const UUID_PATTERN =
@@ -27,6 +29,10 @@ export class PromotionsService {
     // the pooled repository above stays declared for Nest DI compatibility
     // only.
     private readonly dataSource: DataSource,
+    // ENT-03 (issue #984): the B2B `promotions.convenio` requirement cannot
+    // live on a decorator — it depends on the PAYLOAD type, not on the
+    // endpoint — so it reuses the same enforcement helper the guard uses.
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   async findAll(tenantId: string): Promise<Promotion[]> {
@@ -42,6 +48,12 @@ export class PromotionsService {
   }
 
   async create(tenantId: string, dto: CreatePromotionDto): Promise<Promotion> {
+    // ENT-03 (issue #984): a tenant without the `promotions.convenio` bundle
+    // gets the same clear 403 as the guard — never a convenio row that
+    // silently stops applying. Checked BEFORE the write transaction opens.
+    if (dto.type === PromotionType.CONVENIO) {
+      await this.assertConvenioCapability(tenantId);
+    }
     // One logical unit: the validation, the create and the save share this
     // transaction.
     return runInTenantTransaction(
@@ -67,6 +79,12 @@ export class PromotionsService {
     id: string,
     dto: UpdatePromotionDto,
   ): Promise<Promotion> {
+    // ENT-03 (issue #984): the EFFECTIVE type decides, not just the payload.
+    // Checking only `dto.type` would let a tenant that lost the bundle keep
+    // editing an EXISTING convenio (a PATCH that changes the discount does not
+    // resend `type`), and a convenio whose terms can be edited by someone who
+    // no longer pays for it is the same as granting it. The check therefore
+    // runs inside the transaction, right after the row is loaded.
     // One logical unit: the read and the save share this transaction. The
     // lookup uses the manager-based helper directly, never the public read
     // method, because a tenant-bound transaction is never nested inside
@@ -76,6 +94,9 @@ export class PromotionsService {
       tenantId,
       async (manager) => {
         const promotion = await this.findPromotionById(manager, tenantId, id);
+        if ((dto.type ?? promotion.type) === PromotionType.CONVENIO) {
+          await this.assertConvenioCapability(tenantId);
+        }
         // Validated against the CURRENT dto value, inside the same
         // transaction that will persist it.
         await this.assertValidTargetCategory(manager, tenantId, dto);
@@ -86,6 +107,19 @@ export class PromotionsService {
         return manager.getRepository(Promotion).save(promotion);
       },
     );
+  }
+
+  /**
+   * ENT-03 (issue #984): the service-level half of the `promotions.convenio`
+   * gate. The `@RequireCapability('promotions')` decorator covers the whole
+   * controller; THIS check adds the bundle requirement only when the payload
+   * is a B2B convenio, reusing the exact guard logic (same helper, same 403
+   * copy) so a tenant without the bundle never gets a convenio row that
+   * silently stops applying.
+   */
+  private async assertConvenioCapability(tenantId: string): Promise<void> {
+    const snapshot = await this.entitlementsService.snapshot(tenantId);
+    assertCapabilitiesGranted(snapshot.capabilities, ['promotions.convenio']);
   }
 
   async remove(tenantId: string, id: string): Promise<void> {
