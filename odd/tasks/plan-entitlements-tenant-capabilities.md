@@ -224,22 +224,67 @@ Lo cerró el padre: el tab quedó cableado y el fixture ahora stub de entitlemen
 
 ### ENT-06 — Overrides y operación
 
-Status: pending.
+Status: done.
 
-- Alta de override con actor, motivo y expiración.
-- Auditoría y consulta.
-- Runbook para cambiar plan, aplicar add-on y corregir un mapeo.
+- Alta de override con actor, motivo y expiración: `entitlement-override-input.ts` (reglas puras)
+  y `entitlement-overrides.service.ts` (`grant`).
+- Auditoría y consulta: el alta y su fila en `tenant_entitlement_change_history` se escriben en
+  la misma transacción; `revoke` termina la excepción sin borrarla; consulta por
+  `GET /api/tenant/entitlement-overrides` y `…/history` (solo `OWNER`) y por el CLI.
+- Runbook: `docs/operations/entitlement_overrides_runbook.md`.
+
+**Decisión del dueño (2026-11-18): la excepción se concede por CLI interno, no por HTTP.** El
+backend no tiene rol de plataforma (`UserRole` = OWNER/MANAGER/CASHIER/WAITER), así que un
+endpoint de escritura protegido por `OWNER` dejaría que cada cliente se auto-otorgue el plan
+Pro. Sin rol nuevo: `src/scripts/entitlement-override.ts` + `npm run entitlements:override`, y
+el tenant solo lee. Una prueba estructural falla si alguien agrega una ruta de escritura a ese
+controlador.
+
+Propiedades que quedaron garantizadas (no por convención, por construcción):
+
+- Ninguna excepción puede apuntar a una clave de núcleo: el registro la rechaza antes de
+  escribir (`OVERRIDE_TARGET_NOT_GATEABLE`), igual que el resolver.
+- Una excepción **no puede dejar el snapshot irresoluble**: antes de confirmar, el servicio
+  resuelve el snapshot con la excepción puesta dentro de la misma transacción y revierte si
+  falla (`OVERRIDE_WOULD_BREAK_SNAPSHOT`). Es lo que impide que soporte deje a un cliente sin
+  entitlements por conceder `promotions.convenio` sin `promotions`.
+- Una sola excepción vigente por clave, y cada cambio con su propio motivo: conceder sobre una
+  vigente exige revocarla (`OVERRIDE_ALREADY_ACTIVE`).
+- `actor`, `reason` y `expires_at` (futura) obligatorios también al revocar.
+
+Evidencia: unit de reglas 9/9, DB 7/7 (incluye el caso de reversión completa del snapshot
+irresoluble y el aislamiento RLS con rol `NOSUPERUSER NOBYPASSRLS`), CLI 11/11, controlador
+6/6 con la aserción de "ninguna ruta de escritura"; `tsc` 0 y ESLint limpio en los archivos
+tocados.
+
+Corte de la entrega: 4 commits, ~2.100 líneas (≈900 de producción, ≈960 de prueba, ≈260 de
+documentación). No se parte en piezas menores porque la regla, su prueba con base real y su
+control de acceso describen un mismo comportamiento; separarlas dejaría el servicio sin la
+prueba que lo sostiene.
+
+### Deuda declarada por ENT-06
+
+- **Cambiar de plan sigue siendo SQL documentado** (runbook §4): falta un
+  `TenantSubscriptionService` con la misma forma que las excepciones (validación + rastro en una
+  transacción) y su comando. Mientras no exista, la fila de historial de `change_type = 'plan'`
+  se escribe a mano.
+- El dashboard no consume `GET …/entitlement-overrides`: el cliente no ve sus excepciones en UI.
+- No hay tenant SOHO en el código (SOHO aparece como plantilla y catálogo), así que el alta de
+  SOHO con precio fundador y `legacy.full` es un paso operativo por entorno (runbook §6), no una
+  migración.
 
 ## Criterios de aceptación
 
-- [ ] Fuente única de verdad de plan y capacidades por tenant, con RLS probado.
-- [ ] POS lee el snapshot offline y sigue vendiendo si está vencido o ausente.
-- [ ] Una capacidad premium no comprada no se activa por UI ni por llamada directa.
-- [ ] Override auditado con actor, motivo y expiración.
-- [ ] SOHO conserva sus funciones y su precio fundador.
-- [ ] `PRO` habilita ambos packs, dos terminales incluidas y reportes de margen; `OPERACION` un pack; `ESENCIAL` ninguno sin add-on. Los add-ons de terminal y cuenta extra se cobran sin tope duro.
-- [ ] No hay fallback silencioso a "todas las capacidades".
-- [ ] Pruebas unitarias, de integración con base real y de contrato pasan; `tsc` y lint limpios.
+- [x] Fuente única de verdad de plan y capacidades por tenant, con RLS probado.
+- [x] POS lee el snapshot offline y sigue vendiendo si está vencido o ausente.
+- [x] Una capacidad premium no comprada no se activa por UI ni por llamada directa.
+- [x] Override auditado con actor, motivo y expiración.
+- [ ] SOHO conserva sus funciones y su precio fundador. — **pendiente operativo**: no existe un
+  tenant SOHO en el código; el alta se hace por entorno con el runbook §6 (OPERACION a precio
+  fundador + excepción `legacy.full` auditada por CLI).
+- [x] `PRO` habilita ambos packs, dos terminales incluidas y reportes de margen; `OPERACION` un pack; `ESENCIAL` ninguno sin add-on. Los add-ons de terminal y cuenta extra se cobran sin tope duro.
+- [x] No hay fallback silencioso a "todas las capacidades".
+- [x] Pruebas unitarias, de integración con base real y de contrato pasan; `tsc` y lint limpios.
 
 ## Checks
 
