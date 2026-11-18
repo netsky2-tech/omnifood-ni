@@ -148,6 +148,30 @@ registran aquí porque cambian lo que el cliente puede hacer, no por ser un deta
 Ambas se implementan en `entitlement-resolution.ts` y se prueban en
 `entitlement-resolution.spec.ts`. Cambiarlas exige un slice nuevo, no un ajuste de código.
 
+### 6.2 Cuotas: asientos activos con ventana de gracia (ENT-03b, OUR DECISION)
+
+Decisión del dueño del producto para `limits.terminals` y `limits.owner_accounts`. No es gating
+de función: es conteo, y nunca puede tocar la venta ni el camino fiscal.
+
+**Terminales.** Ocupa asiento toda credencial de sincronización que no esté dada de baja
+(`revoked_at IS NULL`, estado distinto de `REVOKED`/`RETIRED`) y que haya tenido actividad en los
+últimos **30 días**. La actividad es `max(issued_at, rotated_at)`, y `rotated_at` se refresca en
+cada renovación de token: un POS vivo renueva y conserva su asiento, uno averiado deja de contar
+a los 30 días de su última renovación.
+
+- La **baja explícita** (`POST identity/device-sync/credentials/:id/revoke`) libera el asiento de
+  inmediato: es el camino normal cuando se reemplaza un equipo.
+- La **ventana de gracia** existe para el equipo que murió y nadie dio de baja: se libera solo.
+- El enrolamiento se bloquea únicamente cuando los asientos ocupados llegan al límite. Nunca se
+  revoca una credencial existente por cuota, y ningún terminal en operación se detiene.
+
+**Cuentas owner.** Se cuentan los usuarios con rol `OWNER` activos. Crear otra cuenta owner, o
+ascender a alguien a `OWNER`, se bloquea al llegar al límite. Sin ventana de gracia: una cuenta es
+una persona y se desactiva en el acto.
+
+**Nada de esto se aplica** a la renovación de token, a la sincronización, a la baja de credencial
+(debe funcionar incluso sobre cuota) ni a ningún endpoint de venta, facturación o caja.
+
 ## 7. Claves que ningún guard puede tocar
 
 Lista cerrada, y el motivo de cada una:
