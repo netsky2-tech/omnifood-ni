@@ -142,11 +142,22 @@ Status: done (`fad61f49` reglas, `71799113` endpoint).
 
 ### ENT-03 — Guards de backend
 
-Status: pending.
+Status: done (`f599f53c` mecanismo, `4c557a89` aplicación).
 
-- `CapabilitiesGuard` y decorador.
-- Aplicar solo a capacidades premium, nunca al camino fiscal.
-- Pruebas de permitido/denegado y de tenant cruzado.
+- `@RequireCapability(...keys)` + `CapabilitiesGuard` con snapshot memoizado por request
+  (WeakMap sobre el objeto request: sin caché entre requests ni TTL) y tenant tomado de las
+  mismas fuentes que `@GetTenantId()`.
+- Falla cerrado ante clave no registrada o clave de núcleo en un decorador.
+- Aplicado a **todas** las funciones premium, lecturas y escrituras: promociones, programas de
+  lealtad, recetas y producción (Cocina), compras/proveedores/conteos/merma/kardex (Retail) y
+  valorización/COGS/ajustes (márgenes). `insumo.controller` queda sin decorar por ser núcleo.
+- Convenios B2B: se decide por el tipo **efectivo**, así un PATCH que solo cambia el descuento
+  tampoco evade el requisito del bundle.
+- `entitlements-fiscal-paths.spec.ts` falla si el decorador aparece alguna vez en `sales/`,
+  `loyalty-sync`, `device-sync-token`, catálogo, clientes o el contrato de auditoría.
+
+Fuera de ENT-03 por decisión: las cuotas (`limits.terminals`, `limits.owner_accounts`) son
+conteo y bloqueo de enrolamiento, no gating de función; van en ENT-03b.
 
 ### ENT-04 — Snapshot offline del POS
 
@@ -274,6 +285,11 @@ multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L9 (ENT-03 entregado, `f599f53c` + `4c557a89`):** guard y decorador aplicados a todos los
+  endpoints premium, con red de regresión que protege el camino fiscal y de sincronización.
+  Corrección del padre durante la revisión: el chequeo de convenios pasa a decidir por el tipo
+  efectivo, porque un PATCH sin `type` dejaba editar un convenio existente sin el bundle.
+  726/726 en promotions+loyalty+inventory, 103/103 en entitlements+promotions, 35/35 de cobertura.
 - **L8 (catálogo v1.1):** auditoría de huecos de pricing y cierre con tres bundles y la clave
   `promotions.convenio`. 41 pruebas unitarias y 14 con base real verdes; la migración de semilla
   es idempotente y reversible.
