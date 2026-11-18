@@ -774,6 +774,25 @@ describe('InboundSyncService', () => {
     );
   });
 
+  it('includes published recipe versions whose effective start date is NULL (issue #985)', async () => {
+    // Una receta publicada sin fecha de inicio de vigencia es válida y tiene que
+    // llegar al terminal. El filtro anterior, `fecha_inicio_vigencia <= :now`,
+    // descarta los NULL por la semántica de tres valores de SQL: la receta nunca
+    // viajaba, la venta se aceptaba como APPLIED_INVENTORY_PENDING y el stock del
+    // insumo no se movía, sin que nada lo mostrara al operador.
+    await service.getInboundDeltas(
+      'tenant-abc',
+      {},
+      undefined,
+      buildDefaultBoundManager(),
+    );
+
+    expect(recipeVersionQb.andWhere).toHaveBeenCalledWith(
+      '(rv.fecha_inicio_vigencia IS NULL OR rv.fecha_inicio_vigencia <= :now)',
+      { now: expect.any(Date) },
+    );
+  });
+
   it('filters deltas by numeric timestamp sinceVersion', async () => {
     const sinceTimestamp = '1787745600000';
     await service.getInboundDeltas(
