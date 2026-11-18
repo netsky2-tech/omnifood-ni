@@ -150,3 +150,30 @@ personas ni dispositivos, cifras iguales a las del material.
   de retención derivadas de los datos.
 - Este documento guarda el método y la matriz. Se actualiza al publicar: una fila
   nueva por pieza, con su dolor, gancho y tratamiento.
+
+## Cuándo entra el 3D, y cuándo no
+
+El isométrico de la pieza del 19/11 se descartó después de dos iteraciones porque
+el fundador, viéndolo, no pudo decir qué era ni para qué servía. Era decoración:
+cumplía paleta y legibilidad, y fallaba lo único que importa, que informe algo.
+
+**Las cuatro pruebas antes de dibujar una escena 3D o isométrica:**
+
+1. **Se puede nombrar.** Si al preguntar "¿qué es esto?" la respuesta es "una
+   escena isométrica", no entra. Tiene que ser "un mostrador con una caja y dos
+   clientes esperando".
+2. **Muestra un cambio de estado.** Antes y después, o acumulación y descarga.
+   Una escena quieta y bonita no justifica el costo.
+3. **Se entiende a 360 px de ancho.** Si hace falta verla en el monitor para
+   descifrarla, el espectador del feed no la va a descifrar.
+4. **Si se quita, no se pierde información.** Entonces se quita.
+
+**Estado técnico hoy.** `@remotion/three` y `@react-three/fiber` v8 no funcionan
+con React 19, que es la versión del proyecto: el render muere antes de crear el
+contexto WebGL. Para habilitarlo de verdad hay que alinear `@remotion/three` a la
+versión del núcleo y subir fiber a v9, y probarlo con una composición de una sola
+escena antes de comprometer una pieza.
+
+Mientras eso no esté probado, el isométrico se resuelve con SVG, que para formas
+planas da mejor nitidez y no cuesta render. Pero el SVG no resuelve el problema de
+fondo: si la escena no explica, el problema es el guion, no la herramienta.
