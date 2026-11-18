@@ -264,6 +264,46 @@ documentación). No se parte en piezas menores porque la regla, su prueba con ba
 control de acceso describen un mismo comportamiento; separarlas dejaría el servicio sin la
 prueba que lo sostiene.
 
+### ENT-07 — Servicio de suscripciones (cambio de plan y add-ons)
+
+Status: pending.
+
+Motivo: hoy cambiar de plan es SQL a mano (runbook §4). Un cambio de plan es una decisión
+comercial que mueve lo que el cliente puede usar; escribirla a mano significa que el rastro
+depende de que la persona recuerde insertar la fila de auditoría en la misma transacción.
+
+Specs:
+
+- **S10.** El cambio de plan escribe la suscripción nueva y su rastro
+  (`change_type = 'plan'`, `previous_value_json` = contrato anterior, `new_value_json` = nueva
+  forma) **en la misma transacción**: no existe cambio sin rastro, igual que en las excepciones.
+- **S11.** Un plan fuera del catálogo (`findPlan`) o un add-on desconocido (`ADD_ON_CODES_LIST`)
+  se rechazan con código estable antes de escribir nada. Los estados válidos son `active`,
+  `suspended` y `expired`, y solo esos.
+- **S12.** `actor` y `reason` son obligatorios (catálogo §6.3), también aquí.
+- **S13.** Post-condición simétrica a las excepciones: antes de confirmar se resuelve el snapshot
+  resultante y se revierte si queda irresoluble (`SUBSCRIPTION_WOULD_BREAK_SNAPSHOT`). Un cambio
+  de plan nunca puede dejar al tenant sin entitlements servibles.
+- **S14.** La entrega es interna (CLI `npm run entitlements:subscription`), igual que las
+  excepciones: el backend no tiene rol de plataforma y el tenant no se auto-asigna planes. Sin
+  endpoint de escritura, y una prueba estructural falla si aparece una ruta de escritura.
+- **S15.** El runbook §4 deja de ser SQL manual y usa el comando; el rastro de plan se consulta
+  con `--list`.
+
+Allowed edit surfaces (el escritor no toca nada fuera de esto):
+
+```
+apps/admin_backend/src/modules/entitlements/tenant-subscription.service.ts
+apps/admin_backend/src/modules/entitlements/tenant-subscription.service.spec.ts
+apps/admin_backend/src/modules/entitlements/tenant-subscription.db.spec.ts
+apps/admin_backend/src/modules/entitlements/entitlements.module.ts
+apps/admin_backend/src/scripts/entitlement-subscription.ts
+apps/admin_backend/src/scripts/entitlement-subscription-args.ts
+apps/admin_backend/src/scripts/entitlement-subscription-args.spec.ts
+apps/admin_backend/package.json
+docs/operations/entitlement_overrides_runbook.md
+```
+
 ### Deuda declarada por ENT-06
 
 - **Cambiar de plan sigue siendo SQL documentado** (runbook §4): falta un
