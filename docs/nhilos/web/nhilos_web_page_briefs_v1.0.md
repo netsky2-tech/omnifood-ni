@@ -5,8 +5,8 @@
 | Campo | Valor |
 |---|---|
 | Documento | `nhilos_web_page_briefs_v1.0.md` |
-| Versión | 1.6 |
-| Estado | WORKING DRAFT — brief del home completo; briefs `/precios/` y hub `/software-pos/` escritos; resto de páginas P0 internas pendientes |
+| Versión | 1.7 |
+| Estado | WORKING DRAFT — briefs del home, `/precios/`, hub `/software-pos/` y hub fiscal `/facturacion-dgi/` escritos; resto de páginas P0 internas pendientes |
 | Owner | Founder / Marketing |
 | Audiencia | Founder, Marketing, Web, redactores |
 | Propósito | Brief por página: keyword, intención, jerarquía de encabezados con contenido y por qué, objeciones, prueba, CTA y enlaces internos |
@@ -459,7 +459,167 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 - **Title (≤60):** `Sistema POS en Nicaragua · NHILOS POS, venta local-first`
 - **Description (≤155):** `Qué hace un sistema POS en Nicaragua y cómo elegir tu nivel de control: venta sin internet, mecánica DT 09-2007 y modo simple o recetas. NHILOS POS.`
 
-## 4. Briefs pendientes (P0 internas)
+## 4. Brief — `/facturacion-dgi/` (hub fiscal — DGI/DT 09-2007)
+
+> **Escrito 2026-11-18.** Esta es la página con el **mayor riesgo de claim del sitio**: es donde el mercado entero sobreafirma ("factura electrónica DGI-NI", "sistema autorizado") y donde una sola palabra de más convierte un diferenciador en una promesa que el producto no puede sostener. Quien llega está preocupado: el dueño antes de una revisión, el dueño que heredó una numeración vieja, el contador que decide si el sistema le crea trabajo o se lo quita. El trabajo de la página es **reducir incertidumbre, no aumentarla**: explicar la norma en lenguaje llano nicaragüense, sostener la división mecánica/autorización a lo largo, y nunca deslizarse hacia "autorizado", "certificado", "aprobado" o "evita multas".
+
+**Tono (vinculante):** sobrio, como un contador explicando una regla. Sin urgencia, sin miedo-venta, sin "multas" como gancho. El lector ya llegó preocupado; los adjetivos se cambian por hechos verificables.
+
+### 4.1 Datos del brief
+
+| Campo | Valor |
+|---|---|
+| Keyword principal | `sistema de facturación DGI en Nicaragua` (regla de los hubs, arquitectura §4) |
+| Keywords secundarias | `facturación DGI Nicaragua`, `sistema de facturación Nicaragua` (mapa §5); `sistema de facturación DGI para pequeños negocios` (consideración, sin hijo dueño aún); `qué es la DT 09-2007 facturación` (informativa de norma — dueña aquí) |
+| Intención | Híbrida informativa-transaccional: entender la norma y evaluar si el sistema sostiene el cumplimiento. Quien llega no compra por precio: compra por confianza. CTA suave |
+| Respuesta rápida (primeros 150 px) | NHILOS garantiza la mecánica que exige la DT 09-2007: consecutivo inalterable, anulación solo con motivo auditado y libros exportables. La autorización —carta, código y numeración— la posee tu negocio como contribuyente. *(Frases exactas del home copy v1.6, FAQ G4 — esta página las sostiene a lo largo, no las cambia)* |
+| Objeción principal | "¿Necesito autorización de la DGI y quién la tramita?" |
+| Objeción secundaria | "¿Qué pasa si llega una revisión de la DGI?" (y la del contador: "¿este sistema me va a crear problemas?") |
+| Prueba | Capturas reales del historial de comprobantes (correlativo visible) y del flujo de anulación con motivo; sin mockups; datos de demo etiquetados (arquitectura §2.1) |
+| CTA | Solicitar una demo (primaria) + WhatsApp (secundaria), ambos suaves |
+| Enlaces internos | home (breadcrumb), `/facturacion-dgi/restaurantes/` (al publicarse), `/precios/`, `/inventario/`, `/software-pos/`, `/demo/` |
+
+### 4.2 Intención y queries objetivo
+
+Las queries vienen del [documento de keywords](./nhilos_web_keyword_opportunities_v1.0.md), de la arquitectura (mapa §5, regla de hubs §4, regla 4 de anti-canibalización) y del [análisis SERP](./nhilos_web_serp_analysis_v1.0.md) (G6: "GO con precisión obligatoria"); no se inventan:
+
+- **Primary:** `sistema de facturación DGI en Nicaragua` — asignada al hub por la regla de hubs de la arquitectura. Veredicto SERP: GO con precisión obligatoria — los que rankean son blogs de proveedores explicando pasos del SFC; el gap explotable es la guía honesta del SFC con los límites del sistema dichos de frente.
+- **Secundarias del mapa §5:** `facturación DGI Nicaragua` y `sistema de facturación Nicaragua` — misma intención de cumplimiento, misma página.
+- **De la tabla de keywords:** `sistema de facturación DGI para pequeños negocios` (consideración; sin hijo que la posea todavía) y la informativa `qué es la DT 09-2007 facturación` — la explicación de la norma es el territorio exclusivo de esta página: el home la adelanta en una línea (regla de profundidad) y ninguna otra URL la explica completa.
+- **Cancelación:** la mecánica de anulación se explica completa en esta página (sección paso a paso). La query informativa `cómo anular una factura en la VET Nicaragua` pertenece al hijo de soporte `/facturacion-dgi/como-anular-factura-vet/` (P2): el hub nombra el tema y enlaza cuando el hijo exista, sin enlaces rotos.
+- **Retención:** el documento de keywords **no registra una query medida de retención de comprobantes**. El tema se cubre dentro de la explicación de la norma (conservación de comprobantes y libros) sin crear un encabezado-target para una keyword que no existe en el dataset — regla de datos: no se crean encabezados para queries no medidas.
+
+**Queries que esta página NO persigue, con dueño explícito** (regla 1 y regla 4 de anti-canibalización: cumplimiento vs POS-con-DGI son ángulos distintos):
+
+| Query | Dueño |
+|---|---|
+| `software de facturación DGI para restaurantes`, `sistema de facturación DGI`, `facturación DT 09-2007`, `cómo facturar en la DGI Nicaragua restaurante` | `/facturacion-dgi/restaurantes/` (G6 hijo; la informativa de trámite es contenido educativo, no claim) |
+| `sistema POS con facturación DGI`, `sistema POS con facturación DGI en Nicaragua` | `/software-pos/facturacion-dgi/` (G7 — operación diaria, no cumplimiento) |
+| `sistema de facturación para cafetería en Nicaragua` | `/facturacion-dgi/cafeterias/` (G4, P2) |
+| `cómo anular una factura en la VET Nicaragua` | `/facturacion-dgi/como-anular-factura-vet/` (P2; revisar con contador antes de publicar, según SERP §4) |
+| `comprar sistema de facturación para restaurante` | `/precios/` (regla 6: la compra vive ahí) |
+| `sistema de facturación electrónica para restaurantes` | **Sin URL, deliberadamente:** la facturación electrónica no se targetea ni se usa como claim (arquitectura §9bis: Nicaragua opera facturación computarizada; es un gap del mercado, no del producto) |
+| `cómo evitar multas de la DGI`, `qué pasa si no facturo en Nicaragua` | **Sin dueño en esta página:** son miedo, no mecánica. Esta página no vende con multas. Si algún día se cubren, es contenido de recursos revisado con contador, nunca un gancho comercial |
+
+### 4.3 Regla de profundidad y disciplina normativa
+
+> **El home vende; `/facturacion-dgi/` explica la norma y sostiene la división.** Esta página puede exceder las ~120 palabras por H2 del home: cada párrafo debe responder una pregunta que el dueño preocupado se hace (¿mi factura es válida? ¿necesito autorización? ¿sirve mi numeración? ¿qué pasa si anulo? ¿qué muestro si llega una revisión?), no describir el producto. La operación diaria con facturación es de `/software-pos/facturacion-dgi/`; el ángulo restaurante es del hijo G6; el costo es de `/precios/`.
+
+**Disciplina normativa (marco de `docs/inventario_marco_normativo.md`, aplicada al copy fiscal):** la página distingue tres capas — lo que la norma exige (verificado: DT 09-2007 y Ley 822 art. 143 según la cadena de evidencia del proyecto), lo que el rubro hace (declarado como práctica, no presentado como obligación) y decisiones de diseño propias (explicables, nunca disfrazadas de norma). Todo requisito normativo que **no esté verificado contra fuente en el repositorio** (por ejemplo, plazos legales de retención) se redacta como "confírmalo con tu contador" o se verifica contra la Gaceta antes de publicar — el mismo caveat de procedencia que el marco de inventario exige. Nada se eleva a norma por conveniencia comercial.
+
+### 4.4 Jerarquía de encabezados
+
+Los H2 siguen **el orden en que el dueño tiene el miedo**, no el orden de features: validez → autorización → numeración → anulación → qué exige la norma → división de responsabilidad → inspección → impresora → FAQ → cierre. Los H3 resuelven sub-ángulos.
+
+#### H1: `Sistema de facturación DGI en Nicaragua: la mecánica que exige la DT 09-2007`
+
+Contenido: keyword del término cabeza + la posición en dos líneas — la fórmula exacta del home (mecánica = NHILOS; autorización = contribuyente). Debajo, sin scroll, la aclaración "facturación computarizada, no factura electrónica". *Por qué: la regla de hubs asigna la primary aquí; la precisión es el diferenciador citable y el H1 debe contener lo que la gente teclea, no un adjetivo.*
+
+#### H2: `¿La factura que emite NHILOS POS es válida ante la DGI?`
+
+Contenido: respuesta directa en las palabras del dueño. En Nicaragua el régimen vigente es la facturación computarizada (Sistema de Facturación Computarizada, DT 09-2007 + art. 143 de la Ley 822); NHILOS opera dentro de ese régimen — y no pretende ser factura electrónica, que no existe como validación en línea en Nicaragua. La validez de tu facturación depende de dos cosas: que tu negocio tenga su autorización (eso es tuyo) y que el sistema cumpla la mecánica (eso lo garantiza NHILOS). *Por qué: el miedo #1, resuelto en la primera pantalla; mata de frente la confusión "factura electrónica" que los competidores sembraron en el mercado (hallazgo transversal del SERP).*
+
+#### H2: `¿Necesito autorización de la DGI? ¿Quién la tramita?`
+
+Contenido: sí — la autorización de facturación (la carta de autorización, el código y la numeración autorizada) la obtiene y la posee cada negocio como contribuyente. NHILOS no emite autorizaciones ni hace trámites: en la implementación (Paso 04) se registran el RUC y los datos de tu autorización para configurar el prefijo y el folio inicial desde el que el sistema empieza a numerar. *Por qué: la objeción principal; es la división que gana al contador y que ningún competidor responde con precisión.*
+
+> **H3: `Qué es la carta de autorización, en palabras simples`**
+> Contenido: explicación llana de la autorización del SFC para un sistema computarizado, con la instrucción explícita de confirmar los requisitos vigentes del trámite con el contador — la página no publica requisitos de trámite que el repositorio no tiene verificados contra fuente. *Por qué: el dueño que empieza de cero necesita la idea, no el manual; la humildad normativa es parte del tono.*
+
+#### H2: `¿Sirve mi numeración actual o hay que empezar de cero?`
+
+Contenido: el sistema no inventa numeración — empieza a numerar desde el folio inicial que tu autorización define. Lo que el sistema no hace: renumerar el pasado ni continuar folios de sistemas anteriores; esa continuidad la evalúa el contador junto con la implementación antes de la primera venta. *Por qué: miedo concreto del dueño que ya factura con otro sistema o en papel; la respuesta honesta evita prometer una migración de folios que no existe (guardia §4.5, punto 9).*
+
+#### H2: `¿Qué pasa cuando hay que anular una factura? Paso a paso`
+
+Contenido: el escenario completo, con captura real del flujo: (1) la factura nunca se elimina — no existe borrado en el sistema; (2) se pide la anulación con **motivo obligatorio** — sin motivo no avanza; (3) la autoriza un supervisor con su PIN (rol OWNER o MANAGER); (4) el sistema genera la **Nota de Crédito con folio correlativo propio**, vinculada a la factura original; (5) queda registrado quién, cuándo, por qué y desde qué terminal, y el evento es inmutable; (6) si la venta había descontado insumos o stock, la reversión es trazable en el kardex; (7) el contador exporta el detalle del periodo con sus notas de crédito. *Por qué: es el escenario que asusta y donde el producto realmente brilla — la anulación ordenada con rastro completo, contra el parche de borrar y seguir.*
+
+> **H3: `Por qué una anulación bien hecha protege tu numeración`**
+> Contenido: la secuencia sigue sin saltos — la factura anulada conserva su número (visible y marcada como anulada) y la nota de crédito lleva el suyo. *Por qué: conecta el miedo de anular con el miedo de "romper el correlativo"; ambas respuestas salen de la misma mecánica (PC-FISC-01/02).*
+
+#### H2: `Lo que la DT 09-2007 le pide a la facturación computarizada`
+
+Contenido: la norma explicada en lenguaje llano, con las tres mecánicas que el sistema implementa: **numeración consecutiva que no se puede alterar** (el sistema asigna el siguiente comprobante; no hay edición de folio ni saltos ni repeticiones), **anulación que exige motivo y deja rastro** (nada se borra; la cancelación es formal, autorizada y auditada) y **libros que se pueden exportar** (cuando el contador pide las ventas del periodo, salen del sistema). Todo requisito adicional de la disposición se enuncia solo si está verificado contra fuente; lo demás, con contador. *Por qué: la informativa `qué es la DT 09-2007 facturación` es dueña aquí; hoy esos pasos los explican blogs de terceros con claims imprecisos — esta es la guía honesta que el SERP confirmó como gap.*
+
+#### H2: `Qué garantiza NHILOS y qué le corresponde a tu negocio`
+
+Contenido: la tabla de dos columnas que el home adelanta en una línea y migra aquí completa (copy v1.0 → home FAQ → esta página). Cada celda de la izquierda tiene evidencia de código y prueba automatizada en el [product claim audit](../branding/claims/product_claim_audit_od02_v1.3.md); cada celda de la derecha es una obligación del contribuyente que ningún software puede absorber. *Por qué: el corazón de la página; el contador puede leerla y aceptarla celda por celda, y es el activo citable por LLMs (reglas GEO del home).*
+
+| Garantiza NHILOS (mecánica, verificada en código) | Le corresponde a tu negocio (contribuyente) |
+|---|---|
+| Numeración consecutiva que no se puede saltar ni editar: el sistema asigna el siguiente comprobante, sin botón de edición de folio (`PC-FISC-01`) | Obtener y mantener tu autorización de facturación ante la DGI: la carta, el código y la numeración autorizada |
+| Nada se borra: no existe eliminación física de facturas (`PC-FISC-02`) | Entregar el RUC y los datos de tu autorización para configurar prefijo y folio inicial (Paso 04 de implementación) |
+| Anulación solo con motivo formal, autorizada con PIN de supervisor y registrada con quién, cuándo y por qué (`PC-FISC-02`, `PC-FISC-05`) | Emitir tus comprobantes en la forma autorizada a tu negocio — incluida la impresión del comprobante, que hoy depende del hardware del cliente |
+| Nota de Crédito con folio correlativo propio, vinculada a la factura original (`PC-FISC-05`) | Conservar tus comprobantes y libros por el plazo legal — el plazo exacto lo confirma tu contador |
+| Registro con fecha, hora, terminal y usuario de cada evento crítico (`PC-SEC-03`) | Entregar a tu contador la información del periodo: los libros exportables salen del sistema, la interpretación es del contador |
+| Libros de ventas y reportes fiscales exportables cuando el contador los pida (`PC-DASH-04`) | Responder ante la DGI: la relación tributaria es del contribuyente; NHILOS no te representa ni hace trámites |
+| El correlativo sigue operando sin internet y sincroniza en orden, sin duplicar, al reconectar (`PC-OFF-01/02/03`) | — |
+| Validación algorítmica de cédula y RUC para evitar errores tipográficos — sintáctica, sin consulta al padrón en línea (`PC-FISC-03`) | — |
+
+Nota bajo la tabla: esta división respeta la separación entre lo que la norma exige, lo que el rubro hace y decisiones de diseño propias — la misma disciplina de [`docs/inventario_marco_normativo.md`](../../inventario_marco_normativo.md) aplicada al copy fiscal.
+
+#### H2: `¿Y si llega una revisión de la DGI?`
+
+Contenido: sobrio, sin prometer resultados. Lo que puedes mostrar con el sistema: la secuencia completa sin saltos, cada anulación con su motivo y su responsable, y los libros del periodo exportables en limpio para el contador. Lo que el sistema no hace: responder por el negocio — la autorización, la conservación de comprobantes y la respuesta ante la DGI siguen siendo del contribuyente. Recomendación práctica: que tu contador prepare la carpeta; el sistema le entrega los datos ordenados. *Por qué: la pregunta que nadie teclea pero todos hacen por WhatsApp; responderla baja la temperatura sin vender miedo — y es el espejo de las páginas que vendieron con miedo y no pueden responderla.*
+
+#### H2: `¿Qué pasa si uso una impresora que NHILOS no soporta?`
+
+Contenido: estado honesto, sin promesa. Hoy la impresión integrada opera en terminales con impresora Sunmi/iPOS; la impresión externa del comprobante en ticketera genérica está en evaluación (issue #983) y **no se promete**. Lo que sí se afirma: el registro fiscal — correlativo, inmutabilidad, anulación auditada, libros exportables — no depende de la impresora; la emisión del comprobante en la forma autorizada es responsabilidad del negocio y se resuelve en la implementación con el hardware del cliente. El detalle de kits y compatibilidades es de `/software-pos/hardware/` cuando exista. *Por qué: la pregunta dura anticipada; responderla con estado real desactiva el claim "facturación impresa" prohibido y desarma la objeción del dueño con ticketera vieja sin prometer lo que no existe.*
+
+#### H2: `Preguntas frecuentes sobre facturación DGI y DT 09-2007`
+
+Contenido: acordeón con schema `FAQPage`, respuestas con entidad y mercado en la primera frase ("NHILOS POS…", "…en Nicaragua") según las reglas GEO del home: ¿NHILOS POS está autorizado por la DGI? (No — y la explicación exacta de la división: respuesta citable que ningún competidor se atreve a dar), ¿Necesito carta de autorización para facturar con sistema computarizado? (sí para el régimen SFC; el trámite es del contribuyente; confirma requisitos vigentes con tu contador), ¿Puedo anular una factura en NHILOS POS? (sí: motivo obligatorio, PIN de supervisor, Nota de Crédito con folio propio, sin borrado), ¿NHILOS POS es factura electrónica? (No: facturación computarizada, DT 09-2007 + art. 143 de la Ley 822; no hay validación en línea en Nicaragua), ¿Qué pasa con mi facturación si se cae el internet? (el correlativo sigue en la terminal enrolada; sincroniza al reconectar — detalle y límites → `/software-pos/sin-internet/`), ¿NHILOS POS imprime la factura en mi impresora? (estado honesto de #983), ¿Qué le entrego a mi contador? (libros exportables y notas de crédito del periodo). *Por qué: el patrón FAQ ya captura snippets en el cluster; aquí las respuestas precisas son el diferenciador — el "No" de la primera pregunta es la respuesta que el mercado no da.*
+
+#### H2: `Solicita una demo con tu operación fiscal real`
+
+Contenido: CTA suave — demo mostrando el historial de comprobantes y el flujo de anulación con datos etiquetados + WhatsApp directo. Quien llegó educándose convierte cuando ve su propio caso, no cuando le repiten la promesa. *Por qué: cierra el funnel con la conversión estándar del mercado (G14) sin romper el tono de la página.*
+
+### 4.5 Guardia de claims: lo que `/facturacion-dgi/` NO publica
+
+Lista vinculante. Es la página con más riesgo de claim del sitio: cada punto es una frase que el mercado usa y que este producto **no puede sostener hoy**, con su motivo.
+
+1. **"Sistema autorizado / certificado / aprobado por la DGI" — NO publicar.** NHILOS no está registrado ni posee autorización DGI; la autorización (carta, código y numeración) la posee cada cliente contribuyente. Es la sobreafirmación que el mercado repite y la que esta página existe para no repetir.
+2. **"Factura electrónica" / "facturación electrónica" / "XML firmado" / "CUFE" — NO publicar.** Nicaragua opera facturación computarizada (SFC, DT 09-2007 + Ley 822 art. 143); no existe validación en línea. La FE con XML/CUFE es futureware (Bloque 19 del roadmap; `PC-FISC-04` NOT_IMPLEMENTED). El término correcto es "facturación computarizada".
+3. **"Cero multas" / "evita multas" / "protege de sanciones" / "pasa cualquier inspección" — NO publicar.** Ningún software puede garantizar un resultado ante la DGI: el cumplimiento es del contribuyente. Además, vender con miedo está vetado en el tono de la página; las queries de multas se rechazan (§4.2).
+4. **"Facturación impresa" / "imprime tu factura DGI en cualquier impresora" — NO publicar.** La impresión externa del comprobante **no está implementada**: el adaptador ESC/POS genérico (issue #983) sigue abierto y hoy solo imprime la impresora integrada de terminales Sunmi/iPOS. Reemplazo obligatorio, misma línea que la home (copy v1.6): "factura con la mecánica que exige la DT 09-2007". La pregunta de la impresora se responde con estado honesto (H2 dedicado), nunca con promesa.
+5. **"Validación de RUC en línea contra el padrón de la DGI" — NO publicar.** La validación es sintáctica y algorítmica (`PC-FISC-03`); no existe consulta en vivo al padrón en Nicaragua.
+6. **"Cumplimiento total DGI" / "100% conforme" — NO publicar.** Regla vinculante de la arquitectura §2.1: la posición exacta es mecánica normativa + autorización del contribuyente; ningún porcentaje.
+7. **"Hacemos el trámite ante la DGI por ti" / "te conseguimos la autorización" — NO publicar.** NHILOS registra en la implementación los datos de una autorización que el cliente obtiene y posee; no representa al contribuyente ni gestiona trámites.
+8. **Plazos legales de retención con años o número de artículo — NO publicar** hasta verificarse contra fuente oficial (Gaceta), misma disciplina del caveat de procedencia del marco normativo de inventario. Mientras no esté verificado: "el plazo de conservación lo confirma tu contador".
+9. **"Continuamos o migramos tu numeración anterior" — NO publicar.** El sistema empieza desde el folio inicial configurado con tu autorización; no renumera ni absorbe folios de sistemas previos. La continuidad la evalúa el contador con la implementación.
+10. **Anulación automática o sin autorización — NO publicar.** La anulación exige motivo y PIN de supervisor (`PC-FISC-02/05`); prometer una anulación "de un clic sin permisos" contradiría la mecánica que la página vende.
+11. **"Cómo anular una factura en la VET" como contenido de esta página — NO aquí.** Es un trámite del contribuyente, no un claim de producto; vive en el hijo de soporte P2 `/facturacion-dgi/como-anular-factura-vet/`, revisado con contador antes de publicar (SERP §4).
+
+### 4.6 Enlazado interno
+
+**Entrante** (según arquitectura §7): home → `/facturacion-dgi/`; hub `/software-pos/` → `/facturacion-dgi/` con el anchor ya definido en §3.6 ("mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti"); FAQ del home ("¿Sirve para la DGI?") → aquí con anchor descriptivo; `/inventario/` → aquí cuando exista (el lado fiscal de la venta). Anchors descriptivos y variados, nunca "click aquí" ni el mismo anchor exacto desde muchas páginas.
+
+**Saliente:** home (breadcrumb, con `BreadcrumbList` al construir la página); `/facturacion-dgi/restaurantes/` con anchor `software de facturación DGI para restaurantes` (P0, ola 1 — se añade al publicarse, sin enlaces rotos); `/facturacion-dgi/como-anular-factura-vet/` (P2, ídem); `/precios/` (`ver planes y precios de NHILOS POS` — el costo se cierra allí, regla 6); `/inventario/` (`control de inventario y kardex` — la mitad física de una revisión: conteos y kardex son de la página de inventario, no de esta); `/software-pos/` (`qué es NHILOS POS: venta local-first` — quien llegó por la norma y aún no sabe qué es el producto); `/software-pos/sin-internet/` (límites exactos de la continuidad offline, desde el FAQ); `/demo/` (CTA primaria).
+
+### 4.7 Medición: qué se considera éxito
+
+Eventos (GA4 o equivalente, todos legibles por nombre):
+
+- `facturacion_llega_division` — scroll hasta la tabla garantiza/corresponde (sección visible ≥75%): prueba que el lector llega al corazón de la página.
+- `facturacion_anulacion_lee` — scroll hasta el paso a paso de anulación.
+- `faq_facturacion_abre` — apertura de cualquier ítem del FAQ.
+- `cta_demo_facturacion` — clic en "Solicitar una demo".
+- `cta_whatsapp_facturacion` — clic de WhatsApp con UTM `utm_medium=facturacion-dgi` para atribuir el canal.
+
+Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC 0/0 de la arquitectura §9bis):
+
+- **≥60%** de las sesiones llegan a la tabla de división — la página sostiene la línea hasta el final y no abandona en el camino.
+- **≥50%** de las sesiones que llegan a la división llegan también al paso a paso de anulación — el escenario que retiene al que vino preocupado.
+- **≥5%** de las sesiones generan clic a demo o WhatsApp — umbral deliberadamente menor que `/precios/`: parte del tráfico es de contadores con intención informativa cuya conversión es indirecta (recomiendan al dueño); por eso la división precisa y el FAQ son el activo, no el CTA.
+- **GSC:** impresiones de `sistema de facturación DGI en Nicaragua`, `facturación DGI Nicaragua` y `qué es la DT 09-2007` atribuidas a esta página — no a la home. Frontera vigiada: el FAQ DGI del home puede absorber las impresiones (regla 9 de anti-canibalización, revisión mensual; si la home absorbe, diferenciar el ángulo).
+- Con un dominio nuevo (baseline 0 clics / 0 impresiones), se miden **tasas y primer movimiento** (impresiones > 0), no absolutos; los umbrales absolutos se fijan tras el primer checkpoint con datos reales.
+
+### 4.8 Meta sugerida
+
+- **Title (≤60):** `Facturación DGI Nicaragua: mecánica DT 09-2007 | NHILOS`
+- **Description (≤155):** `Facturación DGI Nicaragua: mecánica DT 09-2007 — correlativo inalterable, anulación auditada y libros exportables. La autorización es de tu negocio.`
+
+## 5. Briefs pendientes (P0 internas)
 
 | Página | Grupo | Estado |
 |---|---|---|
@@ -467,7 +627,7 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 | `/software-pos/restaurantes/` | G2 | Pendiente — hereda la jerarquía del home al separar páginas |
 | `/software-pos/food-parks/` | G1 | Pendiente |
 | `/software-pos/sin-internet/` | G8 | Pendiente |
-| `/facturacion-dgi/` | G6 | Pendiente |
+| `/facturacion-dgi/` | G6 | Brief escrito — v1.7 §4 |
 | `/facturacion-dgi/restaurantes/` | G6 | Pendiente |
 | `/inventario/` | G9 | Pendiente |
 | `/inventario/restaurantes/` | G9 | Pendiente |
@@ -476,7 +636,7 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 
 ---
 
-## 5. Change log
+## 6. Change log
 
 | Versión | Fecha | Cambio | Autor |
 |---|---|---|---|
@@ -487,3 +647,4 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 | 1.4 | 2026-11-16 | H1 de la home generalizado (decisión founder): keyword restaurante migra a la página interna futura | Equipo NHILOS |
 | 1.5 | 2026-11-18 | Brief de `/precios/` (G13) escrito tras publicarse los precios congelados: queries G13/avatar, jerarquía H1–H3 en orden de decisión, 6 objeciones resueltas, guardia de claims (impresión #983, hardware sin validar, BYOD, exportación contable, multi-sucursal, contrato, SOHO), enlazado según arquitectura §7 y medición legible alineada al checkpoint GSC | Equipo NHILOS |
 | 1.6 | 2026-11-18 | Brief del hub `/software-pos/` (G2, término cabeza) escrito: queries del hub y reparto explícito de las que quedan en los hijos, jerarquía H1–H3 por las preguntas del comprador con las dos formas de operación (vende lo que compra vs lo que se cocina) en la primera pantalla, educación de categoría como territorio propio, guardia de claims (impresión #983, factura electrónica, autorización DGI, hardware, exportación contable/multi-sucursal/KDS, queries de segmento como encabezados), enlazado a los 9 hijos con anchor por query según arquitectura §7 y medición legible (clic a hijo como prueba de orientación) | Equipo NHILOS |
+| 1.7 | 2026-11-18 | Brief del hub fiscal `/facturacion-dgi/` escrito: queries propias y rechazadas con dueño explícito (incluida la negativa deliberada a "facturación electrónica" y a las queries de multas), jerarquía H1–H3 ordenada por el miedo del dueño (validez → autorización → numeración → anulación → norma → división → inspección → impresora), tabla garantiza/corresponde con cada celda defensible (PC-FISC-01..05, PC-SEC-03, PC-DASH-04), paso a paso de anulación, respuesta honesta de impresión (#983), disciplina NORMA/PRÁCTICA/DECISIÓN del marco normativo aplicada al copy fiscal, guardia de claims fiscal vinculante (11 puntos con motivo), enlazado según arquitectura §7 y medición legible | Equipo NHILOS |
