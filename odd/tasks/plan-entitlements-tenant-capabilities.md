@@ -127,11 +127,18 @@ Status: done (`e9450e65`).
 
 ### ENT-02 — Servicio y API de entitlements
 
-Status: pending.
+Status: done (`fad61f49` reglas, `71799113` endpoint).
 
-- Resolver capacidades efectivas: plan + add-ons + overrides + expiración.
-- Endpoint versionado y contrato estable.
-- Pruebas de contrato y de autorización.
+- `entitlement-resolution.ts`: resolución pura de §6 (plan ∪ add-ons ∪ overrides vigentes) sin
+  base de datos, reloj ni contexto de Nest. Falla cerrada ante plan, add-on, clave u override
+  fuera de catálogo.
+- `EntitlementsService.snapshot()`: lee contrato y overrides dentro de una transacción con
+  `app.tenant_id` ligado, así que las políticas RLS son la última defensa; sella el sobre
+  (`version`, `issuedAt`, `expiresAt` con TTL de 24 h).
+- `GET /api/tenant/entitlements`: contrato v1 de nueve campos, para cualquier rol autenticado
+  del tenant; el tenant sale del token, nunca del request.
+- Pruebas: 21 unitarias de reglas y 6 con base real (contrato completo, add-ons y overrides
+  vigentes/vencidos, `sin_plan`, suspendida y aislamiento entre tenants bajo rol restringido).
 
 ### ENT-03 — Guards de backend
 
@@ -222,6 +229,20 @@ anotación `readonly` para que compile `includes()`, y el patrón *unbound* del 
 lugar de denegar, así que la rama sin bind no toca el GUC y hace `SET ROLE` al rol restringido.
 Es un matiz del helper RLS del repo, no de esta migración.
 
+### Evidencia de ENT-02
+
+| Check | Comando | Resultado |
+|---|---|---|
+| Tipos | `npx tsc --noEmit` | exit 0 |
+| Lint | `npx eslint src/modules/entitlements` | exit 0 |
+| Unitario | `npx jest src/modules/entitlements --runInBand` | 34/34 (13 de ENT-01 + 21 nuevos) |
+| Regresión RLS | `npx jest src/core/database/tenant-rls-coverage --runInBand` | 35/35 |
+| Base real | `npm run test:db -- src/modules/entitlements` | 13/13 (7 de ENT-01 + 6 nuevos) |
+
+Dos correcciones durante la verificación: un estrechamiento de tipo en el lector de overrides
+de límite (`unknown` → `number | null`) y el formato que exige prettier en el spec nuevo. La
+regla de negocio que el catálogo no fijaba quedó registrada en §6.1 antes de codificarla.
+
 ## Log
 
 - **L1 (solicitud del usuario):** continuar con #984 tras diferir la entrega de #983 por falta
@@ -234,6 +255,10 @@ Es un matiz del helper RLS del repo, no de esta migración.
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L7 (ENT-02 entregado, `fad61f49` + `71799113`):** resolución de §6 como función pura y `GET
+  /api/tenant/entitlements` con contrato v1 de nueve campos y TTL de 24 h. 40 pruebas verdes (21
+  unitarias nuevas, 6 con base real y 13 heredadas entre unitarias y de base). El catálogo se
+  amplió con §6.1 para fijar qué límites ve un plan suspendido y qué suelo tiene `sin_plan`.
 - **L6 (ENT-01 entregado):** registro, entidades, migración con RLS y seed, con 55 pruebas
   verdes (13 unitarias + 7 con base real + 35 de regresión de cobertura RLS) y `tsc`/`eslint`
   limpios. Commit `e9450e65`.

@@ -111,6 +111,22 @@ efectivas = base(plan) ∪ addons(activos) ∪ overrides(vigentes)
 5. **Suscripción vencida o suspendida**: se conserva el núcleo; las premium caen.
 6. **Snapshot ausente, vencido o corrupto en el POS**: se conserva el núcleo; las premium se consideran no disponibles. La venta, la factura, la anulación, la reimpresión y el cierre de caja **no dependen de ninguna de estas reglas**.
 
+### 6.1 Decisiones de implementación (ENT-02, OUR DECISION)
+
+Dos casos que las reglas de arriba no fijaban y que el código resolvió explícitamente. Se
+registran aquí porque cambian lo que el cliente puede hacer, no por ser un detalle interno:
+
+1. **Una suscripción suspendida o vencida conserva sus cuotas de hardware** (terminales y
+   cuentas owner del contrato), aunque pierda todas las capacidades premium. Motivo: la cuota es
+   un hecho comercial, no una función; una mora no debe impedir reponer un terminal averiado ni
+   dejar a un negocio sin operar. Las capacidades premium sí caen.
+2. **Un tenant sin suscripción (`sin_plan`) recibe el suelo de `ESENCIAL`** (1 terminal, 2
+   cuentas owner) y nunca más. Motivo: `sin_plan` no puede ser un estado con más permisos que el
+   plan más barato, y a la vez un tenant recién creado debe poder enrolar su primer terminal.
+
+Ambas se implementan en `entitlement-resolution.ts` y se prueban en
+`entitlement-resolution.spec.ts`. Cambiarlas exige un slice nuevo, no un ajuste de código.
+
 ## 7. Claves que ningún guard puede tocar
 
 Lista cerrada, y el motivo de cada una:
