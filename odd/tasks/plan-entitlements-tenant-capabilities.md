@@ -180,12 +180,25 @@ que normalizarlo cuando ese spec se pueda tocar.
 
 ### ENT-04 — Snapshot offline del POS
 
-Status: pending.
+Status: done (`fcfac970` códigos del backend, `a07ee9f9` snapshot, `1616b9ad` reclasificación).
 
-- Persistir snapshot en SQLite con versión y TTL.
-- Refrescar al sincronizar.
-- Probar snapshot ausente, vencido y corrupto.
-- Probar que la venta sigue funcionando en todos esos casos.
+- Backend: 403 `CAPABILITY_REQUIRED` con `missingCapabilities` y 409 `QUOTA_EXCEEDED` con
+  `limitKey`/`limit`/`occupied`, para que el POS no dependa de la prosa (ENT-04a).
+- POS: snapshot cacheado en `local_configs` bajo `entitlements:<tenantId>` con TTL del servidor;
+  ausente, vencido o corrupto resuelve a `empty()` (sin capacidades premium), y un refresh
+  fallido conserva el anterior sin lanzar hacia la UI.
+- `classifySyncFailure` y `purchaseReactionAction` (funciones puras): un rechazo de plan es
+  `planBlocked`, no `authBlocked`, y se repropaga **antes** de cualquier ruta de descarte.
+- Un dominio bloqueado por plan se retiene y se libera solo cuando cambia el **contenido** de los
+  entitlements — no cuando se renueva el TTL, que es lo que pasaría con cada pasada de sync.
+
+Notas de ejecución:
+
+- El worker de este slice se colgó 30 minutos en un `flutter test` (proceso `flutter_tester`
+  huérfano); el código estaba escrito y se terminó de revisar y verificar en el padre.
+- Se eliminó la spec de integración que dejó el worker: sus casos no correspondían al
+  comportamiento real (el 403 de compras no pasa por `_runDomain`). En su lugar la decisión se
+  extrajo a `purchaseReactionAction`, que sí se prueba.
 
 ### ENT-05 — Dashboard y POS UI
 
@@ -304,6 +317,11 @@ multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L11 (ENT-04 entregado, `fcfac970` + `a07ee9f9` + `1616b9ad`):** el POS cachea el snapshot con
+  TTL y un rechazo de plan deja de confundirse con una sesión caída. Un dominio bloqueado por
+  plan retiene sus filas y se libera solo ante un cambio real del plan. Evidencia: 601/601 en
+  `test/data/services`, 35/35 en las suites nuevas, `flutter analyze` limpio, y 95/95 + 1541/1541
+  del lado backend.
 - **L10 (ENT-03b entregado, `a51307f1` + `c847f996`):** cuotas de asientos con ventana de gracia.
   Decisión del dueño: cuenta el equipo activo; la baja libera al instante; el que murió se libera
   solo a los 30 días. Corrección del padre en la revisión: el conteo excluye el asiento del mismo
