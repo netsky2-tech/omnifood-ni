@@ -91,25 +91,55 @@ Estas contradicciones se detectaron al cruzar la pieza con el registro de public
 ## 3. Guion — [Rol: Creative Strategist]
 
 - **3 alternativas de hook:**
-  1. `G3` — **Verbal:** «20 ventas al día con billete de $20. Si el redondeo te cuesta C$1 en cada una…» | **Visual Frame 0:** dos líneas de cifras grandes en ámbar y esmeralda sobre fondo oscuro, sin logotipo, sin pantalla, sin producto. El ancho lo ocupa el texto.
-  2. `G7` — **Verbal:** «C$600 al mes se te van en el vuelto.» | **Visual Frame 0:** la cifra sola, enorme, en ámbar, sin contexto.
-  3. `G1` — **Verbal:** «¿Cuánto devolviste a ojo esta semana?» | **Visual Frame 0:** la pregunta a pantalla completa, sin imagen.
-- **Hook seleccionado y justificación:** la alternativa 1, `G3`. La 2 entrega una cifra sin premisa y suena a exageración de vendedor: el espectador no tiene forma de verificarla y la descarta. La 3 es una pregunta honesta pero no abre brecha de curiosidad, porque el espectador cree saber la respuesta. La 1 gana porque **instala la premisa antes que la conclusión**: cuando la cifra mensual aparece en el segundo 4.7, el espectador ya hizo la cuenta con nosotros y no puede discutirla sin contradecirse. Ese es el mecanismo que las referencias del rubro usan y que nuestras trece piezas no usaban.
+  1. `G3` — **Verbal:** «Cada vuelto de veinte dólares te cuesta un córdoba.» | **Visual Frame 0:** la pérdida por operación en cifras grandes a todo el ancho, sin logotipo, sin producto.
+  2. `G7` — **Verbal:** «C$600 al mes se te van en el vuelto.» | **Visual Frame 0:** la cifra mensual sola, en ámbar.
+  3. `G1` — **Verbal:** «¿Cuánto devolviste a ojo esta semana?» | **Visual Frame 0:** la pregunta a pantalla completa.
+- **Hook seleccionado y justificación:** la alternativa 1, `G3`, **reformulada el 18/11 tras la Compuerta 1**. La versión anterior abría con «20 ventas al día con billete de $20», una premisa neutra: la tensión llegaba al segundo 2.6 dentro de la subordinada, y el playbook mide que la decisión de irse ocurre en el primer segundo. Ahora la pérdida está en la primera sílaba y la cifra mensual pasa a ser **escalamiento, no afirmación inicial**: el espectador primero reconoce que pierde un córdoba por vuelto, y solo después ve cuánto suma. La 2 sigue descartada porque entrega una cifra mensual sin premisa verificable, y la 3 porque el espectador cree saber la respuesta.
 - **Desarrollo narrativo:** premisa verificable → multiplicación que se arma en pantalla (día, luego mes) → prueba real del mecanismo → contraste de estados. Progresión causal explícita: *«el redondeo cuesta»* **por lo tanto** *«se acumula»* **por lo tanto** *«se puede eliminar»*. **Reset de atención en f45–f60** (1.5 a 2.0 s): entra el llamado a la acción y cambia la composición, para cortar la caída de retención que el playbook midió a los 2 a 4 segundos.
-- **Clímax o revelación:** el fotograma **f142**, cuando `= C$600 al mes` aterriza y se sostiene. La revelación no es el producto: es la cifra. El producto llega 1.8 s después, cuando el espectador ya está incómodo y necesita ver que eso tiene salida.
-- **Resolución:** estado de control verificable y acotado. `C$600 al mes` en ámbar se resuelve en `C$0 en redondeo` en esmeralda. La afirmación se limita al redondeo: no promete ahorro total, no promete más ventas, no promete nada fiscal.
+- **Clímax o revelación:** el fotograma **f185**, cuando `= C$600 al mes` aterriza tras el paso `× 30 días`. La revelación no es el producto: es la cifra. El producto llega 2.5 s después, cuando el espectador ya está incómodo y necesita ver que eso tiene salida. El paso diario a mensual es visible en pantalla, no se salta: `C$1 × 20 = C$20 al día`, luego `× 30 días`, luego `= C$600 al mes`.
+- **Resolución:** estado de control verificable y acotado. `C$600 al mes` en ámbar se resuelve en `C$0 de redondeo en cada cobro` en esmeralda. **Corregido el 18/11:** la versión anterior decía `C$0 en redondeo` a secas, y una sola transacción grabada no sostiene un cero mensual. La cifra se acota ahora a cada cobro, que es exactamente lo que el material demuestra. Se elimina además la línea «Sin redondear. Sin calcular a ojo.»: decía lo mismo que la cifra del mismo beat.
 - **CTA:** `Comenta DEMO y te paso el acceso.` Un solo disparador, aparece en **f45** (1.5 s), persiste durante todo el contenido y se repite al cierre, en audio y en pantalla con las mismas palabras.
 - **Voz en off y textos en pantalla:**
 
 | Beat | Ventana (`s` / `frames @30fps`) | Voz en off (`es-NI` TTS) | Texto en pantalla (`<= 8` palabras) | Acción visual |
 |---|---|---|---|---|
-| `beat_0_hook` | `0.0–2.6s` (`0–78`) | «Veinte ventas con billete de veinte dólares.» | «20 ventas al día con billete de $20.» | Cifras grandes a todo el ancho, sin producto. `$20` en esmeralda sobre el resto en blanco |
-| `beat_1_desarrollo` | `2.6–6.5s` (`78–195`) | «Si el redondeo te cuesta un córdoba en cada una, son seiscientos al mes que nadie ve.» | «C$1 × 20 = C$20 al día = C$600 al mes» | La multiplicación se arma en tres tiempos (`f84`, `f110`, `f142`); `f142` aterriza y se sostiene |
-| `beat_2_climax` | `6.5–11.5s` (`195–345`) | «NHILOS calcula el vuelto al tipo de cambio del día.» | «Vuelto exacto C$607.49» | Grabación real del cobro bimoneda; banda esmeralda con la cifra contando hasta bloquearse en 607.49 |
-| `beat_3_resolucion` | `11.5–15.0s` (`345–450`) | — | «Sin redondear. Sin calcular a ojo.» + «C$600 al mes» → «C$0 en redondeo» | Contraste ámbar a esmeralda sobre el mismo eje |
-| `beat_4_cierre` | `15.0–18.0s` (`450–540`) | «Comenta DEMO y te paso el acceso.» | «Comenta DEMO» + `nhilospos.com` | Cierre de marca; el contenido sale en `f522–f534` para que `f539` sea igual a `f0` |
+| `beat_0_hook` | `0.0–2.3s` (`0–69`) | «Cada vuelto de veinte dólares te cuesta un córdoba.» | «Cada vuelto de $20 te cuesta C$1.» | Cifras a todo el ancho. La pérdida está presente desde el primer fotograma |
+| `beat_1_desarrollo` | `2.3–7.0s` (`69–210`) | «Veinte al día, treinta días: seiscientos al mes que nadie ve.» | «C$1 × 20 = C$20 al día» → «× 30 días» → «= C$600 al mes» | Cadena de cuatro tiempos (`f80`, `f110`, `f150`, `f185`); `f185` aterriza y se sostiene |
+| `beat_2_climax` | `7.0–12.0s` (`210–360`) | «El sistema calcula el vuelto al tipo de cambio del día.» | «Vuelto exacto C$607.49» | Grabación real del cobro bimoneda; banda esmeralda que cuenta hasta bloquearse en 607.49 |
+| `beat_3_resolucion` | `12.0–15.5s` (`360–465`) | — | «C$600 al mes» → «C$0 de redondeo en cada cobro» | Contraste ámbar a esmeralda. Una sola afirmación por estado |
+| `beat_4_cierre` | `15.5–18.0s` (`465–540`) | «Comenta DEMO y te paso el acceso.» | «Comenta DEMO» + `nhilospos.com` | Cierre de marca; el contenido sale para que el último fotograma sea igual al primero |
 
 **Nota de honestidad sobre el beat de resolución.** La voz en off no dice nada en este tramo: la cifra resuelta habla sola y evita que la locución tenga que afirmar algo que el material no muestra.
+
+
+### Excepción documentada a la compuerta del desenlace antes de 3 s
+
+La compuerta pide que el desenlace se entienda antes del segundo 3. Con la
+reformulación del gancho **la compuerta se cumple por otra vía**: lo que el
+espectador debe entender —que pierde un córdoba en cada vuelto— está en el primer
+fotograma. La cifra de `C$600` a los 6.2 s no es el desenlace: es el escalamiento
+de una pérdida que ya se declaró. Forzar la cifra mensual antes del segundo 3
+obligaría a saltarse el paso `× 30 días`, y un salto aritmético es peor que una
+cifra tardía.
+
+### Correcciones de la Compuerta 1 y su estado
+
+| # | Corrección del Critic | Decisión |
+|---|---|---|
+| 1 | Duración máxima 15 s según R1 | **Rechazada con evidencia.** R1 estaba mal: las nueve referencias duran 29 a 70 s y retienen. R1 se corrigió en el playbook el 18/11. La duración se mantiene en 18 s y cada beat aporta una idea distinta |
+| 2 | El primer segundo no tiene tensión | **Aceptada.** Beat 0 reformulado: la pérdida entra en la primera sílaba |
+| 3 | Conflicto con la compuerta del desenlace antes de 3 s | **Resuelta** por la corrección 2 y documentada arriba |
+| 4 | Falta el paso `× 30` en la cadena | **Aceptada.** Visible en pantalla y en la locución |
+| 5 | `C$0 en redondeo` excede la evidencia | **Aceptada.** Acotado a `C$0 de redondeo en cada cobro` |
+| 6 | Línea redundante en el beat de resolución | **Aceptada.** Se elimina una de las dos afirmaciones |
+| 7 | Copy promete un estado offline que la pieza no muestra | **Aceptada.** Frase retirada del copy y nota añadida al registro |
+
+### Límite del veredicto
+
+El Critic certificó el guion, no los píxeles. Las Secciones 4 y 5 no existían
+cuando emitió el veredicto, y la prueba de legibilidad a 360 px pertenece a la
+Compuerta 2. La pieza no está aprobada para publicar hasta que esa compuerta
+firme.
 
 ## 4. Dirección de arte — [Rol: Art Director]
 

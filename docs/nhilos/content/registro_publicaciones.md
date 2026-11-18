@@ -63,7 +63,7 @@ Copy de Instagram y Facebook, verbatim:
 >
 > En el video la cuenta se hace completa: veinte ventas, un córdoba de redondeo, seiscientos al mes. Y después el cobro real, donde el vuelto sale exacto al tipo de cambio del día.
 >
-> Todo ocurre en la misma pantalla de cobro, y la venta queda guardada aunque se caiga el internet.
+> Todo ocurre en la misma pantalla de cobro.
 >
 > 📩 Comenta DEMO y te envío el acceso para probarlo con tus propios precios y tu tipo de cambio.
 >
@@ -85,7 +85,10 @@ Notas de publicación:
 
 - Un solo llamado a la acción. No se pide guardado en esta pieza: el objetivo es
   abrir conversación.
-- El copy describe **el argumento**, no un recorrido de pantalla. La versión
+- El copy describe **el argumento**, no un recorrido de pantalla.
+- La pieza **no muestra** un estado sin internet, así que el copy no puede
+  prometer que la venta queda guardada sin conexión: sería un claim que el
+  material no sostiene (R8). Si algún día se rueda ese estado, vuelve al copy. La versión
   anterior prometía "el cobro completo" y enumeraba tres pasos; la pieza ya no es
   eso. Si la pieza cambia de estructura, el copy se reescribe antes de publicar.
 - Si no hay quien responda los mensajes directos en minutos, quitar la promesa de

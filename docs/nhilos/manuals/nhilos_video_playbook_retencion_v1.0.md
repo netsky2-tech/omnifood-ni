@@ -78,8 +78,20 @@ opera la caja. El tono debe hablarle al dueño.
 
 ## Reglas de producción
 
-**R1 · Duración.** Máximo 15 segundos. Si la idea no cabe, son dos piezas, no una
-más larga.
+**R1 · Duración.** La duración no es el enemigo: lo es un primer segundo sin
+conflicto. De las nueve referencias del rubro analizadas el 18/11/2026, las
+duraciones van de 29 a 70 segundos con mediana cercana a 43, y todas retienen
+porque abren con el dolor del comprador en segunda persona, cambian de tratamiento
+visual en cada beat y dejan el producto para el final.
+
+La pieza se sostiene entre 15 y 45 segundos según cuántas ideas distintas lleve.
+Más allá de eso, o sobra relleno, o son dos piezas.
+
+*Corrección del 18/11/2026:* esta regla fijaba antes un máximo de 15 segundos. Los
+datos de las referencias la desmienten. Una pieza corta con un primer segundo
+neutro retiene menos que una larga con un gancho real, y ese es exactamente
+nuestro caso: trece piezas por debajo de los 20 segundos con un promedio de
+visualización de 2 a 4 segundos.
 
 **R2 · Desenlace temprano.** La información que da sentido a la pieza aparece
 antes del segundo 3. Quien se va a los 3 segundos tiene que haber entendido qué
