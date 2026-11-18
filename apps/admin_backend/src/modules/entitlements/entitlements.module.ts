@@ -8,6 +8,7 @@ import { EntitlementsController } from './entitlements.controller';
 import { EntitlementOverridesService } from './entitlement-overrides.service';
 import { EntitlementsService } from './entitlements.service';
 import { TenantQuotaService } from './tenant-quota.service';
+import { TenantSubscriptionService } from './tenant-subscription.service';
 
 /**
  * Issue #984 entitlements.
@@ -24,6 +25,9 @@ import { TenantQuotaService } from './tenant-quota.service';
  * (internal CLI only) and serves their read side. There is still no HTTP write
  * path: the backend has no platform role, so an OWNER-guarded write would let
  * a tenant grant itself the top plan.
+ * ENT-07: `TenantSubscriptionService` writes audited plan changes and add-ons
+ * (internal CLI only, same no-write-route decision) with the same
+ * transaction + audit row + snapshot post-condition shape as the exceptions.
  */
 @Module({
   imports: [
@@ -39,11 +43,13 @@ import { TenantQuotaService } from './tenant-quota.service';
     EntitlementsService,
     TenantQuotaService,
     EntitlementOverridesService,
+    TenantSubscriptionService,
   ],
   exports: [
     EntitlementsService,
     TenantQuotaService,
     EntitlementOverridesService,
+    TenantSubscriptionService,
   ],
 })
 export class EntitlementsModule {}

@@ -13,7 +13,7 @@ atiende a un cliente: soporte, implementación o el dueño del producto.
 | Pieza | Dónde vive | Quién la toca |
 |---|---|---|
 | Catálogo de planes y claves | `apps/admin_backend/src/modules/entitlements/capability-registry.ts` | Ingeniería (código + migración) |
-| Contrato del tenant | tabla `tenant_subscription` | Operación (SQL documentado, §4) |
+| Contrato del tenant | tabla `tenant_subscription` | Operación, **solo** por CLI (§4) |
 | Excepciones auditadas | tabla `tenant_entitlement_override` | Operación, **solo** por CLI (§3) |
 | Rastro de cambios | tabla `tenant_entitlement_change_history` (solo-lectura) | Nadie escribe a mano |
 | Consulta para el cliente | `GET /api/tenant/entitlement-overrides` y `…/history` (solo `OWNER`) | El cliente |
@@ -94,41 +94,72 @@ Errores y qué significan:
 
 ## 4. Cambiar de plan o aplicar un add-on
 
-**Estado actual:** todavía no hay servicio de escritura de suscripciones; un cambio de plan
-es una operación de base de datos documentada. Se hace **siempre** con el alta del rastro en
-la misma transacción, o el cambio deja de ser auditable:
+Un cambio de plan se hace **siempre** con el comando, nunca a mano. El comando escribe la
+suscripción nueva, su rastro de auditoría y verifica el snapshot resultante **en una sola
+transacción**: no existe cambio de plan sin rastro, y un contrato que dejaría los entitlements
+irresolubles se revierte entero antes de confirmar.
 
-```sql
-BEGIN;
--- 1) El contrato nuevo (la resolución toma la suscripción más reciente ya iniciada).
-INSERT INTO tenant_subscription
-  (tenant_id, plan_code, status, starts_at, ends_at, add_ons, support_tier)
-VALUES ('<uuid>', 'OPERACION', 'active', '2026-12-01T00:00:00Z', NULL,
-        '["pack.retail"]'::jsonb, 'standard');
+```bash
+# Subir de plan, con add-on y vigencia
+npm run entitlements:subscription -- \
+  --tenant=<uuid-del-tenant> \
+  --plan=OPERACION \
+  --add-ons=pack.retail \
+  --actor=soporte@nhilos.com \
+  --reason="Upgrade solicitado por el cliente; contrato firmado 2026-11-25"
 
--- 2) El rastro. previous_value_json guarda el plan anterior.
-INSERT INTO tenant_entitlement_change_history
-  (tenant_id, change_type, subscription_id, capability_key,
-   previous_value_json, new_value_json, actor, reason, occurred_at)
-VALUES ('<uuid>', 'plan',
-        (SELECT id FROM tenant_subscription WHERE tenant_id='<uuid>'
-          ORDER BY created_at DESC LIMIT 1),
-        NULL,
-        '{"plan_code":"ESENCIAL"}'::jsonb,
-        '{"plan_code":"OPERACION","add_ons":["pack.retail"],"status":"active"}'::jsonb,
-        'soporte@nhilos.com',
-        'Upgrade solicitado por el cliente; contrato firmado 2026-11-25',
-        now());
-COMMIT;
+# Suspendir sin borrar el contrato (mora, corte por impago)
+npm run entitlements:subscription -- \
+  --tenant=<uuid> --plan=OPERACION --status=suspended \
+  --actor=soporte@nhilos.com --reason="Mora de dos ciclos; se suspende sin borrar el contrato"
+
+# Renovación con fin de vigencia y nivel de soporte
+npm run entitlements:subscription -- \
+  --tenant=<uuid> --plan=PRO --support-tier=priority \
+  --starts-at=2026-12-01T00:00:00Z --ends-at=2027-11-30T23:59:59Z \
+  --actor=soporte@nhilos.com --reason="Renovación anual firmada"
+
+# Consultar el rastro de cambios de plan (la última entrada es el contrato vigente)
+npm run entitlements:subscription -- --tenant=<uuid> --list
 ```
+
+Qué garantiza el comando, sin que haya que recordarlo:
+
+- **`actor` y `reason` son obligatorios.** Un cambio de plan sin rastro no se escribe
+  (`SUBSCRIPTION_ACTOR_REQUIRED` / `SUBSCRIPTION_REASON_REQUIRED`).
+- **Solo planes del catálogo.** `ESENCIAL`, `OPERACION` y `PRO`; `ENTERPRISE` se cotiza a mano
+  y se rechaza con `PLAN_CODE_NOT_REGISTERED`. Un add-on desconocido se rechaza con
+  `ADD_ON_NOT_REGISTERED` antes de escribir nada.
+- **Estados cerrados.** `--status` acepta `active`, `suspended` y `expired`, y solo esos
+  (`SUBSCRIPTION_STATUS_INVALID`).
+- **La auditoría la escribe el servicio, no usted.** La fila de
+  `tenant_entitlement_change_history` (`change_type = 'plan'`, `subscription_id`, el contrato
+  anterior en `previous_value_json` y la forma nueva en `new_value_json`) se inserta en la
+  misma transacción que la suscripción. No la agregue a mano jamás.
+- **El cambio no puede romper el snapshot.** Antes de confirmar, el comando resuelve los
+  entitlements del tenant con el contrato puesto; si la resolución falla (por ejemplo,
+  comprar `bundle.convenio` sin `promotions`), se revierte todo y no se escribe nada
+  (`SUBSCRIPTION_WOULD_BREAK_SNAPSHOT`).
+
+Errores y qué significan:
+
+| Código | Qué hacer |
+|---|---|
+| `PLAN_CODE_NOT_REGISTERED` | El plan no está en el catálogo automático: revisar `capability-registry.ts` |
+| `ADD_ON_NOT_REGISTERED` | El código de add-on no existe: revisar el catálogo §5 |
+| `SUBSCRIPTION_STATUS_INVALID` | Solo `active`, `suspended` o `expired` |
+| `SUBSCRIPTION_SUPPORT_TIER_INVALID` | Solo `standard` o `priority` |
+| `SUBSCRIPTION_STARTS_AT_INVALID` / `SUBSCRIPTION_ENDS_AT_INVALID` | La fecha no es un instante válido |
+| `SUBSCRIPTION_ACTOR_REQUIRED` / `SUBSCRIPTION_REASON_REQUIRED` | Faltó nombre o motivo |
+| `SUBSCRIPTION_WOULD_BREAK_SNAPSHOT` | El contrato dejaría los entitlements irresolubles: revise prerrequisitos (p. ej. `bundle.convenio` requiere `promotions`) |
 
 Reglas:
 
 - **No se edita una migración aplicada** para cambiar un plan: los planes son datos del
   tenant, no esquema.
 - **Una baja no se hace con `DELETE`.** Se marca `status = 'expired'` (o `ends_at` en la
-  fecha de corte). Un plan vencido conserva las cuotas de hardware y el núcleo: el cliente
-  no se queda sin cobrar.
+  fecha de corte) con el comando. Un plan vencido conserva las cuotas de hardware y el núcleo:
+  el cliente no se queda sin cobrar.
 - Los add-ons se cambian en la misma fila (`add_ons`), no agregando planes.
 - Después del cambio, el POS del cliente recibe el snapshot actualizado en su próximo sync;
   el snapshot en caché se descarta solo cuando cambia su **contenido**, no al renovarse.
@@ -202,10 +233,7 @@ con el tenant ligado: ver, ve; tocar, no puede.
 
 ## 8. Lo que este runbook no resuelve (deuda declarada)
 
-- **Cambiar un plan no tiene servicio ni interfaz**: es SQL documentado (§4). El siguiente
-  paso natural es un `TenantSubscriptionService` con la misma forma que las excepciones
-  (validación + rastro en una transacción), y su comando.
+- **Cambiar un plan ya tiene servicio y comando** (§4, ENT-07): el rastro de plan se consulta
+  con `--list` y la escritura va por `npm run entitlements:subscription`.
 - **No hay UI** para que el cliente vea sus excepciones: la API existe
   (`GET /api/tenant/entitlement-overrides`) y el dashboard todavía no la consume.
-- El historial de cambios de plan (`change_type = 'plan'`) se escribe a mano mientras no
-  exista ese servicio.

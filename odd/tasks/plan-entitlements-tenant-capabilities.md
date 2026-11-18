@@ -266,7 +266,7 @@ prueba que lo sostiene.
 
 ### ENT-07 — Servicio de suscripciones (cambio de plan y add-ons)
 
-Status: pending.
+Status: done.
 
 Motivo: hoy cambiar de plan es SQL a mano (runbook §4). Un cambio de plan es una decisión
 comercial que mueve lo que el cliente puede usar; escribirla a mano significa que el rastro
@@ -289,6 +289,31 @@ Specs:
   endpoint de escritura, y una prueba estructural falla si aparece una ruta de escritura.
 - **S15.** El runbook §4 deja de ser SQL manual y usa el comando; el rastro de plan se consulta
   con `--list`.
+
+Evidencia: `TenantSubscriptionService` (`changePlan`, `list`) con validación pura exportada
+(`normalizePlanChange`, códigos `PLAN_CODE_NOT_REGISTERED`, `ADD_ON_NOT_REGISTERED`,
+`SUBSCRIPTION_STATUS_INVALID`, `SUBSCRIPTION_ACTOR_REQUIRED`, `SUBSCRIPTION_REASON_REQUIRED`,
+`SUBSCRIPTION_WOULD_BREAK_SNAPSHOT`). Un cambio de plan **supersede**: inserta la fila nueva y
+nunca edita ni borra la anterior. La post-condición resuelve el snapshot en `max(now, starts_at)`,
+así una renovación con fecha futura se valida en el momento en que tomará efecto.
+CLI `npm run entitlements:subscription` (`--plan`, `--status`, `--add-ons`, `--support-tier`,
+`--starts-at`, `--ends-at`, `--actor`, `--reason`, `--list`). Runbook §4 ya no es SQL manual.
+
+Pruebas: unit 23/23 (11 del gate puro, 12 del CLI, incluida la que prueba que ninguna fila de la
+matriz de planes concede ni quita una clave de núcleo), DB 7/7 (transacción única, valor anterior
+capturado, plan y add-on desconocidos rechazados sin escribir, post-condición que revierte, y
+aislamiento RLS con `set_config('app.tenant_id')` previo a mutar), `tsc` 0, ESLint limpio en los
+archivos tocados.
+
+Dos riesgos que el revisor debe mirar, declarados y no escondidos:
+
+1. `contract_price`, `currency` y `notes` no son banderas del CLI: la fila nueva usa los valores
+   por defecto del esquema. Arrastrar el precio anterior sería una decisión de política comercial
+   que no corresponde inventar en código; hoy el precio se fija aparte.
+2. Un `starts_at` anterior al contrato vigente hace que la resolución siga eligiendo la fila
+   vieja: el operador ve "aplicado" algo que el snapshot ignora. No está bloqueado; la
+   post-condición valida lo que realmente gana, así que no se rompe nada, pero confunde. Candidato
+   a guard si aparece en operación.
 
 Allowed edit surfaces (el escritor no toca nada fuera de esto):
 

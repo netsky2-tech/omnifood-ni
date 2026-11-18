@@ -36,6 +36,7 @@
     "seed:soho-catalog": "ts-node -r tsconfig-paths/register src/scripts/seed-soho-catalog.ts",
     "seed:soho-modifier-groups": "ts-node -r tsconfig-paths/register src/scripts/seed-soho-modifier-groups.ts",
     "entitlements:override": "ts-node -r tsconfig-paths/register src/scripts/entitlement-override.ts",
+    "entitlements:subscription": "ts-node -r tsconfig-paths/register src/scripts/entitlement-subscription.ts",
     "seed:demo": "ts-node -r tsconfig-paths/register src/scripts/seed-general-demo-tenant.ts"
   },
   "dependencies": {
