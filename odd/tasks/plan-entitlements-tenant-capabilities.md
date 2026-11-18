@@ -159,6 +159,25 @@ Status: done (`f599f53c` mecanismo, `4c557a89` aplicación).
 Fuera de ENT-03 por decisión: las cuotas (`limits.terminals`, `limits.owner_accounts`) son
 conteo y bloqueo de enrolamiento, no gating de función; van en ENT-03b.
 
+### ENT-03b — Cuotas de terminales y cuentas owner
+
+Status: done (`a51307f1` servicio, `c847f996` aplicación).
+
+- `TenantQuotaService`: asiento ocupado = credencial no dada de baja con actividad
+  `GREATEST(issued_at, rotated_at)` dentro de 30 días; la baja explícita libera de inmediato; límite
+  `null` nunca bloquea. Cuentas owner: `OWNER` activos, sin ventana.
+- Enforce solo en los dos endpoints de aprovisionamiento de credencial y en creación/ascenso a
+  OWNER. Renovación de token, sync, baja, venta, fiscal y caja quedan fuera, con spec de fuentes.
+- El conteo excluye el asiento del mismo intento de activación, porque el aprovisionamiento es
+  idempotente: un reintento legítimo devuelve la credencial existente en vez de un 409 por una
+  cuota que ya cumple. `IS DISTINCT FROM` evita el `<> NULL` que habría sacado del conteo a las
+  credenciales de bootstrap.
+
+Deuda registrada: `IdentityModule` provee `EntitlementsService` y `TenantQuotaService` directamente
+en lugar de importar `EntitlementsModule`, porque `identity.module.spec.ts` no tolera los
+repositorios extra de `forFeature`. Es el mismo grafo (ambos sin estado sobre `DataSource`) y hay
+que normalizarlo cuando ese spec se pueda tocar.
+
 ### ENT-04 — Snapshot offline del POS
 
 Status: pending.
@@ -285,6 +304,11 @@ multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L10 (ENT-03b entregado, `a51307f1` + `c847f996`):** cuotas de asientos con ventana de gracia.
+  Decisión del dueño: cuenta el equipo activo; la baja libera al instante; el que murió se libera
+  solo a los 30 días. Corrección del padre en la revisión: el conteo excluye el asiento del mismo
+  intento, para no romper la idempotencia del aprovisionamiento. 1600/1600 unitarias, 19/19 con
+  base real, 35/35 cobertura.
 - **L9 (ENT-03 entregado, `f599f53c` + `4c557a89`):** guard y decorador aplicados a todos los
   endpoints premium, con red de regresión que protege el camino fiscal y de sincronización.
   Corrección del padre durante la revisión: el chequeo de convenios pasa a decidir por el tipo
