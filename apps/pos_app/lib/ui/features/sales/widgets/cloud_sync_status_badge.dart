@@ -203,10 +203,25 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
     // every domain confirmed. The reverse stays honest: an empty local queue
     // without an accepted pass (never synced, or the last pass failed) never
     // turns green.
+    // R3-003: green must be bound to the sync pass, not to a bare
+    // timestamp. `lastSyncTime` is stamped only by an accepted pass, but by
+    // itself it survives everything that happens afterwards: a later failed
+    // or degraded pass leaves it untouched, and the old denylist
+    // (`!= error && != syncing`) let any status it forgot about — notably
+    // `auditDegraded`, the settled state of a pass that did NOT fully
+    // confirm the device — keep the green alive. Instead of denying the
+    // known-bad states, allow only the settled states that legitimately
+    // carry the acceptance: the service announces every pass with
+    // `syncing` and settles it into `idle` (fully accepted), `error`
+    // (failed) or `auditDegraded` (partially confirmed), so a failed or
+    // degraded pass can never leave green behind and a pass in progress is
+    // never green. `offline` is the network drop AFTER that acceptance —
+    // no new pass has run, so the evidence still stands. The pre-first-pass
+    // initial `idle` is gated out by `lastSyncTime != null`.
     final bool lastPassAcceptedByServer =
         syncService?.lastSyncTime != null &&
-        status != CloudSyncStatus.error &&
-        status != CloudSyncStatus.syncing;
+        (status == CloudSyncStatus.idle ||
+            status == CloudSyncStatus.offline);
     final bool businessQueueEmpty =
         _pendingCount == 0 && _pendingAuditCount == 0;
 
