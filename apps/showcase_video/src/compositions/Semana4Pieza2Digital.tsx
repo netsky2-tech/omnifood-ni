@@ -3,7 +3,6 @@ import {
   Audio,
   Sequence,
   staticFile,
-  Img,
   useCurrentFrame,
   useVideoConfig,
   interpolate,
@@ -17,129 +16,125 @@ import { NhilosLogo } from '../components/NhilosLogo';
 import { Semana4Q80ScreenAsset } from '../scenes/semana4_fisico/Semana4Q80ScreenAsset';
 
 /**
- * Semana4Pieza2Digital — Demo 100% digital "Cobro Bimoneda" (Jueves 19/11).
+ * Semana4Pieza2Digital — "El redondeo que nadie ve" (Jueves 19/11).
  *
- * REESCRITA (v5, 615f @ 30fps = 20.5s, 1080x1920): tras análisis de nueve
- * videos de referencia de la industria —ninguno repite un mismo tratamiento
- * visual en cinco de seis tiempos, como hacía la v4— la pieza ahora alterna
- * CUATRO tratamientos distintos:
- *   1. Foto real (mano con el POS) + tipografía en el gancho.
- *   2. Pantalla real de la app en marco de dispositivo (Dinero y Vuelto).
- *   3. Acento isométrico VECTORIAL (una sola <svg>, proyección isométrica
- *      2:1 con polígonos y rellenos fijos por cara) en Cola y Sync: Vector
- *      plano como los videos de referencia — no 3D volumétrico. La
- *      pipeline WebGL (@remotion/three + fiber v8) es incompatible con
- *      React 19 del proyecto; SVG da bordes más nítidos y control exacto
- *      del sombreado, sin costo de render.
- *   4. Cierre de marca canónico.
+ * REESCRITA (v6, 540f @ 30fps = 18s, 1080x1920): la v5 era una demo
+ * competente pero sin argumento — pantallas en secuencia, tipografía
+ * pequeña flotando en navy, la misma píldora abajo en cada tiempo, y una
+ * escena isométrica que no comunicaba nada. Tras analizar nueve videos de
+ * referencia de la industria (todos ARGUMENTAN y defienden una tesis), la
+ * pieza ahora es un argumento con CINCO tiempos:
  *
- * Todos los números en pantalla provienen de la UI real del POS
+ *   1. Argumento (f0..f78):    tipografía a todo lo ancho. "20 ventas al
+ *                              día con billete de $20." → "Si el redondeo
+ *                              te cuesta C$1 en cada una…"
+ *   2. La multiplicación       los números SON el elemento visual:
+ *      (f78..f195)             "C$1 × 20" → "= C$20 al día" → "= C$600 al
+ *                              mes" (ámbar = pérdida hipotética; el
+ *                              esmeralda se reserva para la resolución).
+ *   3. Prueba (f195..f345):    la pantalla real del checkout bimoneda con
+ *                              la tasa real; banda esmeralda "Vuelto
+ *                              exacto C$607.49" + "Calculado al tipo de
+ *                              cambio del día". El producto es el
+ *                              mecanismo, no la estrella.
+ *   4. Resolución (f345..f450): tipografía con contraste. "Sin redondear.
+ *                              Sin calcular a ojo." El número hipotético
+ *                              ámbar se resuelve a esmeralda.
+ *   5. Cierre (f450..f540):    logo, NHILOS POS, CTA, sitio; el contenido
+ *                              sale en f522..f534 y los frames finales son
+ *                              el mismo fondo del arranque (f539 == f0).
+ *
+ * La escena isométrica (v5) y sus losas/badges se eliminaron por completo,
+ * igual que la foto de la mano: si un elemento visual no explica algo, no
+ * va. El cambio es de ESCALA, POSICIÓN y CONTRASTE de la tipografía —
+ * misma paleta NHILOS y misma pila de fuentes.
+ *
+ * Posición del texto por tiempo (para que el ojo no se acomode al mismo
+ * ritmo): t1 tercio superior · t2 centro · t3 banda en tercio inferior ·
+ * t4 tercio superior + número al centro · t5 centro.
+ *
+ * Todos los números provienen de la UI real del POS
  * (`MultiCurrencyCheckoutDialog` montado en el asset Semana4Q80ScreenAsset):
- *   Total C$ 125.00 · Paga $ 20.00 USD · $ 20.00 × TC BCN 36.6243 = C$ 732.49
- *   → Vuelto C$ 607.49 · Folio 001-001-01-00000893.
+ *   $ 20.00 USD × TC BCN 36.6243 → Vuelto C$ 607.49. Los C$1 / C$20 / C$600
+ *   son explícitamente hipotéticos y se leen como condicional ("si…").
  * Sin ticket renderizado, sin claims falsos, sin nombres de persona o equipo.
  *
- * Estructura (615f = 20.5s):
- * - f000..f070  Gancho   (70f, 2.33s): foto real + tipo. Línea 1 "Te pagan
- *                         con $20." f1..f33 (~1.1s), línea 2 "¿Cuánto
- *                         devuelves en córdobas?" f34..f69 (~1.2s).
- * - f070..f160  Dinero   (90f, 3.0s): checkout bimoneda real, push-in.
- * - f160..f250  Vuelto   (90f, 3.0s): conteo que para exacto en C$607.49,
- *                         aro spotlight + chip TC BCN 36.6243.
- * - f250..f360  Cola     (110f, 3.67s): isométrico — mostrador, dispositivo
- *                         como losa, badge ámbar "1" flotando; tipo "La
- *                         venta queda en cola".
- * - f360..f470  Sync     (110f, 3.67s): isométrico vuelve a estado limpio,
- *                         badge pasa a esmeralda "0 pendientes"; crossfade a
- *                         la pantalla real sincronizada; "Se sincronizó sola".
- * - f470..f615  Cierre   (145f, 4.83s): logo, NHILOS POS, CTA, sitio; el
- *                         contenido sale en f582..f594 (incluido el chip CTA)
- *                         y los frames finales son el mismo fondo del arranque
- *                         (loop: f614 == f0).
- *
- * Locución (edge-tts es-MX-JorgeNeural, rate -2%): entra en f0 y dura 334f
- * (11.14s). La cola de la pieza (cierre) queda sin voz — no se loopea el
- * audio. El CTA persistente aparece en f45 y sale con el contenido del
- * cierre para que el último frame loopee sin salto.
+ * Locución REGENERADA (edge-tts es-MX-JorgeNeural, rate -2%, 15.86s): entra
+ * en f0 y narra el argumento nuevo; la cola de la pieza queda sin voz. El
+ * CTA persistente aparece en f45 y sale con el contenido del cierre para
+ * que el último frame loopee sin salto.
  */
 
 const { colors } = NHILOS_BRAND;
-const FPS = 30;
 const RENOGARE = 'Renogare, Poppins, sans-serif';
 const AMBER = '#D97706';
 
-/* Frame global en el que el contenido del cierre (incluido el CTA) sale. */
-const CLOSE_EXIT_START = 470 + 112; // f582
-const CLOSE_EXIT_END = 470 + 124; // f594
+/* Fondo compartido por todos los tiempos: el frame final del cierre y el
+ * frame 0 del arranque son exactamente este fondo vacío → loop limpio. */
+const BG = `radial-gradient(circle at 50% 40%, ${colors.navyLight} 0%, ${colors.navyDark} 78%)`;
+
+/* Frames globales en los que el contenido del cierre (incluido el CTA)
+ * sale: 450 + 72 = f522 .. 450 + 84 = f534. Desde ahí hasta f539 solo
+ * queda el fondo, idéntico al arranque. */
+const CLOSE_EXIT_START = 522;
+const CLOSE_EXIT_END = 534;
 
 /* ------------------------------------------------------------------ */
-/* CTA persistente: chip pequeño y quieto, visible desde f45 hasta el
- * final del contenido del cierre (f582). Vive en la banda superior,
- * sobre el bezel, nunca sobre la UI ni las cifras. Sale con el cierre
- * para que los frames finales loopeen contra el arranque.             */
+/* Tipografía protagonista: bloque a todo lo ancho, llegada dura       */
 /* ------------------------------------------------------------------ */
-const PersistentCTA: React.FC = () => {
+const SlamType: React.FC<{
+  appearAt: number;
+  /** Frame local en el que la línea sale (corte seco); indefinido = se queda. */
+  disappearAt?: number;
+  top: number;
+  fontSize: number;
+  children: React.ReactNode;
+}> = ({ appearAt, disappearAt, top, fontSize, children }) => {
   const frame = useCurrentFrame();
-  if (frame < 45 || frame >= CLOSE_EXIT_START) return null;
-  const opacity = interpolate(frame, [45, 49, CLOSE_EXIT_START, CLOSE_EXIT_START + 6], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
+  const { fps } = useVideoConfig();
+  if (frame < appearAt || (disappearAt !== undefined && frame >= disappearAt)) return null;
+  const s = spring({
+    frame: frame - appearAt,
+    fps,
+    config: { damping: 14, mass: 0.4 },
+    durationInFrames: 6,
   });
   return (
     <div
       style={{
         position: 'absolute',
-        top: 128,
-        left: 0,
-        right: 0,
+        top,
+        left: 120,
+        right: 120,
         display: 'flex',
         justifyContent: 'center',
-        opacity,
-        zIndex: 100,
-        pointerEvents: 'none',
+        opacity: interpolate(frame, [appearAt, appearAt + 2], [0, 1], {
+          extrapolateLeft: 'clamp',
+          extrapolateRight: 'clamp',
+        }),
       }}
     >
       <div
         style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 12,
-          background: 'rgba(0, 31, 51, 0.9)',
-          border: '2px solid rgba(0, 191, 129, 0.5)',
-          borderRadius: 999,
-          padding: '12px 28px',
+          transform: `scale(${interpolate(s, [0, 1], [1.25, 1])})`,
+          fontFamily: RENOGARE,
+          fontWeight: 900,
+          fontSize,
+          lineHeight: 1.12,
+          letterSpacing: -2,
+          color: '#FFFFFF',
+          textAlign: 'center',
+          whiteSpace: 'nowrap',
         }}
       >
-        <MessageSquare style={{ width: 28, height: 28, color: colors.green }} />
-        <span
-          style={{
-            fontFamily: RENOGARE,
-            fontWeight: 800,
-            fontSize: 30,
-            color: '#FFFFFF',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Comenta DEMO
-        </span>
-        <span
-          style={{
-            fontFamily: RENOGARE,
-            fontWeight: 700,
-            fontSize: 26,
-            color: colors.greenLight,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          · acceso a la demo
-        </span>
+        {children}
       </div>
     </div>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/* Marco de dispositivo: la UI real de la app dentro de un bezel      */
+/* Pantalla real: la UI de la app dentro de un bezel genérico          */
 /* ------------------------------------------------------------------ */
 const SCREEN = { w: 950, h: 1520 }; // 1:1.6, igual proporción que el asset 1600x2560
 
@@ -152,9 +147,7 @@ const NetworkChip: React.FC<{ mode: NetworkMode }> = ({ mode }) => {
     syncing: { Icon: Wifi, label: 'Sincronizando…', color: AMBER },
     synced: { Icon: Cloud, label: 'Sincronizado · 0 pendientes', color: colors.green },
   }[mode];
-  const frame = useCurrentFrame();
   const Icon = cfg.Icon;
-  const spin = mode === 'syncing' ? frame * 14 : 0;
   return (
     <div
       style={{
@@ -175,9 +168,7 @@ const NetworkChip: React.FC<{ mode: NetworkMode }> = ({ mode }) => {
         whiteSpace: 'nowrap',
       }}
     >
-      <Icon
-        style={{ width: 30, height: 30, ...(spin ? { transform: `rotate(${spin}deg)` } : {}) }}
-      />
+      <Icon style={{ width: 30, height: 30 }} />
       <span>{cfg.label}</span>
     </div>
   );
@@ -188,13 +179,12 @@ const DeviceScreen: React.FC<{
   /** Escala de push-in (1 = quieto). */
   zoom?: number;
   zoomOrigin?: string;
-  style?: React.CSSProperties;
-}> = ({ network, zoom = 1, zoomOrigin = '50% 45%', style }) => {
+  /** Desplazamiento vertical para liberar la banda inferior. */
+  shift?: number;
+}> = ({ network, zoom = 1, zoomOrigin = '50% 40%', shift = 0 }) => {
   return (
-    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', ...style }}>
-      {/* Empujado 36px hacia abajo: libera la banda superior (y120..y190)
-          para el CTA persistente sin tocar la pantalla del producto. */}
-      <div style={{ transform: `translateY(36px) scale(${zoom})`, transformOrigin: zoomOrigin }}>
+    <AbsoluteFill style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ transform: `translateY(${shift}px) scale(${zoom})`, transformOrigin: zoomOrigin }}>
         {/* Bezel de dispositivo genérico (sin nombre ni marca) */}
         <div
           style={{
@@ -249,599 +239,321 @@ const DeviceScreen: React.FC<{
 };
 
 /* ------------------------------------------------------------------ */
-/* Píldora de texto con llegada dura (sin fades suaves)               */
+/* CTA persistente: chip pequeño y quieto, visible desde f45 hasta el
+ * inicio de la salida del cierre (f522). Vive en la banda superior,
+ * nunca sobre el tipo protagonista ni las cifras. Sale con el cierre
+ * para que los frames finales loopeen contra el arranque.             */
 /* ------------------------------------------------------------------ */
-const SlamPill: React.FC<{
-  appearAt: number;
-  top: number;
-  children: React.ReactNode;
-  fontSize?: number;
-  /** Banda de ancho completo (cubierta limpia de la fila de título del diálogo). */
-  fullWidth?: boolean;
-}> = ({ appearAt, top, children, fontSize = 60, fullWidth = false }) => {
+const PersistentCTA: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  if (frame < appearAt) return null;
-  const s = spring({
-    frame: frame - appearAt,
-    fps,
-    config: { damping: 14, mass: 0.5 },
-    durationInFrames: 6,
-  });
-  const opacity = interpolate(frame, [appearAt, appearAt + 2], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  if (frame < 45 || frame >= CLOSE_EXIT_START) return null;
+  const opacity = interpolate(
+    frame,
+    [45, 49, CLOSE_EXIT_START, CLOSE_EXIT_START + 6],
+    [0, 1, 1, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
+  );
   return (
     <div
       style={{
         position: 'absolute',
-        top,
-        left: fullWidth ? 60 : 0,
-        right: fullWidth ? 60 : 0,
+        top: 128,
+        left: 0,
+        right: 0,
         display: 'flex',
         justifyContent: 'center',
         opacity,
+        zIndex: 100,
+        pointerEvents: 'none',
       }}
     >
       <div
         style={{
-          transform: `scale(${interpolate(s, [0, 1], [1.45, 1])})`,
-          background: 'rgba(0, 31, 51, 0.99)',
-          border: '2px solid rgba(0, 191, 129, 0.45)',
-          borderRadius: fullWidth ? 20 : 24,
-          padding: fullWidth ? '26px 40px' : '20px 44px',
-          width: fullWidth ? '100%' : undefined,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 12,
+          background: 'rgba(0, 31, 51, 0.9)',
+          border: '2px solid rgba(0, 191, 129, 0.5)',
+          borderRadius: 999,
+          padding: '12px 28px',
         }}
       >
-        <div
+        <MessageSquare style={{ width: 28, height: 28, color: colors.green }} />
+        <span
           style={{
             fontFamily: RENOGARE,
             fontWeight: 800,
-            fontSize,
-            lineHeight: 1.2,
+            fontSize: 30,
             color: '#FFFFFF',
-            textAlign: 'center',
-            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
           }}
         >
-          {children}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ------------------------------------------------------------------ */
-/* Tiempo 1: GANCHO (f0..f70) — foto real + tipografía                */
-/* ------------------------------------------------------------------ */
-const HookType: React.FC<{
-  appearAt: number;
-  /** Frame local en el que la línea sale (corte seco); indefinido = se queda. */
-  disappearAt?: number;
-  children: React.ReactNode;
-  fontSize: number;
-  top: number;
-}> = ({ appearAt, disappearAt, children, fontSize, top }) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  if (frame < appearAt || (disappearAt !== undefined && frame >= disappearAt)) return null;
-  const s = spring({
-    frame: frame - appearAt,
-    fps,
-    config: { damping: 13, mass: 0.4 },
-    durationInFrames: 5,
-  });
-  const opacity = interpolate(frame, [appearAt, appearAt + 1], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        top,
-        left: 60,
-        right: 60,
-        display: 'flex',
-        justifyContent: 'center',
-        opacity,
-      }}
-    >
-      <div
-        style={{
-          transform: `scale(${interpolate(s, [0, 1], [1.8, 1])})`,
-          background: 'rgba(0, 31, 51, 0.94)',
-          border: '2px solid rgba(0, 191, 129, 0.4)',
-          borderRadius: 24,
-          padding: '24px 46px',
-        }}
-      >
-        <div
+          Comenta DEMO
+        </span>
+        <span
           style={{
             fontFamily: RENOGARE,
-            fontWeight: 900,
-            fontSize,
-            lineHeight: 1.15,
-            color: '#FFFFFF',
-            textAlign: 'center',
-            letterSpacing: -1,
+            fontWeight: 700,
+            fontSize: 26,
+            color: colors.greenLight,
+            whiteSpace: 'nowrap',
           }}
         >
-          {children}
-        </div>
+          · acceso a la demo
+        </span>
       </div>
     </div>
   );
 };
 
-const HookBeat: React.FC = () => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const photoIn = spring({ frame, fps, config: { damping: 15, mass: 0.7 }, durationInFrames: 8 });
-  // En f0 la foto está en opacidad 0: el frame 0 es el mismo fondo navy del
-  // cierre, así la pieza loopea sin salto.
-  const photoOpacity = interpolate(frame, [0, 5], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+/* ------------------------------------------------------------------ */
+/* Tiempo 1: ARGUMENTO (f0..f78) — tipografía a todo lo ancho,         */
+/* tercio superior. Cada línea ~1.1–1.3s en cuadro.                    */
+/* ------------------------------------------------------------------ */
+const ArgumentBeat: React.FC = () => {
   return (
-    <AbsoluteFill
-      style={{
-        background: `radial-gradient(circle at 50% 40%, ${colors.navyLight} 0%, ${colors.navyDark} 78%)`,
-      }}
-    >
-      {/* Foto real: mano sosteniendo el POS (asset transparente, sin modificar) */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 40,
-          left: 0,
-          right: 0,
-          display: 'flex',
-          justifyContent: 'center',
-          opacity: photoOpacity,
-          transform: `scale(${interpolate(photoIn, [0, 1], [0.94, 1])})`,
-        }}
-      >
-        <Img
-          src={staticFile('pos_hand_device_transparent.webp')}
-          style={{
-            height: 1380,
-            width: 'auto',
-            objectFit: 'contain',
-            filter: 'drop-shadow(0 40px 90px rgba(0,0,0,0.55))',
-          }}
-        />
-      </div>
-      {/* Línea 1: f1..f33 (~1.1s en cuadro); f0 queda navy vacío para el loop */}
-      <HookType appearAt={1} disappearAt={34} fontSize={88} top={300}>
-        Te pagan con <span style={{ color: colors.green }}>$20.</span>
-      </HookType>
-      {/* Línea 2: f34..fin del tiempo (~1.2s) */}
-      <HookType appearAt={34} fontSize={72} top={300}>
-        ¿Cuánto devuelves
+    <AbsoluteFill style={{ background: BG }}>
+      {/* Línea 1: f1..f38 (~1.2s); f0 queda fondo vacío para el loop */}
+      <SlamType appearAt={1} disappearAt={39} top={420} fontSize={96}>
+        20 ventas al día
         <br />
-        en córdobas?
-      </HookType>
+        con billete de <span style={{ color: colors.green }}>$20.</span>
+      </SlamType>
+      {/* Línea 2: f39..f78 (~1.3s); el C$1 queda en ámbar — es la pérdida */}
+      <SlamType appearAt={39} top={420} fontSize={78}>
+        Si el redondeo te cuesta
+        <br />
+        <span style={{ color: AMBER }}>C$1</span> en cada una…
+      </SlamType>
     </AbsoluteFill>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/* Tiempo 2: DINERO (f70..f160) — checkout bimoneda, push-in lento     */
+/* Tiempo 2: LA MULTIPLICACIÓN (f78..f195) — los números SON el        */
+/* elemento visual. Ámbar = pérdida; el esmeralda se reserva para la   */
+/* resolución del tiempo 4. Centro del cuadro.                         */
 /* ------------------------------------------------------------------ */
-const MoneyBeat: React.FC = () => {
-  const frame = useCurrentFrame();
-  // Push-in lento y continuo hacia la tarjeta del total (sin corte).
-  const zoom = interpolate(frame, [0, 88], [1, 1.065], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+const MultiplicationBeat: React.FC = () => {
   return (
-    <AbsoluteFill style={{ background: colors.navy }}>
-      <DeviceScreen network="online" zoom={zoom} zoomOrigin="50% 45%" />
-      {/* Banda de título: cubre la fila de cabecera del diálogo completa */}
-      <SlamPill appearAt={8} top={376} fullWidth>
-        Total <span style={{ color: colors.green }}>C$125.00</span>
-      </SlamPill>
+    <AbsoluteFill style={{ background: BG }}>
+      <SlamType appearAt={6} top={560} fontSize={128}>
+        <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>C$1 × 20</span>
+      </SlamType>
+      <SlamType appearAt={32} top={760} fontSize={80}>
+        <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>= C$20 al día</span>
+      </SlamType>
+      {/* Aterriza y se queda: es la cifra que sostiene el argumento */}
+      <SlamType appearAt={64} top={920} fontSize={112}>
+        <span style={{ color: AMBER, fontVariantNumeric: 'tabular-nums' }}>= C$600 al mes</span>
+      </SlamType>
+      <SlamType appearAt={74} top={1110} fontSize={38}>
+        <span style={{ color: colors.gray, fontWeight: 700, letterSpacing: 0 }}>
+          si cada venta pierde C$1
+        </span>
+      </SlamType>
     </AbsoluteFill>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/* Tiempo 3: VUELTO (f160..f250) — pantalla sostenida, conteo que para */
+/* Tiempo 3: PRUEBA (f195..f345) — la pantalla real con la tasa real.  */
+/* El producto es el mecanismo, no la estrella: banda esmeralda con    */
+/* el vuelto exacto + caption del tipo de cambio. Tercio inferior.     */
 /* ------------------------------------------------------------------ */
-/*
- * Caja verde del vuelto medida sobre el asset (1600x2560):
- *   x 20..1580, y 1757..2228 → canvas con pantalla 950x1520 en y200:
- *   x = 540 + (assetX-800)*0.59375; y = 200 + assetY*0.59375
- *   → x 77..1003, y 1243..1523.
- */
-const SPOT = { x1: 77, x2: 1003, y1: 1243, y2: 1523 };
-const DIM = 0.66;
-
-const ChangeBeat: React.FC = () => {
+const ProofBeat: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-
-  const dim = interpolate(frame, [4, 18], [0, 1], {
+  // Escala menor y push-in sutil: libera el tercio inferior para la banda
+  // esmeralda y el caption sobre el fondo, sin tapar la UI del vuelto.
+  const zoom = interpolate(frame, [0, 150], [0.84, 0.86], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
-  const ringIn = spring({ frame: Math.max(0, frame - 8), fps, config: { damping: 18 } });
-
   // Conteo del vuelto: sube hasta el valor real y SE DETIENE.
-  const t = interpolate(frame, [12, 48], [0, 1], {
+  const t = interpolate(frame, [14, 52], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
     easing: Easing.out(Easing.cubic),
   });
   const vuelto = (607.49 * t).toFixed(2);
-
+  const bandOpacity = interpolate(frame, [10, 13], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
   return (
-    <AbsoluteFill style={{ background: colors.navy }}>
-      <DeviceScreen network="online" />
-
-      {/* Atenuación fuera de la caja del vuelto */}
+    <AbsoluteFill style={{ background: BG }}>
+      {/* +60px: baja la pantalla para que la banda superior (CTA en y128)
+          no pise el chip "Factura #00893" de la UI real. */}
+      <DeviceScreen network="online" zoom={zoom} zoomOrigin="50% 25%" />
+      {/* Banda esmeralda a todo lo ancho: contraste duro sobre la pantalla */}
       <div
         style={{
           position: 'absolute',
-          left: 0,
-          top: 0,
-          width: 1080,
-          height: SPOT.y1,
-          background: `linear-gradient(to bottom, rgba(0,31,51,${DIM * dim}) 0%, rgba(0,31,51,${
-            DIM * dim
-          }) calc(100% - 90px), rgba(0,31,51,0) 100%)`,
+          top: 1600,
+          left: 120,
+          right: 120,
+          background: colors.green,
+          borderRadius: 20,
+          padding: '24px 16px',
+          display: 'flex',
+          justifyContent: 'center',
+          opacity: bandOpacity,
         }}
-      />
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: SPOT.y2,
-          width: 1080,
-          height: 1920 - SPOT.y2,
-          background: `linear-gradient(to bottom, rgba(0,31,51,0) 0%, rgba(0,31,51,${
-            DIM * dim
-          }) 90px, rgba(0,31,51,${DIM * dim}) 100%)`,
-        }}
-      />
-
-      {/* Aro verde institucional sobre la caja del vuelto */}
-      <div
-        style={{
-          position: 'absolute',
-          left: SPOT.x1,
-          top: SPOT.y1,
-          width: SPOT.x2 - SPOT.x1,
-          height: SPOT.y2 - SPOT.y1,
-          border: `4px solid ${colors.green}`,
-          borderRadius: 24,
-          boxShadow: `0 0 60px rgba(0,191,129,0.55), inset 0 0 40px rgba(0,191,129,0.18)`,
-          opacity: interpolate(ringIn, [0, 1], [0, 1]),
-          transform: `scale(${interpolate(ringIn, [0, 1], [1.06, 1])})`,
-        }}
-      />
-
-      {/* Vuelto contando (píldora grande, dentro del margen seguro) */}
-      <SlamPill appearAt={10} top={1548} fontSize={84}>
-        Vuelto <span style={{ color: colors.green }}>C${vuelto}</span>
-      </SlamPill>
-      {/* Chip de tasa: el que la app muestra de verdad */}
-      <SlamPill appearAt={30} top={1700} fontSize={38}>
-        <span style={{ color: colors.gray }}>TC BCN 36.6243</span>
-      </SlamPill>
+      >
+        <span
+          style={{
+            fontFamily: RENOGARE,
+            fontWeight: 900,
+            fontSize: 68,
+            color: colors.navyDark,
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Vuelto exacto C${vuelto}
+        </span>
+      </div>
+      <SlamType appearAt={56} top={1740} fontSize={38}>
+        <span style={{ color: colors.gray, fontWeight: 700, letterSpacing: 0 }}>
+          Calculado al tipo de cambio del día
+        </span>
+      </SlamType>
     </AbsoluteFill>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/* Acento isométrico VECTORIAL (decisión del fundador: vector plano,   */
-/* no volumétrico). Una sola <svg> con viewBox explícito; caras como   */
-/* polígonos con proyección isométrica 2:1 y tres rellenos FIJOS por   */
-/* objeto (cara superior clara, izquierda media, derecha oscura — luz  */
-/* desde arriba-izquierda, pasos de tono derivados de la paleta        */
-/* NHILOS). Sin gradientes, sin filtros, sin blur, sin reflejos.       */
-/* La animación sale de useCurrentFrame() con interpolación            */
-/* determinística — nada de transiciones ni keyframes CSS. La          */
-/* tipografía y el badge siguen en HTML sobre la escena.               */
+/* Tiempo 4: RESOLUCIÓN (f345..f450) — tipografía con el contraste.    */
+/* El número hipotético ámbar se resuelve a esmeralda. Tercio          */
+/* superior para el claim, centro para el número.                      */
 /* ------------------------------------------------------------------ */
-const ISO_W = 0.866; // cos(30°): factor horizontal por unidad de mundo
-const ISO_OX = 480;  // origen del mundo dentro del viewBox 960x640
-const ISO_OY = 330;
-const BAR_H = 170;   // altura de las barras de cola (unidades de mundo)
-const BAR_X = [-60, 40, 140]; // x de las tres barras, al fondo-derecha del mostrador
-
-/** Proyección isométrica: x baja a la derecha, z baja a la izquierda,
- *  y sube. Unidades de mundo → coordenadas del viewBox. */
-const iso = (x: number, z: number, y: number): [number, number] => [
-  ISO_OX + (x - z) * ISO_W,
-  ISO_OY + (x + z) * 0.5 - y,
-];
-
-const poly = (corners: Array<[number, number, number]>): string =>
-  corners.map(([x, z, y]) => iso(x, z, y).join(',')).join(' ');
-
-/* Rellenos fijos por objeto: [cara superior, cara izquierda, cara derecha].
- * Pasos de sombra derivados de la paleta (sin gradientes). El mostrador
- * va en tonos navy para que la pantalla esmeralda del dispositivo destaque. */
-const COUNTER_FILL = [colors.navy, colors.navyDark, '#001B2C'] as const;
-const DEVICE_FILL = ['#0B1220', '#060B14', '#04070D'] as const;
-const BAR_FILL = [AMBER, '#B45309', '#92400E'] as const;
-
-/** Caja isométrica: cara superior + las dos caras frontales visibles. */
-const IsoBox: React.FC<{
-  x0: number;
-  x1: number;
-  z0: number;
-  z1: number;
-  base?: number;
-  h: number;
-  fills: readonly string[];
-}> = ({ x0, x1, z0, z1, base = 0, h, fills }) => (
-  <>
-    {/* cara superior (y = base + h) */}
-    <polygon
-      points={poly([
-        [x0, z0, base + h],
-        [x1, z0, base + h],
-        [x1, z1, base + h],
-        [x0, z1, base + h],
-      ])}
-      fill={fills[0]}
-    />
-    {/* cara frontal derecha (x = x1) — la más oscura */}
-    <polygon
-      points={poly([
-        [x1, z0, base + h],
-        [x1, z1, base + h],
-        [x1, z1, base],
-        [x1, z0, base],
-      ])}
-      fill={fills[2]}
-    />
-    {/* cara frontal izquierda (z = z1) — tono medio */}
-    <polygon
-      points={poly([
-        [x0, z1, base + h],
-        [x1, z1, base + h],
-        [x1, z1, base],
-        [x0, z1, base],
-      ])}
-      fill={fills[1]}
-    />
-  </>
-);
-
-const IsoScene: React.FC<{
-  /** Estado de cola (badge ámbar "1") o limpio (esmeralda "0 pendientes"). */
-  state: 'queue' | 'clean';
-  /** Opacidad global del escenario (crossfade a la pantalla real en Sync). */
-  opacity: number;
-}> = ({ state, opacity }) => {
+const ResolutionBeat: React.FC = () => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const sceneIn = spring({ frame, fps, config: { damping: 16, mass: 0.6 }, durationInFrames: 12 });
-  const queue = state === 'queue';
-
-  /* Barras de cola: en Cola aparecen UNA POR UNA (el espectador las ve
-   * acumularse). En Sync colapsan a la barra central, que queda como
-   * único testigo mientras el badge pasa a esmeralda y se posa.        */
-  const barHeights = queue
-    ? BAR_X.map((_, i) =>
-        frame < 14 + i * 14
-          ? 0
-          : interpolate(frame, [14 + i * 14, 26 + i * 14], [0, BAR_H], {
-              extrapolateLeft: 'clamp',
-              extrapolateRight: 'clamp',
-              easing: Easing.out(Easing.cubic),
-            }),
-      )
-    : BAR_X.map((_, i) =>
-        i === 2
-          ? BAR_H
-          : interpolate(frame, [6 + i * 8, 20 + i * 8], [BAR_H, 0], {
-              extrapolateLeft: 'clamp',
-              extrapolateRight: 'clamp',
-              easing: Easing.in(Easing.cubic),
-            }),
-      );
-
-  /* Sync: el badge baja y se posa SOBRE el mostrador (local f14..f38). */
-  const settle = queue
-    ? 0
-    : interpolate(frame, [14, 38], [0, 1], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-        easing: Easing.out(Easing.cubic),
-      });
-  // Badge flotando: bob suave que se apaga al posarse.
-  const badgeBob = Math.sin(frame / 9) * 10 * (1 - settle);
-
+  // La cifra hipotética (ámbar, "si redondeas a ojo") se resuelve a la
+  // cifra resuelta (esmeralda, "si el vuelto se calcula solo").
+  const resolved = interpolate(frame, [74, 84], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+    easing: Easing.out(Easing.cubic),
+  });
   return (
-    <AbsoluteFill style={{ opacity, background: colors.navy }}>
+    <AbsoluteFill style={{ background: BG }}>
+      <SlamType appearAt={8} top={420} fontSize={100}>
+        Sin redondear.
+      </SlamType>
+      <SlamType appearAt={30} top={560} fontSize={100}>
+        Sin calcular a ojo.
+      </SlamType>
+      {/* Número resuelto: ámbar → esmeralda */}
       <div
         style={{
           position: 'absolute',
-          left: '50%',
-          top: '47%',
-          width: 900,
-          transform: `translate(-50%, -50%) scale(${interpolate(sceneIn, [0, 1], [0.94, 1])})`,
-        }}
-      >
-        <svg width={900} height={600} viewBox="0 0 960 640" style={{ display: 'block' }}>
-          {/* ORDEN DEL PINTOR, atrás → adelante. No reordenar: las caras
-              se ocluyen entre sí solo en este orden.
-              1. piso (plano en y=0, sin caras)
-              2. barras de cola (detrás del mostrador, z negativo)
-              3. mostrador (losa ancha con volumen)
-              4. dispositivo (losa fina sobre el mostrador, con bisel)
-              5. pantalla (rectángulo interior sobre la cara del
-                 dispositivo: el inset es lo que lo lee como equipo)   */}
-          {/* 1. piso (más claro que el mostrador, para separar siluetas) */}
-          <polygon
-            points={poly([
-              [-260, -260, 0],
-              [260, -260, 0],
-              [260, 260, 0],
-              [-260, 260, 0],
-            ])}
-            fill={colors.navyLight}
-          />
-          {/* 2. barras de cola (crecen una a una en Cola; colapsan a una en Sync;
-              al fondo-derecha, fuera de la silueta del dispositivo en 2D) */}
-          {BAR_X.map((xi, i) =>
-            barHeights[i] > 0.5 ? (
-              <IsoBox
-                key={`bar-${i}`}
-                x0={xi - 13}
-                x1={xi + 13}
-                z0={-200}
-                z1={-182}
-                h={barHeights[i]}
-                fills={BAR_FILL}
-              />
-            ) : null,
-          )}
-          {/* 3. mostrador */}
-          <IsoBox x0={-160} x1={160} z0={-90} z1={90} h={120} fills={COUNTER_FILL} />
-          {/* 4. dispositivo (bisel oscuro fino sobre el mostrador) */}
-          <IsoBox x0={-100} x1={100} z0={-55} z1={55} base={120} h={16} fills={DEVICE_FILL} />
-          {/* 5. pantalla interior (inset claro sobre la cara superior) */}
-          <polygon
-            points={poly([
-              [-84, -40, 136],
-              [84, -40, 136],
-              [84, 40, 136],
-              [-84, 40, 136],
-            ])}
-            fill={colors.green}
-          />
-        </svg>
-      </div>
-
-      {/* Badge flotante en HTML (billboard en espacio de pantalla,
-          siempre legible; fuera de las siluetas de las losas). */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: 460 + 190 * settle,
+          top: 820,
+          left: 120,
+          right: 120,
           display: 'flex',
           justifyContent: 'center',
         }}
       >
-        {queue ? (
-          <div
+        <div style={{ position: 'relative', width: 640, height: 150 }}>
+          <span
             style={{
-              transform: `translateY(${badgeBob}px)`,
-              width: 132,
-              height: 132,
-              borderRadius: '50%',
-              background: AMBER,
-              border: `6px solid ${colors.navyDark}`,
+              position: 'absolute',
+              inset: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              fontFamily: RENOGARE,
+              fontWeight: 900,
+              fontSize: 96,
+              color: AMBER,
+              fontVariantNumeric: 'tabular-nums',
+              opacity: 1 - resolved,
             }}
           >
-            <span
-              style={{
-                fontFamily: RENOGARE,
-                fontWeight: 900,
-                fontSize: 72,
-                color: colors.navyDark,
-              }}
-            >
-              1
-            </span>
-          </div>
-        ) : (
-          <div
+            C$600 al mes
+          </span>
+          <span
             style={{
-              transform: `translateY(${badgeBob}px)`,
-              display: 'inline-flex',
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
               alignItems: 'center',
-              gap: 14,
-              padding: '18px 36px',
-              borderRadius: 999,
-              background: colors.green,
-              border: `6px solid ${colors.navyDark}`,
+              justifyContent: 'center',
+              fontFamily: RENOGARE,
+              fontWeight: 900,
+              fontSize: 96,
+              color: colors.green,
+              fontVariantNumeric: 'tabular-nums',
+              opacity: resolved,
             }}
           >
-            <span
-              style={{
-                fontFamily: RENOGARE,
-                fontWeight: 900,
-                fontSize: 48,
-                color: colors.navyDark,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              0 pendientes
-            </span>
-          </div>
-        )}
+            C$0 al mes
+          </span>
+        </div>
+      </div>
+      {/* Condición que hace honesta la cifra: cambia con la resolución */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 1000,
+          left: 120,
+          right: 120,
+          display: 'flex',
+          justifyContent: 'center',
+        }}
+      >
+        <div style={{ position: 'relative', width: 760, height: 56 }}>
+          <span
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: RENOGARE,
+              fontWeight: 700,
+              fontSize: 36,
+              color: colors.gray,
+              whiteSpace: 'nowrap',
+              opacity: 1 - resolved,
+            }}
+          >
+            si redondeas a ojo
+          </span>
+          <span
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontFamily: RENOGARE,
+              fontWeight: 700,
+              fontSize: 36,
+              color: colors.greenLight,
+              whiteSpace: 'nowrap',
+              opacity: resolved,
+            }}
+          >
+            si el vuelto se calcula solo
+          </span>
+        </div>
       </div>
     </AbsoluteFill>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/* Tiempo 4: COLA (f250..f360) — acento isométrico                    */
-/* ------------------------------------------------------------------ */
-const QueueBeat: React.FC = () => {
-  return (
-    <AbsoluteFill style={{ background: colors.navy }}>
-      <IsoScene state="queue" opacity={1} />
-      <SlamPill appearAt={18} top={1620} fontSize={58}>
-        La venta queda <span style={{ color: colors.green }}>en cola</span>
-      </SlamPill>
-    </AbsoluteFill>
-  );
-};
-
-/* ------------------------------------------------------------------ */
-/* Tiempo 5: SYNC (f360..f470) — isométrico limpio + pantalla real     */
-/* ------------------------------------------------------------------ */
-const SyncBeat: React.FC = () => {
-  const frame = useCurrentFrame();
-  // Crossfade: isométrico sale (f40..f56), pantalla real sincronizada entra
-  // (f48..f62). El badge del isométrico ya está en esmeralda desde f0.
-  const isoOpacity = interpolate(frame, [40, 56], [1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const screenOpacity = interpolate(frame, [48, 62], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
-  const network: NetworkMode = frame < 56 ? 'syncing' : 'synced';
-  return (
-    <AbsoluteFill style={{ background: colors.navy }}>
-      <IsoScene state="clean" opacity={isoOpacity} />
-      <DeviceScreen network={network} style={{ opacity: screenOpacity }} />
-      <SlamPill appearAt={14} top={1620} fontSize={58}>
-        Se sincronizó <span style={{ color: colors.green }}>sola</span>
-      </SlamPill>
-    </AbsoluteFill>
-  );
-};
-
-/* ------------------------------------------------------------------ */
-/* Tiempo 6: CIERRE (f470..f615) — cierre de marca canónico            */
+/* Tiempo 5: CIERRE (f450..f540) — cierre de marca canónico. El        */
+/* contenido (incluido el glow) sale en local f72..f84 (global         */
+/* f522..f534); los frames finales son el fondo del arranque.          */
 /* ------------------------------------------------------------------ */
 const CloseBeat: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // El contenido (incluido el glow) sale en local f112..f124 (global
-  // f582..f594). Desde ahí hasta f614 solo queda el fondo, idéntico al del
-  // gancho en f0: el frame final loopea sin salto.
-  const exit = interpolate(frame, [112, 124], [1, 0], {
+  const exit = interpolate(frame, [72, 84], [1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -860,9 +572,7 @@ const CloseBeat: React.FC = () => {
   return (
     <div
       className="w-full h-full flex flex-col items-center justify-center p-12 relative overflow-hidden text-center font-sans"
-      style={{
-        background: `radial-gradient(circle at 50% 40%, ${colors.navyLight} 0%, ${colors.navyDark} 78%)`,
-      }}
+      style={{ background: BG }}
     >
       <div
         style={{
@@ -875,91 +585,89 @@ const CloseBeat: React.FC = () => {
           opacity: exit,
         }}
       >
-      {/* Glow radial institucional */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: 'radial-gradient(circle at center, rgba(0,191,129,0.18) 0%, transparent 70%)',
-          opacity: exit,
-        }}
-      />
+        {/* Glow radial institucional */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              'radial-gradient(circle at center, rgba(0,191,129,0.18) 0%, transparent 70%)',
+            opacity: exit,
+          }}
+        />
 
-      {/* Isotipo oficial NHILOS (logo.png) */}
-      <div style={{ transform: `scale(${logoScale})` }} className="mb-8 relative z-10">
-        <NhilosLogo size={200} />
-      </div>
+        {/* Isotipo oficial NHILOS (logo.png) */}
+        <div style={{ transform: `scale(${logoScale})` }} className="mb-8 relative z-10">
+          <NhilosLogo size={200} />
+        </div>
 
-      {/* Nombre oficial */}
-      <h1
-        style={{
-          opacity: textOpacity,
-          fontFamily: RENOGARE,
-          letterSpacing: 4,
-        }}
-        className="text-6xl font-extrabold text-white mb-3 z-10"
-      >
-        NHILOS POS
-      </h1>
+        {/* Nombre oficial */}
+        <h1
+          style={{
+            opacity: textOpacity,
+            fontFamily: RENOGARE,
+            letterSpacing: 4,
+          }}
+          className="text-6xl font-extrabold text-white mb-3 z-10"
+        >
+          NHILOS POS
+        </h1>
 
-      <p
-        style={{ opacity: textOpacity }}
-        className="text-2xl text-slate-200 font-light tracking-wide max-w-xl mb-10 z-10"
-      >
-        Conectamos los hilos de tu negocio.
-      </p>
+        <p
+          style={{ opacity: textOpacity }}
+          className="text-2xl text-slate-200 font-light tracking-wide max-w-xl mb-10 z-10"
+        >
+          Conectamos los hilos de tu negocio.
+        </p>
 
-      {/* Botón CTA: icono MessageSquare + Comenta DEMO */}
-      <div
-        style={{ transform: `scale(${ctaScale})` }}
-        className="bg-[#00BF81] text-[#003757] font-black text-3xl px-10 py-5 rounded-2xl shadow-[0_0_40px_rgba(0,191,129,0.45)] flex items-center gap-4 z-10 mb-6 border-2 border-white/25"
-      >
-        <MessageSquare className="w-8 h-8 fill-[#003757] text-[#003757]" />
-        <span style={{ fontFamily: RENOGARE }}>Comenta DEMO</span>
-      </div>
+        {/* Botón CTA: icono MessageSquare + Comenta DEMO */}
+        <div
+          style={{ transform: `scale(${ctaScale})` }}
+          className="bg-[#00BF81] text-[#003757] font-black text-3xl px-10 py-5 rounded-2xl shadow-[0_0_40px_rgba(0,191,129,0.45)] flex items-center gap-4 z-10 mb-6 border-2 border-white/25"
+        >
+          <MessageSquare className="w-8 h-8 fill-[#003757] text-[#003757]" />
+          <span style={{ fontFamily: RENOGARE }}>Comenta DEMO</span>
+        </div>
 
-      {/* Sitio web */}
-      <div
-        style={{ opacity: urlOpacity * exit }}
-        className="inline-flex items-center gap-2 text-lg text-white/90 font-semibold bg-white/10 px-6 py-2.5 rounded-full border border-white/15 z-10"
-      >
-        <Globe className="w-5 h-5 text-[#00BF81]" />
-        <span>nhilospos.com</span>
-      </div>
+        {/* Sitio web */}
+        <div
+          style={{ opacity: urlOpacity * exit }}
+          className="inline-flex items-center gap-2 text-lg text-white/90 font-semibold bg-white/10 px-6 py-2.5 rounded-full border border-white/15 z-10"
+        >
+          <Globe className="w-5 h-5 text-[#00BF81]" />
+          <span>nhilospos.com</span>
+        </div>
       </div>
     </div>
   );
 };
 
 /* ------------------------------------------------------------------ */
-/* Composición principal — corte de seis tiempos, 615f (20.5s)          */
+/* Composición principal — argumento de cinco tiempos, 540f (18s)      */
 /* ------------------------------------------------------------------ */
 export const Semana4Pieza2Digital: React.FC = () => {
   return (
-    <AbsoluteFill style={{ background: colors.navy }}>
-      <Sequence from={0} durationInFrames={70}>
-        <HookBeat />
+    <AbsoluteFill style={{ background: BG }}>
+      <Sequence from={0} durationInFrames={78}>
+        <ArgumentBeat />
       </Sequence>
-      <Sequence from={70} durationInFrames={90}>
-        <MoneyBeat />
+      <Sequence from={78} durationInFrames={117}>
+        <MultiplicationBeat />
       </Sequence>
-      <Sequence from={160} durationInFrames={90}>
-        <ChangeBeat />
+      <Sequence from={195} durationInFrames={150}>
+        <ProofBeat />
       </Sequence>
-      <Sequence from={250} durationInFrames={110}>
-        <QueueBeat />
+      <Sequence from={345} durationInFrames={105}>
+        <ResolutionBeat />
       </Sequence>
-      <Sequence from={360} durationInFrames={110}>
-        <SyncBeat />
-      </Sequence>
-      <Sequence from={470} durationInFrames={145}>
+      <Sequence from={450} durationInFrames={90}>
         <CloseBeat />
       </Sequence>
-      {/* Locución (sin claims falsos): entra en f0, dura 334f (11.14s); la
-          cola de la pieza queda sin voz y sin loop de audio. */}
+      {/* Locución regenerada (argumento nuevo): entra en f0, dura 476f
+          (15.86s); la cola de la pieza queda sin voz y sin loop de audio. */}
       <Sequence from={0}>
         <Audio src={staticFile('audio/pieza2_digital_vo.mp3')} />
       </Sequence>
-      {/* CTA persistente: f45..f582; sale con el cierre para loopear. */}
+      {/* CTA persistente: f45..f522; sale con el cierre para loopear. */}
       <PersistentCTA />
     </AbsoluteFill>
   );

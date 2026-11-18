@@ -156,6 +156,6 @@ export const COMPOSITION_PRESETS = {
     width: 1080,
     height: 1920,
     fps: VIDEO_FPS,
-    durationInFrames: 615, // 20.5s @ 30fps: seis tiempos, cuatro tratamientos (foto real + tipo, pantalla real, acento isométrico vectorial SVG, cierre de marca); locución desde f0 (11.14s, sin loop); el cierre y el chip CTA salen en f582..f594 para que el frame final loopee al arranque (f614 == f0); sin ticket ni claims falsos
+    durationInFrames: 540, // 18s @ 30fps: cinco tiempos de argumento (tipo a todo lo ancho, la multiplicación en ámbar, pantalla real con la tasa, resolución ámbar→esmeralda, cierre de marca); locución regenerada desde f0 (15.86s, sin loop); el cierre y el chip CTA salen en f522..f534 para que el frame final loopee al arranque (f539 == f0); sin ticket ni claims falsos
   },
 } as const;
