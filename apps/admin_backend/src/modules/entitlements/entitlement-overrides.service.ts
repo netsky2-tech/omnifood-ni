@@ -227,6 +227,18 @@ export class EntitlementOverridesService {
         occurredAt: now,
       });
 
+      // Symmetric with `grant`: ending an exception can also break the
+      // snapshot, e.g. revoking `promotions` while an override on
+      // `promotions.convenio` is still in force leaves the convenio without its
+      // prerequisite. Without this check the tenant's entitlements endpoint and
+      // every premium guard would throw until an operator noticed.
+      await this.assertSnapshotResolves(
+        runner,
+        input.tenantId,
+        now,
+        target.capability_key,
+      );
+
       return {
         overrideId: target.id,
         capabilityKey: target.capability_key,

@@ -393,6 +393,61 @@ describe('EntitlementOverridesService (db, ENT-06 #984)', () => {
   );
 
   it(
+    'se niega a revocar la excepción que sostiene un prerrequisito, y no escribe nada',
+    async () => {
+      await withIsolatedSchema('ent_ovr_revoke_poison', async (queryRunner) => {
+        await buildSchema(queryRunner);
+        const tenantId = await seedTenant(queryRunner, 'revoke-poison');
+        await seedSubscription(queryRunner, tenantId, 'ESENCIAL');
+
+        // `promotions.convenio` requires `promotions`; both exist only as
+        // exceptions here, so revoking `promotions` would leave the convenio
+        // without its prerequisite and the snapshot unresolvable.
+        await overridesOn(queryRunner).grant(
+          grant(tenantId, { capabilityKey: 'promotions' }),
+        );
+        await overridesOn(queryRunner).grant(
+          grant(tenantId, { capabilityKey: 'promotions.convenio' }),
+        );
+        const before = await entitlementsOn(queryRunner).snapshot(
+          tenantId,
+          NOW,
+        );
+
+        await expect(
+          overridesOn(queryRunner).revoke({
+            tenantId,
+            capabilityKey: 'promotions',
+            actor: 'soporte@nhilos.com',
+            reason: 'Fin del piloto',
+            now: NOW,
+          }),
+        ).rejects.toMatchObject({
+          code: OVERRIDE_REJECTION_CODES.OVERRIDE_WOULD_BREAK_SNAPSHOT,
+        });
+
+        // Nothing changed: both exceptions are still in force, the trail has
+        // only the two grants, and the snapshot still resolves.
+        const active = (
+          await overridesOn(queryRunner).list({ tenantId, now: NOW })
+        )
+          .filter((row) => row.isActive)
+          .map((row) => row.capabilityKey)
+          .sort();
+        expect(active).toStrictEqual(['promotions', 'promotions.convenio']);
+        expect(
+          await countRows(queryRunner, 'tenant_entitlement_change_history'),
+        ).toBe(2);
+        expect(
+          (await entitlementsOn(queryRunner).snapshot(tenantId, NOW))
+            .capabilities,
+        ).toStrictEqual(before.capabilities);
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     'una excepción vencida no aplica pero sigue consultable',
     async () => {
       await withIsolatedSchema('ent_ovr_expired', async (queryRunner) => {

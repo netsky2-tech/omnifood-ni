@@ -146,13 +146,27 @@ próximo despliegue lo sobrescribe.
 
 ## 6. SOHO fundador (decisión S5)
 
-SOHO no se registra como `ESENCIAL`: se registra como `OPERACION` a precio fundador, con una
-excepción temporal auditada sobre la clave que corresponda (`legacy.full`), **aplicada con el
-CLI del §3**, con fecha de revisión. No se edita la tabla de overrides a mano.
+SOHO no se registra como `ESENCIAL`: se registra como `OPERACION` a precio fundador, y lo que
+falte de su operación se concede con excepciones auditadas **clave por clave**, con el CLI del
+§3 y fecha de revisión.
 
-> Nota: no hay un tenant SOHO en el código (SOHO aparece en este repositorio como nombre de
-> plantilla y de catálogo, no como tenant). Por eso esto es un paso operativo por entorno y
-> no una migración.
+**No existe una clave `legacy.full`.** Las excepciones solo se conceden sobre claves registradas
+(hoy 18, ver `capability-registry.ts`); una clave inventada se rechaza con
+`CAPABILITY_KEY_NOT_REGISTERED`. La forma ejecutable es una excepción por clave faltante, porque
+solo puede haber una vigente por clave:
+
+```bash
+for key in inventory.retail inventory.cooking promotions loyalty reports.margins; do
+  npm run entitlements:override -- \
+    --tenant=<uuid> --key=$key --included=true \
+    --expires=2027-01-31T23:59:59Z \
+    --actor=soporte@nhilos.com \
+    --reason="SOHO fundador (S5): precio fundador con funciones completas hasta la revisión de enero"
+done
+```
+
+No se edita la tabla de overrides a mano, y no se concede nada que el cliente no haya acordado:
+el motivo de cada excepción es lo que se lee en una auditoría.
 
 ## 7. Auditoría: cómo verificar lo que se hizo
 
@@ -176,9 +190,15 @@ SELECT capability_key, value_json FROM tenant_entitlement_override
  WHERE tenant_id = '<uuid>' AND expires_at > now();
 ```
 
-Nunca se actualiza ni se borra una fila de `tenant_entitlement_change_history`: el historial
-es de solo lectura por política de base de datos (el rol de la aplicación no tiene `UPDATE`
-ni `DELETE` sobre ella).
+Nunca se actualiza ni se borra una fila de `tenant_entitlement_change_history`: el historial es
+append-only **por procedimiento** — no existe ruta, comando ni servicio que lo haga, y `grant` y
+`revoke` solo insertan.
+
+> Aviso honesto (deuda declarada, no resuelta): la base de datos **sí** permite `UPDATE` y
+> `DELETE` sobre esa tabla con el rol de la aplicación, porque las políticas creadas en la
+> migración de ENT-01 cubren S/I/U/D. Endurecerlo — quitando las políticas de `UPDATE`/`DELETE`
+> o con un trigger que las rechace — está pendiente; hasta entonces, la inmutabilidad del rastro
+> depende de que nadie ejecute SQL a mano.
 
 ## 8. Lo que este runbook no resuelve (deuda declarada)
 

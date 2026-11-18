@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { ROLES_KEY } from '../../core/decorators/roles.decorator';
@@ -83,6 +85,32 @@ describe('EntitlementsController overrides (ENT-06 #984)', () => {
         handler: name,
         method: RequestMethod.GET,
       });
+    }
+  });
+
+  it('ningún controlador del módulo declara una ruta de escritura', () => {
+    // The prototype check above only sees THIS class. A future controller in
+    // the module could add the write path the decision forbids, so scan the
+    // module's controllers at the source level too.
+    const dir = __dirname;
+    const controllers = readdirSync(dir).filter((name) =>
+      name.endsWith('.controller.ts'),
+    );
+    expect(controllers).toContain('entitlements.controller.ts');
+
+    for (const name of controllers) {
+      const source = readFileSync(join(dir, name), 'utf8');
+      for (const verb of ['@Post(', '@Put(', '@Patch(', '@Delete(']) {
+        expect({
+          controller: name,
+          verb,
+          found: source.includes(verb),
+        }).toStrictEqual({
+          controller: name,
+          verb,
+          found: false,
+        });
+      }
     }
   });
 

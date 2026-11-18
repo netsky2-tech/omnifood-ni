@@ -244,18 +244,20 @@ Propiedades que quedaron garantizadas (no por convención, por construcción):
 
 - Ninguna excepción puede apuntar a una clave de núcleo: el registro la rechaza antes de
   escribir (`OVERRIDE_TARGET_NOT_GATEABLE`), igual que el resolver.
-- Una excepción **no puede dejar el snapshot irresoluble**: antes de confirmar, el servicio
-  resuelve el snapshot con la excepción puesta dentro de la misma transacción y revierte si
-  falla (`OVERRIDE_WOULD_BREAK_SNAPSHOT`). Es lo que impide que soporte deje a un cliente sin
-  entitlements por conceder `promotions.convenio` sin `promotions`.
+- Una excepción **no puede dejar el snapshot irresoluble**, ni al concederla ni al revocarla: antes
+  de confirmar, el servicio resuelve el snapshot con el cambio puesto dentro de la misma
+  transacción y revierte si falla (`OVERRIDE_WOULD_BREAK_SNAPSHOT`). Cubre los dos sentidos: por
+  conceder `promotions.convenio` sin `promotions`, y por **revocar** `promotions` cuando el
+  convenio sigue concedido por excepción — el caso que encontró la verificación independiente y
+  que la primera versión no cubría.
 - Una sola excepción vigente por clave, y cada cambio con su propio motivo: conceder sobre una
   vigente exige revocarla (`OVERRIDE_ALREADY_ACTIVE`).
 - `actor`, `reason` y `expires_at` (futura) obligatorios también al revocar.
 
-Evidencia: unit de reglas 9/9, DB 7/7 (incluye el caso de reversión completa del snapshot
-irresoluble y el aislamiento RLS con rol `NOSUPERUSER NOBYPASSRLS`), CLI 11/11, controlador
-6/6 con la aserción de "ninguna ruta de escritura"; `tsc` 0 y ESLint limpio en los archivos
-tocados.
+Evidencia: unit de reglas 9/9, DB 8/8 (incluye la reversión completa del snapshot irresoluble en
+los dos sentidos y el aislamiento RLS con rol `NOSUPERUSER NOBYPASSRLS`), CLI 11/11, controlador
+7/7 con la aserción de "ninguna ruta de escritura" a nivel de prototipo y de fuentes del módulo;
+`tsc` 0 y ESLint limpio en los archivos tocados.
 
 Corte de la entrega: 4 commits, ~2.100 líneas (≈900 de producción, ≈960 de prueba, ≈260 de
 documentación). No se parte en piezas menores porque la regla, su prueba con base real y su
@@ -270,8 +272,19 @@ prueba que lo sostiene.
   se escribe a mano.
 - El dashboard no consume `GET …/entitlement-overrides`: el cliente no ve sus excepciones en UI.
 - No hay tenant SOHO en el código (SOHO aparece como plantilla y catálogo), así que el alta de
-  SOHO con precio fundador y `legacy.full` es un paso operativo por entorno (runbook §6), no una
-  migración.
+  SOHO con precio fundador es un paso operativo por entorno (runbook §6), no una migración. **No
+  existe una clave `legacy.full`**: el runbook lo decía y era inexistente; la forma ejecutable es
+  una excepción por clave registrada que falte.
+- **El rastro auditable no es inmutable en la base.** La migración de ENT-01 crea políticas
+  S/I/U/D sobre `tenant_entitlement_change_history`, así que el rol de la aplicación podría
+  actualizar o borrar filas; la inmutabilidad hoy es de procedimiento. Falta quitar las políticas
+  de `UPDATE`/`DELETE` o agregar un trigger que las rechace. El comentario de
+  `tenant-entitlement-change-history.entity.ts` ("no UPDATE and no DELETE policy exists") es falso
+  y hay que corregirlo.
+- Una sola excepción vigente por clave se garantiza con una consulta dentro de la transacción, no
+  con una restricción de base: dos operadores concurrentes podrían conceder la misma clave a la
+  vez. Bajo riesgo mientras el único escritor sea el CLI, pero es un invariante sin dientes en la
+  base.
 
 ## Criterios de aceptación
 
