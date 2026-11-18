@@ -98,7 +98,7 @@ medida.
 | owner_dashboard | D7 | G2 | T5 |
 | clientes_convenio | D7 | G2 | T5 |
 | showcase-master | varios | G2 | T5 |
-| pieza 2 del jueves | D2 | G1 | T1 + T5 + T3 |
+| pieza 2 del jueves | D2 | G3 | T2 + T5 + T2 |
 
 **Doce de trece usan T5.** Doce abre con pantalla o logotipo. Ninguna usa T2, T4,
 T6 ni T7. Los dolores D8 a D15 no se tocaron nunca.

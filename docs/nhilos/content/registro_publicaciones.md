@@ -49,24 +49,21 @@ Copy de TikTok, verbatim:
 
 ### Jueves 19/11 · Bimoneda en teléfono
 
-- **Archivo:** por definir, `pieza2` recortada a 14 s
-- **Gancho en pantalla:** "Te pagan con $20. ¿Cuánto devuelves en córdobas?"
+- **Archivo:** `apps/showcase_video/out/pieza2_digital.mp4`, 18 s, 1080×1920, 540 fotogramas
+- **Gancho en pantalla:** "20 ventas al día con billete de $20."
 - **CTA primario:** comentar `DEMO` (uno solo, sin pedir guardado en la misma pieza)
 - **Redes:** Instagram, Facebook, TikTok, simultáneo
 - **Métricas:** pendientes
 
 Copy de Instagram y Facebook, verbatim:
 
-> Te pagan con un billete de $20 y hay que devolver en córdobas. La cuenta se hace sola.
+> 20 ventas al día con billete de $20. Si el redondeo te cuesta un córdoba en cada una, son C$600 al mes que nadie ve.
 >
-> En un mostrador eso pasa diez veces por turno. La calculadora externa, el redondeo a ojo y el vuelto entregado de menos se acumulan sin que ningún reporte de ventas los muestre.
+> El problema no es equivocarse una vez. Es que el vuelto se calcula a ojo y la diferencia se acumula turno tras turno sin aparecer en ningún reporte de ventas.
 >
-> En el video se ve el cobro completo en un teléfono normal:
-> Se registra el monto en dólares.
-> El sistema calcula el vuelto exacto en córdobas al tipo de cambio del día.
-> La venta queda guardada aunque se caiga el internet.
+> En el video la cuenta se hace completa: veinte ventas, un córdoba de redondeo, seiscientos al mes. Y después el cobro real, donde el vuelto sale exacto al tipo de cambio del día.
 >
-> Todo ocurre en la misma pantalla de cobro, sin pasos ni cálculos aparte.
+> Todo ocurre en la misma pantalla de cobro, y la venta queda guardada aunque se caiga el internet.
 >
 > 📩 Comenta DEMO y te envío el acceso para probarlo con tus propios precios y tu tipo de cambio.
 >
@@ -74,11 +71,11 @@ Copy de Instagram y Facebook, verbatim:
 
 Copy de TikTok, verbatim:
 
-> Te pagan con $20 y tenés que dar vuelto en córdobas 💵
+> 20 ventas con billete de $20 y un córdoba de redondeo en cada una: C$600 al mes que nadie ve 📉
 >
-> La calculadora externa se equivoca y el redondeo a ojo se acumula turno tras turno.
+> El vuelto se calcula a ojo y la diferencia se acumula sin aparecer en ningún reporte.
 >
-> En el video: cobro en dólares, vuelto exacto en córdobas al tipo de cambio del día, y la venta se guarda aunque no haya internet.
+> En el video: la cuenta completa en pantalla y el cobro real, con el vuelto exacto al tipo de cambio del día.
 >
 > Comenta DEMO y te paso el acceso.
 >
@@ -88,15 +85,39 @@ Notas de publicación:
 
 - Un solo llamado a la acción. No se pide guardado en esta pieza: el objetivo es
   abrir conversación.
+- El copy describe **el argumento**, no un recorrido de pantalla. La versión
+  anterior prometía "el cobro completo" y enumeraba tres pasos; la pieza ya no es
+  eso. Si la pieza cambia de estructura, el copy se reescribe antes de publicar.
 - Si no hay quien responda los mensajes directos en minutos, quitar la promesa de
   envío y dejar "Comenta DEMO y te cuento cómo funciona". Un comentario sin
   respuesta cuesta más que no pedirlo.
 - No citar el tipo de cambio exacto en el copy: cambia todos los días y el video
   muestra el del día de la grabación.
 
-### Viernes 20/11 · Macro-zoom de venta por código
+### Viernes 20/11 · Macro-zoom de venta por código en cafetería
 
-- **Archivo:** pendiente
-- **Gancho:** pendiente
-- **CTA primario:** pendiente
+- **Archivo:** `apps/showcase_video/out/viernes20_cafeteria_codigo.mp4` (`Viernes20CafeteriaCodigoReel`, `1080×1920`, `25.0s` / `750 frames` @ `30fps`, `POST-RENDER QA PASSED` a `360px`) · [Brief](./briefs/creative_production_brief_viernes20_cafeteria_codigo_v1.0.md)
+- **Gancho (`G4`):** `¿Tu cajero nuevo frena la fila?` · VO: *"Ocho de la mañana: fila llena y cajero nuevo."*
+- **CTA primario (`Eje 5`):** comentar `DEMO` (único llamado a la acción)
+- **Redes:** TikTok (principal), Instagram Reels, Facebook
 - **Métricas:** pendientes
+
+Copy de Instagram y Facebook, verbatim:
+
+> En hora pico de cafetería, buscar cada bebida entre submenús detiene toda la fila cuando hay personal nuevo.
+>
+> En este ejemplo real de caja con datos de prueba ves el flujo directo: buscar por código corto (`104 + Enter`), enviar directo al carrito (`Americano 12oz · C$ 100.00`), cobrar con `C$ 200.00` y ver el vuelto exacto (`C$ 100.00`) al instante en la misma pantalla.
+>
+> 📩 Comenta DEMO abajo y te enviamos el acceso directo.
+>
+> #CafeteriasNicaragua #PuntoDeVenta #ControlDeCaja #GestionDeNegocios #NHILOS
+
+Copy de TikTok, verbatim:
+
+> Cajero nuevo, ocho de la mañana y veinte cafés esperando ☕
+>
+> En una cafetería real, el mostrador no se traba si el cajero digita el código corto del artículo, presiona Enter para sumarlo al carrito y cierra el cobro en la misma pantalla.
+>
+> Comenta DEMO abajo para enviarte el acceso directo.
+>
+> #negociosnicaragua #cafeteriasnicaragua #puntodeventa #controldecaja #nhilosapp
