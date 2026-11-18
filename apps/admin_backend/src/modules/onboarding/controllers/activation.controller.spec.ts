@@ -1,9 +1,10 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { HttpException, UnauthorizedException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ActivationController } from './activation.controller';
 import { ActivationService } from '../services/activation.service';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { PermissionsGuard } from '../../identity/guards/permissions.guard';
+import { TenantQuotaService } from '../../entitlements/tenant-quota.service';
 import {
   ActivationCheckCode,
   ActivationCheckStatus,
@@ -13,6 +14,8 @@ import { ActivationAttemptStatus } from '../entities/activation-attempt.entity';
 describe('ActivationController', () => {
   let controller: ActivationController;
   let activationService: jest.Mocked<Partial<ActivationService>>;
+  // ENT-03b: the terminal seat quota is enforced at the enrolment endpoints.
+  let tenantQuotaService: { assertCanEnrollTerminal: jest.Mock };
 
   const tenantId = 'tenant-c1';
   const userId = 'user-u1';
@@ -62,7 +65,15 @@ describe('ActivationController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ActivationController],
-      providers: [{ provide: ActivationService, useValue: activationService }],
+      providers: [
+        { provide: ActivationService, useValue: activationService },
+        {
+          provide: TenantQuotaService,
+          useValue: (tenantQuotaService = {
+            assertCanEnrollTerminal: jest.fn().mockResolvedValue(undefined),
+          }),
+        },
+      ],
     })
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: () => true })
@@ -192,16 +203,77 @@ describe('ActivationController', () => {
     );
   });
 
-  it('delegates device sync credential provisioning', async () => {
+  it('delegates device sync credential provisioning, with the seat quota asserted first', async () => {
     const req = { user: { id: userId, tenant_id: tenantId } } as any;
 
     const result = await controller.provisionDeviceSyncCredential(req, 'att-1');
 
     expect(result).toBeDefined();
+    // The attempt's own seat is excluded: a replay of this idempotent
+    // provisioning must not be denied by the seat it already holds.
+    expect(tenantQuotaService.assertCanEnrollTerminal).toHaveBeenCalledWith(
+      tenantId,
+      expect.any(Date),
+      { idempotentAttemptId: 'att-1' },
+    );
+    expect(
+      tenantQuotaService.assertCanEnrollTerminal.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      (activationService.provisionDeviceCredential as jest.Mock).mock
+        .invocationCallOrder[0],
+    );
     expect(activationService.provisionDeviceCredential).toHaveBeenCalledWith(
       tenantId,
       'att-1',
     );
+  });
+
+  it('blocks enrolment with 409 when the terminal quota is exhausted, without touching the credential flow', async () => {
+    tenantQuotaService.assertCanEnrollTerminal.mockRejectedValueOnce(
+      new HttpException(
+        'Su plan permite 1 terminal y ya está ocupado por equipos activos en los últimos 30 días. Dé de baja un equipo e intente de nuevo, o adquiera un terminal adicional.',
+        409,
+      ),
+    );
+    const req = { user: { id: userId, tenant_id: tenantId } } as any;
+
+    await expect(
+      controller.provisionDeviceSyncCredential(req, 'att-1'),
+    ).rejects.toThrow(HttpException);
+
+    expect(activationService.provisionDeviceCredential).not.toHaveBeenCalled();
+  });
+
+  it('enrols normally when a seat is free', async () => {
+    const req = { user: { id: userId, tenant_id: tenantId } } as any;
+
+    await expect(
+      controller.provisionDeviceSyncCredential(req, 'att-1'),
+    ).resolves.toBeDefined();
+    expect(activationService.provisionDeviceCredential).toHaveBeenCalledWith(
+      tenantId,
+      'att-1',
+    );
+  });
+
+  it('blocks the bootstrap enrolment endpoint under the same seat quota', async () => {
+    activationService.provisionBootstrapDeviceCredential = jest
+      .fn()
+      .mockResolvedValue({ credentialId: 'cred-boot' } as any);
+    tenantQuotaService.assertCanEnrollTerminal.mockRejectedValueOnce(
+      new HttpException('quota', 409),
+    );
+    const req = { user: { id: userId, tenant_id: tenantId } } as any;
+
+    await expect(
+      controller.provisionBootstrapDeviceSyncCredential(req, {
+        deviceId: terminalId,
+      } as any),
+    ).rejects.toThrow(HttpException);
+
+    expect(
+      activationService.provisionBootstrapDeviceCredential,
+    ).not.toHaveBeenCalled();
   });
 
   it('delegates follow-up endpoints', async () => {

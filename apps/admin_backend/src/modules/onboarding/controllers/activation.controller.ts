@@ -29,6 +29,7 @@ import { SyncBatchRecordDto } from '../../sales/dto/sync-batch.dto';
 import { DeviceSyncCredentialResponseDto } from '../dto/device-sync-credential-response.dto';
 import { ConfirmDeviceSyncCredentialDto } from '../dto/confirm-device-sync-credential.dto';
 import { BootstrapDeviceSyncCredentialDto } from '../dto/bootstrap-device-sync-credential.dto';
+import { TenantQuotaService } from '../../entitlements/tenant-quota.service';
 
 interface RequestWithUser extends Request {
   user?: {
@@ -48,7 +49,14 @@ interface RequestWithUser extends Request {
 @UseGuards(AuthGuard, PermissionsGuard)
 @UseInterceptors(TenantInterceptor)
 export class ActivationController {
-  constructor(private readonly activationService: ActivationService) {}
+  constructor(
+    private readonly activationService: ActivationService,
+    // ENT-03b (issue #984, catalog §6.2): the terminal quota is a COUNT that
+    // blocks ENROLMENT only. It is checked here, at the two enrolment entry
+    // points, and nowhere else: token renewal, sync, credential revocation
+    // (baja) and every sale path stay untouched.
+    private readonly tenantQuotaService: TenantQuotaService,
+  ) {}
 
   private getEffectiveTenantId(req: RequestWithUser): string {
     const tenantId = req.user?.tenantId || req.user?.tenant_id;
@@ -213,6 +221,16 @@ export class ActivationController {
     @Param('id') attemptId: string,
   ): Promise<DeviceSyncCredentialResponseDto> {
     const tenantId = this.getEffectiveTenantId(req);
+    // The seat this very attempt already holds does not count against itself:
+    // provisioning is idempotent, so a replay must return the existing
+    // credential instead of a 409 for a quota it already satisfies.
+    await this.tenantQuotaService.assertCanEnrollTerminal(
+      tenantId,
+      new Date(),
+      {
+        idempotentAttemptId: attemptId,
+      },
+    );
     return this.activationService.provisionDeviceCredential(
       tenantId,
       attemptId,
@@ -241,6 +259,10 @@ export class ActivationController {
     @Body() dto: BootstrapDeviceSyncCredentialDto,
   ): Promise<DeviceSyncCredentialResponseDto> {
     const tenantId = this.getEffectiveTenantId(req);
+    // Same enrolment rule as the attempt-scoped endpoint: the bootstrap
+    // provisioning delegates to the same credential creation, so it counts
+    // against the same seat quota (catalog §6.2).
+    await this.tenantQuotaService.assertCanEnrollTerminal(tenantId);
     return this.activationService.provisionBootstrapDeviceCredential(
       tenantId,
       dto.deviceId,

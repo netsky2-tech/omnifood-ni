@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -28,6 +30,8 @@ import { isCommonPassword } from '../security/common-passwords.matcher';
 import { bindRlsTenantContext } from '../human-authorization/rls/tenant-context';
 import { runInTenantTransaction } from '../../../core/database/tenant-transaction';
 import { markTenantPublicationDirty } from '../human-authorization/services/tenant-publication-marker';
+import { UserRole } from '../security/user-role.enum';
+import { TenantQuotaService } from '../../entitlements/tenant-quota.service';
 
 /**
  * Publication marking (design §11.2 decision 16): every policy-affecting
@@ -57,6 +61,13 @@ export class UserService {
     private securityProfileRepository: Repository<SecurityProfile>,
     private readonly dataSource: DataSource,
     private readonly authService: AuthService,
+    // ENT-03b (issue #984, catalog §6.2): the owner-account quota blocks
+    // creating or promoting ANOTHER OWNER when the active owner count has
+    // reached `limits.owner_accounts`. Optional only so the hand-built test
+    // harnesses can omit it; when an OWNER path needs it and it is missing,
+    // the check fails closed (see `assertOwnerQuotaAllows`).
+    @Optional()
+    private readonly tenantQuotaService?: TenantQuotaService,
   ) {}
 
   async findByTenant(tenantId: string): Promise<User[]> {
@@ -93,6 +104,9 @@ export class UserService {
         'La contraseña es demasiado común: elegí una distinta',
       );
     }
+    // ENT-03b: creating an OWNER consumes an owner-account seat. Checked
+    // before any persistence; a non-OWNER role never consults the quota.
+    await this.assertOwnerQuotaAllows(tenantId, dto.role);
     // Hashing is pure CPU work over secrets: keep it outside the transaction.
     const passwordHash = dto.password
       ? await bcrypt.hash(dto.password, PASSWORD_BCRYPT_COST)
@@ -284,6 +298,14 @@ export class UserService {
     const isPasswordChanged = passwordHash !== undefined;
     const shouldRevoke = isRoleActuallyChanged || isPasswordChanged;
 
+    // ENT-03b: promoting an existing user to OWNER consumes an owner-account
+    // seat, exactly like creating a new OWNER account. A no-op role (OWNER →
+    // OWNER) and any demotion never consult the quota; deactivation is never
+    // gated — an account must always be revocable (catalog §6.2).
+    if (isRoleActuallyChanged) {
+      await this.assertOwnerQuotaAllows(tenantId, dto.role);
+    }
+
     if (dto.name) user.name = dto.name;
     if (dto.role !== undefined) user.role = dto.role;
     if (passwordHash) user.password_hash = passwordHash;
@@ -433,6 +455,27 @@ export class UserService {
         effective_permissions: effectivePermissions,
       };
     });
+  }
+
+  /**
+   * ENT-03b: the owner-account quota gate. Only the OWNER role consumes a
+   * seat (`TenantQuotaService.assertCanAddOwnerAccount` no-ops otherwise).
+   * Fails closed if the quota service is absent on an OWNER path: a missing
+   * quota must never silently allow a new owner.
+   */
+  private async assertOwnerQuotaAllows(
+    tenantId: string,
+    nextRole: UserRole,
+  ): Promise<void> {
+    if (nextRole !== UserRole.OWNER) {
+      return;
+    }
+    if (!this.tenantQuotaService) {
+      throw new InternalServerErrorException(
+        'TENANT_QUOTA_SERVICE_UNAVAILABLE',
+      );
+    }
+    await this.tenantQuotaService.assertCanAddOwnerAccount(tenantId, nextRole);
   }
 
   private async logAction(

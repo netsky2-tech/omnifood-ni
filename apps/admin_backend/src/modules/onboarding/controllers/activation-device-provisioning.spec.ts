@@ -43,7 +43,13 @@ describe('DSI-3: Activation Device Credential Provisioning', () => {
         provisionBootstrapDeviceCredential: jest.fn(),
         confirmBootstrapDeviceCredential: jest.fn(),
       };
-      controller = new ActivationController(activationService as any);
+      controller = new ActivationController(
+        activationService as any,
+        // ENT-03b: the seat quota is asserted at the enrolment endpoints.
+        {
+          assertCanEnrollTerminal: jest.fn().mockResolvedValue(undefined),
+        } as any,
+      );
       reflector = new Reflector();
     });
 
