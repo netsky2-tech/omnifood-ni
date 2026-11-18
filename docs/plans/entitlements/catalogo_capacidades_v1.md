@@ -172,6 +172,23 @@ una persona y se desactiva en el acto.
 **Nada de esto se aplica** a la renovación de token, a la sincronización, a la baja de credencial
 (debe funcionar incluso sobre cuota) ni a ningún endpoint de venta, facturación o caja.
 
+### 6.3 Respuesta del POS a un rechazo de plan (ENT-04, OUR DECISION)
+
+Prohibido descartar y prohibido bloquear la venta. Cuando el backend responde 403 (capacidad no
+incluida) o 409 (cuota agotada) a una operación que el POS ya capturó sin conexión:
+
+1. La operación **se conserva** en la cola local con su motivo (`capability_denied` /
+   `quota_exceeded`), marcada como pendiente de plan y no como fallida.
+2. El POS **deja de reintentarla** en el ciclo automático para no inundar el servidor, pero la
+   muestra al propietario con el mensaje de upgrade.
+3. Cuando el plan se regulariza (snapshot nuevo con la capacidad o la cuota), la cola la
+   **reintenta y se vacía** sin intervención.
+4. La venta, la factura, la anulación, la reimpresión y el cierre de caja **nunca** se encolan
+   contra un plan: el núcleo no se gatea, así que no pueden recibir 403 por esta vía.
+5. Una operación nunca se borra por un rechazo de plan. Borrarla destruiría trabajo del cliente y
+   evidencia de inventario; el costo de conservarla es una fila, el de perderla es un descuadre
+   que nadie puede reconstruir.
+
 ## 7. Claves que ningún guard puede tocar
 
 Lista cerrada, y el motivo de cada una:
