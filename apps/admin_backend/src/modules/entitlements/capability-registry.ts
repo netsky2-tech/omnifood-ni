@@ -31,6 +31,12 @@ export interface CapabilityDefinition {
   /** Whether a guard may deny it. Nucleus keys are NEVER gated. */
   readonly gated: boolean;
   readonly area: CapabilityArea;
+  /**
+   * Another capability key this one cannot work without. Enforced by the
+   * resolver: a contract that grants the dependent key without its
+   * prerequisite is invalid and fails loudly instead of degrading.
+   */
+  readonly requires?: string;
   /** Where the feature actually lives in the repository (catalog §3). */
   readonly evidence: string;
 }
@@ -141,6 +147,19 @@ export const CAPABILITY_REGISTRY: readonly CapabilityDefinition[] = [
     evidence: 'promotions.controller.ts',
   },
   {
+    // Not a promotion "type" to be ignored: it is B2B contract pricing — a
+    // company customer with RUC, an agreement code, a usage counter and its
+    // own B2B report and export. Sells differently from a 2x1, so it carries
+    // its own key (catalog v1.1, gap H2).
+    key: 'promotions.convenio',
+    type: 'flag',
+    gated: true,
+    area: 'transversal',
+    requires: 'promotions',
+    evidence:
+      'promotions/entities/promotion.entity.ts:20 (CONVENIO), migración 1810100000000 (code, target_customer_id, used_count), sales-reports.service.ts:1097 (convenioCode/convenioName)',
+  },
+  {
     key: 'loyalty',
     type: 'flag',
     gated: true,
@@ -152,8 +171,11 @@ export const CAPABILITY_REGISTRY: readonly CapabilityDefinition[] = [
     type: 'flag',
     gated: true,
     area: 'transversal',
+    // Dish cost (dish-margins / theoretical-cost) is deliberately NOT listed
+    // here: it is a recipe feature that travels with `inventory.cooking`.
+    // Claiming it in two keys was a double-gating hole (catalog v1.1, H3).
     evidence:
-      'inventory-reports.controller.ts (márgenes por plato, valorización, COGS — decisión #2)',
+      'inventory-reports.controller.ts:45 (valuation), :116 (cogs) — decisión #2',
   },
   // Límites — gated por conteo (catalog §3).
   {
@@ -264,6 +286,7 @@ export const PLAN_CAPABILITY_MATRIX: readonly PlanCapabilityMap[] = [
       'inventory.retail': false,
       'inventory.cooking': false,
       promotions: false,
+      'promotions.convenio': false,
       loyalty: false,
       'reports.margins': false,
     },
@@ -283,6 +306,7 @@ export const PLAN_CAPABILITY_MATRIX: readonly PlanCapabilityMap[] = [
       'inventory.retail': false,
       'inventory.cooking': false,
       promotions: true,
+      'promotions.convenio': false,
       loyalty: true,
       'reports.margins': false,
     },
@@ -299,6 +323,7 @@ export const PLAN_CAPABILITY_MATRIX: readonly PlanCapabilityMap[] = [
       'inventory.retail': true,
       'inventory.cooking': true,
       promotions: true,
+      'promotions.convenio': true,
       loyalty: true,
       'reports.margins': true,
     },
@@ -347,9 +372,12 @@ export function getPlanInclusions(planCode: string): {
 /** One purchasable add-on and what it changes when active (catalog §5). */
 export interface AddOnDefinition {
   readonly code: string;
-  /** `pack` turns a pack capability on; `limit` increments a limit by one. */
+  /**
+   * `capabilities` turns one or more flags on (a single pack, or a transversal
+   * bundle); `limit` increments a quota by one.
+   */
   readonly effect:
-    | { kind: 'capability'; capabilityKey: string }
+    | { kind: 'capabilities'; capabilityKeys: string[] }
     | { kind: 'limit'; limitKey: string; increment: 1 };
   /** Whether the add-on applies per plan (packs are plan-priced, catalog §5). */
   readonly packOf?: 'inventory.retail' | 'inventory.cooking';
@@ -364,13 +392,35 @@ export interface AddOnDefinition {
 export const ADD_ON_CODES: readonly AddOnDefinition[] = [
   {
     code: 'pack.retail',
-    effect: { kind: 'capability', capabilityKey: 'inventory.retail' },
+    effect: { kind: 'capabilities', capabilityKeys: ['inventory.retail'] },
     packOf: 'inventory.retail',
   },
   {
     code: 'pack.cooking',
-    effect: { kind: 'capability', capabilityKey: 'inventory.cooking' },
+    effect: { kind: 'capabilities', capabilityKeys: ['inventory.cooking'] },
     packOf: 'inventory.cooking',
+  },
+  {
+    // Bundle "Marketing" — US$19/mes (catalog v1.1 §5). One SKU instead of
+    // two: promotions and loyalty are sold together because neither is worth
+    // much alone in a food park.
+    code: 'bundle.marketing',
+    effect: {
+      kind: 'capabilities',
+      capabilityKeys: ['promotions', 'loyalty'],
+    },
+  },
+  {
+    // Bundle "Inteligencia de costos" — US$19/mes. The reason to upgrade to
+    // Pro stays intact: Pro still wins on packs, terminals and support.
+    code: 'bundle.cost_intelligence',
+    effect: { kind: 'capabilities', capabilityKeys: ['reports.margins'] },
+  },
+  {
+    // Bundle "Convenios B2B" — US$15/mes. Requires `promotions` active: the
+    // resolver rejects a contract that buys convenios without promotions.
+    code: 'bundle.convenio',
+    effect: { kind: 'capabilities', capabilityKeys: ['promotions.convenio'] },
   },
   {
     code: 'terminal.extra',

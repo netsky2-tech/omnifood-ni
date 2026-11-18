@@ -243,6 +243,25 @@ Dos correcciones durante la verificación: un estrechamiento de tipo en el lecto
 de límite (`unknown` → `number | null`) y el formato que exige prettier en el spec nuevo. La
 regla de negocio que el catálogo no fijaba quedó registrada en §6.1 antes de codificarla.
 
+### Catálogo v1.1 — cierre de huecos de pricing
+
+Auditoría con evidencia antes de gatear nada. Cuatro huecos reales, no supuestos:
+
+| Hueco | Qué era | Corrección |
+|---|---|---|
+| H1 | `promotions`, `loyalty` y `reports.margins` se gateaban sin línea de precio propia | Bundles Marketing US$19, Inteligencia US$19 y (convenios) US$15 |
+| H2 | `convenio` B2B existía y no estaba en el catálogo: se regalaba dentro de `promotions` | Clave propia `promotions.convenio` con requisito `promotions` |
+| H3 | El costo por plato lo reclamaban **dos** claves (`inventory.cooking` y `reports.margins`) | Se queda en Cocina; `reports.margins` queda en valorización y COGS de inventario |
+| H4 | `loyalty-sync` (`POST point-transactions/sync`) parecía gateable | Nunca se decora: es flujo transaccional del POS, familia del camino fiscal |
+
+Decisión del dueño: **bundles** (no venta a la carta ni planes cerrados), con las tres líneas a
+US$19, US$19 y US$15. Verificado que la escalera no se rompe: Operación+Cocina+Inteligencia = 137
+< Pro 149; Esencial+Marketing = 68 < Operación 89.
+
+Implementación: `promotions.convenio` en el registro con `requires`, efecto de add-on
+multi-clave, `CAPABILITY_PREREQUISITE_MISSING` en el resolver, y migración
+`1810500000000-SeedConvenioCapability` para las bases que ya corrieron ENT-01.
+
 ## Log
 
 - **L1 (solicitud del usuario):** continuar con #984 tras diferir la entrega de #983 por falta
@@ -255,6 +274,9 @@ regla de negocio que el catálogo no fijaba quedó registrada en §6.1 antes de 
 - **L4 (hallazgo de recon):** el repo no tiene plan, suscripción ni entitlement: es verde. Pero
   sí tiene un `TenantCapabilityService` de contratos de auditoría que **no** debe confundirse
   con entitlements.
+- **L8 (catálogo v1.1):** auditoría de huecos de pricing y cierre con tres bundles y la clave
+  `promotions.convenio`. 41 pruebas unitarias y 14 con base real verdes; la migración de semilla
+  es idempotente y reversible.
 - **L7 (ENT-02 entregado, `fad61f49` + `71799113`):** resolución de §6 como función pura y `GET
   /api/tenant/entitlements` con contrato v1 de nueve campos y TTL de 24 h. 40 pruebas verdes (21
   unitarias nuevas, 6 con base real y 13 heredadas entre unitarias y de base). El catálogo se

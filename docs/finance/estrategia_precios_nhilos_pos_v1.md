@@ -97,8 +97,10 @@ Reglas:
 | Portal del propietario | Sí | Sí | Sí |
 | Pack Retail | Add-on | 1 incluido | Ambos |
 | Pack Cocina | Add-on | 1 incluido | Ambos |
-| Promociones y lealtad | No | Sí | Sí |
-| Reportes de margen y kardex valorizado | No | No | Sí |
+| Promociones y lealtad | Add-on US$19 | Sí | Sí |
+| Convenios B2B (empresa con RUC) | Add-on US$15 | Add-on US$15 | Sí |
+| Reportes de margen y kardex valorizado | No | Add-on US$19 | Sí |
+| Costo por plato y costo teórico | Pack Cocina | Pack Cocina | Pack Cocina |
 | Terminales incluidas | 1 | 1 | 2 |
 | Cuentas owner incluidas | 2 | 2 | 4 |
 | Soporte prioritario | No | No | Sí |
@@ -109,6 +111,9 @@ Reglas:
 | --- | ---: | --- |
 | Terminal adicional | US$40/mes; US$29 en Pro | Misma sucursal; sincronización por nube, sin LAN en tiempo real. Setup de enrolamiento US$75 (SOHO US$50). SOHO conserva US$35/mes. No hay tope duro por plan |
 | Cuenta owner adicional | US$10/mes | Sobre las incluidas (2; 4 en Pro) |
+| Bundle Marketing | US$19/mes | `promotions` + `loyalty`. Para Esencial; incluido en Operación y Pro |
+| Bundle Inteligencia de costos | US$19/mes | `reports.margins`: valorización, COGS, márgenes. Para Operación; incluido en Pro |
+| Bundle Convenios B2B | US$15/mes | Convenios con empresa (RUC, código, reporte B2B). Requiere promociones; incluido en Pro |
 | Sucursal adicional | Setup + mensualidad base | Nueva ubicación; sin consolidación automática |
 | OmniFood Care | US$99/mes | Dos horas remotas no acumulables y agenda prioritaria |
 | Capacitación remota | US$40/hora | Sin mínimo |

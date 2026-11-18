@@ -216,8 +216,8 @@ export function resolveEffectiveCapabilities(
 
     for (const code of appliedAddOns) {
       const addOn = ADD_ON_CODES.find((candidate) => candidate.code === code);
-      if (addOn.effect.kind === 'capability') {
-        capabilities.add(addOn.effect.capabilityKey);
+      if (addOn.effect.kind === 'capabilities') {
+        for (const key of addOn.effect.capabilityKeys) capabilities.add(key);
         continue;
       }
       const current = limits[addOn.effect.limitKey];
@@ -239,6 +239,17 @@ export function resolveEffectiveCapabilities(
       continue;
     }
     limits[capability.key] = readLimitOverride(capability.key, row.value_json);
+  }
+
+  // Prerequisites last, so an override cannot smuggle a dependent capability
+  // into a contract that never bought its prerequisite.
+  for (const key of capabilities) {
+    const required = findCapability(key)?.requires;
+    if (required && !capabilities.has(required)) {
+      throw new Error(
+        `CAPABILITY_PREREQUISITE_MISSING: "${key}" requires "${required}", which the resolved contract does not include`,
+      );
+    }
   }
 
   return {

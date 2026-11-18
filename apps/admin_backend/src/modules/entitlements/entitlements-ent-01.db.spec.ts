@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource, type QueryRunner } from 'typeorm';
 import { CreateBootstrapIdentityTables1759000000001 } from '../../migrations/1759000000001-CreateBootstrapIdentityTables';
 import { CreateEntitlementsTables1810400000000 } from '../../migrations/1810400000000-CreateEntitlementsTables';
+import { SeedConvenioCapability1810500000000 } from '../../migrations/1810500000000-SeedConvenioCapability';
 import {
   CAPABILITY_REGISTRY,
   PLAN_CAPABILITY_MATRIX,
@@ -528,4 +529,48 @@ describe('CreateEntitlementsTables1810400000000 (db, ENT-01 #984)', () => {
       TEST_TIMEOUT_MS,
     );
   }
+  it(
+    'seeds catalog v1.1 convenio rows idempotently and reverses only them',
+    async () => {
+      await withIsolatedSchema('ent_convenio', async (queryRunner) => {
+        await buildEntitlementsSchema(queryRunner);
+
+        const countCapabilities = async (): Promise<number> => {
+          const rows: Array<{ n: number }> = await queryRunner.query(
+            `SELECT count(*)::int AS n FROM plan_capability`,
+          );
+          return rows[0].n;
+        };
+
+        // 1810400000000 seeds whatever the current registry declares, so a
+        // fresh database already carries the convenio rows.
+        const seeded = await countCapabilities();
+        expect(seeded).toBe(
+          PLAN_CAPABILITY_MATRIX.length * CAPABILITY_REGISTRY.length,
+        );
+
+        await new SeedConvenioCapability1810500000000().up(queryRunner);
+        expect(await countCapabilities()).toBe(seeded);
+
+        await new SeedConvenioCapability1810500000000().down(queryRunner);
+        expect(await countCapabilities()).toBe(
+          seeded - PLAN_CAPABILITY_MATRIX.length,
+        );
+
+        await new SeedConvenioCapability1810500000000().up(queryRunner);
+        expect(await countCapabilities()).toBe(seeded);
+
+        const rows: Array<{ plan_code: string; value_json: unknown }> =
+          await queryRunner.query(
+            `SELECT plan_code, value_json FROM plan_capability
+              WHERE capability_key = 'promotions.convenio'`,
+          );
+        expect(rows).toHaveLength(PLAN_CAPABILITY_MATRIX.length);
+        for (const row of rows) {
+          expect(row.value_json).toEqual({ included: row.plan_code === 'PRO' });
+        }
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

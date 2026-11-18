@@ -2,6 +2,7 @@ import {
   ADD_ON_CODES,
   ADD_ON_CODES_LIST,
   CAPABILITY_KEYS,
+  CAPABILITY_REGISTRY,
   findCapability,
   findPlan,
   getPlanInclusions,
@@ -40,6 +41,8 @@ const CATALOG_3_GATED_FLAG_KEYS = [
   'inventory.retail',
   'inventory.cooking',
   'promotions',
+  // Catalog v1.1 (gap H2): the B2B agreement capability.
+  'promotions.convenio',
   'loyalty',
   'reports.margins',
 ] as const;
@@ -65,11 +68,15 @@ const CATALOG_7_UNGUARDABLE_KEYS = [
 const CATALOG_5_ADD_ON_CODES = [
   'pack.retail',
   'pack.cooking',
+  // Catalog v1.1: the three transversal bundles.
+  'bundle.marketing',
+  'bundle.cost_intelligence',
+  'bundle.convenio',
   'terminal.extra',
   'owner.account.extra',
 ] as const;
 
-describe('capability registry (ENT-01, frozen catalog v1)', () => {
+describe('capability registry (ENT-01/ENT-02, frozen catalog v1.1)', () => {
   it('registers every key of catalog §3 and ONLY those keys', () => {
     const expected = [
       ...CATALOG_3_NUCLEUS_KEYS,
@@ -152,6 +159,7 @@ describe('capability registry (ENT-01, frozen catalog v1)', () => {
       'inventory.retail': false,
       'inventory.cooking': false,
       promotions: false,
+      'promotions.convenio': false,
       loyalty: false,
       'reports.margins': false,
     });
@@ -175,6 +183,7 @@ describe('capability registry (ENT-01, frozen catalog v1)', () => {
       'inventory.retail': false,
       'inventory.cooking': false,
       promotions: true,
+      'promotions.convenio': false,
       loyalty: true,
       'reports.margins': false,
     });
@@ -199,6 +208,7 @@ describe('capability registry (ENT-01, frozen catalog v1)', () => {
       'inventory.retail': true,
       'inventory.cooking': true,
       promotions: true,
+      'promotions.convenio': true,
       loyalty: true,
       'reports.margins': true,
     });
@@ -227,12 +237,24 @@ describe('capability registry (ENT-01, frozen catalog v1)', () => {
     );
     const byCode = new Map(ADD_ON_CODES.map((addOn) => [addOn.code, addOn]));
     expect(byCode.get('pack.retail')?.effect).toEqual({
-      kind: 'capability',
-      capabilityKey: 'inventory.retail',
+      kind: 'capabilities',
+      capabilityKeys: ['inventory.retail'],
     });
     expect(byCode.get('pack.cooking')?.effect).toEqual({
-      kind: 'capability',
-      capabilityKey: 'inventory.cooking',
+      kind: 'capabilities',
+      capabilityKeys: ['inventory.cooking'],
+    });
+    expect(byCode.get('bundle.marketing')?.effect).toEqual({
+      kind: 'capabilities',
+      capabilityKeys: ['promotions', 'loyalty'],
+    });
+    expect(byCode.get('bundle.cost_intelligence')?.effect).toEqual({
+      kind: 'capabilities',
+      capabilityKeys: ['reports.margins'],
+    });
+    expect(byCode.get('bundle.convenio')?.effect).toEqual({
+      kind: 'capabilities',
+      capabilityKeys: ['promotions.convenio'],
     });
     expect(byCode.get('terminal.extra')?.effect).toEqual({
       kind: 'limit',
@@ -244,6 +266,23 @@ describe('capability registry (ENT-01, frozen catalog v1)', () => {
       limitKey: 'limits.owner_accounts',
       increment: 1,
     });
+  });
+
+  it('declares the convenio prerequisite on the key itself (catalog v1.1)', () => {
+    expect(findCapability('promotions.convenio')?.requires).toBe('promotions');
+    // No other key carries a prerequisite without a stated reason.
+    const withRequires = CAPABILITY_REGISTRY.filter((row) => row.requires);
+    expect(withRequires.map((row) => row.key)).toStrictEqual([
+      'promotions.convenio',
+    ]);
+  });
+
+  it('does not claim the plate cost in two keys (catalog v1.1, gap H3)', () => {
+    // dish-margins/theoretical-cost travel with the cooking pack only.
+    expect(findCapability('reports.margins')?.evidence).not.toMatch(
+      /dish-margins|theoretical-cost|márgenes por plato/i,
+    );
+    expect(findCapability('inventory.cooking')?.evidence).toMatch(/recetas/i);
   });
 
   it('fails closed on a plan outside the automatic catalog (ENTERPRISE)', () => {

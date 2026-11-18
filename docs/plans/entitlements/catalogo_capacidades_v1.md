@@ -55,8 +55,18 @@ Regla de entrada: **una clave solo entra al catálogo si la función existe en e
 | Clave | Tipo | Estado en código | Evidencia |
 |---|---|---|---|
 | `promotions` | flag | EXISTE | `promotions.controller.ts:23` |
+| `promotions.convenio` | flag | EXISTE (convenios B2B: cliente empresa con RUC, código, contador de usos, reporte y export propios) | `promotion.entity.ts:20` (`CONVENIO`), migración `1810100000000`, `sales-reports.service.ts:1097` |
 | `loyalty` | flag | EXISTE | `loyalty.controller.ts:67` |
-| `reports.margins` | flag | EXISTE (márgenes por plato, valorización, COGS) | `inventory-reports.controller.ts:58,71` |
+| `reports.margins` | flag | EXISTE (valorización y COGS **de inventario**) | `inventory-reports.controller.ts:45,116` |
+
+`promotions.convenio` **requiere** `promotions`: el resolver rechaza un contrato que compre
+convenios sin promociones (`CAPABILITY_PREREQUISITE_MISSING`) en lugar de conceder una función
+que no puede operar.
+
+El **costo por plato** (`dish-margins`, `theoretical-cost` en `inventory-reports.controller.ts:58,71`)
+pertenece a `inventory.cooking`, no a `reports.margins`: es una función de recetas. Tenerlo en dos
+claves era un doble gating real — un cliente con Operación + pack Cocina podía o no verlo según
+el orden de los guards.
 | `support.priority` | — | **AUSENTE** | sin coincidencias en `admin_backend/src` |
 
 `support.priority` **no entra como capacidad gateable**: es una obligación de servicio (SLA), no una función del producto. Se modela como atributo del `tenant_subscription` (`support_tier`), visible en el dashboard y auditable, sin guard. Diferido hasta que exista el flujo de soporte.
@@ -81,7 +91,8 @@ Tomada de la autoridad §4 y de la matriz de capacidades, sin agregar nada:
 | `inventory.cooking` | Add-on | 1 pack incluido | Sí |
 | `promotions` | No | Sí | Sí |
 | `loyalty` | No | Sí | Sí |
-| `reports.margins` | No | No | Sí |
+| `promotions.convenio` | Add-on | Add-on | Sí |
+| `reports.margins` | No | Add-on | Sí |
 | `limits.terminals` | 1 | 1 | 2 |
 | `limits.owner_accounts` | 2 | 2 | 4 |
 | `support_tier` | estándar | estándar | prioritario |
@@ -95,6 +106,16 @@ Tomada de la autoridad §4 y de la matriz de capacidades, sin agregar nada:
 | Terminal adicional | US$40/mes (US$29 en Pro; US$35 SOHO) | Sin tope duro por plan |
 | Cuenta owner adicional | US$10/mes | Sobre las incluidas |
 | Setup de terminal adicional | US$75 (US$50 SOHO) | Enrolamiento |
+| **Bundle Marketing** (`bundle.marketing`) | US$19 | `promotions` + `loyalty`; disponible en Esencial, incluido en Operación y Pro |
+| **Bundle Inteligencia de costos** (`bundle.cost_intelligence`) | US$19 | `reports.margins`: valorización, COGS, márgenes; disponible en Operación, incluido en Pro |
+| **Bundle Convenios B2B** (`bundle.convenio`) | US$15 | `promotions.convenio`; **requiere `promotions` activo**; incluido en Pro |
+
+Coherencia de escalera con los bundles (verificada al congelarlos):
+
+- Operación 89 + Cocina 29 + Inteligencia 19 = **137** < Pro **149** → Pro sigue ganando por
+  packs, terminales y soporte.
+- Esencial 49 + Marketing 19 = **68** < Operación **89** → Operación sigue ganando porque
+  incluye un pack.
 
 Reglas de negocio que el catálogo **no** implementa (son de venta, no de código): descuento anual máximo, setup no reembolsable, ofrecer upgrade cuando dos add-ons superan US$30/mes.
 

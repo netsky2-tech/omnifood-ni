@@ -166,6 +166,61 @@ describe('resolveEffectiveCapabilities', () => {
       expect(result.limits['limits.owner_accounts']).toBe(3);
     });
 
+    it('bundle.marketing enciende promociones y lealtad en ESENCIAL', () => {
+      const result = resolveEffectiveCapabilities({
+        subscription: subscription({ add_ons: ['bundle.marketing'] }),
+        overrides: [],
+        now: NOW,
+      });
+
+      expect(result.capabilities).toContain('promotions');
+      expect(result.capabilities).toContain('loyalty');
+      expect(result.capabilities).not.toContain('reports.margins');
+    });
+
+    it('bundle.cost_intelligence enciende los márgenes sin tocar los packs', () => {
+      const result = resolveEffectiveCapabilities({
+        subscription: subscription({ add_ons: ['bundle.cost_intelligence'] }),
+        overrides: [],
+        now: NOW,
+      });
+
+      expect(result.capabilities).toContain('reports.margins');
+      expect(result.capabilities).not.toContain('inventory.retail');
+    });
+
+    it('bundle.convenio enciende los convenios B2B sobre promociones', () => {
+      const result = resolveEffectiveCapabilities({
+        subscription: subscription({
+          add_ons: ['bundle.marketing', 'bundle.convenio'],
+        }),
+        overrides: [],
+        now: NOW,
+      });
+
+      expect(result.capabilities).toContain('promotions.convenio');
+    });
+
+    it('rechaza convenios sin promociones: el requisito no se improvisa', () => {
+      expect(() =>
+        resolveEffectiveCapabilities({
+          subscription: subscription({ add_ons: ['bundle.convenio'] }),
+          overrides: [],
+          now: NOW,
+        }),
+      ).toThrow(/CAPABILITY_PREREQUISITE_MISSING/);
+    });
+
+    it('rechaza un override que enciende convenios sin promociones', () => {
+      expect(() =>
+        resolveEffectiveCapabilities({
+          subscription: subscription(),
+          overrides: [override('promotions.convenio', { included: true })],
+          now: NOW,
+        }),
+      ).toThrow(/CAPABILITY_PREREQUISITE_MISSING/);
+    });
+
     it('rechaza un add-on fuera del catálogo en lugar de ignorarlo', () => {
       expect(() =>
         resolveEffectiveCapabilities({
