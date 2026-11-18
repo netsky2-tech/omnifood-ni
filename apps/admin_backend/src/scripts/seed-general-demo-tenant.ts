@@ -374,6 +374,62 @@ async function seed() {
         }
       }
 
+      // 4b. Opening kardex entries (INITIAL_STOCK) — required by the
+      // running-balance trigger (issue #986). The seed sets stock values
+      // directly, so every insumo that ends up with stock needs a ledger
+      // opening row or the first recipe-driven sale is rejected with
+      // "inventory_kardex balance invariant violated" and the terminal
+      // retries forever. Entry shape mirrors src/scripts/seed-test-data.ts.
+      //
+      // Idempotency: an insumo is only seeded when it has NO kardex rows at
+      // all. Insumos that already have ledger history (previous runs, real
+      // sales, purchases) are left untouched — their chain already starts at
+      // stock_before = 0, and inserting an opening row over an existing chain
+      // would itself violate the running-balance invariant. Re-running the
+      // seed therefore never duplicates opening entries or shifts balances.
+      // Only INSERTs happen here, so the append-only trigger is never bypassed.
+      const kardexCovered = await manager.query(
+        `SELECT DISTINCT insumo_id FROM inventory_kardex WHERE tenant_id = $1`,
+        [DEMO_TENANT_ID],
+      );
+      const coveredInsumoIds = new Set(
+        (Array.isArray(kardexCovered) ? kardexCovered : []).map(
+          (row: { insumo_id: string }) => row.insumo_id,
+        ),
+      );
+      interface DemoInsumoRow {
+        id: string;
+        name: string;
+        stock: string;
+        costo_promedio_nio: string;
+      }
+      const rawDemoInsumos: unknown = await manager.query(
+        `SELECT id, name, stock, costo_promedio_nio FROM insumos WHERE tenant_id = $1`,
+        [DEMO_TENANT_ID],
+      );
+      const demoInsumos = (
+        Array.isArray(rawDemoInsumos) ? rawDemoInsumos : []
+      ) as DemoInsumoRow[];
+      let openingEntriesCreated = 0;
+      for (const dbInsumo of demoInsumos) {
+        const stock = Number(dbInsumo.stock);
+        // No opening entry for insumos with zero or null stock.
+        if (!(stock > 0) || coveredInsumoIds.has(dbInsumo.id)) {
+          continue;
+        }
+        const avgCost = Number(dbInsumo.costo_promedio_nio);
+        await manager.query(
+          `INSERT INTO inventory_kardex (tenant_id, insumo_id, movement_type, quantity, unit_cost_nio, total_cost_nio, stock_before, stock_after, source_document_type, source_document_id, occurred_at)
+           VALUES ($1, $2, 'INITIAL_STOCK', $3, $4, $5, 0.0000, $3, 'SEED', 'seed-initial', NOW())`,
+          [DEMO_TENANT_ID, dbInsumo.id, stock, avgCost, stock * avgCost],
+        );
+        openingEntriesCreated++;
+        console.log(`✅ Kardex init: ${dbInsumo.name} stock=${stock}`);
+      }
+      if (openingEntriesCreated === 0) {
+        console.log('♻️  Kardex opening entries already present for all insumos with stock');
+      }
+
       // 5. Modifier Groups for Hot Coffee & Beverages
       const lecheGroup = await manager.findOne(ModifierGroup, { where: { tenant_id: DEMO_TENANT_ID, name: 'Tipo de Leche' } });
       let modLeche: ModifierGroup;
