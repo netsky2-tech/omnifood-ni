@@ -9,6 +9,24 @@ import {
   useAlerts,
 } from "@/features/inventory/use-inventory-reports";
 
+// ENT-05: these fixtures assert the valuation TABLE, not the plan. The page
+// now reads the entitlement snapshot, so it must be stubbed as granted;
+// without the stub the query fails in jsdom and the tab renders locked.
+vi.mock("@/features/entitlements/use-entitlements", () => ({
+  useEntitlements: () => ({
+    capabilities: [
+      "reports.margins",
+      "inventory.retail",
+      "inventory.cooking",
+      "promotions",
+      "loyalty",
+    ],
+    isPending: false,
+    has: () => true,
+    limit: () => null,
+  }),
+}));
+
 vi.mock("@/features/inventory/use-inventory-reports", () => ({
   useValuation: vi.fn(() => ({
     data: {

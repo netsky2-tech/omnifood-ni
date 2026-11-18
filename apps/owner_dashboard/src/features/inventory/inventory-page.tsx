@@ -22,6 +22,12 @@ import { InsumosTab } from "./insumos-tab";
 import { InventoryDivergencePanel } from "./divergence-panel";
 import { SuppliersTab } from "./suppliers-tab";
 import { PurchasesTab } from "./purchases-tab";
+import { useEntitlements } from "@/features/entitlements/use-entitlements";
+import { PremiumLocked } from "@/features/entitlements/premium-locked";
+import {
+  canAccessPremiumSurface,
+  SURFACE_PREMIUM_CAPABILITIES,
+} from "@/lib/rbac";
 import type { MovementType, AlertSeverity, KardexFilters } from "./types";
 
 type TabId =
@@ -679,6 +685,21 @@ function AlertsTab({ initialSeverity }: { initialSeverity?: string }) {
 
 export function InventoryPage() {
   const [searchParams, setSearchParams] = useSafeSearchParams();
+  // ENT-05b: premium surfaces inside this core page. The purchases and
+  // suppliers tabs require the Retail pack; while the snapshot is in flight
+  // nothing is locked, and a failed snapshot fails closed (no-premium).
+  // Valuation is the `reports.margins` surface: an owner without it sees the
+  // upgrade state instead of a 403 raised by the report itself.
+  const { capabilities, isPending: entitlementsPending } = useEntitlements();
+  const valuationLocked =
+    !entitlementsPending &&
+    !canAccessPremiumSurface(capabilities, "inventory.valuation");
+  const purchasesLocked =
+    !entitlementsPending &&
+    !canAccessPremiumSurface(capabilities, "inventory.purchases");
+  const suppliersLocked =
+    !entitlementsPending &&
+    !canAccessPremiumSurface(capabilities, "inventory.suppliers");
   const tabParam = searchParams.get("tab") as TabId | null;
   const initialTab: TabId =
     tabParam && ["valuation", "insumos", "purchases", "cogs", "kardex", "alerts"].includes(tabParam)
@@ -795,12 +816,34 @@ export function InventoryPage() {
         aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
       >
-        {activeTab === "valuation" && <ValuationTab />}
+        {activeTab === "valuation" &&
+          (valuationLocked ? (
+            <PremiumLocked
+              capability={SURFACE_PREMIUM_CAPABILITIES["inventory.valuation"][0]!}
+              featureName="Valoración de inventario"
+            />
+          ) : (
+            <ValuationTab />
+          ))}
         {activeTab === "insumos" && <InsumosTab />}
-        {activeTab === "suppliers" && <SuppliersTab />}
-        {activeTab === "purchases" && (
-          <PurchasesTab startDate={range.startDate} endDate={range.endDate} />
-        )}
+        {activeTab === "suppliers" &&
+          (suppliersLocked ? (
+            <PremiumLocked
+              capability={SURFACE_PREMIUM_CAPABILITIES["inventory.suppliers"][0]!}
+              featureName="Proveedores"
+            />
+          ) : (
+            <SuppliersTab />
+          ))}
+        {activeTab === "purchases" &&
+          (purchasesLocked ? (
+            <PremiumLocked
+              capability={SURFACE_PREMIUM_CAPABILITIES["inventory.purchases"][0]!}
+              featureName="Compras"
+            />
+          ) : (
+            <PurchasesTab startDate={range.startDate} endDate={range.endDate} />
+          ))}
         {activeTab === "cogs" && (
           <CogsTab startDate={range.startDate} endDate={range.endDate} />
         )}
