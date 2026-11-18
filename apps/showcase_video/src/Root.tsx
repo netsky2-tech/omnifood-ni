@@ -198,7 +198,7 @@ export const RemotionRoot: React.FC = () => {
         height={COMPOSITION_PRESETS.semana4HeroSalesScreenAsset.height}
       />
 
-      {/* 17. Demo 100% Digital - Cobro Bimoneda (Jueves 19/11): seis tiempos, 14.7s, payoff front-loaded, loop; sin ticket ni claims falsos */}
+      {/* 17. Demo 100% Digital - Cobro Bimoneda (Jueves 19/11): seis tiempos, 20.5s, cuatro tratamientos visuales (foto real + tipo, pantalla real, acento isométrico vectorial SVG, cierre de marca); loop; sin ticket ni claims falsos */}
       <Composition
         id={COMPOSITION_PRESETS.semana4Pieza2DigitalAsset.id}
         component={Semana4Pieza2Digital}
