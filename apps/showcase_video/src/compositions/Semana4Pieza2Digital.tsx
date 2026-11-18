@@ -18,33 +18,38 @@ import { Semana4Q80ScreenAsset } from '../scenes/semana4_fisico/Semana4Q80Screen
 /**
  * Semana4Pieza2Digital — Demo 100% digital "Cobro Bimoneda" (Jueves 19/11).
  *
- * REESCRITA (v3, 440f @ 30fps = 14.67s, 1080x1920): seis tiempos con cadencia
- * desigual y payoff front-loaded — analítica de TikTok/IG: watch time medio
- * 2.8–5.9s, la mayoría se va en 0:01. El total real (C$125.00) está en cuadro
- * antes del frame 90 (f38) para que un viewer de 3s ya sepa qué hace el
- * producto. El cierre sale en limpio y el último frame es idéntico al primero
- * (navy vacío) para loopear sin salto.
+ * REESCRITA (v4, 450f @ 30fps = 15.0s, 1080x1920): corrección de la v3 tras
+ * revisión del fundador — (1) el gancho era ilegible (0.4s por línea): ahora
+ * cada línea del hook aguanta ≥1.1s; (2) arrancaba en silencio: la locución
+ * entra en f0 y cubre los primeros 11.14s (334f); (3) el loop no cuadraba:
+ * el CTA persistente sale con el contenido del cierre (~f420) y los frames
+ * finales son el mismo navy vacío del arranque.
  *
  * Todos los números en pantalla provienen de la UI real del POS
  * (`MultiCurrencyCheckoutDialog` montado en el asset Semana4Q80ScreenAsset):
  *   Total C$ 125.00 · Paga $ 20.00 USD · $ 20.00 × TC BCN 36.6243 = C$ 732.49
  *   → Vuelto C$ 607.49 · Folio 001-001-01-00000893.
  *
- * Estructura (corte seco entre tiempos; 440f = 14.67s):
- * - f000..f030  Gancho    (30f, 1.0s): tipografía sola sobre navy, llegada dura.
- * - f030..f096  Dinero    (66f, 2.2s): checkout bimoneda real en marco de
- *                         dispositivo, push-in. "Total C$125.00" en f38.
- * - f096..f170  Vuelto    (74f, 2.47s): misma pantalla sostenida; el vuelto
+ * Estructura (corte seco entre tiempos; 450f = 15.0s):
+ * - f000..f072  Gancho    (72f, 2.4s): tipografía sola sobre navy. Línea 1
+ *                         "Te pagan con $20." f1..f33 (~1.1s), línea 2
+ *                         "¿Cuánto devuelves en córdobas?" f34..f71 (~1.3s).
+ * - f072..f140  Dinero    (68f, 2.27s): checkout bimoneda real en marco de
+ *                         dispositivo, push-in. "Total C$125.00" temprano.
+ * - f140..f210  Vuelto    (70f, 2.33s): misma pantalla sostenida; el vuelto
  *                         cuenta hasta C$607.49 y se detiene + chip TC BCN.
- * - f170..f270  Offline   (100f, 3.33s): panel modo avión → venta completada
+ * - f210..f300  Offline   (90f, 3.0s): panel modo avión → venta completada
  *                         con badge de cola pendiente.
- * - f270..f330  Sync      (60f, 2.0s): indicador de red vuelve a sincronizado.
- * - f330..f440  Cierre    (110f, 3.67s): cierre de marca + CTA + sitio;
- *                         el contenido sale en f424 y el frame final es el
- *                         mismo navy vacío del arranque (loop).
+ * - f300..f350  Sync      (50f, 1.67s): indicador de red vuelve a sincronizado.
+ * - f350..f450  Cierre    (100f, 3.33s): cierre de marca + CTA + sitio;
+ *                         el contenido sale en f420..f432 (incluido el chip
+ *                         CTA) y los frames finales son el mismo navy vacío
+ *                         del arranque (loop: f449 == f0).
  *
- * Locución regenerada (edge-tts es-MX-JorgeNeural, rate -2%): entra con el
- * beat de Dinero (f30) y dura 334f (11.14s); el texto no claims falsos.
+ * Locución (edge-tts es-MX-JorgeNeural, rate -2%): entra en f0 — la línea de
+ * apertura describe la situación y no duplica la tipografía en pantalla, así
+ * que el solape es correcto y la pieza nunca empieza en silencio. Dura 334f
+ * (11.14s); el beat de cierre queda sin locución y con el navy vacío.
  */
 
 const { colors } = NHILOS_BRAND;
@@ -57,16 +62,20 @@ const AMBER = '#D97706';
 
 
 /* ------------------------------------------------------------------ */
-/* CTA persistente: chip pequeño y quieto, visible desde ~1.5s hasta   */
-/* el último frame. La analítica muestra que el CTA al final no lo ve
-/* nadie (0% comentarios): la promesa "comentar = acceso a la demo"    */
-/* se entrega temprano y permanece. No cubre pantalla ni cifras:       */
-/* vive en la banda superior, sobre el bezel, nunca sobre la UI.       */
+/* CTA persistente: chip pequeño y quieto, visible desde ~1.5s (f45) hasta
+ * el final del contenido del cierre (~f420). La analítica muestra que el CTA
+ * al final no lo ve nadie (0% comentarios): la promesa "comentar = acceso a
+ * la demo" se entrega temprano y permanece. No cubre pantalla ni cifras:
+ * vive en la banda superior, sobre el bezel, nunca sobre la UI.
+ *
+ * El chip NO aguanta hasta el último frame: sale con el contenido del cierre
+ * (fade out f420..f426) para que los frames finales sean el mismo navy vacío
+ * del arranque y la pieza loopee sin salto (f449 == f0).                */
 /* ------------------------------------------------------------------ */
 const PersistentCTA: React.FC = () => {
   const frame = useCurrentFrame();
-  if (frame < 45) return null;
-  const opacity = interpolate(frame, [45, 49], [0, 1], {
+  if (frame < 45 || frame >= 420) return null;
+  const opacity = interpolate(frame, [45, 49, 420, 426], [0, 1, 1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -361,12 +370,13 @@ const HookBeat: React.FC = () => {
         background: `radial-gradient(circle at 50% 40%, ${colors.navyLight} 0%, ${colors.navyDark} 78%)`,
       }}
     >
-      {/* Línea 1: f1..f13 (corte seco) — 1s de gancho total */}
-      <HookType appearAt={1} disappearAt={13} fontSize={104}>
+      {/* Línea 1: f1..f33 (~1.1s en cuadro, legible); f0 queda navy vacío
+          para que el loop cierre contra el último frame de la pieza. */}
+      <HookType appearAt={1} disappearAt={34} fontSize={104}>
         Te pagan con <span style={{ color: colors.green }}>$20.</span>
       </HookType>
-      {/* Línea 2: f13..fin del tiempo */}
-      <HookType appearAt={13} fontSize={78}>
+      {/* Línea 2: f34..fin del tiempo (~1.3s) */}
+      <HookType appearAt={34} fontSize={78}>
         ¿Cuánto devuelves
         <br />
         en córdobas?
@@ -707,9 +717,10 @@ const CloseBeat: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Fondo idéntico al del gancho: el frame final del cierre (contenido ya
-  // salido) loopea sin salto al frame 0 de la pieza.
-  const exit = interpolate(frame, [94, 106], [1, 0], {
+  // El contenido (incluido el glow) sale en local f70..f82 (global f420..f432).
+  // Desde ahí hasta f449 solo queda el fondo, idéntico al del gancho: el frame
+  // final loopea sin salto al frame 0 de la pieza.
+  const exit = interpolate(frame, [70, 82], [1, 0], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
@@ -799,35 +810,37 @@ const CloseBeat: React.FC = () => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Composición principal — corte de seis tiempos, 440f (14.67s)         */
+/* Composición principal — corte de seis tiempos, 450f (15.0s)          */
 /* ------------------------------------------------------------------ */
 export const Semana4Pieza2Digital: React.FC = () => {
   return (
     <AbsoluteFill style={{ background: colors.navy }}>
-      <Sequence from={0} durationInFrames={30}>
+      <Sequence from={0} durationInFrames={72}>
         <HookBeat />
       </Sequence>
-      <Sequence from={30} durationInFrames={66}>
+      <Sequence from={72} durationInFrames={68}>
         <MoneyBeat />
       </Sequence>
-      <Sequence from={96} durationInFrames={74}>
+      <Sequence from={140} durationInFrames={70}>
         <ChangeBeat />
       </Sequence>
-      <Sequence from={170} durationInFrames={100}>
+      <Sequence from={210} durationInFrames={90}>
         <OfflineBeat />
       </Sequence>
-      <Sequence from={270} durationInFrames={60}>
+      <Sequence from={300} durationInFrames={50}>
         <SyncBeat />
       </Sequence>
-      <Sequence from={330} durationInFrames={110}>
+      <Sequence from={350} durationInFrames={100}>
         <CloseBeat />
       </Sequence>
-      {/* Locución corregida (sin claims falsos): entra con el beat de Dinero,
-          dura 334f (11.14s) y termina antes del frame final. */}
-      <Sequence from={30}>
+      {/* Locución (sin claims falsos): entra en f0 — su línea de apertura
+          describe la situación y no duplica la tipografía del hook, así que
+          el solape es correcto y la pieza nunca arranca en silencio. Dura
+          334f (11.14s); el cierre queda con el navy vacío y sin voz. */}
+      <Sequence from={0}>
         <Audio src={staticFile('audio/pieza2_digital_vo.mp3')} />
       </Sequence>
-      {/* CTA persistente desde f45 (1.5s) hasta el último frame. */}
+      {/* CTA persistente: f45..f426; sale con el cierre para loopear. */}
       <PersistentCTA />
     </AbsoluteFill>
   );

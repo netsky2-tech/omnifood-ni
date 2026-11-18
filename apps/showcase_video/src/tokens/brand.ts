@@ -156,6 +156,6 @@ export const COMPOSITION_PRESETS = {
     width: 1080,
     height: 1920,
     fps: VIDEO_FPS,
-    durationInFrames: 440, // 14.67s @ 30fps: seis tiempos desiguales, payoff antes de f90, cierre que loopea al gancho; sin ticket ni claims falsos
+    durationInFrames: 450, // 15.0s @ 30fps: seis tiempos desiguales con hook legible (≥1.1s por línea), locución desde f0, payoff temprano; el cierre y el chip CTA salen en f420..f432 para que el frame final loopee al navy vacío del arranque (f449 == f0); sin ticket ni claims falsos
   },
 } as const;
