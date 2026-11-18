@@ -66,7 +66,7 @@ Copy de Instagram y Facebook, verbatim:
 > El sistema calcula el vuelto exacto en córdobas al tipo de cambio del día.
 > La venta queda guardada aunque se caiga el internet.
 >
-> La venta se hace en un teléfono, sin comprar una terminal dedicada.
+> Todo ocurre en la misma pantalla de cobro, sin pasos ni cálculos aparte.
 >
 > 📩 Comenta DEMO y te envío el acceso para probarlo con tus propios precios y tu tipo de cambio.
 >
