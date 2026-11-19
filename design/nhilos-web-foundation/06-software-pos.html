@@ -176,21 +176,26 @@
     .hub-hero h1 { font-size: var(--text-display-xl); line-height: 1.06; font-weight: 800; letter-spacing: -0.03em; margin-bottom: var(--space-6); }
     .hub-hero h1 em { font-style: normal; color: var(--web-navy-800); }
     .hub-hero .lead { margin-bottom: var(--space-6); }
-    .hero-questions { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-2); }
-    .hero-questions > :last-child { margin-top: auto; }
+    /* El fork llena la columna: dos filas de altura completa con tipografía display; la nota
+       de capturas va pegada debajo del fork, no clavada al fondo de la columna. */
+    .hero-questions { display: grid; grid-template-rows: 1fr 1fr auto; }
     /* El control de la bifurcación: las dos preguntas SON el control. Sin JS son anclas a #formas;
-       con JS el script las asciende a botones y aria-pressed anuncia la forma elegida. */
-    .hero-question { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: 600; line-height: 1.2; display: flex; align-items: baseline; gap: var(--space-3); width: 100%; color: var(--web-text-primary); text-decoration: none; background: none; border: 0; border-top: 1px solid var(--web-border); padding: var(--space-4) 0; cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out); }
+       con JS el script las asciende a botones, el estado vive en el contenedor (data-mode="" cuando
+       no hay nada elegido) y aria-pressed solo anuncia una forma elegida: elegir la activa la deselecciona. */
+    .hero-question { font-family: var(--font-display); font-size: var(--text-display-lg); font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; display: flex; align-items: center; gap: var(--space-4); width: 100%; color: var(--web-text-primary); text-decoration: none; background: none; border: 0; border-top: 1px solid var(--web-border-hairline); padding: var(--space-4) 0; cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out); }
+    .hero-question:nth-child(2) { border-bottom: 1px solid var(--web-border-hairline); }
     .hero-question:hover, .hero-question:focus-visible { color: var(--web-navy-800); border-top-color: var(--web-navy-800); }
     .hero-question[aria-pressed="true"] { color: var(--web-emerald-700); }
-    .hero-question .idx { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-body-sm); color: var(--web-emerald-700); }
+    .hero-question .idx { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-heading-md); color: var(--web-emerald-700); }
+    .hero-questions .hero-proof-note { margin-top: var(--space-4); }
     @media (max-width: 1024px) {
       .hub-hero-grid { grid-template-columns: 1fr; gap: var(--space-6); align-items: start; }
+      .hero-questions { grid-template-rows: auto auto auto; }
       .hero-question:nth-child(2) { margin-left: var(--space-5); }
     }
 
     /* Banda comparativa a-vs-b (patrón nuevo: tensión entre dos columnas con costura central) */
-    .compare-band { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--space-5); margin-top: var(--space-6); align-items: stretch; }
+    .compare-band { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--space-5); margin-top: var(--space-6); align-items: start; }
     .compare-col { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); transition: transform var(--motion-base) var(--ease-out), opacity var(--motion-base) var(--ease-out), border-color var(--motion-base) var(--ease-out), background-color var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out); }
     .compare-col .tag { display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-subheading); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--web-emerald-700); background: var(--web-emerald-50); border: 1px solid rgba(0, 122, 82, 0.22); border-radius: var(--radius-full); padding: 6px 12px; margin-bottom: var(--space-4); }
     .compare-col .tag::before { content: ""; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
@@ -201,7 +206,7 @@
     .compare-band[data-mode="b"] .compare-col[data-panel="a"] { opacity: 0.55; transform: translateY(4px); }
     .compare-band[data-mode="a"] .compare-col[data-panel="a"],
     .compare-band[data-mode="b"] .compare-col[data-panel="b"] { border-color: var(--web-emerald-700); background: var(--web-bg-canvas); box-shadow: var(--shadow-card); transform: translateY(-4px); }
-    .compare-seam { display: flex; align-items: center; justify-content: center; }
+    .compare-seam { align-self: stretch; display: flex; align-items: center; justify-content: center; }
     .compare-seam span { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--web-text-muted); border-left: 1px solid var(--web-border-hairline); padding-left: var(--space-2); }
     @media (max-width: 900px) {
       .compare-band { grid-template-columns: 1fr; }
@@ -214,6 +219,12 @@
     /* Captura real enmarcada (marco sobrio; sin bezel de navegador del home) */
     .capture-frame { margin: var(--space-5) 0 0; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); overflow: hidden; }
     .capture-frame img { width: 100%; height: auto; display: block; }
+    /* Capturas desparejas (teléfono vertical vs escritorio amplio): cada medio vive en una caja de
+       proporción fija, la misma caja para las dos, con object-fit: contain — peso visual igual sin
+       recortar la captura real y sin que una tarjeta estire a la otra. */
+    .capture-media { aspect-ratio: 1 / 1; }
+    .capture-media img { height: 100%; object-fit: contain; }
+    @media (max-width: 900px) { .capture-media { aspect-ratio: 3 / 4; } }
 
     /* Rejilla editorial asimétrica para la educación de categoría */
     .edu-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: var(--space-10); align-items: start; margin-top: var(--space-6); }
@@ -227,44 +238,75 @@
     .statu-quo li::before { content: "↗"; font-family: var(--font-mono); font-weight: 700; color: var(--web-emerald-700); }
     @media (max-width: 1024px) { .edu-grid { grid-template-columns: 1fr; gap: var(--space-6); } .edu-aside { margin-top: 0; } }
 
-    /* Mapa de negocios: columnas desfasadas (asimetría editorial) */
-    .map-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8) var(--space-10); margin-top: var(--space-6); }
+    /* Mapa de negocios: la sección que reparte el tráfico se ve como reparto — tres tarjetas de
+       altura propia (número, nombre, una línea, destino), una columna en móvil. */
+    .map-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); margin-top: var(--space-6); align-items: start; }
+    .map-item { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); }
+    .map-item .map-num { display: block; font-family: var(--font-mono); font-weight: 700; font-size: var(--text-body-sm); color: var(--web-emerald-700); margin-bottom: var(--space-3); }
     .map-item h3 { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 600; letter-spacing: -0.015em; margin-bottom: var(--space-3); }
     .map-item p { color: var(--web-text-secondary); font-size: var(--text-body-md); }
     .map-item p a { color: var(--web-emerald-700); font-weight: 600; }
-    .map-item:nth-child(2) { margin-top: var(--space-10); }
-    @media (max-width: 900px) { .map-grid { grid-template-columns: 1fr; } .map-item:nth-child(2) { margin-top: 0; } }
+    .map-dest { margin-top: var(--space-4); }
+    .map-dest a { font-weight: 600; color: var(--web-emerald-700); text-decoration: none; }
+    .map-dest a::after { content: " →"; font-family: var(--font-mono); }
+    .map-dest a:hover { text-decoration: underline; }
+    @media (max-width: 900px) { .map-grid { grid-template-columns: 1fr; } }
 
     /* Libro de rutas numerado (patrón nuevo: filas 01/02/03 con destino a la derecha) */
     .ledger { margin-top: var(--space-6); border-top: 1px solid var(--web-border-hairline); }
-    .ledger-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 34%); gap: var(--space-5); padding-block: var(--space-6); border-bottom: 1px solid var(--web-border-hairline); align-items: start; }
-    .ledger-num { font-family: var(--font-mono); font-weight: 700; font-size: 1.25rem; color: var(--web-emerald-700); font-variant-numeric: tabular-nums; }
-    .ledger-row h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 600; margin-bottom: var(--space-2); }
+    .ledger-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-5); padding-block: var(--space-6); border-bottom: 1px solid var(--web-border-hairline); align-items: start; }
+    .ledger-num { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-heading-md); color: var(--web-emerald-700); font-variant-numeric: tabular-nums; }
+    /* La nota de destino vive en la misma línea que el título: la fila mide lo que su contenido. */
+    .ledger-head { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-6); row-gap: var(--space-2); margin-bottom: var(--space-2); }
+    .ledger-row h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 600; margin-bottom: 0; }
     .ledger-row p { font-size: var(--text-body-md); color: var(--web-text-secondary); max-width: 60ch; }
     .ledger-dest { font-size: var(--text-body-sm); }
     .ledger-dest .none { color: var(--web-text-muted); font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; }
-    .ledger-dest a { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--web-emerald-700); text-decoration: none; }
+    .ledger-dest a { font-weight: 600; color: var(--web-emerald-700); text-decoration: none; }
     .ledger-dest a:hover { text-decoration: underline; }
-    .ledger-dest a::after { content: "→"; font-family: var(--font-mono); }
-    @media (max-width: 900px) { .ledger-row { grid-template-columns: 48px 1fr; } .ledger-dest { grid-column: 2; } }
+    .ledger-dest a::after { content: " →"; font-family: var(--font-mono); }
+    @media (max-width: 900px) { .ledger-row { grid-template-columns: 48px 1fr; } .ledger-head { flex-direction: column; } }
+    /* Fila 01 con clip: copia a la izquierda, el clip a la derecha con ancho acotado; la fila
+       termina donde termina su contenido. La columna del clip se acota al bezel (320px) para que
+       la etiqueta de demostración no infle la pista; en móvil se apila y el bezel se ajusta al
+       ancho disponible. */
+    .ledger-split { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-8); align-items: start; }
+    .ledger-media { justify-self: end; max-width: 320px; min-width: 0; }
+    .ledger-media .media-video { margin: 0; }
+    .ledger-media .demo-tag { display: block; }
+    @media (max-width: 900px) { .ledger-split { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); } .ledger-media { justify-self: start; max-width: none; } .ledger-media .media-video.device { width: min(320px, 100%); } }
 
-    /* Espacio marcado para grabación real: nunca simula footage (marco punteado + etiqueta) */
-    .media-slot { margin-top: var(--space-5); border: 1.5px dashed var(--web-border-manual); border-radius: var(--radius-md); min-height: 180px; display: flex; align-items: center; justify-content: center; padding: var(--space-5); }
-    .media-slot p { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.04em; line-height: 1.6; color: var(--web-text-muted); text-align: center; max-width: 46ch; margin: 0; }
+    /* Condiciones de compra: costo y equipo comparten una banda — una pregunta por columna,
+       con costura vertical; en móvil se apilan con filete superior. La sección termina donde
+       termina su contenido. */
+    .conditions-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-8); align-items: start; }
+    .conditions-grid > div + div { border-left: 1px solid var(--web-border-hairline); padding-left: var(--space-8); }
+    @media (max-width: 900px) { .conditions-grid { grid-template-columns: 1fr; gap: var(--space-6); } .conditions-grid > div + div { border-left: 0; padding-left: 0; border-top: 1px solid var(--web-border-hairline); padding-top: var(--space-6); } }
 
-    /* FAQ acordeón nativo (patrón nuevo: details/summary, legible sin JS) */
-    .faq-list { margin-top: var(--space-8); border-top: 1px solid var(--web-border-hairline); max-width: 900px; }
-    .faq-item { border-bottom: 1px solid var(--web-border-hairline); }
-    .faq-item summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); min-height: 56px; padding-block: var(--space-4); font-family: var(--font-subheading); font-weight: 600; font-size: 1.0625rem; line-height: 1.4; color: var(--web-text-primary); }
-    .faq-item summary::-webkit-details-marker { display: none; }
-    .faq-item summary::after { content: "+"; font-family: var(--font-mono); font-weight: 700; font-size: 1.25rem; color: var(--web-emerald-700); transition: transform var(--motion-base) var(--ease-out); }
-    .faq-item[open] summary::after { transform: rotate(45deg); }
-    .faq-item summary:hover { color: var(--web-navy-800); }
-    .faq-item p { padding-bottom: var(--space-5); color: var(--web-text-secondary); max-width: 65ch; }
-    .faq-item p a { color: var(--web-emerald-700); font-weight: 600; }
+    /* Nivel de control: la comparación real de lo que cada nivel controla llena la banda junto al
+       clip; la fila deja de quedar a media sección con un bloque suelto. */
+    .control-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: var(--space-8); align-items: start; margin-top: var(--space-6); }
+    .control-level { border-top: 1px solid var(--web-border-hairline); padding-top: var(--space-4); }
+    .control-level + .control-level { margin-top: var(--space-6); }
+    .control-level h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 600; margin-bottom: var(--space-2); }
+    .control-level ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+    .control-level li { display: grid; grid-template-columns: 18px 1fr; gap: var(--space-2); color: var(--web-text-secondary); font-size: var(--text-body-md); }
+    .control-level li::before { content: "→"; font-family: var(--font-mono); font-weight: 700; color: var(--web-emerald-700); }
+    @media (max-width: 1024px) { .control-grid { grid-template-columns: 1fr; gap: var(--space-6); } }
+
+    /* Video real en el slot: el marco es el frame de captura (borde sólido del sistema de tokens),
+       nunca el punteado que marcaba espacio reservado. El video no tiene autoplay: site.js reproduce
+       a lo sumo uno por página a partir del 12% de visibilidad. */
+    .media-video { margin-top: var(--space-5); max-width: 720px; }
+    .media-video video { display: block; width: 100%; height: auto; border-radius: var(--radius-md); background: var(--web-navy-950); }
+    .device.media-video { width: min(320px, 78vw); aspect-ratio: 720 / 1544; }
+    .device.media-video video { border-radius: var(--radius-lg); object-fit: contain; }
+
+    /* FAQ: el diseño es el del home — grilla de celdas con borde (faq-wrap / faq-cells / faq-cell
+       vienen de assets/site.css, la misma fuente de tokens del home). Estático y legible sin JS. */
 
     @media (prefers-reduced-motion: reduce) {
-      .compare-col, .hero-question, .faq-item summary::after, .ledger-dest a, .breadcrumb a { transition: none !important; }
+      .compare-col, .hero-question, .ledger-dest a, .map-dest a, .breadcrumb a { transition: none !important; }
     }
   </style>
   <noscript>
@@ -358,7 +400,7 @@
             <span class="tag">Vende lo que compra</span>
             <h3>Vendes lo que compras: reventa y mostrador sin recetas</h3>
             <p>Alta de producto con costo y precio, control de stock, arqueos y métricas del turno. Es la operación de mostrador y reventa pura: botanas, bebidas embotelladas, vender sin preparar nada.</p>
-            <figure class="capture-frame">
+            <figure class="capture-frame capture-media">
               <img src="/media/pos_03_catalogo_soho.webp" alt="Captura real de la terminal NHILOS POS: catálogo de productos de reventa con sus precios, datos de demostración" loading="lazy" title="NHILOS POS: catálogo en modo simple">
             </figure>
             <p class="demo-tag">Captura real de la terminal · datos de demostración</p>
@@ -368,7 +410,7 @@
             <span class="tag">Lo que se cocina</span>
             <h3>Lo que se cocina: recetas, insumos y costo por plato</h3>
             <p>Receta BOM por plato, descuento de insumos en cada venta y costo por plato calculado. Es la prueba técnica más fuerte del sistema, enunciada aquí y explicada a fondo en la página de inventario.</p>
-            <figure class="capture-frame">
+            <figure class="capture-frame capture-media">
               <img src="/media/dsh_16_recetas_bom.webp" alt="Captura real del panel de administración de NHILOS POS: recetas BOM con sus insumos, datos de demostración" loading="lazy" title="NHILOS POS: recetas e insumos">
             </figure>
             <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
@@ -424,11 +466,37 @@
           <h2 class="h-lg" id="control-title">¿Cuánto control necesitas? Elige el nivel, no aceptes uno fijo</h2>
           <p class="lead" style="margin-top: var(--space-4);">El control no es un paquete que compras de una vez: se empieza donde tu negocio está hoy y sube cuando la operación lo pide. Se comienza en modo simple, y recetas, insumos y kardex se activan cuando el negocio los necesita, sin cambiar de producto. Un food park puede tener puestos en ambos modos a la vez.</p>
         </div>
-        <!-- media-slot: dsh_bom_live_loop.mp4. Clip real del dashboard (grabación de pantalla del panel de
-             administración) que debe mostrar: una receta BOM activada y el descuento de insumos al registrarse
-             una venta, en la operación de NHILOS Market & Café. Etiqueta "datos de demostración" obligatoria. -->
-        <div class="media-slot reveal" data-media-slot="recetas-descuento-dashboard">
-          <p>Espacio reservado para grabación real del dashboard: receta BOM activada, insumos descontándose por venta · datos de demostración</p>
+        <div class="control-grid reveal">
+          <div>
+            <div class="control-level">
+              <h3>Modo simple: lo que controlas desde el día uno</h3>
+              <ul>
+                <li>Catálogo con costo y precio de venta.</li>
+                <li>Stock de lo que vendes y arqueos del turno.</li>
+                <li>Métricas del turno que el dueño puede leer.</li>
+              </ul>
+            </div>
+            <div class="control-level">
+              <h3>Recetas activadas: lo que añade el mismo sistema</h3>
+              <ul>
+                <li>Receta BOM por plato.</li>
+                <li>Descuento de insumos en cada venta.</li>
+                <li>Costo por plato calculado.</li>
+                <li>Kardex con el costo recalculado al recibir un lote.</li>
+              </ul>
+            </div>
+          </div>
+          <div>
+            <!-- media-slot: dsh_bom_recetas.13330051.mp4. Clip real del dashboard (grabación de pantalla del panel de
+                 administración de NHILOS Market & Café) que muestra: la página Recetas y BOM con la receta del
+                 Capuchino Vainilla activa (3 ingredientes, costo C$27.20) y la entrada del lote de leche con el
+                 costo recalculado en Kardex (NIC 2). No muestra el descuento por venta: eso vive en el kardex.
+                 Etiqueta "datos de demostración" obligatoria. -->
+            <figure class="media-slot media-video capture-frame" data-media-slot="recetas-descuento-dashboard">
+              <video src="media/dsh_bom_recetas.13330051.mp4" poster="media/dsh_bom_recetas_poster.7fa0d248.webp" width="1440" height="900" muted loop playsinline preload="metadata" disablepictureinpicture title="NHILOS POS: recetas y BOM con costo por receta y costo recalculado en kardex al recibir un lote"></video>
+            </figure>
+            <p class="demo-tag">Grabación real del panel de administración · datos de demostración</p>
+          </div>
         </div>
       </div>
     </section>
@@ -442,16 +510,22 @@
         </div>
         <div class="map-grid stagger">
           <div class="map-item">
+            <span class="map-num" aria-hidden="true">01</span>
             <h3>Restaurantes de alta rotación</h3>
-            <p>La operación completa del turno: comandas con modificadores, recetas que se descuentan por plato y el cierre con arqueo. Es el segmento con más detalle operando en el sistema.</p>
+            <p>Comandas con modificadores, recetas que se descuentan por plato y el cierre con arqueo.</p>
+            <p class="map-dest"><a href="/inventario/">control de inventario y kardex</a></p>
           </div>
           <div class="map-item">
+            <span class="map-num" aria-hidden="true">02</span>
             <h3>Food parks y food courts</h3>
-            <p>Varios negocios bajo un mismo techo, cada uno con su forma de vender: puestos en modo simple y cocinas con recetas conviven en el mismo sistema.</p>
+            <p>Puestos en modo simple y cocinas con recetas conviven en el mismo sistema.</p>
+            <p class="map-dest"><a href="/demo/">solicitar una demo con tu operación real</a></p>
           </div>
           <div class="map-item">
+            <span class="map-num" aria-hidden="true">03</span>
             <h3>Cafeterías y comercios de mostrador</h3>
-            <p>Modificadores por bebida (tamaño, leche extra, sin azúcar) y reventa simple de empaquetados. El plan Esencial es el punto de entrada para mostrador: <a href="/precios/">ver planes y precios de NHILOS POS</a>.</p>
+            <p>Modificadores por bebida y reventa simple de empaquetados.</p>
+            <p class="map-dest"><a href="/precios/">planes y precios de NHILOS POS</a></p>
           </div>
         </div>
       </div>
@@ -468,33 +542,45 @@
         <div class="ledger stagger">
           <div class="ledger-row">
             <span class="ledger-num" aria-hidden="true">01</span>
-            <div>
-              <h3>Sin internet</h3>
-              <p>La terminal enrolada sigue cobrando con su catálogo cargado, y todo lo vendido queda registrado en orden para sincronizar cuando vuelve la conexión.</p>
-              <!-- media-slot: pos_offline_live_loop.mp4. Clip real de la terminal (grabación S23 Ultra) que debe
-                   mostrar: un cobro completándose con la red caída y la cola de sincronización al reconectar.
-                   Etiqueta "datos de demostración" obligatoria. -->
-              <div class="media-slot" data-media-slot="venta-offline-terminal">
-                <p>Espacio reservado para grabación real de la terminal: cobro con la red caída y sincronización al reconectar · datos de demostración</p>
+            <div class="ledger-split">
+              <div class="ledger-copy">
+                <div class="ledger-head">
+                  <h3>Sin internet</h3>
+                  <span class="ledger-dest"><span class="none">Detalle de método: página propia del tema</span></span>
+                </div>
+                <p>La terminal enrolada sigue cobrando con su catálogo cargado, y todo lo vendido queda registrado en orden para sincronizar cuando vuelve la conexión.</p>
+              </div>
+              <div class="ledger-media">
+                <!-- media-slot: pos_offline_venta_exitosa.30ccc3cc.mp4. Clip real de la terminal (grabación S23 Ultra)
+                     que muestra: un cobro completándose con la red caída — el indicador offline (nube con badge
+                     de cola en 2) es visible en toda la grabación y la venta queda en cola, sin sincronizar.
+                     No muestra el momento de la reconexión. Etiqueta "datos de demostración" obligatoria. -->
+                <figure class="media-slot media-video device device-offline" data-media-slot="venta-offline-terminal">
+                  <video src="media/pos_offline_venta_exitosa.30ccc3cc.mp4" poster="media/pos_offline_venta_exitosa_poster.ea6487ab.webp" width="720" height="1544" muted loop playsinline preload="metadata" disablepictureinpicture title="NHILOS POS: cobro completándose con la red caída, la venta queda en cola"></video>
+                </figure>
+                <p class="demo-tag">Grabación real de la terminal · datos de demostración</p>
               </div>
             </div>
-            <div class="ledger-dest"><span class="none">Detalle de método: página propia del tema</span></div>
           </div>
           <div class="ledger-row">
             <span class="ledger-num" aria-hidden="true">02</span>
             <div>
-              <h3>DGI y facturación</h3>
+              <div class="ledger-head">
+                <h3>DGI y facturación</h3>
+                <span class="ledger-dest"><a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a></span>
+              </div>
               <p>Mecánica DT 09-2007 con consecutivo inalterable y anulación con motivo auditado. La autorización la posee tu negocio como contribuyente; el sistema garantiza la mecánica.</p>
             </div>
-            <div class="ledger-dest"><a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a></div>
           </div>
           <div class="ledger-row">
             <span class="ledger-num" aria-hidden="true">03</span>
             <div>
-              <h3>Inventario</h3>
+              <div class="ledger-head">
+                <h3>Inventario</h3>
+                <span class="ledger-dest"><a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a></span>
+              </div>
               <p>Cada venta descuenta lo que consumió, en recetas o en stock simple, y el costo queda reflejado donde el dueño puede verlo.</p>
             </div>
-            <div class="ledger-dest"><a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a></div>
           </div>
         </div>
         <div class="reveal" style="margin-top: var(--space-10);">
@@ -504,21 +590,20 @@
       </div>
     </section>
 
-    <!-- 6 · CUÁNTO CUESTA -->
-    <section class="section section-subtle" id="cuanto" aria-labelledby="cuanto-title">
-      <div class="container reveal">
-        <p class="eyebrow">La pregunta del presupuesto</p>
-        <h2 class="h-lg" id="cuanto-title">¿Cuánto cuesta un sistema POS en Nicaragua?</h2>
-        <p class="lead" style="margin-top: var(--space-4);">Depende de la operación: cuántas terminales necesitas, cuántos locales venden y si activas recetas e insumos. Los planes públicos, los setups y la letra pequeña están en una sola tabla, mantenida en un solo lugar: <a href="/precios/" style="color: var(--web-emerald-700); font-weight: 600;">ver planes y precios de NHILOS POS</a>.</p>
-      </div>
-    </section>
-
-    <!-- 7 · EQUIPO -->
-    <section class="section" id="equipo" aria-labelledby="equipo-title">
-      <div class="container reveal">
-        <p class="eyebrow">La pregunta del hardware</p>
-        <h2 class="h-lg" id="equipo-title">¿Necesito equipo especial?</h2>
-        <p class="lead" style="margin-top: var(--space-4);">NHILOS POS opera en terminales táctiles Android. Si ya tienes equipo, se evalúa antes de empezar; si no, se cotiza un kit con proveedores locales. Precios y compatibilidades de hardware se definen al cotizar, no en esta página.</p>
+    <!-- 6/7 · CONDICIONES DE COMPRA: las dos preguntas de cierre comparten una banda de dos columnas
+         (costo a la izquierda, equipo a la derecha); sin texto nuevo, cada columna es su contenido. -->
+    <section class="section section-subtle">
+      <div class="container conditions-grid">
+        <div class="reveal" id="cuanto">
+          <p class="eyebrow">La pregunta del presupuesto</p>
+          <h2 class="h-lg" id="cuanto-title">¿Cuánto cuesta un sistema POS en Nicaragua?</h2>
+          <p class="lead" style="margin-top: var(--space-4);">Depende de la operación: cuántas terminales necesitas, cuántos locales venden y si activas recetas e insumos. Los planes públicos, los setups y la letra pequeña están en una sola tabla, mantenida en un solo lugar: <a href="/precios/" style="color: var(--web-emerald-700); font-weight: 600;">ver planes y precios de NHILOS POS</a>.</p>
+        </div>
+        <div class="reveal" id="equipo">
+          <p class="eyebrow">La pregunta del hardware</p>
+          <h2 class="h-lg" id="equipo-title">¿Necesito equipo especial?</h2>
+          <p class="lead" style="margin-top: var(--space-4);">NHILOS POS opera en terminales táctiles Android. Si ya tienes equipo, se evalúa antes de empezar; si no, se cotiza un kit con proveedores locales. Precios y compatibilidades de hardware se definen al cotizar, no en esta página.</p>
+        </div>
       </div>
     </section>
 
@@ -529,31 +614,33 @@
           <p class="eyebrow">Antes de decidir</p>
           <h2 class="h-lg" id="faq-title">Preguntas frecuentes sobre sistemas POS en Nicaragua</h2>
         </div>
-        <div class="faq-list">
-          <details class="faq-item">
-            <summary>¿Qué es un sistema POS local-first?</summary>
-            <p>NHILOS POS es un sistema POS local-first en Nicaragua: trabaja primero en tu terminal y después en la nube, así lo esencial para vender no depende del internet. El nivel de control lo eliges tú: venta y reventa simple, o recetas e insumos que se descuentan por plato.</p>
-          </details>
-          <details class="faq-item">
-            <summary>¿Sirve para una tienda que no cocina?</summary>
-            <p>Sí: en Nicaragua, NHILOS POS opera en modo simple para negocios que venden lo que compran. Ventas, stock, arqueos y métricas del turno, sin recetas y sin pasos de más.</p>
-          </details>
-          <details class="faq-item">
-            <summary>¿Funciona sin internet?</summary>
-            <p>Sí: en Nicaragua, NHILOS POS sigue cobrando sin internet. La terminal enrolada conserva su catálogo y cada venta queda registrada en orden para sincronizar cuando vuelve la conexión.</p>
-          </details>
-          <details class="faq-item">
-            <summary>¿Sirve para la DGI?</summary>
-            <p>NHILOS POS emite facturación conforme a la mecánica de la DT 09-2007 en Nicaragua, con numeración consecutiva inalterable y anulaciones con motivo auditado. La autorización la posee tu negocio como contribuyente; el sistema garantiza la mecánica. Ver <a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>.</p>
-          </details>
-          <details class="faq-item">
-            <summary>¿Cuánto cuesta un sistema POS en Nicaragua?</summary>
-            <p>En Nicaragua, NHILOS POS se cotiza según tu operación: cuántas terminales necesitas, cuántos locales venden y si activas recetas e insumos. Ver <a href="/precios/">planes y precios de NHILOS POS</a>.</p>
-          </details>
-          <details class="faq-item">
-            <summary>¿Se puede empezar simple y activar recetas después?</summary>
-            <p>Sí: en Nicaragua, NHILOS POS empieza en modo simple y activa recetas, insumos y kardex cuando el negocio lo pida, sin cambiar de producto.</p>
-          </details>
+        <div class="faq-wrap reveal" id="faq-geo">
+          <div class="faq-cells stagger">
+            <div class="faq-cell">
+              <h3>¿Qué es un sistema POS local-first?</h3>
+              <p>NHILOS POS es un sistema POS local-first en Nicaragua: trabaja primero en tu terminal y después en la nube, así lo esencial para vender no depende del internet. El nivel de control lo eliges tú: venta y reventa simple, o recetas e insumos que se descuentan por plato.</p>
+            </div>
+            <div class="faq-cell">
+              <h3>¿Sirve para una tienda que no cocina?</h3>
+              <p>Sí: en Nicaragua, NHILOS POS opera en modo simple para negocios que venden lo que compran. Ventas, stock, arqueos y métricas del turno, sin recetas y sin pasos de más.</p>
+            </div>
+            <div class="faq-cell">
+              <h3>¿Funciona sin internet?</h3>
+              <p>Sí: en Nicaragua, NHILOS POS sigue cobrando sin internet. La terminal enrolada conserva su catálogo y cada venta queda registrada en orden para sincronizar cuando vuelve la conexión.</p>
+            </div>
+            <div class="faq-cell">
+              <h3>¿Sirve para la DGI?</h3>
+              <p>NHILOS POS emite facturación conforme a la mecánica de la DT 09-2007 en Nicaragua, con numeración consecutiva inalterable y anulaciones con motivo auditado. La autorización la posee tu negocio como contribuyente; el sistema garantiza la mecánica. Ver <a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>.</p>
+            </div>
+            <div class="faq-cell">
+              <h3>¿Cuánto cuesta un sistema POS en Nicaragua?</h3>
+              <p>En Nicaragua, NHILOS POS se cotiza según tu operación: cuántas terminales necesitas, cuántos locales venden y si activas recetas e insumos. Ver <a href="/precios/">planes y precios de NHILOS POS</a>.</p>
+            </div>
+            <div class="faq-cell">
+              <h3>¿Se puede empezar simple y activar recetas después?</h3>
+              <p>Sí: en Nicaragua, NHILOS POS empieza en modo simple y activa recetas, insumos y kardex cuando el negocio lo pida, sin cambiar de producto.</p>
+            </div>
+          </div>
         </div>
       </div>
     </section>
@@ -630,9 +717,11 @@
   <script>
     // Interacción propia del hub: las dos preguntas del hero SON el control de la bifurcación.
     // Sin JS: quedan como anclas a #formas y las dos columnas de la banda se leen completas.
-    // Con JS: cada ancla se asciende a botón real (aria-pressed anuncia la forma elegida) y, al
-    // elegir, la columna correspondiente toma énfasis y la página lleva #formas a la vista con
-    // scroll suave; con prefers-reduced-motion no hay scroll, solo el cambio de énfasis.
+    // Con JS: cada ancla se asciende a botón real y el estado vive en el contenedor: data-mode=""
+    // es el neutro (las dos columnas con el mismo peso, sin aria-pressed="true"). Elegir la forma
+    // activa la DESELECCIONA y devuelve el neutro; al elegir una forma nueva, la columna toma
+    // énfasis y la página lleva #formas a la vista con scroll suave; con prefers-reduced-motion
+    // no hay scroll, solo el cambio de énfasis.
     (function () {
       var band = document.getElementById('compareBand');
       var formas = document.getElementById('formas');
@@ -642,7 +731,7 @@
       function setMode(mode) {
         band.setAttribute('data-mode', mode);
         questions.forEach(function (q) {
-          q.setAttribute('aria-pressed', String(q.getAttribute('data-mode-target') === mode));
+          q.setAttribute('aria-pressed', String(mode !== '' && q.getAttribute('data-mode-target') === mode));
         });
       }
       questions.forEach(function (a, i) {
@@ -658,8 +747,10 @@
         btn.setAttribute('aria-pressed', 'false');
         questions[i] = btn;
         btn.addEventListener('click', function () {
-          setMode(btn.getAttribute('data-mode-target'));
-          if (!reduceMotion.matches) {
+          var target = btn.getAttribute('data-mode-target');
+          var next = band.getAttribute('data-mode') === target ? '' : target;
+          setMode(next);
+          if (next !== '' && !reduceMotion.matches) {
             formas.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         });

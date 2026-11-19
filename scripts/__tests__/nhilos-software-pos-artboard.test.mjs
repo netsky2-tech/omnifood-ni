@@ -18,7 +18,7 @@ const vis = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<!--[\s\S]*?
 const txt = (s) => s.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
 const ld = JSON.parse(src.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
 const faq = ld["@graph"].find((n) => n["@type"] === "FAQPage").mainEntity;
-const cells = [...vis.matchAll(/<details class="faq-item">\s*<summary>([\s\S]*?)<\/summary>\s*<p>([\s\S]*?)<\/p>/g)].map((m) => [txt(m[1]), txt(m[2])]);
+const cells = [...vis.matchAll(/<div class="faq-cell">\s*<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map((m) => [txt(m[1]), txt(m[2])]);
 
 // S2 / brief §3.4: H1 exacto, una sola vez
 test("S2: single h1 with brief §3.4 text", () => {
@@ -99,7 +99,7 @@ test("S4: no internal vocabulary or roadmap language (visible text and JSON-LD)"
 });
 
 // S5: paridad GEO — respuestas visibles == schema, celda por celda
-test("S5: FAQPage names and texts match visible accordion cells exactly", () => {
+test("S5: FAQPage names and texts match visible FAQ cells exactly", () => {
   assert.equal(cells.length, 6);
   assert.equal(faq.length, 6);
   assert.deepEqual(new Set(faq.map((q) => q.name)), new Set(cells.map((c) => c[0])));
@@ -161,6 +161,36 @@ test("links: no dead hrefs; hub children are never linked before they exist", ()
 
 // Media: toda captura existe; etiqueta de demostración en cada sección con prueba;
 // slots nombrados no simulan footage y nombran un clip real existente
+test("C3: published video clips are within the media weight budget (700 KB each)", () => {
+  for (const m of vis.matchAll(/<video\b[^>]*src="([^"]+\.mp4)"/g)) {
+    const size = fs.statSync(path.join(MEDIA, m[1].replace(/^\//, ""))).size;
+    assert.ok(size <= 700 * 1024, `${m[1]} is ${size} bytes, over the 700 KB budget`);
+  }
+});
+test("C3: both real footage slots carry a video (no dashed placeholder remains)", () => {
+  const slots = [...src.matchAll(/data-media-slot="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(slots.sort(), ["recetas-descuento-dashboard", "venta-offline-terminal"]);
+  for (const slot of slots) {
+    const idx = src.indexOf(`data-media-slot="${slot}"`);
+    const container = src.slice(idx, src.indexOf("</div>", idx));
+    assert.match(container, /<video\b/, `slot ${slot} must contain a real <video>`);
+  }
+  // El marco punteado y su etiqueta mono eran el estilo del placeholder: no pueden quedar
+  // alrededor de footage real.
+  assert.equal(src.includes("media-slot p {"), false, "placeholder mono-label styling must be gone");
+  assert.equal(/\.media-slot\s*\{[^}]*dashed/.test(src), false, "dashed placeholder frame must be gone");
+});
+test("C1/C2: video markup is autoplay-free, posterred, and demo-labelled; posters exist", () => {
+  for (const m of vis.matchAll(/<video\b[^>]*>/g)) {
+    assert.match(m[0], /muted/);
+    assert.match(m[0], /playsinline/);
+    assert.match(m[0], /preload="metadata"/);
+    assert.match(m[0], /poster="media\//);
+    assert.equal(/autoplay/.test(m[0]), false, "no autoplay: site.js owns playback");
+    const poster = (m[0].match(/poster="([^"]+)"/) || [])[1];
+    assert.ok(fs.existsSync(path.join(MEDIA, poster.replace(/^\//, ""))), poster);
+  }
+});
 test("C1/C2: media exist, videos muted+playsinline, demo label in every proof section", () => {
   for (const m of vis.matchAll(/<(video|img)\b[^>]*src="([^"]+)"[^>]*>/g)) {
     assert.ok(fs.existsSync(path.join(MEDIA, m[2].replace(/^\//, ""))), m[2]);
@@ -232,9 +262,23 @@ test("interaction: the fork lives once, in the hero — no-JS anchors to #formas
   assert.match(src, /<noscript>/);
   assert.match(src, /<script src="\/assets\/site\.js"><\/script>/);
 });
-test("interaction: FAQ accordion is native details (readable with JS off)", () => {
-  assert.equal((src.match(/<details class="faq-item">/g) || []).length, 6);
-  assert.equal((src.match(/<summary>/g) || []).length, 6);
+// Interacción: el conmutador tiene retorno. Elegir la forma activa la deselecciona: el estado
+// vive en el contenedor (data-mode="" es el neutro) y el neutro no deja aria-pressed="true".
+test("interaction: choosing the active fork option deselects it (neutral state returns)", () => {
+  const inlineJs = src.split('<script src="/assets/site.js"></script>')[1] || "";
+  assert.match(inlineJs, /getAttribute\('data-mode'\)\s*===\s*target\s*\?\s*''\s*:\s*target/, "re-clicking the active option returns to neutral");
+  assert.match(inlineJs, /setMode\(next\)/, "the container holds the state");
+  assert.match(inlineJs, /mode !== '' &&/, "neutral state leaves no aria-pressed=true");
+  assert.match(inlineJs, /next !== '' && !reduceMotion\.matches/, "no scroll when returning to neutral");
+});
+// Interacción: el FAQ replica la retícula del home (faq-wrap > faq-cells > faq-cell, sitio.css
+// compartido). Estático, legible sin JS; nada de acordeón details/summary.
+test("interaction: FAQ replicates the home's bordered faq-cell grid (static, readable with JS off)", () => {
+  assert.equal((src.match(/<div class="faq-cell">/g) || []).length, 6);
+  assert.match(src, /class="faq-wrap reveal"/);
+  assert.match(src, /class="faq-cells stagger"/);
+  assert.equal(src.includes("<details"), false, "no accordion: the home's cell grid, not details/summary");
+  assert.equal(src.includes("<summary"), false);
 });
 
 // C3: WhatsApp oficial
@@ -256,4 +300,50 @@ test("no personal names in public copy", () => {
 test("build: hub registered in PAGES with its canonical url", () => {
   const buildSrc = fs.readFileSync(BUILD, "utf8");
   assert.match(buildSrc, /source: "06-software-pos\.html", out: "software-pos\/index\.html", url: "\/software-pos\/"/);
+});
+
+// T9 / S1: fila 01 del libro de rutas — copia a la izquierda, clip a la derecha con ancho
+// acotado; la fila es una rejilla de dos columnas y termina donde termina su contenido.
+test("T9: ledger row 01 is a two-column split (copy left, bounded clip right)", () => {
+  const idx = src.indexOf('data-media-slot="venta-offline-terminal"');
+  assert.ok(idx !== -1);
+  const rowStart = src.lastIndexOf('<div class="ledger-row">', idx);
+  const rowEnd = src.indexOf('class="ledger-num" aria-hidden="true">02', idx);
+  const row = src.slice(rowStart, rowEnd);
+  assert.match(row, /class="ledger-split"/, "row 01 uses the two-column split");
+  const copyAt = row.indexOf('class="ledger-copy"');
+  const mediaAt = row.indexOf('class="ledger-media"');
+  assert.ok(copyAt !== -1 && mediaAt !== -1 && copyAt < mediaAt, "copy column precedes the media column");
+  assert.ok(mediaAt < idx, "the terminal clip lives inside the media column");
+  const css = src.split("<style>")[1].split("</style>")[0];
+  assert.match(css, /\.ledger-split\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*auto/);
+  assert.match(css, /\.ledger-media\s*\{[^}]*justify-self:\s*end/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.ledger-split\s*\{[^}]*grid-template-columns:\s*(minmax\(0,\s*1fr\)|1fr)/);
+});
+
+// T9 / S1: las dos preguntas de cierre (condiciones de compra) comparten UNA sección de dos
+// columnas — costo a un lado, equipo al otro; los ids #cuanto y #equipo sobreviven para la
+// espina dorsal y la sección termina donde termina su contenido.
+test("T9: cost and equipment questions share one two-column conditions section", () => {
+  const cuantoAt = src.indexOf('id="cuanto"');
+  assert.ok(cuantoAt !== -1, "#cuanto anchor survives");
+  assert.ok(src.includes('id="equipo"'), "#equipo anchor survives");
+  const secStart = src.lastIndexOf("<section", cuantoAt);
+  const seg = src.slice(secStart, src.indexOf("</section>", cuantoAt));
+  assert.equal((seg.match(/<section\b/g) || []).length, 1, "one section, not two stacked half-empty ones");
+  assert.match(seg, /id="cuanto-title"/);
+  assert.match(seg, /id="equipo-title"/);
+  const css = src.split("<style>")[1].split("</style>")[0];
+  assert.match(css, /\.conditions-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /@media \(max-width: 900px\)[\s\S]*?\.conditions-grid\s*\{[^}]*grid-template-columns:\s*1fr/);
+});
+
+// Guard contra el fallo de la pasada anterior: un token inexistente (--text-heading-lg, hoy
+// también --web-border) hace que la regla renderice en silencio a tamaño de cuerpo.
+test("T9: every var(--*) token referenced by the page is defined in assets/site.css", () => {
+  const css = fs.readFileSync(path.join(ROOT, "design/nhilos-web-foundation/assets/site.css"), "utf8");
+  const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+  const used = [...new Set([...src.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]))];
+  const missing = used.filter((t) => !defined.has(t));
+  assert.deepEqual(missing, [], `tokens used but not defined in site.css: ${missing.join(", ")}`);
 });
