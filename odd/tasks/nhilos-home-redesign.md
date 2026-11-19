@@ -40,6 +40,22 @@ Rediseño de la home de nhilospos.com como nuevo artboard independiente (no dest
 
 **Fuera de alcance, ya decidido:** `#que-es` sigue sin material (darle capturas lo volvería la banda del hub). Y el hero no se anima todavía: el único clip de terminal en mano disponible (`pos_on_hand.mp4`) es footage sintético —fondo verde que aparece, notch de iPhone, la mano cambia de forma entre frames— y está prohibido por regla. El hero en movimiento necesita una grabación real nueva, no un clip generado.
 
+### T10b — El turno en el teléfono: carril, no pared
+
+T10 dio al home la evidencia del turno, pero a 390 `#como-funciona` pasó de **925 a 3737 px**. Cuatro marcos de teléfono apilados, cada uno con su número, su título, su párrafo y su etiqueta: el mismo patrón cuatro veces seguidas. Eso no es densidad, es repetición.
+
+**El problema no son las capturas, es la repetición.** Y no se resuelve achicándolas: a 150 px de ancho ya no se lee `Facturas: 2` ni `Vuelto: C$ 275.00`, y entonces la captura deja de probar lo que el paso afirma. Se pierde el único motivo por el que están ahí.
+
+**Specs.**
+
+- S7. En escritorio (`min-width: 768px`) nada cambia: los cuatro pasos siguen en una fila horizontal.
+- S8. En móvil los cuatro pasos pasan a un **carril horizontal con scroll-snap**, una tarjeta por paso a `~78vw`, de modo que la siguiente asome como invitación a deslizar. La sección no puede pasar de **~1400 px** de alto.
+- S9. El carril funciona **sin JavaScript**: `overflow-x: auto` + `scroll-snap-type`. Si el JS del sitio no carga, se desliza igual.
+- S10. El carril desliza por dentro; la página **no** gana desborde horizontal (`overflowX` = 0).
+- S11. Cada captura sigue legible a `~78vw`: no se recorta, no se rota, no se aplana.
+
+**Aceptación:** altura de `#como-funciona` a 390 antes (3737) y después (≤1400), `overflowX` 0, las cuatro capturas presentes y legibles, y una guardia que fije el carril móvil (que la regla exista y que el escritorio siga en fila).
+
 ## Log
 
 - **L1**: "Bien, con eso ya hecho nos tocaría el rediseño de la home actual. Ya tenemos un system design, skills y demás. Pero quiero recalcar la inspiración de https://impeccable.style/ y https://www.tasteskill.dev/ Hay partes de esas paginas como en taste 'How it works', 'Before and after' y 'Questions' que son visualmente atractivas y pueden ser utiles para algunas secciones de nuestor copy. Esto ultimo es de taste, pero impeccable tambien tiene lo suyo. La idea tampoco es copiar fielmente pero si tomarlo de inspiración y hacer algo único para nuestro tipo de página. La idea del hero en impeccable me gusta para nuestro sitio también, donde a un lado iría el H! y al otro lado un montaje de un dispositivo con la UI de nuestra app." (ref imagen PayOne) "algo como este ejemplo. Espero haberme explicado bien y que captes la idea. No queremos una pagina generica o de plantilla, necesitamos algo único, atractivo y de alto nivel como lo exige nhilos."
