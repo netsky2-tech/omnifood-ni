@@ -150,6 +150,7 @@ personas ni dispositivos, cifras iguales a las del material.
   de retención derivadas de los datos.
 - Este documento guarda el método y la matriz. Se actualiza al publicar: una fila
   nueva por pieza, con su dolor, gancho y tratamiento.
+- `docs/nhilos/content/nhilos_video_production_toolbox_v1.0.md` define el stack técnico canónico de producción (motores, HyperFrames + GSAP, audio, licencias y QA).
 
 ## Cuándo entra el 3D, y cuándo no
 

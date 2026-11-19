@@ -53,6 +53,16 @@ This document provides essential context and instructions for AI agents working 
 - **Development**: `npm run start:dev`
 - **Testing**: `npm test` (Unit) / `npm run test:e2e` (E2E)
 
+### Audio Pipeline (`scripts/audio`)
+- **Install UI cues only (recommended)**: `bash scripts/audio/install_tools.sh --uisfx-only` (uisfx, ~14 MB; reuses the existing ffmpeg), then `source ~/.local/opt/nhilos-audio/env.sh`.
+- **Full toolchain (optional)**: `bash scripts/audio/install_tools.sh` (adds static ffmpeg/ffprobe, ~153 MB; add `--with-real-sfx`/`--with-earshot` only if needed).
+- **Validate / export cues**: `python3 -m scripts.audio.spec <spec> --summary --json` / `... --out work/cues.json`.
+- **Source CC0/PDM assets**: `python3 -m scripts.audio.source_openverse fetch --query "whoosh" --role whoosh --limit 5` (Openverse anonymous limit is 20 req/min, 200/day; writes `assets/sfx/licenses.json` with `sha256`).
+- **Mix + normalize**: `python3 -m scripts.audio.mixer <spec> --out <render>` (target `-14 LUFS / -1 dBTP / LRA <= 6`).
+- **QA**: `python3 -m scripts.audio.qa <render> --json`.
+- **Optional handoffs**: `python3 -m scripts.audio.adapters.real_sfx render <spec> --out <render>` (needs `ffprobe` + a library index) and `python3 -m scripts.audio.adapters.earshot doctor`.
+- **Tests**: `python3 -m unittest discover -s scripts/audio/tests -t .`
+
 ---
 
 ## 🧠 Test Execution Limits (Mandatory on WSL2 dev hosts)
@@ -83,6 +93,7 @@ harness depends on, which is why runs die mid-session with no useful error.
 - **Product Requirement Document**: `docs/Product_Requirement_Document.md`
 - **Change History & Specs**: `openspec/`
 - **Platform Guidelines**: `GEMINI.md` (root and apps)
+- **Video Production Toolbox**: `docs/nhilos/content/nhilos_video_production_toolbox_v1.0.md` (HyperFrames + GSAP, Three.js, Remotion, audio pipeline, licenses, and WSL2 QA commands)
 
 When proposing code changes, always ask: **"How does this work if the WiFi goes down?"** and **"Does this violate DGI norms?"**
 

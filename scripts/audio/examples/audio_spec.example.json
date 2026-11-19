@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "fps": 30,
+  "video": "renders/jueves19_bimoneda.mp4",
+  "voice_track": "work/vo.wav",
+  "output": "renders/jueves19_bimoneda_mixed.mp4",
+  "loudness": {
+    "target_lufs": -14,
+    "true_peak_db": -1,
+    "lra": 6
+  },
+  "sfx_cues": [
+    {
+      "cue_id": "hook-hit",
+      "frame": 0,
+      "kind": "hit",
+      "source": {
+        "type": "uisfx",
+        "pack": "cinematic",
+        "cue": "drop"
+      },
+      "gain_db": -4
+    },
+    {
+      "cue_id": "hook-whoosh",
+      "frame": 6,
+      "kind": "whoosh",
+      "source": {
+        "type": "uisfx",
+        "pack": "studio",
+        "cue": "swipe"
+      },
+      "gain_db": -8,
+      "length_s": 0.6
+    },
+    {
+      "cue_id": "library-whoosh",
+      "frame": 90,
+      "kind": "whoosh",
+      "source": {
+        "type": "openverse",
+        "query": "whoosh",
+        "role": "whoosh"
+      },
+      "gain_db": -8,
+      "length_s": 1.2
+    },
+    {
+      "cue_id": "tap-demo",
+      "frame": 42,
+      "kind": "click",
+      "source": {
+        "type": "uisfx",
+        "cue": "press"
+      },
+      "gain_db": -10
+    },
+    {
+      "cue_id": "key-typing",
+      "frame": 78,
+      "kind": "key",
+      "source": {
+        "type": "uisfx",
+        "cue": "typing"
+      },
+      "gain_db": -12,
+      "length_frames": 20,
+      "keystrokes": 12
+    },
+    {
+      "cue_id": "success",
+      "frame": 150,
+      "kind": "success",
+      "source": {
+        "type": "uisfx",
+        "cue": "success"
+      },
+      "gain_db": -9
+    },
+    {
+      "cue_id": "cta-purchase",
+      "frame": 180,
+      "kind": "cta",
+      "source": {
+        "type": "uisfx",
+        "cue": "purchase"
+      },
+      "gain_db": -8
+    },
+    {
+      "cue_id": "accent-tone",
+      "frame": 120,
+      "kind": "tone",
+      "source": {
+        "type": "synth",
+        "preset": "tone",
+        "freq_hz": 1320,
+        "duration_s": 0.12
+      },
+      "gain_db": -18
+    }
+  ],
+  "license_manifest": "assets/sfx/licenses.json"
+}

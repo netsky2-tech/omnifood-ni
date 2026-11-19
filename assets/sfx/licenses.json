@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-11-19T18:05:12.205452+00:00",
+  "assets": [
+    {
+      "id": "eab8a6e2-0ac8-4615-9e0d-ebde30523783",
+      "title": "Deep Whoosh #1",
+      "creator": "Kinoton",
+      "license": "cc0",
+      "license_version": "1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "provider": "freesound",
+      "source": "https://freesound.org/people/Kinoton/sounds/351256",
+      "download_url": "https://cdn.freesound.org/previews/351/351256_2247456-hq.mp3",
+      "duration_ms": 3155,
+      "role": "whoosh",
+      "query": "whoosh",
+      "path": "whoosh/deep-whoosh-1-eab8a6e2.mp3",
+      "downloaded_at": "2026-11-19T17:56:55.821421+00:00",
+      "sha256": "8e4dccf0697f7faff1104e58a1b38ebdd692f26294e3a53649e73e4cf7e9801f",
+      "bytes": 69196
+    },
+    {
+      "id": "b9f90a19-16a9-4099-a860-a53a4cfaa698",
+      "title": "Keyboard typing",
+      "creator": "Dasgoat",
+      "license": "cc0",
+      "license_version": "1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "provider": "freesound",
+      "source": "https://freesound.org/people/Dasgoat/sounds/361703",
+      "download_url": "https://cdn.freesound.org/previews/361/361703_3424781-hq.mp3",
+      "duration_ms": 82000,
+      "role": "typing",
+      "query": "keyboard typing",
+      "path": "typing/keyboard-typing-b9f90a19.mp3",
+      "downloaded_at": "2026-11-19T18:04:26.562174+00:00",
+      "sha256": "6c4f6ff02003217083debf1850a15bbd8468a23183e08a4237e93b7943cd7053",
+      "bytes": 1527556
+    },
+    {
+      "id": "bd75927b-9d53-4c88-9dda-b17d22f1980c",
+      "title": "Restaurant ambience chatter",
+      "creator": "mycompasstv",
+      "license": "cc0",
+      "license_version": "1.0",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "provider": "freesound",
+      "source": "https://freesound.org/people/mycompasstv/sounds/474740",
+      "download_url": "https://cdn.freesound.org/previews/474/474740_3902754-hq.mp3",
+      "duration_ms": 56569,
+      "role": "ambience",
+      "query": "restaurant ambience chatter",
+      "path": "ambience/restaurant-ambience-chatter-bd75927b.mp3",
+      "downloaded_at": "2026-11-19T18:04:55.236411+00:00",
+      "sha256": "99bae85993cfe2e5033bf5e5017d3d3a8171ddfb85b13390acd78f820e697c74",
+      "bytes": 1276393
+    }
+  ]
+}

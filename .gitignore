@@ -76,3 +76,7 @@ docs/nhilos/manuals/images/*.avif
 # Python bytecode
 __pycache__/
 *.pyc
+
+# HyperFrames local cache and rendered outputs (regenerated from compositions)
+videos/*/.hyperframes/
+videos/*/renders/
