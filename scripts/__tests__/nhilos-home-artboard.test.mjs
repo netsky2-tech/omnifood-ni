@@ -136,12 +136,14 @@ test("C6: no duplicated/stray script close tag", () => {
   assert.equal(/<\/script>\s*<\/script>/.test(src), false);
 });
 
-// Depth rule: body H2 sections <=120 words (FAQ exempt per v1.5; demo measured on copy column only)
+// Depth rule: body H2 sections <=120 words (FAQ exempt per v1.5; demo measured on copy column only;
+// T10 figcaptions exempt — the capture caption "Captura real de la terminal · datos de demostración"
+// is media apparatus mandated verbatim by odd/tasks/nhilos-home-redesign.md T10 S1, not copy)
 test("copy depth rule: body sections <=120 words", () => {
   for (const s of vis.split(/<section\b/).slice(1)) {
     const id = (s.match(/id="([^"]+)"/) || [])[1];
     if (!id || id === "faq") continue;
-    let measured = s;
+    let measured = s.replace(/<figcaption\b[^>]*>[\s\S]*?<\/figcaption>/g, "");
     if (id === "demo") {
       const copy = s.match(/<div class="demo-copy[\s\S]*?<\/div>/);
       measured = copy ? copy[0] : s;
@@ -163,4 +165,58 @@ test("form: no pre-checked segment; group error slots exist", () => {
 test("no personal names in public placeholders", () => {
   assert.equal(src.includes("Octavio"), false);
   assert.match(src, /Ej\. John Doe/);
+});
+
+// T10: the turno, with the real screen of each step (odd/tasks/nhilos-home-redesign.md, S1-S6)
+const HILO_CAPTURES = [
+  "media/pos_04_carrito_barra.webp",
+  "media/pos_10_historial_ventas.webp",
+  "media/pos_07_cobro_efectivo_vuelto.webp",
+  "media/pos_16_cierre_turno_corte_z.webp",
+];
+const HILO_LABEL = "Captura real de la terminal · datos de demostración";
+const comoSec = vis.split('id="como-funciona"')[1].split("</section>")[0];
+const hiloSteps = comoSec.split('<div class="hilo-step">').slice(1);
+
+test("T10 S1/S4: every hilo step carries its capture, in order, still 4 numbered steps", () => {
+  assert.equal(hiloSteps.length, 4);
+  assert.ok(src.includes("CLAIM GUARD (#993/#983)"), "step 02 claim guard comment");
+  for (const [i, cap] of HILO_CAPTURES.entries()) {
+    const step = hiloSteps[i];
+    const imgs = [...step.matchAll(/<img\b[^>]*src="([^"]+)"[^>]*>/g)];
+    assert.equal(imgs.length, 1, `step ${i + 1} has exactly one capture`);
+    assert.equal(imgs[0][1], cap, `step ${i + 1} capture`);
+    assert.match(step, /<div class="device" style="width: 100%; aspect-ratio: \d+ \/ \d+;">/, `step ${i + 1} framed`);
+  }
+});
+
+test("T10 S1: each capture carries the real-terminal demo label", () => {
+  for (const [i, step] of hiloSteps.entries()) assert.ok(step.includes(HILO_LABEL), `step ${i + 1} label`);
+});
+
+// S2: no cropping. Dimensions are read from the real files (webp header), the
+// img attributes must match them exactly, the frame must use the same aspect
+// ratio so the capture is shown complete, and .device img must keep
+// object-fit: contain in site.css.
+function webpSize(file) {
+  const buf = fs.readFileSync(file);
+  assert.equal(buf.toString("ascii", 0, 4), "RIFF");
+  assert.equal(buf.toString("ascii", 8, 12), "WEBP");
+  const fourcc = buf.toString("ascii", 12, 16);
+  if (fourcc === "VP8 ") return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff };
+  if (fourcc === "VP8L") { const b = buf.readUInt32LE(21); return { w: (b & 0x3fff) + 1, h: ((b >>> 14) & 0x3fff) + 1 }; }
+  if (fourcc === "VP8X") return { w: 1 + (buf[24] | (buf[25] << 8) | (buf[26] << 16)), h: 1 + (buf[27] | (buf[28] << 8) | (buf[29] << 16)) };
+  throw new Error("unsupported webp chunk: " + fourcc);
+}
+test("T10 S2: captures shown complete at their real file dimensions", () => {
+  const css = fs.readFileSync(path.join(ROOT, "design/nhilos-web-foundation/assets/site.css"), "utf8");
+  assert.match(css, /\.device video, \.device img \{[^}]*object-fit: contain/);
+  for (const [i, cap] of HILO_CAPTURES.entries()) {
+    const { w, h } = webpSize(path.join(ROOT, "design/nhilos-web-foundation", cap));
+    const img = hiloSteps[i].match(/<img\b[^>]*>/)[0];
+    assert.match(img, new RegExp(`width="${w}" height="${h}"`), cap);
+    const ar = hiloSteps[i].match(/aspect-ratio: (\d+) \/ (\d+)/);
+    assert.equal(Number(ar[1]), w, cap + " frame aspect");
+    assert.equal(Number(ar[2]), h, cap + " frame aspect");
+  }
 });
