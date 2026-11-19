@@ -275,12 +275,13 @@ prueba que lo sostiene.
   SOHO con precio fundador es un paso operativo por entorno (runbook §6), no una migración. **No
   existe una clave `legacy.full`**: el runbook lo decía y era inexistente; la forma ejecutable es
   una excepción por clave registrada que falte.
-- **El rastro auditable no es inmutable en la base.** La migración de ENT-01 crea políticas
-  S/I/U/D sobre `tenant_entitlement_change_history`, así que el rol de la aplicación podría
-  actualizar o borrar filas; la inmutabilidad hoy es de procedimiento. Falta quitar las políticas
-  de `UPDATE`/`DELETE` o agregar un trigger que las rechace. El comentario de
-  `tenant-entitlement-change-history.entity.ts` ("no UPDATE and no DELETE policy exists") es falso
-  y hay que corregirlo.
+- ~~El rastro auditable no es inmutable en la base.~~ **Resuelto**: la migración
+  `1810600000000-HardenEntitlementChangeHistory` instala un trigger que rechaza `UPDATE`, `DELETE`
+  y `TRUNCATE` con `restrict_violation` (idempotente y reversible), y
+  `entitlement-audit-immutability.db.spec.ts` lo prueba bajo rol restringido con el tenant
+  ligado — el caso que antes era un no-op silencioso por RLS. El comentario de la entidad se
+  corrigió: afirmaba que no existían políticas de `UPDATE`/`DELETE`, y sí existen; lo que hace
+  verdadera la inmutabilidad es el trigger.
 - Una sola excepción vigente por clave se garantiza con una consulta dentro de la transacción, no
   con una restricción de base: dos operadores concurrentes podrían conceder la misma clave a la
   vez. Bajo riesgo mientras el único escritor sea el CLI, pero es un invariante sin dientes en la

@@ -194,11 +194,11 @@ Nunca se actualiza ni se borra una fila de `tenant_entitlement_change_history`: 
 append-only **por procedimiento** — no existe ruta, comando ni servicio que lo haga, y `grant` y
 `revoke` solo insertan.
 
-> Aviso honesto (deuda declarada, no resuelta): la base de datos **sí** permite `UPDATE` y
-> `DELETE` sobre esa tabla con el rol de la aplicación, porque las políticas creadas en la
-> migración de ENT-01 cubren S/I/U/D. Endurecerlo — quitando las políticas de `UPDATE`/`DELETE`
-> o con un trigger que las rechace — está pendiente; hasta entonces, la inmutabilidad del rastro
-> depende de que nadie ejecute SQL a mano.
+Y no depende de la buena conducta de nadie: la migración
+`1810600000000-HardenEntitlementChangeHistory` instala un trigger que rechaza `UPDATE`, `DELETE`
+y `TRUNCATE` con `restrict_violation`. Un intento de reescribir el rastro falla ruidosamente en
+vez de afectar filas en silencio. Probado con base real bajo un rol `NOSUPERUSER NOBYPASSRLS`
+con el tenant ligado: ver, ve; tocar, no puede.
 
 ## 8. Lo que este runbook no resuelve (deuda declarada)
 
