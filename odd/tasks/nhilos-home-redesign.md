@@ -18,6 +18,28 @@ Rediseño de la home de nhilospos.com como nuevo artboard independiente (no dest
 - **T1** (S1-S8): Construir `05-home-geo.html` completo con todas las secciones del copy v1.3, JSON-LD integrado y validación JS/JSON propia.
 - **T2** (S7-S8): Verificación del padre: screenshots 1440/1024/390 con Chrome headless + validación JSON-LD + node --check de scripts → veredicto por S#.
 
+### T10 — El turno, con la pantalla real de cada paso
+
+`#como-funciona` es hoy un muro de texto: cuatro pasos numerados y cero evidencia. Existen cuatro capturas reales sin usar que mapean **1:1** a los cuatro pasos, y ese mapeo no se inventa: cada captura prueba lo que el paso afirma.
+
+| Paso | Captura | Lo que la captura prueba |
+|---|---|---|
+| 01 El pedido entra | `media/pos_04_carrito_barra.webp` | Catálogo con `Total: C$ 75.00` y `1 producto agregado` |
+| 02 Queda registrado | `media/pos_10_historial_ventas.webp` | Historial con `Facturas: 2` y `Anuladas: 0` |
+| 03 El cobro cierra | `media/pos_07_cobro_efectivo_vuelto.webp` | Cobro con `C$ 500.00` recibido y `Vuelto: C$ 275.00` |
+| 04 El cuadre queda | `media/pos_16_cierre_turno_corte_z.webp` | Arqueo ciego y `Cerrar Turno (Corte Z)` |
+
+**Specs.**
+
+- S1. Cada paso lleva su captura, dentro de un marco, con `alt` que describa lo que se ve y la etiqueta `Captura real de la terminal · datos de demostración`.
+- S2. La captura no se recorta para encajar: se muestra completa, con `width`/`height` reales leídos del archivo.
+- S3. Cero copy nuevo. Los cuatro textos de paso quedan como están, y el `CLAIM GUARD (#993/#983)` del paso 02 se conserva intacto.
+- S4. El patrón no repite el libro de rutas del hub: aquí los cuatro pasos son horizontales y numerados, no filas con texto a un lado y medio al otro.
+- S5. Tokens de `assets/site.css` solamente, y todo `var(--*)` que se nombre tiene que existir en ese archivo.
+- S6. A 390 los cuatro pasos se apilan sin desborde horizontal (`overflowX` = 0).
+
+**Fuera de alcance, ya decidido:** `#que-es` sigue sin material (darle capturas lo volvería la banda del hub). Y el hero no se anima todavía: el único clip de terminal en mano disponible (`pos_on_hand.mp4`) es footage sintético —fondo verde que aparece, notch de iPhone, la mano cambia de forma entre frames— y está prohibido por regla. El hero en movimiento necesita una grabación real nueva, no un clip generado.
+
 ## Log
 
 - **L1**: "Bien, con eso ya hecho nos tocaría el rediseño de la home actual. Ya tenemos un system design, skills y demás. Pero quiero recalcar la inspiración de https://impeccable.style/ y https://www.tasteskill.dev/ Hay partes de esas paginas como en taste 'How it works', 'Before and after' y 'Questions' que son visualmente atractivas y pueden ser utiles para algunas secciones de nuestor copy. Esto ultimo es de taste, pero impeccable tambien tiene lo suyo. La idea tampoco es copiar fielmente pero si tomarlo de inspiración y hacer algo único para nuestro tipo de página. La idea del hero en impeccable me gusta para nuestro sitio también, donde a un lado iría el H! y al otro lado un montaje de un dispositivo con la UI de nuestra app." (ref imagen PayOne) "algo como este ejemplo. Espero haberme explicado bien y que captes la idea. No queremos una pagina generica o de plantilla, necesitamos algo único, atractivo y de alto nivel como lo exige nhilos."
