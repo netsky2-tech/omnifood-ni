@@ -225,9 +225,10 @@
       "excerpt": "07",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(7): Touch target under 44 px.\n\"Cuánto cuesta\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:31.353Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:31.374Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:46:32.858Z",
+      "resolution": "Mismo componente: site.css .spine a = 44px target desde ec6d74f8, compartido por las tres páginas. Obsoleto al momento de su captura."
     },
     {
       "id": "idjbwat9",
