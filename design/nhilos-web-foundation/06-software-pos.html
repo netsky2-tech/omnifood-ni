@@ -172,17 +172,17 @@
 
     /* HERO editorial: tipografía asimétrica, sin bezel ni chips (patrón distinto al home) */
     .hub-hero { padding-block: var(--space-10) var(--space-6); overflow: hidden; }
-    .hub-hero-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: var(--space-8); align-items: end; }
+    .hub-hero-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); gap: var(--space-8); align-items: stretch; }
     .hub-hero h1 { font-size: var(--text-display-xl); line-height: 1.06; font-weight: 800; letter-spacing: -0.03em; margin-bottom: var(--space-6); }
     .hub-hero h1 em { font-style: normal; color: var(--web-navy-800); }
     .hub-hero .lead { margin-bottom: var(--space-6); }
-    .hero-questions { display: grid; gap: var(--space-4); padding-bottom: var(--space-2); }
+    .hero-questions { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-2); }
+    .hero-questions > :last-child { margin-top: auto; }
     /* El control de la bifurcación: las dos preguntas SON el control. Sin JS son anclas a #formas;
        con JS el script las asciende a botones y aria-pressed anuncia la forma elegida. */
-    .hero-question { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 600; line-height: 1.25; display: flex; align-items: baseline; gap: var(--space-3); color: var(--web-text-primary); text-decoration: none; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-out); }
-    .hero-question:hover { color: var(--web-navy-800); }
+    .hero-question { font-family: var(--font-display); font-size: var(--text-heading-lg); font-weight: 600; line-height: 1.2; display: flex; align-items: baseline; gap: var(--space-3); width: 100%; color: var(--web-text-primary); text-decoration: none; background: none; border: 0; border-top: 1px solid var(--web-border); padding: var(--space-4) 0; cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out); }
+    .hero-question:hover, .hero-question:focus-visible { color: var(--web-navy-800); border-top-color: var(--web-navy-800); }
     .hero-question[aria-pressed="true"] { color: var(--web-emerald-700); }
-    .hero-question:nth-child(2) { margin-left: var(--space-8); }
     .hero-question .idx { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-body-sm); color: var(--web-emerald-700); }
     @media (max-width: 1024px) {
       .hub-hero-grid { grid-template-columns: 1fr; gap: var(--space-6); align-items: start; }
