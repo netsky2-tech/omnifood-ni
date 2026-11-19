@@ -41,6 +41,37 @@ El build deja de ensamblar una sola página. El CSS del home se extrae a un asse
 | T5 | Verificación: build, 16/16 + nuevas, texto visible en vivo, capturas 1440 y 390 | parent | — |
 | T6 | Experimento 3D acotado: una escena que explique el flujo compra → plato → kardex. Se descarta si no explica o si pasa el presupuesto de peso | worker (después de T2) | `feat(web): escena 3d del flujo` |
 | T7 | Consolidar la bifurcación: la página plantea las dos formas **dos veces** (preguntas inertes en el hero y píldoras en `#formas`). Un solo control, en el hero, que además mueva la banda. Quitar la duplicación y el aire muerto del hero | worker | `fix(web): una sola bifurcacion` |
+| T8 | **Densidad al nivel del home.** Siete defectos medidos en la página publicada: hero con columna vacía, conmutador sin retorno, tarjetas estiradas por capturas desparejas, `#entra-por-el-tuyo` plano, FAQ con diseño ajeno al home, `#nivel` con un vacío de media sección, y el libro de rutas con filas huecas | worker | `feat(web): densidad del hub` |
+
+| T9 | Los tres huecos que sobreviven a T8: fila 01 del libro de rutas con el video solo y media fila vacía, y dos secciones de una sola columna (`¿Cuánto cuesta?`, `¿Necesito equipo especial?`) con media página vacía al lado | worker | `fix(web): cerrar los huecos del hub` |
+
+### T9 — Lo que T8 no cerró
+
+Medido sobre la página construida, no a ojo:
+
+1. **Fila 01 del libro de rutas.** El video de la terminal ocupa ~240 px de una fila de 1440 y deja media fila vacía. Va en dos columnas: el texto a la izquierda, el video a la derecha con ancho acotado; la fila termina donde termina su contenido.
+2. **`¿Cuánto cuesta un sistema POS en Nicaragua?`** Un párrafo de ~40 % de ancho y el resto vacío.
+3. **`¿Necesito equipo especial?`** Igual. Las dos son preguntas de cierre y hoy parecen relleno.
+
+**Corrección para 2 y 3:** son la misma clase de pregunta (condiciones de compra) y viven pegadas. Se resuelven como **una sección de dos columnas** —costo a la izquierda, equipo a la derecha— o, si se mantienen separadas, cada una gana su columna de contenido real. Prohibido rellenar con aire o con texto nuevo que afirme capacidades no vendidas.
+
+**Aceptación:** a 1440 y a 390 ninguna de las tres deja más de ~120 px de vacío sin contenido, y la altura de cada sección se reporta antes y después.
+
+### T8 — Diagnóstico de la página publicada (revisión del fundador + captura propia)
+
+**Regla sistémica que las causa a casi todas:** hay celdas de grilla que se estiran para igualar a su vecina y no tienen con qué llenarse. El resultado no se lee como aire editorial, se lee como hueco. **Ninguna caja puede ser más alta que su contenido.**
+
+1. **Hero, columna derecha vacía.** El fork y la nota de capturas viven en la misma columna con ~500 px entre ellos. Medido: el fork ocupa 2 líneas y la columna mide lo que el H1. **Corrección:** el fork pasa a ocupar la columna con dos filas de altura completa y tipografía grande (es el control principal de una página de ruteo); la nota va pegada debajo del fork, no al fondo de la columna.
+2. **El conmutador no tiene retorno.** Al elegir una forma, la otra se atenúa y no hay manera de volver al estado neutro salvo eligiendo la otra. **Corrección:** elegir la forma activa la deselecciona; sin ninguna elegida, las dos tarjetas quedan en el mismo peso. `aria-pressed` pasa de booleano por botón a estado tri-valente gestionado en el contenedor.
+3. **Tarjetas estiradas por capturas desparejas.** `#formas`: a la izquierda una captura de teléfono vertical altísima, a la derecha una del panel de escritorio. La derecha queda con media tarjeta vacía. **Corrección:** el medio de cada tarjeta vive en una caja de proporción fija (`aspect-ratio`) con `object-fit`, las tarjetas se alinean arriba (`align-items: start`) y no se estiran entre sí. Mismo tratamiento en móvil.
+4. **`#entra-por-el-tuyo` plano.** Tres bloques de texto sueltos contra media página vacía a la derecha. Es la sección que **reparte el tráfico**: tiene que verse como un reparto. **Corrección:** tres tarjetas de altura propia en grilla de tres columnas (a una columna en móvil), cada una con número, nombre, una línea y su destino.
+5. **FAQ con diseño ajeno.** Hoy es un acordeón `details/summary`. El fundador pide **el diseño del home**: grilla de celdas en dos columnas con borde. **Corrección:** mismo patrón `faq-cell` del home, misma retícula, mismo tratamiento de filetes. Mantener la paridad JSON-LD celda por celda.
+6. **`#nivel` con vacío de media sección.** El bloque de la decisión de control deja un hueco grande con una cita suelta. **Corrección:** o se llena con una comparación real de los tres niveles (lo que cada uno controla) o se recorta a la altura de su contenido. Prohibido rellenar con aire.
+7. **Libro de rutas con filas huecas.** Las filas 01/02/03 reservan altura de dos columnas y su nota derecha es de dos líneas. **Corrección:** la nota va en la misma fila que el título, la fila se ajusta al contenido, y el número manda la jerarquía.
+
+**Criterio de aceptación de T8:** a 1440 y a 390, ninguna sección muestra una columna o celda con más de ~120 px de vacío sin contenido; el conmutador vuelve a neutro; las dos capturas de `#formas` tienen el mismo peso visual; el FAQ replica la retícula del home; y la página tiene al menos la densidad del home, no menos.
+
+**Medir, no mirar a ojo:** capturar el sitio publicado a 1440 y a 390 por iframe de ancho fijo, y anotar la altura de cada sección antes y después. Un `--virtual-time-budget` alto o la captura sale con las animaciones a medias.
 
 ### T7 — Una sola bifurcación
 
