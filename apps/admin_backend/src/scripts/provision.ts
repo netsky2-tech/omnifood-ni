@@ -8,15 +8,32 @@ import { SecurityProfile } from '../modules/identity/entities/security-profile.e
 import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
 import { CatalogService } from '../modules/catalog/catalog.service';
+import { TenantSubscriptionService } from '../modules/entitlements/tenant-subscription.service';
 import * as bcrypt from 'bcrypt';
 import * as readline from 'readline';
 import { assertSeedOutcome } from './provision-seed-guard';
+import {
+  ProvisionArgsError,
+  parseProvisionPlanArgs,
+  type ProvisionPlanArgs,
+} from './provision-plan-args';
 
 /**
  * MASS PROVISIONING SCRIPT
  *
  * This script allows for the manual creation of a new Tenant and its initial Owner.
  * Useful for onboarding new clients massively or for initial setup.
+ *
+ * ENT-08 of issue #984 (ODD S18): a provisioned tenant is operable in ONE
+ * command, so besides the tenant and its owner this script creates the
+ * audited plan subscription through TenantSubscriptionService (never raw
+ * SQL), right after the owner exists, with the owner's email as actor and a
+ * reason naming the provisioning. Flags: --plan=<code> (default PRO while
+ * the founder stage lasts), --support-tier=<tier>, --add-ons=a,b.
+ *
+ * ENT-08 (ODD S19): an invalid plan or add-on is rejected BEFORE any
+ * database connection, prompt or write — exit 1 with a stable code and
+ * nothing half-created.
  */
 
 const rl = readline.createInterface({
@@ -29,6 +46,25 @@ const ask = (query: string): Promise<string> =>
 
 async function provision() {
   console.log('--- OmniFood NI: Mass Provisioning Tool ---');
+
+  // ENT-08 (ODD S19): parse and validate the plan flags FIRST — before the
+  // Nest context, the prompts or any write. An invalid value exits 1 with a
+  // stable code and the database is never touched, so no half-created
+  // tenant can exist.
+  let planArgs: ProvisionPlanArgs;
+  try {
+    planArgs = parseProvisionPlanArgs(process.argv.slice(2));
+  } catch (error) {
+    if (error instanceof ProvisionArgsError) {
+      console.error(`❌ ${error.code}: ${error.message}`);
+    } else {
+      console.error('❌ Error al leer los argumentos:', error);
+    }
+    process.exit(1);
+  }
+  console.log(
+    `Plan solicitado: ${planArgs.planCode} (soporte ${planArgs.supportTier}, add-ons: ${planArgs.addOns.join(', ') || 'ninguno'})`,
+  );
 
   const app = await NestFactory.createApplicationContext(AppModule);
   const dataSource = app.get(DataSource);
@@ -89,6 +125,25 @@ async function provision() {
     const seeded = await catalogService.seedDefaults(tenantId);
     assertSeedOutcome(tenantId, seeded);
     console.log(`✅ Catálogos por defecto sembrados: ${seeded} valores`);
+
+    // ENT-08 (ODD S18): the audited subscription goes through
+    // TenantSubscriptionService — the same transaction the CLI uses, which
+    // writes the new contract AND its tenant_entitlement_change_history row
+    // and refuses a contract that would break the snapshot. The OWNER just
+    // created is the actor; the reason names the provisioning.
+    const subscriptions = app.get(TenantSubscriptionService);
+    const subscription = await subscriptions.changePlan({
+      tenantId,
+      planCode: planArgs.planCode,
+      supportTier: planArgs.supportTier,
+      addOns: planArgs.addOns,
+      startsAt: new Date(),
+      actor: ownerEmail,
+      reason: `Alta inicial del tenant por npm run provision (issue #984): plan ${planArgs.planCode} con add-ons [${planArgs.addOns.join(', ')}]`,
+    });
+    console.log(
+      `✅ Suscripción creada: plan ${subscription.planCode} (${subscription.subscriptionId})`,
+    );
 
     console.log('--- Provisión completada exitosamente ---');
   } catch (error) {
