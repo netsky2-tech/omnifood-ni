@@ -87,10 +87,22 @@ for (const file of walk(path.join(SOURCE, ASSETS_DIR))) {
   const rel = path.relative(path.join(SOURCE, ASSETS_DIR), file).split(path.sep).join("/");
   const ext = path.extname(file);
   const base = path.basename(file, ext);
-  const hash = createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 10);
+  let content = readFileSync(file);
+  // El CSS vive en /assets/, así que un url('fonts/...') relativo apunta a
+  // /assets/fonts/ y da 404. Se reescribe a raíz absoluta. El artboard conserva
+  // la ruta relativa para seguir abriéndose desde design/.
+  if (ext === ".css") {
+    content = Buffer.from(
+      content
+        .toString("utf8")
+        .replaceAll("url('fonts/", "url('/fonts/")
+        .replaceAll('url("fonts/', 'url("/fonts/'),
+    );
+  }
+  const hash = createHash("sha256").update(content).digest("hex").slice(0, 10);
   const hashed = `${base}.${hash}${ext}`;
   hashedAssets.set(`${ASSETS_DIR}/${rel}`, `${ASSETS_DIR}/${hashed}`);
-  copyFileSync(file, path.join(OUTPUT, ASSETS_DIR, hashed));
+  writeFileSync(path.join(OUTPUT, ASSETS_DIR, hashed), content);
 }
 
 for (const page of PAGES) {
@@ -217,6 +229,17 @@ for (const page of PAGES) {
     if (!existsSync(path.join(OUTPUT, match[1]))) {
       fail(`${page.out} references a missing asset: ${match[1]}`);
     }
+  }
+}
+
+// Una hoja publicada bajo /assets/ no puede referenciar fuentes con ruta relativa:
+// apuntarían a /assets/fonts/ y el sitio entero caería a fuentes del sistema sin
+// decir una palabra. Ya pasó una vez; esto lo vuelve ruidoso.
+for (const hashed of hashedAssets.values()) {
+  if (!hashed.endsWith(".css")) continue;
+  const css = readFileSync(path.join(OUTPUT, hashed), "utf8");
+  if (/url\(['"]?fonts\//.test(css)) {
+    fail(`${hashed} references fonts with a relative path and would 404 under /assets/`);
   }
 }
 
