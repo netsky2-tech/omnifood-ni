@@ -273,9 +273,10 @@
       "excerpt": "01",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(1): Touch target under 44 px.\n\"Inicio\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:53.062Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:53.112Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T23:02:19.452Z",
+      "resolution": "Mismo componente del sistema: site.css .spine a = 44px target desde ec6d74f8, compartido por las tres páginas. Obsoleto al momento de su captura."
     },
     {
       "id": "rfyjskuk",
