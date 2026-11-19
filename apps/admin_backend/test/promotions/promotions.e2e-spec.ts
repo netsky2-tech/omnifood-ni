@@ -19,11 +19,20 @@ import { RolesGuard } from '../../src/modules/identity/guards/roles.guard';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { JWT_TOKEN_TYPES } from '../../src/modules/identity/security/jwt-token.types';
 import { createIdentityJwtConfigProvider } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 describe('Promotions Module (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
   let app: INestApplication<App>;
   let jwtService: JwtService;
+  let entitlementsFixture: EntitlementsFixture;
 
   let dbPromotions: Promotion[] = [];
 
@@ -98,6 +107,18 @@ describe('Promotions Module (E2E / Integration)', () => {
     process.env.JWT_CLOCK_TOLERANCE_SECONDS = '5';
     process.env.JWT_ALGORITHM = 'HS256';
 
+    // ENT-03 (issue #984): PromotionsController carries CapabilitiesGuard
+    // and PromotionsService itself resolves the tenant snapshot, so the
+    // PREMIUM routes must pass through the REAL resolver. The fixture opens
+    // a dedicated real-PostgreSQL scratch schema with the contract tables;
+    // the suite's in-memory promotion fixtures stay untouched.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      'tenant-A',
+      'PRO',
+    );
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true }),
@@ -117,6 +138,11 @@ describe('Promotions Module (E2E / Integration)', () => {
           useValue: promotionRepo,
         },
         { provide: DataSource, useValue: transactionalDataSource },
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     }).compile();
 
@@ -132,6 +158,7 @@ describe('Promotions Module (E2E / Integration)', () => {
     if (app) {
       await app.close();
     }
+    await closeEntitlementsFixture(entitlementsFixture);
   });
 
   beforeEach(() => {

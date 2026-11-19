@@ -40,6 +40,13 @@ import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
 
 import { OnboardingSessionController } from '../../src/modules/onboarding/controllers/onboarding-session.controller';
 import { ActivationController } from '../../src/modules/onboarding/controllers/activation.controller';
+// ENT-03b (issue #984): ActivationController's device-credential routes
+// consult the terminal seat quota through the real TenantQuotaService
+// (backed by the real EntitlementsService), both resolved against this
+// suite's own real DataSource — the same object graph OnboardingModule
+// provides.
+import { EntitlementsService } from '../../src/modules/entitlements/entitlements.service';
+import { TenantQuotaService } from '../../src/modules/entitlements/tenant-quota.service';
 import { ImportStagingController } from '../../src/modules/onboarding/controllers/import-staging.controller';
 
 import { OnboardingSessionService } from '../../src/modules/onboarding/services/onboarding-session.service';
@@ -198,6 +205,8 @@ describe('ONB1.10C: Security & Multi-Tenant Isolation Hardening (Real PostgreSQL
           provide: DataSource,
           useValue: dataSource,
         },
+        EntitlementsService,
+        TenantQuotaService,
         {
           provide: 'TenantRepository',
           useValue: dataSource.getRepository(Tenant),

@@ -41,6 +41,14 @@ import {
   createIdentityJwtConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -64,8 +72,20 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
 
   let ownerToken: string;
   let cashierToken: string;
+  let entitlementsFixture: EntitlementsFixture;
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): LoyaltyController is class-level
+    // @RequireCapability('loyalty') — the tenant must really resolve as
+    // entitled through the real resolver against the fixture's contract
+    // tables.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      tenantId,
+      'PRO',
+    );
+
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = jwtSecret;
     process.env.JWT_ISSUER = 'omnifood-admin';
@@ -305,6 +325,11 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
         JwtService,
         TenantInterceptor,
         createIdentityJwtConfigProvider(),
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     }).compile();
 
@@ -332,6 +357,7 @@ describe('Loyalty Cutover & Writers E2E (LV1.7A / M7 & M8 Real PostgreSQL)', () 
 
   afterAll(async () => {
     if (app) await app.close();
+    await closeEntitlementsFixture(entitlementsFixture);
     if (dataSource?.isInitialized) {
       await dataSource.query(`DROP SCHEMA "${schema}" CASCADE`);
       await dataSource.destroy();

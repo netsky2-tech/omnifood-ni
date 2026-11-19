@@ -45,6 +45,14 @@ import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 const INVENTORY_API_PREFIX = '/api/inventory';
 const TEST_TENANT_ID = 'tenant-count-session';
@@ -115,6 +123,7 @@ class TestTenantInterceptor implements NestInterceptor {
 
 describe('Count session route (integration)', () => {
   let app: INestApplication<App>;
+  let entitlementsFixture: EntitlementsFixture;
   const savedMovements: InventoryMovement[] = [];
   const findExistingMovement = jest.fn();
   const findInsumo = jest.fn();
@@ -175,6 +184,17 @@ describe('Count session route (integration)', () => {
   );
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): POST /inventory/count-sessions is a PREMIUM route
+    // (@RequireCapability('inventory.retail')) resolved by the REAL
+    // CapabilitiesGuard, so the suite's sentinel tenant must really resolve
+    // as entitled against the fixture's contract tables.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      TEST_TENANT_ID,
+      'PRO',
+    );
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [InventoryMovementController],
       providers: [
@@ -230,6 +250,11 @@ describe('Count session route (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     })
       // The device transport guard is declared per-route on movements/sync and
@@ -278,6 +303,7 @@ describe('Count session route (integration)', () => {
 
   afterAll(async () => {
     await app?.close();
+    await closeEntitlementsFixture(entitlementsFixture);
   });
 
   it('accepts a valid count-session document and links the resulting adjustment movement', async () => {
