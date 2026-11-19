@@ -205,13 +205,30 @@ test("B7: zero em-dashes in visible copy and JSON-LD", () => {
   assert.equal(JSON.stringify(ld).includes("—"), false);
 });
 
-// Interacción nueva: sin JS, la comparación completa queda visible y legible
-test("interaction: mode toggle degrades — static source shows both columns, nothing pre-hidden", () => {
+// Interacción nueva: la bifurcación vive UNA vez, en el hero. Sin JS, las preguntas son anclas a
+// #formas y la comparación completa queda visible y legible; con JS, el script las asciende a botones
+// reales que anuncian estado (aria-pressed) y llevan #formas a la vista respetando reduced-motion.
+test("interaction: the fork lives once, in the hero — no-JS anchors to #formas, JS promotes them to stateful buttons", () => {
+  // 1. Las píldoras de #formas se eliminaron: un solo lugar para la misma decisión.
+  assert.equal(src.includes("mode-switch"), false, "the #formas pills must be removed");
+  assert.equal(src.includes("mode-btn"), false, "the #formas pills must be removed");
+  // 2. Las dos preguntas del hero son anclas reales a #formas (fallback sin JS), antes de la banda.
+  const hero = src.split('id="inicio"')[1].split("</section>")[0];
+  const qs = [...hero.matchAll(/<a\b[^>]*class="hero-question"[^>]*>/g)].map((m) => m[0]);
+  assert.equal(qs.length, 2, "two hero questions as anchors");
+  for (const tag of qs) {
+    assert.match(tag, /href="#formas"/, "no-JS fallback: plain anchor to #formas");
+    assert.match(tag, /data-mode-target="[ab]"/, "each question carries its operation shape");
+  }
+  // 3. Fuente estática: nada preseleccionado, las dos columnas completas.
   const staticBody = body.split("<script")[0];
   assert.equal(/data-mode=/.test(staticBody), false, "no pre-applied mode: both columns visible without JS");
   const bandSec = src.split('id="compareBand"')[1].split("</section>")[0];
   assert.equal((bandSec.match(/class="compare-col"/g) || []).length, 2);
-  for (const m of src.matchAll(/<button[^>]*class="mode-btn"[^>]*>/g)) assert.match(m[0], /aria-pressed="false"/);
+  // 4. El JS asciende las anclas a botones con aria-pressed y el scroll honra prefers-reduced-motion.
+  const inlineJs = src.split('<script src="/assets/site.js"></script>')[1] || "";
+  assert.match(inlineJs, /aria-pressed/, "state announced via aria-pressed");
+  assert.match(inlineJs, /prefers-reduced-motion/, "smooth scroll gated by prefers-reduced-motion");
   assert.match(src, /<noscript>/);
   assert.match(src, /<script src="\/assets\/site\.js"><\/script>/);
 });
