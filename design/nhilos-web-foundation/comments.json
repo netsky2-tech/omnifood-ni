@@ -153,9 +153,10 @@
       "excerpt": "09",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(9): Touch target under 44 px.\n\"Precios\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:06.699Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:06.720Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:21:40.525Z",
+      "resolution": "Mismo caso: fix de componente ya desplegado (site.css .spine a = 44px target, ec6d74f8). Obsoleto al momento de su captura."
     },
     {
       "id": "7yw30l7c",
