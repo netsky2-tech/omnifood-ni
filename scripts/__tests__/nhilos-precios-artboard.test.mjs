@@ -1,0 +1,294 @@
+// Regression guards for the /precios/ artboard (07-precios.html).
+// Run: node --test scripts/__tests__/nhilos-precios-artboard.test.mjs
+// Source of truth: docs/nhilos/web/nhilos_web_page_briefs_v1.0.md §2 (binding) +
+// odd/tasks/nhilos-web-precios.md (S1-S8) + voice rule S7 of odd/tasks/nhilos-web-software-pos.md.
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+
+const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
+const ART = path.join(ROOT, "design/nhilos-web-foundation/07-precios.html");
+const HOME = path.join(ROOT, "design/nhilos-web-foundation/05-home-geo.html");
+const FINANCE = path.join(ROOT, "docs/finance/estrategia_precios_nhilos_pos_v1.md");
+const BUILD = path.join(ROOT, "scripts/build-nhilos-web.mjs");
+const SITE_CSS = path.join(ROOT, "design/nhilos-web-foundation/assets/site.css");
+
+const src = fs.readFileSync(ART, "utf8");
+const body = src.split("<body>")[1];
+const vis = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+const txt = (s) => s.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+const ld = JSON.parse(src.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
+const faq = ld["@graph"].find((n) => n["@type"] === "FAQPage").mainEntity;
+const cells = [...vis.matchAll(/<div class="faq-cell">\s*<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map((m) => [txt(m[1]), txt(m[2])]);
+
+// S1 / brief §2.4: H1 exacto, una sola vez
+test("S1: single h1 with brief §2.4 text", () => {
+  const h1 = [...src.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)];
+  assert.equal(h1.length, 1);
+  assert.equal(txt(h1[0][1]), "Precio de sistema POS para restaurante en Nicaragua: planes desde US$49 al mes");
+});
+
+// S1 / brief §2.4: jerarquía H2 completa, verbatim y en orden.
+// Nota: el brief §2.4 contiene ONCE H2 (S1 los describe como "diez"); la fuente
+// vinculante es la jerarquía verbatim del brief, así que se fijan los once.
+test("S1: H2 hierarchy matches brief §2.4 verbatim, in order", () => {
+  const expected = [
+    "¿Cuánto cuesta NHILOS POS?",
+    "Planes y precios: qué incluye cada uno",
+    "Packs de capacidad: Retail y Cocina, US$39 al mes cada uno",
+    "Add-ons: qué se cobra aparte de la mensualidad",
+    "¿Por qué cuesta más que un POS barato?",
+    "¿Qué pasa si dejo de pagar o quiero cancelar?",
+    "¿El setup de US$149 a US$450 es un casco?",
+    "¿Necesito comprar equipo especial?",
+    "¿Puedo empezar pequeño y crecer después?",
+    "Preguntas frecuentes sobre los precios de NHILOS POS",
+    "Cotiza NHILOS POS con tu operación real",
+  ];
+  const actual = [...vis.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)].map((m) => txt(m[1]));
+  assert.deepEqual(actual, expected);
+});
+
+// S1 / brief §2.1: la respuesta rápida (los cuatro planes) vive en el hero, antes de cualquier H2
+test("S1: quick answer with all four tiers lives in the hero, before the first h2", () => {
+  const hero = src.split('id="inicio"')[1].split("</section>")[0];
+  const heroTxt = txt(hero);
+  for (const pair of ["US$49", "US$149", "US$89", "US$250", "US$450"])
+    assert.ok(heroTxt.includes(pair), pair);
+  assert.match(heroTxt, /Enterprise/);
+  assert.match(heroTxt, /por cotización/i);
+  assert.match(heroTxt, /Suscripción mensual por negocio/);
+  assert.match(heroTxt, /hardware aparte/);
+  assert.ok(src.indexOf("price-strip") < src.indexOf("<h2"), "the quick-answer strip precedes the first h2");
+});
+
+// S2 / brief §2.4: los H3 de los planes
+test("S2: plan H3 sub-angles from brief §2.4 are present", () => {
+  const h3s = [...vis.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/g)].map((m) => txt(m[1]));
+  for (const h3 of [
+    "Esencial: US$49 al mes para empezar a vender y facturar",
+    "Operación: US$89 al mes con un pack a elección",
+    "Pro: US$149 al mes con ambos packs y dos terminales",
+    "Enterprise: cotización con alcance validado",
+  ])
+    assert.ok(h3s.includes(h3), h3);
+});
+
+// S5: paridad numérica — el conjunto exacto de cifras US$ de la página contra la home (#precios)
+// y docs/finance/estrategia_precios_nhilos_pos_v1.md §4. Si un número cambia, cambia en los tres
+// documentos a la vez; una cifra fuera de este conjunto es una claim sin fuente y falla aquí.
+test("S5: every US$ figure on the page belongs to the frozen price document and the home", () => {
+  const pageNums = [...new Set([...src.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]))].sort();
+  const expected = ["10", "149", "250", "29", "39", "40", "450", "49", "75", "88", "89"];
+  assert.deepEqual(pageNums, expected);
+  const homeSrc = fs.readFileSync(HOME, "utf8");
+  const homeNums = new Set([...homeSrc.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]));
+  const financeSrc = fs.readFileSync(FINANCE, "utf8");
+  for (const n of pageNums) {
+    assert.match(financeSrc, new RegExp(`US\\$\\s?${n}\\b`), `US$${n} must exist in the frozen price document`);
+    if (n !== "75") assert.ok(homeNums.has(n), `US$${n} must also appear on the home pricing section`);
+  }
+  // US$75 (enrolamiento) vive solo en el documento de precios; la home lo nombra sin cifra.
+  assert.ok(!homeNums.has("75"), "home does not publish the enrolment fee figure");
+});
+
+// S5: los pares plan/-setup exactos del documento de precios §4
+test("S5: plan and setup pairs match the frozen price document", () => {
+  for (const [plan, monthly, setup] of [
+    ["Esencial", "US$49", "US$149"],
+    ["Operación", "US$89", "US$250"],
+    ["Pro", "US$149", "US$450"],
+  ]) {
+    const card = src.split(`>${plan}<`)[1] || "";
+    const seg = src.slice(src.indexOf(`>${plan}<`), src.indexOf(`>${plan}<`) + 4000);
+    assert.ok(seg.includes(monthly) && seg.includes(setup), `${plan}: ${monthly}/${setup}`);
+  }
+  assert.match(vis, /Enterprise[^.]*por cotización/i);
+});
+
+// S6: claims vetados del brief §2.5 — cero apariciones en texto visible y JSON-LD
+test("S6: zero banned claims in visible copy and JSON-LD", () => {
+  const haystack = (txt(vis) + " " + JSON.stringify(ld)).toLowerCase();
+  for (const b of [
+    "factura electrónica", "facturación electrónica", "factura impresa",
+    "cero multas", "autorizado por la dgi", "folio autorizado",
+    "cancela cuando quieras", "sin permanencia", "permanencia mínima",
+    "solo esta semana", "por tiempo limitado", "últimos cupos", "cuenta regresiva",
+    "kds", "impresora", "impresión", "esc-pos", "esc/pos",
+    "exportación contable", "multi-sucursal", "multisucursal", "consolidado",
+    "integración bancaria", "gestión de rutas",
+    "soho", "byod", "plan de catálogo", "hardware incluido",
+    "descuento anual", "% de descuento",
+  ])
+    assert.ok(!haystack.includes(b), `banned claim present: ${b}`);
+});
+
+// S6: cifras de hardware y de servicios cotizables — el conjunto de números ya lo fija la prueba
+// de paridad; aquí se fijan los tokens de precio que NUNCA pueden entrar al archivo (comentarios incluidos)
+test("S6: hardware and quotable-service prices never enter the file at all", () => {
+  const nums = new Set([...src.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]));
+  for (const banned of ["25", "79", "99", "15", "19", "35", "50", "96", "200", "289", "299", "350", "749", "899"])
+    assert.ok(!nums.has(banned), `US$${banned} must never be published`);
+});
+
+// S4 + S7 (regla de voz del hub): cero narración de sitio, cero jerga de ingeniería
+test("S7 voice: el copy habla de la operación del lector, no del sitio; sin BOM ni vocabulario interno", () => {
+  const spoken = txt(vis);
+  for (const b of [/esta página/i, /esta sección/i, /este sitio/i, /esta web/i, /página dueña/i, /orienta y reparte/i, /página especializada/i, /el detalle de método vive/i])
+    assert.doesNotMatch(spoken, b, `narración de sitio: ${b}`);
+  assert.doesNotMatch(spoken, /\bBOM\b/);
+  assert.doesNotMatch(JSON.stringify(ld), /\bBOM\b/);
+  const schema = JSON.stringify(ld);
+  for (const term of ["issue #", "entitlement", "go-live", "golive", "backlog", "sprint", "staging", "hotfix", "roadmap", "próximamente", "cuando exista", "owner", "funnel", "gating"]) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.equal((spoken.match(new RegExp(escaped, "gi")) || []).length, 0, `visible copy leaks "${term}"`);
+    assert.equal((schema.match(new RegExp(escaped, "gi")) || []).length, 0, `JSON-LD leaks "${term}"`);
+  }
+  for (const term of ["TODO", "QA", "WIP"]) {
+    const word = new RegExp(`\\b${term}\\b`);
+    assert.equal((spoken.match(word) || []).length, 0, `visible copy leaks "${term}"`);
+    assert.equal((schema.match(word) || []).length, 0, `JSON-LD leaks "${term}"`);
+  }
+});
+
+// S7: paridad GEO — respuestas visibles == schema, celda por celda
+test("S7: FAQPage names and texts match visible FAQ cells exactly", () => {
+  assert.equal(cells.length, 7);
+  assert.equal(faq.length, 7);
+  assert.deepEqual(new Set(faq.map((q) => q.name)), new Set(cells.map((c) => c[0])));
+  for (const c of cells) {
+    const q = faq.find((x) => x.name === c[0]);
+    assert.ok(q, q?.name ?? c[0]);
+    assert.equal(c[1], q.acceptedAnswer.text.replace(/\s+/g, " ").trim(), q.name);
+  }
+});
+
+// GEO regla 1: entidad + mercado en la primera frase de cada respuesta visible
+test("GEO rule 1: first sentence names NHILOS POS + Nicaragua", () => {
+  for (const [q, a] of cells) {
+    const first = a.split(/(?<=[.!?])\s/)[0];
+    assert.match(first, /NHILOS POS/, q);
+    assert.match(first, /Nicaragua/, q);
+  }
+});
+
+// S7: BreadcrumbList parity con la ruta visible
+test("S7: BreadcrumbList names match the visible breadcrumb", () => {
+  const bc = ld["@graph"].find((n) => n["@type"] === "BreadcrumbList");
+  const nav = vis.split('aria-label="Ruta de navegación"')[1].split("</nav>")[0];
+  const visibleNames = bc.itemListElement.map((i) => i.name);
+  for (const name of visibleNames) assert.match(txt(nav), new RegExp(name), name);
+  assert.equal(bc.itemListElement[0].item, "https://www.nhilospos.com/");
+  assert.equal(bc.itemListElement[1].item, "https://www.nhilospos.com/precios/");
+});
+
+// S7: integridad del schema — Organization visible en el footer, sin offers/ratings
+test("S7: Organization contact + socials match visible footer; no offers or ratings", () => {
+  const org = ld["@graph"].find((n) => n["@type"] === "Organization");
+  assert.ok(org, "Organization node present");
+  assert.match(vis, /50581948526/);
+  assert.match(vis, /\+505 8194 8526/);
+  for (const url of org.sameAs) assert.match(vis, new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.equal(/aggregateRating|"review"|"offers"|"price"/.test(JSON.stringify(ld)), false);
+});
+
+// Anchors internos resuelven
+test("B5: all in-page anchors resolve", () => {
+  const ids = new Set([...vis.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]));
+  for (const m of vis.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.has(m[1]), m[1]);
+});
+
+// Sin enlaces muertos: solo páginas existentes (/, /software-pos/, /precios/) + anchors.
+// Hijas pendientes (/demo/, /facturacion-dgi/, /inventario/): texto plano + comentario, nunca href.
+test("links: no dead hrefs; pending pages are plain text with a comment, never hrefs", () => {
+  const allowedInternal = new Set(["/", "/precios/", "/software-pos/"]);
+  for (const m of vis.matchAll(/href="(\/[^"]*)"/g)) assert.ok(allowedInternal.has(m[1]), `unexpected internal href: ${m[1]}`);
+  for (const pending of ["/demo/", "/facturacion-dgi/", "/inventario/", "/software-pos/hardware/"]) {
+    assert.equal(vis.includes(`href="${pending}"`), false, `href to unpublished page ${pending}`);
+    assert.match(src, new RegExp(`<!--[^>]*${pending.replace(/\//g, "\\/")}[^>]*-->`), `${pending} must be declared pending in a comment`);
+  }
+  const allowedExternal = new Set([
+    "https://wa.me/50581948526",
+    "https://www.instagram.com/nhilosapp/",
+    "https://www.facebook.com/nhilosapp",
+    "https://www.tiktok.com/@nhilosapp",
+  ]);
+  for (const m of vis.matchAll(/href="(https:\/\/[^"]+)"/g)) assert.ok(allowedExternal.has(m[1]), `unexpected external href: ${m[1]}`);
+});
+
+// Media y fuentes: rutas absolutas (una página hija con ruta relativa da 404 en producción)
+// y toda referencia existe. Sin object-fit: cover: la evidencia nunca se recorta.
+test("media/fonts: absolute paths only, referenced files exist, no object-fit: cover", () => {
+  for (const m of src.matchAll(/(?:src|poster|href)="([^"]*(?:media|fonts)\/[^"]*)"/g)) {
+    assert.ok(m[1].startsWith("/"), `relative media/fonts path: ${m[1]}`);
+    assert.ok(fs.existsSync(path.join(ROOT, "design/nhilos-web-foundation", m[1].slice(1))), m[1]);
+  }
+  const css = src.split("<style>")[1].split("</style>")[0];
+  assert.doesNotMatch(css, /object-fit:\s*cover/);
+});
+
+// S2: tokens — todo var(--*) usado por la página existe en assets/site.css
+test("S2: every var(--*) token referenced by the page is defined in assets/site.css", () => {
+  const css = fs.readFileSync(SITE_CSS, "utf8");
+  const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+  const used = [...new Set([...src.matchAll(/var\((--[\w-]+)/g)].map((m) => m[1]))];
+  const missing = used.filter((t) => !defined.has(t));
+  assert.deepEqual(missing, [], `tokens used but not defined in site.css: ${missing.join(", ")}`);
+});
+
+// S2: el shell del sitio — hoja y script compartidos, noscript presente, un solo JSON-LD
+test("S2: shared shell (site.css + site.js + noscript), one JSON-LD block", () => {
+  assert.match(src, /<link rel="stylesheet" href="\/assets\/site\.css">/);
+  assert.match(src, /<script src="\/assets\/site\.js"><\/script>/);
+  assert.match(src, /<noscript>/);
+  assert.equal((src.match(/<script type="application\/ld\+json">/g) || []).length, 1);
+  assert.equal(/<\/script>\s*<\/script>/.test(src), false, "no duplicated/stray script close tag");
+  // El FAQ replica la retícula del home (componente de sistema, único reuse permitido)
+  assert.match(src, /class="faq-wrap reveal"/);
+  assert.match(src, /class="faq-cells stagger"/);
+  assert.equal(src.includes("<details"), false);
+  assert.equal(src.includes("<summary"), false);
+});
+
+// Patrones de sección propios: la página NO puede reciclar las composiciones del home ni del hub
+test("S2: fresh section patterns — home and hub compositions stay out of this page", () => {
+  const pageCss = src.split("<style>")[1].split("</style>")[0];
+  for (const cls of ["plan-grid", "plan-card", "pack-grid", "pack-card", "addons-list", "fineprint", "compare-band", "compare-col", "ledger-row", "ledger-split", "map-grid", "map-item", "edu-grid", "control-grid", "control-level", "conditions-grid", "hero-question", "mode-btn", "hero-questions"]) {
+    assert.ok(!pageCss.includes(cls), `page CSS reuses home/hub pattern class: ${cls}`);
+    assert.ok(!body.includes(`class="${cls}`) && !body.includes(` ${cls}`), `body reuses home/hub pattern class: ${cls}`);
+  }
+});
+
+// C3: WhatsApp oficial
+test("C3: every WhatsApp link targets the official number", () => {
+  for (const m of vis.matchAll(/wa\.me\/(\d+)/g)) assert.equal(m[1], "50581948526");
+});
+
+// B7: cero em-dashes
+test("B7: zero em-dashes in visible copy and JSON-LD", () => {
+  assert.equal(vis.includes("—"), false);
+  assert.equal(JSON.stringify(ld).includes("—"), false);
+});
+
+// B2: meta exacta del brief §2.8 y canónica de la página
+test("B2: title/description match brief §2.8 and canonical is /precios/", () => {
+  const title = src.match(/<title>([^<]+)<\/title>/)[1];
+  const desc = src.match(/<meta name="description" content="([^"]+)">/)[1];
+  assert.equal(title, "Precios de NHILOS POS en Nicaragua · Planes desde US$49");
+  assert.equal(desc, "Esencial US$49, Operación US$89 y Pro US$149 al mes. Setups desde US$149. Suscripción por negocio, hardware aparte. Cotiza tu NHILOS POS.");
+  assert.ok(title.length <= 60);
+  assert.ok(desc.length <= 155);
+  assert.equal(src.match(/<link rel="canonical" href="([^"]+)">/)[1], "https://www.nhilospos.com/precios/");
+});
+
+// Datos personales
+test("no personal names in public copy", () => {
+  assert.equal(src.includes("Octavio"), false);
+});
+
+// S8: la página está registrada en el build multi-página con su URL canónica
+test("S8: precios registered in PAGES with its canonical url", () => {
+  const buildSrc = fs.readFileSync(BUILD, "utf8");
+  assert.match(buildSrc, /source: "07-precios\.html", out: "precios\/index\.html", url: "\/precios\/"/);
+});

@@ -22,6 +22,7 @@ const ASSETS_DIR = "assets";
 const PAGES = [
   { source: ENTRY, out: "index.html", url: "/" },
   { source: "06-software-pos.html", out: "software-pos/index.html", url: "/software-pos/" },
+  { source: "07-precios.html", out: "precios/index.html", url: "/precios/" },
 ];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
@@ -107,6 +108,11 @@ for (const file of walk(path.join(SOURCE, ASSETS_DIR))) {
 
 for (const page of PAGES) {
   let html = readFileSync(path.join(SOURCE, page.source), "utf8");
+  // media/ y fonts/ viven en la raíz del dominio. Una referencia relativa en una
+  // página hija (/software-pos/) resuelve contra la URL de la página y da 404 —
+  // así murieron los dos clips del hub en producción sin que ninguna prueba lo
+  // viera. Absoluta en todas las páginas, raíz incluida, para que no vuelva.
+  html = html.replace(/(\s(?:src|poster|href)=")(media|fonts)\//g, "$1/$2/");
   for (const [from, to] of hashedAssets) {
     html = html.replaceAll(`"${from}"`, `"${to}"`);
     // Las páginas que no viven en la raíz (p. ej. /software-pos/) referencian
@@ -228,6 +234,15 @@ for (const page of PAGES) {
   for (const match of built.matchAll(/href="\/?(assets\/[^"?]+)[^"]*"/g)) {
     if (!existsSync(path.join(OUTPUT, match[1]))) {
       fail(`${page.out} references a missing asset: ${match[1]}`);
+    }
+  }
+  for (const match of built.matchAll(/(?:src|poster|href)="([^"]*(?:media|fonts)\/[^"]*)"/g)) {
+    const ref = match[1];
+    if (!ref.startsWith("/")) {
+      fail(`${page.out} references ${ref} with a relative path: on a child page it resolves against the page URL and 404s in production`);
+    }
+    if (!existsSync(path.join(OUTPUT, ref.slice(1)))) {
+      fail(`${page.out} references a missing file: ${ref}`);
     }
   }
 }
