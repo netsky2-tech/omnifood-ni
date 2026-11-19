@@ -20,7 +20,10 @@ const ENTRY = "05-home-geo.html";
 const ASSETS_DIR = "assets";
 // Una página por artboard público. `out` es la ruta del archivo; `url` es la
 // canónica, que además alimenta el sitemap.
-const PAGES = [{ source: ENTRY, out: "index.html", url: "/" }];
+const PAGES = [
+  { source: ENTRY, out: "index.html", url: "/" },
+  { source: "06-software-pos.html", out: "software-pos/index.html", url: "/software-pos/" },
+];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
 const PUBLIC_DIRS = ["media", "fonts"];
@@ -93,7 +96,12 @@ for (const file of walk(path.join(SOURCE, ASSETS_DIR))) {
 
 for (const page of PAGES) {
   let html = readFileSync(path.join(SOURCE, page.source), "utf8");
-  for (const [from, to] of hashedAssets) html = html.replaceAll(`"${from}"`, `"${to}"`);
+  for (const [from, to] of hashedAssets) {
+    html = html.replaceAll(`"${from}"`, `"${to}"`);
+    // Las páginas que no viven en la raíz (p. ej. /software-pos/) referencian
+    // assets con ruta absoluta; reescribir también esa forma con el nombre hasheado.
+    html = html.replaceAll(`"/${from}"`, `"/${to}"`);
+  }
   const target = path.join(OUTPUT, page.out);
   mkdirSync(path.dirname(target), { recursive: true });
   writeFileSync(target, html);
@@ -171,7 +179,7 @@ for (const page of PAGES) {
   if (built.includes(`"${ASSETS_DIR}/site.css"`)) {
     fail(`${page.out} still links the unhashed stylesheet`);
   }
-  for (const match of built.matchAll(/href="(assets\/[^"]+)"/g)) {
+  for (const match of built.matchAll(/href="\/?(assets\/[^"?]+)[^"]*"/g)) {
     if (!existsSync(path.join(OUTPUT, match[1]))) {
       fail(`${page.out} references a missing asset: ${match[1]}`);
     }

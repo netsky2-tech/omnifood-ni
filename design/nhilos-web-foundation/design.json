@@ -30,6 +30,13 @@
       "tradeoff": "Dirección insignia que fusiona el dosel arquitectónico oscuro de Linear, la claridad comercial de Square, la autoridad gerencial de Lightspeed y la narrativa Toast. Incorpora capa conmutable de rationale psicológico, simulador interactivo de continuidad offline y formulario contextual NF-13.",
       "width": 1440,
       "height": 900
+    },
+    {
+      "file": "06-software-pos.html",
+      "title": "06 — Hub /software-pos/ (paridad de tokens, patrones propios)",
+      "tradeoff": "Página hub de categoría sobre los tokens y el comportamiento del home (reveal, stagger, hilo, focus, reduced-motion) con patrones de sección propios: banda comparativa a-vs-b con selector de forma de operación, libreta de rutas numerada, FAQ acordeón nativo, breadcrumb y rejillas editoriales asimétricas. Capturas reales de media/ etiquetadas como datos de demostración y espacios marcados (data-media-slot) para grabaciones reales; nunca simula footage.",
+      "width": 1440,
+      "height": 900
     }
   ]
 }
