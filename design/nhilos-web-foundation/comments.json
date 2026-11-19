@@ -177,9 +177,10 @@
       "excerpt": "/",
       "comment": "Accessibility check on body > main > nav > div > ol > li:nth-of-type(2): Low contrast.\n\"/\" is 1.6 : 1 (#cccccc on #ffffff); WCAG AA needs 4.5 : 1.\nFix it so it meets WCAG 2.2 AA, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:12.508Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:12.523Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:35:40.234Z",
+      "resolution": "El separador '/' pasa de --web-border-manual (#CCCCCC, 1.61:1, decorativo) a --web-text-muted (#5B6B7C, 5.47:1 AA). Unificado también en /precios/, que tenía el mismo patrón. El token de bordes no se tocó: cada cosa su color."
     },
     {
       "id": "8s46800w",
@@ -188,9 +189,10 @@
       "excerpt": "01",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(1): Touch target under 44 px.\n\"Inicio\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:15.419Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:15.451Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:39:43.678Z",
+      "resolution": "Mismo componente del sistema: site.css `.spine a` ya mide 44px de target (ec6d74f8) y el hub usa ese stylesheet compartido — el fix del home aplica aquí automáticamente. Obsoleto al momento de su captura."
     },
     {
       "id": "kfmacaqd",
@@ -199,9 +201,10 @@
       "excerpt": "02",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(2): Touch target under 44 px.\n\"Dos formas de vender\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:18.387Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:18.409Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:41:23.938Z",
+      "resolution": "Mismo componente: site.css .spine a = 44px target desde ec6d74f8, compartido por las tres páginas. Obsoleto al momento de su captura."
     },
     {
       "id": "2ycgd4d4",
