@@ -26,7 +26,7 @@ const cells = [...vis.matchAll(/<div class="faq-cell">\s*<h3>([\s\S]*?)<\/h3>\s*
 test("S1: single h1 with brief §2.4 text", () => {
   const h1 = [...src.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)];
   assert.equal(h1.length, 1);
-  assert.equal(txt(h1[0][1]), "Precio de sistema POS para restaurante en Nicaragua: planes desde US$49 al mes");
+  assert.equal(txt(h1[0][1]), "Precio de un sistema POS en Nicaragua: planes desde US$49 al mes");
 });
 
 // S1 / brief §2.4: jerarquía H2 completa, verbatim y en orden.
@@ -217,12 +217,16 @@ test("links: no dead hrefs; pending pages are plain text with a comment, never h
   for (const m of vis.matchAll(/href="(https:\/\/[^"]+)"/g)) assert.ok(allowedExternal.has(m[1]), `unexpected external href: ${m[1]}`);
 });
 
-// Media y fuentes: rutas absolutas (una página hija con ruta relativa da 404 en producción)
-// y toda referencia existe. Sin object-fit: cover: la evidencia nunca se recorta.
-test("media/fonts: absolute paths only, referenced files exist, no object-fit: cover", () => {
+// Media y fuentes en la página PUBLICADA: rutas absolutas (una página hija con
+// ruta relativa da 404 en producción — así murieron los clips del hub). El
+// ARTBOARD usa relativas porque se abre desde design/, donde media/ y fonts/ son
+// hermanas. Esta suite lee el artboard: exige relativas y que la referencia
+// exista; la absoluta publicada la garantiza el build (rewrite + guardia propia).
+// Sin object-fit: cover: la evidencia nunca se recorta.
+test("media/fonts: artboard-relative paths that resolve from design/, no object-fit: cover", () => {
   for (const m of src.matchAll(/(?:src|poster|href)="([^"]*(?:media|fonts)\/[^"]*)"/g)) {
-    assert.ok(m[1].startsWith("/"), `relative media/fonts path: ${m[1]}`);
-    assert.ok(fs.existsSync(path.join(ROOT, "design/nhilos-web-foundation", m[1].slice(1))), m[1]);
+    assert.ok(!m[1].startsWith("/"), `artboard must use relative media/fonts paths: ${m[1]}`);
+    assert.ok(fs.existsSync(path.join(ROOT, "design/nhilos-web-foundation", m[1])), m[1]);
   }
   const css = src.split("<style>")[1].split("</style>")[0];
   assert.doesNotMatch(css, /object-fit:\s*cover/);
@@ -239,8 +243,8 @@ test("S2: every var(--*) token referenced by the page is defined in assets/site.
 
 // S2: el shell del sitio — hoja y script compartidos, noscript presente, un solo JSON-LD
 test("S2: shared shell (site.css + site.js + noscript), one JSON-LD block", () => {
-  assert.match(src, /<link rel="stylesheet" href="\/assets\/site\.css">/);
-  assert.match(src, /<script src="\/assets\/site\.js"><\/script>/);
+  assert.match(src, /<link rel="stylesheet" href="assets\/site\.css">/);
+  assert.match(src, /<script src="assets\/site\.js"><\/script>/);
   assert.match(src, /<noscript>/);
   assert.equal((src.match(/<script type="application\/ld\+json">/g) || []).length, 1);
   assert.equal(/<\/script>\s*<\/script>/.test(src), false, "no duplicated/stray script close tag");
