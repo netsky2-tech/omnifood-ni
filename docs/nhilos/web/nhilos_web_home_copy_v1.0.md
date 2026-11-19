@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `nhilos_web_home_copy_v1.0.md` |
-| Versión | 1.5 |
+| Versión | 1.8 |
 | Estado | COPY FINAL PARA RESTRUCTURACIÓN — versión lean orientada a venta |
 | Owner | Founder / Marketing |
 | Tono | Cercano y profesional: se habla de tú a tú, sin jerga corporativa, con concretez operativa |
@@ -102,7 +102,7 @@ Cada venta descuenta lo que consumió: el refresco que se vendió entero, los gr
 
 ### H2: Hecho para la operación de tu negocio
 
-- **Food parks:** varias marcas, cajas compartidas, vista consolidada para el administrador.
+- **Food parks:** varias marcas en un solo park, cada puesto con su catálogo y su cobro.
 - **Restaurantes:** velocidad en mostrador y mesa, modificadores rápidos, arqueos por turno.
 - **Cafeterías:** modificadores por bebida y descuento por gramos.
 - **Tiendas y mostrador:** lo que necesitas — y nada de lo que no.
@@ -118,7 +118,7 @@ El cliente paga como quiera; el cuadre del cierre sale exacto, no aproximado.
 
 Depende de tu operación: terminales, locales y si activas recetas. Cotización sin compromiso por WhatsApp o demo — sin licencias pesadas de una vez.
 
-Precios definidos y congelados (v1.6, fuente: `docs/finance/estrategia_precios_nhilos_pos_v1.md`, sección 4). Se publican como tres secciones contiguas (cada una ≤120 palabras, regla de profundidad): `#precios` (planes Esencial US$49/Operación US$89/Pro US$149, setup US$149/US$250/US$450), `#packs` (Retail y Cocina US$39/mes; add-ons terminal adicional US$40/mes, US$29 en Pro; cuenta de propietario adicional US$10/mes; Enterprise por cotización) y `#condiciones` (letra pequeña: mecánica DT 09-2007, hardware aparte, precios netos, entitlements #984). La capacidad fiscal se publica como "factura con la mecánica que exige la DT 09-2007", nunca "facturación impresa" (el adaptador ESC/POS genérico, issue #983, sigue abierto) ni "factura electrónica".
+Precios definidos y congelados (v1.6, fuente: `docs/finance/estrategia_precios_nhilos_pos_v1.md`, sección 4). Se publican como bloques contiguos (cada uno ≤120 palabras, regla de profundidad): `#precios` (planes Esencial US$49/Operación US$89/Pro US$149, setup US$149/US$250/US$450; las terminales se publican como "habilitadas": punto de cobro activado, nunca equipo incluido; el portal del propietario se lista sujeto al go-live comprometido), notas bajo la grilla (`#precios-notas`: la mecánica DT 09-2007 como declaración de capacidad, la aclaración de que una terminal no es un equipo, y la línea de Enterprise), `#packs` "Packs de capacidad" (solo Retail y Cocina US$39/mes + regla de inclusión por plan y reglas de compra: segundo pack en Operación +US$29/mes; pack en Esencial +US$39/mes, total US$88, con la recomendación de subir a Operación), `#addons` "Add-ons" (terminal adicional US$40/mes, US$29 en Pro, con cuota única de enrolamiento; cuenta de propietario adicional US$10/mes; nota de que no es el catálogo completo y el detalle se cotiza por operación) y `#condiciones` "Condiciones del servicio" (hardware aparte, setup no reembolsable, precios netos, entitlements #984). La capacidad fiscal se publica como "factura con la mecánica que exige la DT 09-2007" y vive junto a los planes, no en letra pequeña; nunca "facturación impresa" (el adaptador ESC/POS genérico, issue #983, sigue abierto) ni "factura electrónica". Tampoco se publican como capacidades vigentes: KDS (#993), comandas por red local (#994), vista consolidada multi-sucursal ni kit de estación con impresora (#983). El pack Retail se publica como "kardex, costo promedio ponderado"; "kardex valorizado" queda como diferenciador de Pro.
 
 > El benchmark del mercado ($21–50/mes de entrada) era referencia de mercado, no precio propio; se retiró del texto público al publicar precios reales.
 
@@ -196,7 +196,9 @@ NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US
 
 **3. ¿NHILOS POS funciona sin internet?**
 
-Sí: NHILOS POS funciona sin internet en cualquier negocio de Nicaragua; es su característica principal. La terminal tiene el catálogo cargado y sigue cobrando, emitiendo tickets con numeración consecutiva y enviando comandas a cocina por la red local del negocio. Al volver el internet, las ventas se sincronizan al panel web automáticamente, en orden y sin duplicar.
+Sí: NHILOS POS funciona sin internet en cualquier negocio de Nicaragua; es su característica principal. La terminal tiene el catálogo cargado y sigue cobrando, emitiendo tickets con numeración consecutiva. Al volver el internet, las ventas se sincronizan al panel web automáticamente, en orden y sin duplicar.
+
+*(Sin comandas por red local: la concurrencia LAN no es capacidad vigente (#994) y el despacho a cocina depende de #993.)*
 
 **4. ¿NHILOS POS emite facturación válida para la DGI de Nicaragua?**
 
@@ -208,15 +210,21 @@ Sí: NHILOS POS, disponible en todo Nicaragua, cubre la reventa pura en modo sim
 
 **6. ¿Cómo funciona NHILOS POS en un food park con varios puestos?**
 
-En un food park de Nicaragua, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve la vista consolidada de todas las marcas. Un puesto que revende trabaja en modo simple y una cocina que prepara platos activa recetas e insumos: ambos modos conviven en el mismo sistema.
+En un food park de Nicaragua, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve su operación desde el panel web. Un puesto que revende trabaja en modo simple y una cocina que prepara platos activa recetas e insumos: ambos modos conviven en el mismo sistema.
+
+*(Sin "vista consolidada de todas las marcas" ni "cajas compartidas": la consolidación multi-sucursal no existe; una suscripción por park, sus propios puestos y marcas.)*
 
 **7. ¿Qué incluye la implementación de NHILOS POS y cuánto tarda?**
 
-La implementación de NHILOS POS en Nicaragua incluye la carga inicial de tu catálogo (productos, insumos y precios), la configuración de terminales y red local, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo y el acompañamiento en el primer turno real. El tiempo depende de tu catálogo: un mostrador simple arranca en días; un restaurante con recetas toma más. El cronograma real viene en la cotización.
+La implementación de NHILOS POS en Nicaragua incluye el alta de tu catálogo con plantillas (productos, insumos y precios), la configuración de tus terminales, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo y el acompañamiento en el primer turno real. El setup cubre una puesta en marcha con una sesión de trabajo: la migración extra de datos se cotiza aparte. El tiempo depende de tu catálogo: un mostrador simple arranca en días; un restaurante con recetas toma más. El cronograma real viene en la cotización.
+
+*(Alcance del setup según el documento de precios: plantilla + Setup Center + una sesión; migración pesada fuera del setup, se cotiza por lote en `/precios/`, sin cifra en el home. Sin "red local" (#994).)*
 
 **8. ¿Necesito comprar equipo especial para usar NHILOS POS?**
 
-NHILOS POS opera en terminales táctiles Android y no exige hardware propietario para negocios en Nicaragua. Si ya tienes equipo, se evalúa si sirve; si no, se cotiza el kit completo (terminal, impresora térmica y gaveta de dinero) con proveedores locales. Las comandas salen a cocina por pantalla KDS o por impresora, según tu operación.
+NHILOS POS opera en terminales táctiles Android y no exige hardware propietario para negocios en Nicaragua. Si ya tienes equipo, se evalúa si sirve; si no, el equipo se cotiza aparte según tu mostrador.
+
+*(Sin enumeración de kit con impresora ni KDS: el kit de estación está bloqueado hasta cerrar #983 y KDS no se vende (#993). El hardware se cotiza aparte por escenario, como la nota bajo los planes.)*
 
 **9. ¿Dónde quedan mis datos si se daña la terminal o se va el internet?**
 
@@ -306,7 +314,6 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
         "Inventario con descuento por recetas (BOM) y kardex para productos de producción",
         "Modo de reventa simple para tiendas y misceláneas, sin recetas",
         "Cobro bimoneda en córdobas y dólares",
-        "Comandas a cocina por pantalla KDS o impresora",
         "Arqueos y cierres de turno con auditoría por usuario",
         "Sincronización automática con panel web al reconectar"
       ],
@@ -329,7 +336,7 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
         {
           "@type": "Question",
           "name": "¿NHILOS POS funciona sin internet?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Sí, y es su característica principal. NHILOS POS es local-first: la terminal tiene el catálogo cargado en el equipo, así que cuando se cae el internet sigue cobrando, emite tickets con numeración consecutiva y envía comandas a cocina o barra por la red local del negocio. Todo lo que vendiste sin conexión se sincroniza automáticamente al panel web cuando la red vuelve, en orden y sin duplicar. La condición honesta: la terminal debe estar enrolada a tu negocio y con su catálogo cargado — eso lo valida la implementación antes de quedar en producción." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Sí, y es su característica principal. NHILOS POS es local-first: la terminal tiene el catálogo cargado en el equipo, así que cuando se cae el internet sigue cobrando y emite tickets con numeración consecutiva. Todo lo que vendiste sin conexión se sincroniza automáticamente al panel web cuando la red vuelve, en orden y sin duplicar. La condición honesta: la terminal debe estar enrolada a tu negocio y con su catálogo cargado — eso lo valida la implementación antes de quedar en producción." }
         },
         {
           "@type": "Question",
@@ -344,17 +351,17 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
         {
           "@type": "Question",
           "name": "¿Cómo funciona NHILOS POS en un food park con varios puestos?",
-          "acceptedAnswer": { "@type": "Answer", "text": "En un food park, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve la vista consolidada de todas las marcas. Cada locatario opera con el nivel de control que necesite: un puesto que revende productos trabaja en modo simple, y una cocina que prepara platos activa recetas e insumos. Ambos modos conviven en el mismo sistema, y las ventas de todos llegan al panel web del administrador cuando la conexión está disponible." }
+          "acceptedAnswer": { "@type": "Answer", "text": "En un food park, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve su operación desde el panel web. Cada locatario opera con el nivel de control que necesite: un puesto que revende productos trabaja en modo simple, y una cocina que prepara platos activa recetas e insumos. Ambos modos conviven en el mismo sistema, y las ventas de todos llegan al panel web del administrador cuando la conexión está disponible." }
         },
         {
           "@type": "Question",
           "name": "¿Qué incluye la implementación de NHILOS POS y cuánto tarda?",
-          "acceptedAnswer": { "@type": "Answer", "text": "La implementación de NHILOS POS incluye la carga inicial de tu catálogo (productos, insumos y precios), la configuración de terminales y red local, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo de caja y cocina, y el acompañamiento en el primer turno real. El tiempo depende de tu catálogo: un negocio de mostrador simple arranca en días; un restaurante con recetas completas toma más, porque cada receta se define con precisión. El cronograma real viene en la cotización — no se promete una fecha genérica." }
+          "acceptedAnswer": { "@type": "Answer", "text": "La implementación de NHILOS POS incluye el alta de tu catálogo con plantillas (productos, insumos y precios), la configuración de tus terminales, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo de caja y cocina, y el acompañamiento en el primer turno real. El setup cubre una puesta en marcha con una sesión de trabajo: la migración extra de datos se cotiza aparte. El tiempo depende de tu catálogo: un negocio de mostrador simple arranca en días; un restaurante con recetas completas toma más, porque cada receta se define con precisión. El cronograma real viene en la cotización — no se promete una fecha genérica." }
         },
         {
           "@type": "Question",
           "name": "¿Necesito comprar equipo especial para usar NHILOS POS?",
-          "acceptedAnswer": { "@type": "Answer", "text": "NHILOS POS opera en terminales táctiles Android. Si tu negocio ya tiene equipo, se evalúa si sirve; si no, se cotiza el kit completo — terminal, impresora térmica y gaveta de dinero — con proveedores locales de Nicaragua. El sistema emite comandas a cocina por pantalla (KDS) o por impresora, según cómo esté organizada tu operación." }
+          "acceptedAnswer": { "@type": "Answer", "text": "NHILOS POS opera en terminales táctiles Android. Si tu negocio ya tiene equipo, se evalúa si sirve; si no, el equipo se cotiza aparte según tu mostrador, con proveedores locales de Nicaragua. El hardware nunca va incluido en la mensualidad." }
         },
         {
           "@type": "Question",
@@ -424,3 +431,5 @@ NHILOS POS se diferencia de otros sistemas POS que se venden en Nicaragua en tre
 | 1.4 | 2026-11-16 | H1 generalizado a "Sistema POS en Nicaragua que sigue vendiendo sin internet" (title, og y JSON-LD sincronizados); long-tail restaurante reservada para /software-pos/restaurantes/ | Equipo NHILOS |
 | 1.3 | 2026-11-16 | JSON-LD completo definido: @graph con Organization (sin address, área de servicio, redes en sameAs) + SoftwareApplication (Android, featureList) + FAQPage (10 preguntas GEO); reglas de integridad y extensiones pendientes (offers al definir precios) | Equipo NHILOS |
 | 1.6 | 2026-11-18 | Precios reales publicados según `docs/finance/estrategia_precios_nhilos_pos_v1.md` (congelado): planes Esencial/Operación/Pro + Enterprise, packs US$39, add-ons y letra pequeña en tres secciones ≤120 palabras; FAQ G2 actualizado (texto visible = JSON-LD); benchmark $21–50 retirado del texto público; capacidad fiscal publicada solo como mecánica DT 09-2007 (impresión pendiente en #983) | Equipo NHILOS |
+| 1.7 | 2026-11-18 | Reestructuración del área de precios (founder): tarjeta Enterprise retirada (queda una línea de cotización bajo la grilla), packs separados de add-ons (`#packs` "Packs de capacidad" + `#addons` como bloque propio), "La letra pequeña" renombrada a "Condiciones del servicio", capacidad fiscal DT 09-2007 movida fuera de la letra pequeña a notas bajo la grilla de planes, terminales publicadas como "habilitadas" (punto de cobro activado; el hardware nunca va incluido, corre en Android propio o kit cotizado aparte) | Equipo NHILOS |
+| 1.8 | 2026-11-18 | Auditoría de claims contra `estrategia_precios_nhilos_pos_v1.md`: KDS y comandas por LAN retirados de featureList, hilo y FAQ (guardias #993/#994/#983); kit de estación desenumerado; pack Retail "kardex, costo promedio ponderado" (valorizado queda en Pro); "vista consolidada" y "cajas compartidas" retiradas; portal del propietario sujeto al go-live comprometido; alcance del setup honesto (plantilla + una sesión, migración extra cotizada aparte); reglas de compra de packs publicadas (+US$29 en Operación, +US$39 en Esencial/total US$88); cuota única de enrolamiento de terminal adicional declarada sin cifra; nota de que add-ons no es el catálogo completo; "el setup no es reembolsable" en condiciones | Equipo NHILOS |
