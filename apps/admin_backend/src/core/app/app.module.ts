@@ -86,6 +86,7 @@ import { TemplateRecipeItem } from '../../modules/onboarding/entities/template-r
 import { ImportStaging } from '../../modules/onboarding/entities/import-staging.entity';
 import { OnboardingSession } from '../../modules/onboarding/entities/onboarding-session.entity';
 import { DeviceLinkingCode } from '../../modules/onboarding/entities/device-linking-code.entity';
+import { InstallToken } from '../../modules/onboarding/entities/install-token.entity';
 import { OnboardingIdempotencyRecord } from '../../modules/onboarding/entities/onboarding-idempotency.entity';
 import { TemplateApplication } from '../../modules/onboarding/entities/template-application.entity';
 import { TemplateSeedLink } from '../../modules/onboarding/entities/template-seed-link.entity';
@@ -210,6 +211,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     ImportStaging,
     OnboardingSession,
     DeviceLinkingCode,
+    InstallToken,
     OnboardingIdempotencyRecord,
     TemplateApplication,
     TemplateSeedLink,

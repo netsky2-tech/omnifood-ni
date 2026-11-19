@@ -18,6 +18,7 @@ import { ActivationAttempt } from './entities/activation-attempt.entity';
 import { ActivationCheckResult } from './entities/activation-check-result.entity';
 import { ActivationFollowUp } from './entities/activation-follow-up.entity';
 import { DeviceLinkingCode } from './entities/device-linking-code.entity';
+import { InstallToken } from './entities/install-token.entity';
 import { OnboardingTelemetryEvent } from './entities/onboarding-telemetry-event.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
@@ -61,6 +62,10 @@ import { ActivationController } from './controllers/activation.controller';
 import { DeviceLinkingService } from './services/device-linking.service';
 import { DeviceLinkingController } from './controllers/device-linking.controller';
 import { DeviceLinkingRateLimiter } from './utils/linking-rate-limiter';
+import { InstallKitService } from './services/install-kit.service';
+import { InstallTokensController } from './controllers/install-tokens.controller';
+import { InstallKitController } from './controllers/install-kit.controller';
+import { InstallKitRateLimiter } from './utils/install-kit-rate-limiter';
 import { TerminalPrimingService } from './services/terminal-priming.service';
 import { TerminalPrimingController } from './controllers/terminal-priming.controller';
 import { OnboardingTelemetryService } from './telemetry/onboarding-telemetry.service';
@@ -89,6 +94,7 @@ import { TenantModule } from '../tenant/tenant.module';
 // ENT-03b (issue #984): provides TenantQuotaService for the terminal seat
 // quota enforced at the two enrolment endpoints of ActivationController.
 import { EntitlementsModule } from '../entitlements/entitlements.module';
+import { ReleasesModule } from '../releases/releases.module';
 import { CompanyLogoService } from './services/company-logo.service';
 import { CompanyLogoController } from './controllers/company-logo.controller';
 import { CompanyLogoDeviceController } from './controllers/company-logo-device.controller';
@@ -116,6 +122,7 @@ export const getRequiredOnboardingJwtSecret = (
     TenantModule,
     // ENT-03b: terminal seat quota for the enrolment endpoints.
     EntitlementsModule,
+    ReleasesModule,
     TypeOrmModule.forFeature([
       IndustryTemplate,
       TemplateInsumo,
@@ -134,6 +141,7 @@ export const getRequiredOnboardingJwtSecret = (
       ActivationCheckResult,
       ActivationFollowUp,
       DeviceLinkingCode,
+      InstallToken,
       OnboardingTelemetryEvent,
       Tenant,
       User,
@@ -161,6 +169,8 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingCatalogController,
     ActivationController,
     DeviceLinkingController,
+    InstallTokensController,
+    InstallKitController,
     TerminalPrimingController,
     OnboardingTelemetryController,
     OnboardingRolloutController,
@@ -188,6 +198,8 @@ export const getRequiredOnboardingJwtSecret = (
     ActivationService,
     DeviceLinkingService,
     DeviceLinkingRateLimiter,
+    InstallKitService,
+    InstallKitRateLimiter,
     TerminalPrimingService,
     OnboardingTelemetryService,
     OnboardingCustomerSaleObserver,
@@ -232,6 +244,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingIdempotencyCoordinator,
     OnboardingCatalogService,
     ActivationService,
+    InstallKitService,
     OnboardingTelemetryService,
     OnboardingCustomerSaleObserver,
     OnboardingFeatureRolloutService,

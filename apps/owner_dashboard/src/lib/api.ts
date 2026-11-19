@@ -324,6 +324,10 @@ export async function apiFetch<T>(
           });
         }
 
+        if (retryResponse.status === 204) {
+          return undefined as T;
+        }
+
         return retryResponse.json() as Promise<T>;
       } catch (refreshErr) {
         clearTokens();
@@ -357,6 +361,10 @@ export async function apiFetch<T>(
       responseBody: errorBody,
       requestId,
     });
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;

@@ -11,6 +11,9 @@ import {
   cancelActivationAttempt,
   generateLinkingCode,
   fetchLinkingCodes,
+  listInstallTokens,
+  createInstallToken,
+  revokeInstallToken,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -20,9 +23,10 @@ import {
   type SetupCenterProgress,
   type CreateManualProductDto,
   type StartActivationDto,
+  type CreateInstallTokenDto,
 } from "./types";
 
-import { getActiveTenantId } from "@/lib/tenant";
+import { getActiveTenantId, useTenantId } from "@/lib/tenant";
 
 export const onboardingKeys = {
   all: ["onboarding"] as const,
@@ -31,6 +35,7 @@ export const onboardingKeys = {
   catalogSummary: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "catalog-summary"] as const,
   activationAttempt: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "activation-attempt"] as const,
   linkingCodes: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "linking-codes"] as const,
+  installTokens: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "install-tokens"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -257,10 +262,12 @@ export function useActiveActivationAttempt() {
  * push) matches the offline-first reality where the POS and the dashboard
  * share no direct channel.
  */
-export function useLinkingCodes() {
+export function useLinkingCodes(options?: { enabled?: boolean }) {
+  const tenantId = useTenantId();
   return useQuery({
-    queryKey: onboardingKeys.linkingCodes(),
+    queryKey: onboardingKeys.linkingCodes(tenantId),
     queryFn: fetchLinkingCodes,
+    enabled: options?.enabled ?? true,
     refetchInterval: 3000,
     refetchIntervalInBackground: true,
   });
@@ -334,6 +341,47 @@ export function useCancelActivationAttempt() {
       // without waiting for the next background poll.
       queryClient.setQueryData(onboardingKeys.activationAttempt(), null);
       queryClient.invalidateQueries({ queryKey: onboardingKeys.all });
+    },
+  });
+}
+
+/**
+ * Lists the tenant's POS install kit tokens (issue #958).
+ */
+export function useInstallTokens(options?: { enabled?: boolean }) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: onboardingKeys.installTokens(tenantId),
+    queryFn: listInstallTokens,
+    enabled: options?.enabled ?? true,
+    staleTime: 10_000,
+  });
+}
+
+/**
+ * Creates or rotates a POS install kit token for the caller's tenant (issue #958).
+ */
+export function useCreateInstallToken() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  return useMutation({
+    mutationFn: (dto: CreateInstallTokenDto = {}) => createInstallToken(dto),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.installTokens(tenantId) });
+    },
+  });
+}
+
+/**
+ * Revokes an install kit token by id (issue #958).
+ */
+export function useRevokeInstallToken() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  return useMutation({
+    mutationFn: (tokenId: string) => revokeInstallToken(tokenId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: onboardingKeys.installTokens(tenantId) });
     },
   });
 }
