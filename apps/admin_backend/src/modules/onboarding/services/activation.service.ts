@@ -805,6 +805,11 @@ export class ActivationService {
         const contractMismatch =
           contractV2 && hasLegacyOnlyEvidence && !hasAnyV2Evidence;
 
+        // Issue #961: reject finalizing an activation attempt when any printer
+        // check reports the mock/simulator driver or simulated print evidence.
+        const mockPrinterFailureCode =
+          this.evaluateMockPrinterEvidence(checkMap);
+
         // V2 fiscal-safety gate: the dry-run proposal is re-verified against
         // the LIVE cloud watermark at finalization time, so an attempt cannot
         // pass on a stale local reading even if the check itself was PASS when
@@ -832,6 +837,9 @@ export class ActivationService {
         } else if (firstFailedCode) {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = firstFailedCode;
+        } else if (mockPrinterFailureCode) {
+          attempt.status = ActivationAttemptStatus.FAIL;
+          attempt.failureCode = mockPrinterFailureCode;
         } else if (dryRunFailureCode) {
           attempt.status = ActivationAttemptStatus.FAIL;
           attempt.failureCode = dryRunFailureCode;
@@ -941,6 +949,49 @@ export class ActivationService {
    *
    * Returns a failure code, or null when the proposal is safe.
    */
+  /**
+   * Issue #961: reject finalizing an activation attempt when any printer check
+   * (`NON_FISCAL_TEST_PRINT`, `TEST_PRINT`, or `PRINTER_AVAILABLE`) reports
+   * the mock/simulator driver (`driverType` matching `'mock'` case-insensitively
+   * after trim) or `simulated === true`.
+   *
+   * Backwards compatible: evidence that omits `driverType` or reports a real
+   * hardware driver (`IPOS_Q80`, `SUNMI_V2S`, `ESCPOS_NETWORK`) returns null.
+   */
+  private evaluateMockPrinterEvidence(
+    checkMap: Map<ActivationCheckCode, ActivationCheckResult>,
+  ): string | null {
+    const printerCheckCodes: readonly ActivationCheckCode[] = [
+      ActivationCheckCode.NON_FISCAL_TEST_PRINT,
+      ActivationCheckCode.TEST_PRINT,
+      ActivationCheckCode.PRINTER_AVAILABLE,
+    ];
+
+    for (const code of printerCheckCodes) {
+      const check = checkMap.get(code);
+      if (!check) continue;
+
+      const details = check.detailsSanitizedJson;
+      if (!details || typeof details !== 'object' || Array.isArray(details)) {
+        continue;
+      }
+
+      if (details['simulated'] === true) {
+        return 'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED';
+      }
+
+      const rawDriverType = details['driverType'];
+      if (
+        typeof rawDriverType === 'string' &&
+        rawDriverType.trim().toLowerCase() === 'mock'
+      ) {
+        return 'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED';
+      }
+    }
+
+    return null;
+  }
+
   private async evaluateVerificationSequenceDryRun(
     manager: EntityManager,
     tenantId: string,

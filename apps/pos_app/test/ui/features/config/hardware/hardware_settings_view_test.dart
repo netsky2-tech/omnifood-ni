@@ -160,6 +160,10 @@ void main() {
 
         expect(find.textContaining('Modo Simulador'), findsOneWidget);
         expect(
+          find.textContaining('Impresión simulada (solo pruebas / demo)'),
+          findsWidgets,
+        );
+        expect(
           find.text('Impresora Conectada y Lista'),
           findsNothing,
           reason: 'a simulator has no thermal head and no paper; the driver '

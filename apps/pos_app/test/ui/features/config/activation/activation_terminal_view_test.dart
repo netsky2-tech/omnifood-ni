@@ -1067,5 +1067,109 @@ void main() {
       expect(laggingWarning.data, isNot(contains('emitirá')));
       expect(laggingWarning.data, isNot(contains('11')));
     });
+
+    testWidgets(
+        'Issue #961: shows simulated-print warning when pre-offline checks report driverType=MOCK',
+        (tester) async {
+      stubPreparationSuccess();
+      stubPreOfflineChecks(
+        isReadyForOffline: true,
+        checks: {
+          'PRINTER_AVAILABLE': const ActivationCheckResultLocalEntity(
+            id: 'check-PRINTER_AVAILABLE',
+            tenantId: 'tenant-1',
+            activationAttemptId: 'attempt-1',
+            checkCode: 'PRINTER_AVAILABLE',
+            status: 'PASS',
+            evidenceType: 'HARDWARE_PRINTER_STATUS',
+            evidenceRef: 'ready',
+            recordedAt: '2026-01-01T00:00:00.000Z',
+            detailsSanitizedJson: '{"driverType":"MOCK","simulated":true}',
+          ),
+          'NON_FISCAL_TEST_PRINT': const ActivationCheckResultLocalEntity(
+            id: 'check-NON_FISCAL_TEST_PRINT',
+            tenantId: 'tenant-1',
+            activationAttemptId: 'attempt-1',
+            checkCode: 'NON_FISCAL_TEST_PRINT',
+            status: 'PASS',
+            evidenceType: 'RECEIPT_FEED_CORROBORATION',
+            evidenceRef: 'PRINT_COMMAND_ACCEPTED',
+            recordedAt: '2026-01-01T00:00:00.000Z',
+            detailsSanitizedJson: '{"driverType":"MOCK","simulated":true}',
+          ),
+        },
+      );
+
+      await tester.pumpWidget(buildWidget(viewModel));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('activation_pin_field')), '1234');
+      await tester.ensureVisible(
+          find.byKey(const Key('run_pre_offline_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('run_pre_offline_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('pre_offline_mock_printer_warning')),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Impresión simulada (driver mock) — no válida para activación en producción',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'Issue #961: hides simulated-print warning when pre-offline checks report a real hardware driver',
+        (tester) async {
+      stubPreparationSuccess();
+      stubPreOfflineChecks(
+        isReadyForOffline: true,
+        checks: {
+          'PRINTER_AVAILABLE': const ActivationCheckResultLocalEntity(
+            id: 'check-PRINTER_AVAILABLE',
+            tenantId: 'tenant-1',
+            activationAttemptId: 'attempt-1',
+            checkCode: 'PRINTER_AVAILABLE',
+            status: 'PASS',
+            evidenceType: 'HARDWARE_PRINTER_STATUS',
+            evidenceRef: 'ready',
+            recordedAt: '2026-01-01T00:00:00.000Z',
+            detailsSanitizedJson: '{"driverType":"IPOS_Q80","simulated":false}',
+          ),
+          'NON_FISCAL_TEST_PRINT': const ActivationCheckResultLocalEntity(
+            id: 'check-NON_FISCAL_TEST_PRINT',
+            tenantId: 'tenant-1',
+            activationAttemptId: 'attempt-1',
+            checkCode: 'NON_FISCAL_TEST_PRINT',
+            status: 'PASS',
+            evidenceType: 'RECEIPT_FEED_CORROBORATION',
+            evidenceRef: 'PRINT_COMMAND_ACCEPTED',
+            recordedAt: '2026-01-01T00:00:00.000Z',
+            detailsSanitizedJson: '{"driverType":"IPOS_Q80","simulated":false}',
+          ),
+        },
+      );
+
+      await tester.pumpWidget(buildWidget(viewModel));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.byKey(const Key('activation_pin_field')), '1234');
+      await tester.ensureVisible(
+          find.byKey(const Key('run_pre_offline_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('run_pre_offline_button')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('pre_offline_mock_printer_warning')),
+        findsNothing,
+      );
+    });
   });
 }

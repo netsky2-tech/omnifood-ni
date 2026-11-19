@@ -726,6 +726,171 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         expect(result.status).toBe(ActivationAttemptStatus.PASS);
       });
 
+      describe('Issue #961 — reject mock printer evidence at finalization', () => {
+        const buildV2ChecksWithPrinterDetails = (
+          overrides: Partial<
+            Record<ActivationCheckCode, Record<string, unknown>>
+          >,
+        ) =>
+          buildV2Checks(8).map((chk) => {
+            const override = overrides[chk.checkCode];
+            return override
+              ? { ...chk, detailsSanitizedJson: override }
+              : chk;
+          });
+
+        it.each(['MOCK', 'mock', '  Mock  '])(
+          'rejects finalizeActivation when NON_FISCAL_TEST_PRINT has driverType=%s',
+          async (driverType) => {
+            const session = buildSession();
+            attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+            sessionRepo.findOne.mockResolvedValueOnce(session);
+            checkRepo.find.mockResolvedValueOnce(
+              buildV2ChecksWithPrinterDetails({
+                [ActivationCheckCode.NON_FISCAL_TEST_PRINT]: {
+                  driverType,
+                  simulated: true,
+                },
+              }),
+            );
+            mockWatermark(7);
+
+            const result = await service.finalizeActivation(
+              tenantId,
+              attemptId,
+              userId,
+            );
+
+            expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+            expect(result.failureCode).toBe(
+              'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED',
+            );
+            expect(session.lifecycleState).not.toBe(
+              OnboardingLifecycleState.ACTIVATED,
+            );
+          },
+        );
+
+        it('rejects finalizeActivation when NON_FISCAL_TEST_PRINT has simulated=true even without driverType', async () => {
+          attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+          sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+          checkRepo.find.mockResolvedValueOnce(
+            buildV2ChecksWithPrinterDetails({
+              [ActivationCheckCode.NON_FISCAL_TEST_PRINT]: {
+                simulated: true,
+              },
+            }),
+          );
+          mockWatermark(7);
+
+          const result = await service.finalizeActivation(
+            tenantId,
+            attemptId,
+            userId,
+          );
+
+          expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+          expect(result.failureCode).toBe(
+            'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED',
+          );
+        });
+
+        it('rejects finalizeActivation when PRINTER_AVAILABLE has driverType=MOCK', async () => {
+          attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+          sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+          checkRepo.find.mockResolvedValueOnce(
+            buildV2ChecksWithPrinterDetails({
+              [ActivationCheckCode.PRINTER_AVAILABLE]: {
+                driverType: 'MOCK',
+                simulated: true,
+              },
+            }),
+          );
+          mockWatermark(7);
+
+          const result = await service.finalizeActivation(
+            tenantId,
+            attemptId,
+            userId,
+          );
+
+          expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+          expect(result.failureCode).toBe(
+            'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED',
+          );
+        });
+
+        it('rejects finalizeActivation when V1 TEST_PRINT has driverType=MOCK', async () => {
+          const attempt = {
+            id: attemptId,
+            tenantId,
+            onboardingSessionId: 'sess-1',
+            contractVersion: 1,
+            verificationTicketId: 'verification-invoice-1',
+            status: ActivationAttemptStatus.IN_PROGRESS,
+            completedAt: null,
+            warningsCount: 0,
+          };
+          const v1ChecksWithMockPrint = allChecksPass.map((chk) =>
+            chk.checkCode === ActivationCheckCode.TEST_PRINT
+              ? {
+                  ...chk,
+                  detailsSanitizedJson: { driverType: 'MOCK', simulated: true },
+                }
+              : chk,
+          );
+
+          attemptRepo.findOne.mockResolvedValueOnce(attempt);
+          sessionRepo.findOne.mockResolvedValueOnce(buildSession());
+          checkRepo.find.mockResolvedValueOnce(v1ChecksWithMockPrint);
+
+          const result = await service.finalizeActivation(
+            tenantId,
+            attemptId,
+            userId,
+          );
+
+          expect(result.status).toBe(ActivationAttemptStatus.FAIL);
+          expect(result.failureCode).toBe(
+            'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED',
+          );
+        });
+
+        it.each(['IPOS_Q80', 'SUNMI_V2S'])(
+          'accepts finalizeActivation when NON_FISCAL_TEST_PRINT and PRINTER_AVAILABLE use real driver %s',
+          async (driverType) => {
+            const session = buildSession();
+            attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
+            sessionRepo.findOne.mockResolvedValueOnce(session);
+            checkRepo.find.mockResolvedValueOnce(
+              buildV2ChecksWithPrinterDetails({
+                [ActivationCheckCode.PRINTER_AVAILABLE]: {
+                  driverType,
+                  simulated: false,
+                },
+                [ActivationCheckCode.NON_FISCAL_TEST_PRINT]: {
+                  driverType,
+                  simulated: false,
+                },
+              }),
+            );
+            mockWatermark(7);
+
+            const result = await service.finalizeActivation(
+              tenantId,
+              attemptId,
+              userId,
+            );
+
+            expect(result.status).toBe(ActivationAttemptStatus.PASS);
+            expect(result.failureCode).toBeUndefined();
+            expect(session.lifecycleState).toBe(
+              OnboardingLifecycleState.ACTIVATED,
+            );
+          },
+        );
+      });
+
       it('syncVerificationSale rejects a V2 attempt before touching the invoice pipeline', async () => {
         attemptRepo.findOne.mockResolvedValueOnce(buildV2Attempt());
 
