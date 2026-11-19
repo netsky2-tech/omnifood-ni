@@ -40,7 +40,7 @@ test("S1: H2 hierarchy matches brief §2.4 verbatim, in order", () => {
     "Add-ons: qué se cobra aparte de la mensualidad",
     "¿Por qué cuesta más que un POS barato?",
     "¿Qué pasa si dejo de pagar o quiero cancelar?",
-    "¿El setup de US$149 a US$450 es un casco?",
+    "¿Qué compra exactamente el setup?",
     "¿Necesito comprar equipo especial?",
     "¿Puedo empezar pequeño y crecer después?",
     "Preguntas frecuentes sobre los precios de NHILOS POS",
@@ -80,7 +80,9 @@ test("S2: plan H3 sub-angles from brief §2.4 are present", () => {
 // documentos a la vez; una cifra fuera de este conjunto es una claim sin fuente y falla aquí.
 test("S5: every US$ figure on the page belongs to the frozen price document and the home", () => {
   const pageNums = [...new Set([...src.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]))].sort();
-  const expected = ["10", "149", "250", "29", "39", "40", "450", "49", "75", "88", "89"];
+  // US$88 (total de Esencial+pack) se retiró por decisión del fundador: la aritmética
+// "total" sonaba a doble cobro. Si alguien reintroduce un total compuesto, esta lista lo caza.
+  const expected = ["10", "149", "250", "29", "39", "40", "450", "49", "75", "89"];
   assert.deepEqual(pageNums, expected);
   const homeSrc = fs.readFileSync(HOME, "utf8");
   const homeNums = new Set([...homeSrc.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]));
@@ -107,7 +109,9 @@ test("S5: plan and setup pairs match the frozen price document", () => {
   assert.match(vis, /Enterprise[^.]*por cotización/i);
 });
 
-// S6: claims vetados del brief §2.5 — cero apariciones en texto visible y JSON-LD
+// S6: claims vetados del brief §2.5 — cero apariciones en texto visible y JSON-LD.
+// "Impresora" integrada de la terminal física (Sunmi/iPOS) SÍ se puede nombrar: es
+// el hardware vendido. Lo vetado es prometer impresión externa o a ticketeras (#983).
 test("S6: zero banned claims in visible copy and JSON-LD", () => {
   const haystack = (txt(vis) + " " + JSON.stringify(ld)).toLowerCase();
   for (const b of [
@@ -115,7 +119,7 @@ test("S6: zero banned claims in visible copy and JSON-LD", () => {
     "cero multas", "autorizado por la dgi", "folio autorizado",
     "cancela cuando quieras", "sin permanencia", "permanencia mínima",
     "solo esta semana", "por tiempo limitado", "últimos cupos", "cuenta regresiva",
-    "kds", "impresora", "impresión", "esc-pos", "esc/pos",
+    "kds", "impresión externa", "imprime el ticket", "ticketera", "esc-pos", "esc/pos",
     "exportación contable", "multi-sucursal", "multisucursal", "consolidado",
     "integración bancaria", "gestión de rutas",
     "soho", "byod", "plan de catálogo", "hardware incluido",

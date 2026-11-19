@@ -216,7 +216,7 @@ Contenido: comparación por categoría, nunca contra competidor nombrado — el 
 
 Contenido: los términos de contrato (permanencia, renovación, qué se desactiva) se entregan por escrito en la cotización — la página no inventa términos ni promete "cancela cuando quieras". Lo que sí se afirma: tus datos son tuyos y los libros exportables salen cuando tu contador los pida (claim ya publicado en la home). *Por qué: miedo al proveedor del avatar ("¿y si desaparecen y quedo amarrado?"); el gating por plan es contractual y manual hasta cerrar #984 — prometer un comportamiento automático al dejar de pagar sería publicar una capacidad que no existe.*
 
-#### H2: `¿El setup de US$149 a US$450 es un casco?`
+#### H2: `¿Qué compra exactamente el setup?`
 
 Contenido: qué compra el setup — carga inicial del catálogo, enrolado y configuración de terminales, configuración fiscal con el RUC y la autorización DGI del negocio, capacitación del equipo y acompañamiento en el primer turno real; el cronograma real viene en la cotización. Es pago único y no reembolsable, dicho tal cual. El hardware se compra aparte y es del cliente; la mensualidad nunca lo incluye. *Por qué: desarma el miedo al lock-in con el alcance exacto — el fee compra implementación, no exclusividad; coincide con la respuesta G7 del FAQ GEO del home.*
 
@@ -1335,3 +1335,7 @@ Lecturas de éxito al checkpoint de 28 días:
 ### v2.0 — Metodología vinculante y regla de voz (2026-11-19, fundador)
 
 Toda página hija se construye con el proceso de 7 pasos de la guía SEO (avatar → keywords → arquitectura → encabezados → contenido → FAQ para LLMs → prototipo + schema); los briefs de este documento son el producto de esos pasos y **la guía dicta la estructura real de la página**. Regla de voz agregada y fijada por guardia: el copy habla de la operación del lector, nunca del sitio ("esta página orienta y reparte" es narración de arquitectura de información, prohibida); jerga de ingeniería (BOM) prohibida en copy visible y JSON-LD. Corregido en el hub (7 frases) y el home (2).
+
+### v2.1 — Auditoría de contenido de /precios/ (2026-11-19, fundador)
+
+Correcciones sobre la página publicada: H2 del setup de "es un casco" (palabra sin significado para el lector) a "¿Qué compra exactamente el setup?"; OmniFood Care es nombre interno del proyecto y no va en la página (ahora "plan de soporte extendido"); la regla de packs se publica como consejo de compra sin aritmética de totales (el "total US$88" sonaba a doble cobro); terminal integrada se describe por lo que el comprador recibe, no por el estado del roadmap (#983); "dicho tal cual" eliminado (narración de sitio); la comparación con el POS barato se reescribe como escenarios de riesgo, no como regaño. Guardia S6 afinada: la impresora integrada de la terminal física es hardware vendido y se puede nombrar; lo vetado es prometer impresión externa (#983).
