@@ -199,7 +199,92 @@ done
 No se edita la tabla de overrides a mano, y no se concede nada que el cliente no haya acordado:
 el motivo de cada excepción es lo que se lee en una auditoría.
 
-## 7. Auditoría: cómo verificar lo que se hizo
+## 7. Provisión de un tenant nuevo con plan (ENT-08)
+
+Un tenant nuevo se crea **operable en un solo comando**: el mismo `npm run provision` crea el
+tenant, su owner, los catálogos por defecto **y su suscripción auditada**, escrita por
+`TenantSubscriptionService` — el mismo camino del §4, nunca SQL suelto.
+
+```bash
+# Alta estándar de la etapa fundador: PRO por defecto, soporte y add-ons del plan
+npm run provision
+
+# Alta con plan explícito, add-ons y nivel de soporte
+npm run provision -- --plan=OPERACION --add-ons=pack.retail --support-tier=standard
+
+# Sin add-ons (PRO ya incluye ambos packs)
+npm run provision -- --plan=PRO
+```
+
+| Bandera | Valores | Predeterminado |
+|---|---|---|
+| `--plan=<código>` | `ESENCIAL`, `OPERACION`, `PRO` | `PRO` mientras dure la etapa fundador |
+| `--support-tier=<nivel>` | `standard`, `priority` | el nivel del plan elegido (PRO → `priority`) |
+| `--add-ons=a,b` | códigos del catálogo §5, separados por coma | ninguno |
+
+Qué garantiza el comando:
+
+- **Valida ANTES de crear nada.** Un plan o add-on inválido se rechaza **antes** de abrir la
+  base de datos o hacer una sola pregunta: el proceso sale con código 1 y un código estable
+  (`PLAN_CODE_NOT_REGISTERED`, `ADD_ON_NOT_REGISTERED`, `SUBSCRIPTION_SUPPORT_TIER_INVALID`,
+  `PROVISION_FLAG_NOT_RECOGNIZED`, `PROVISION_ADD_ON_LIST_EMPTY_SEGMENT`). No queda jamás un
+  tenant a medio provisionar por un error de escritura de la bandera.
+- **La suscripción es auditada.** El actor es el correo del owner recién creado y el motivo
+  nombra la provisión; la fila de `tenant_entitlement_change_history` se escribe en la misma
+  transacción que la suscripción. Consulte el rastro con el §4 (`--list`).
+- **El nivel de soporte por defecto es el del plan**, no un valor fijo: un contrato PRO es de
+  soporte `priority` según el catálogo §4; si usted pasa `--support-tier` explícito, manda usted.
+
+## 8. Backfill de clientes existentes (migración 1810700000000)
+
+**Qué hace.** Al desplegar los entitlements, todo tenant sin fila en `tenant_subscription`
+queda en `sin_plan` —solo núcleo, suelo de una terminal y dos owners—. Los clientes que hoy
+operan perderían compras, recetas, promociones y márgenes de un día para otro. La migración
+`1810700000000-BackfillFounderSubscriptions` asigna **PRO** (el plan que da acceso completo,
+con su nivel de soporte `priority`) a todo tenant **sin** suscripción, de forma idempotente, y
+escribe la fila de rastro de cada alta (`change_type = 'plan'`, contrato anterior nulo,
+contrato nuevo, `actor = 'migration:#984-backfill'` y un motivo que explica por qué). Sin
+rastro no hay backfill.
+
+**Cómo verificarlo después del despliegue.**
+
+```bash
+# El rastro del tenant: la última entrada 'plan' es el contrato vigente
+npm run entitlements:subscription -- --tenant=<uuid> --list
+
+# Resuelve el snapshot del tenant (mismo camino que el POS)
+#   GET /api/tenant/entitlements desde el dashboard, o:
+```
+
+```sql
+-- Qué tenants recibió el backfill
+SELECT tenant_id, plan_code, status, support_tier, notes
+  FROM tenant_subscription
+ WHERE notes = 'backfill:#984';
+
+-- Que el rastro existe y explica el porqué
+SELECT occurred_at, change_type, new_value_json, actor, reason
+  FROM tenant_entitlement_change_history
+ WHERE actor = 'migration:#984-backfill';
+
+-- Que nadie quedó sin contrato (debe devolver cero filas)
+SELECT t.id FROM tenants t
+ WHERE NOT EXISTS (SELECT 1 FROM tenant_subscription s WHERE s.tenant_id = t.id);
+```
+
+**La bajada no borra el rastro, a propósito.** `down` elimina **solo** las suscripciones
+marcadas con `notes = 'backfill:#984'` — las suscripciones que usted creó por CLI quedan
+intactas — y **deja** todas las filas de `tenant_entitlement_change_history`: el historial es
+append-only por trigger (migración `1810600000000`) y borrarlo contradiría la garantía de
+auditoría del §3. Las filas de rastro quedan como registro de lo que el backfill hizo.
+
+**Un tenant sin suscripción queda en núcleo a propósito, no por olvido.** Si la consulta de
+verificación devolviera un tenant sin contrato después del backfill (por ejemplo, un tenant
+creado después de correr la migración), no lo "arregle" con SQL: délo de alta con el §7 o
+asígnele plan con el §4. El suelo `sin_plan` (núcleo, 1 terminal, 2 owners) es el
+comportamiento deliberado del catálogo §6 para quien nunca compró nada.
+
+## 9. Auditoría: cómo verificar lo que se hizo
 
 ```sql
 -- Todas las excepciones de un tenant, con quién y por qué
@@ -231,7 +316,7 @@ y `TRUNCATE` con `restrict_violation`. Un intento de reescribir el rastro falla 
 vez de afectar filas en silencio. Probado con base real bajo un rol `NOSUPERUSER NOBYPASSRLS`
 con el tenant ligado: ver, ve; tocar, no puede.
 
-## 8. Lo que este runbook no resuelve (deuda declarada)
+## 10. Lo que este runbook no resuelve (deuda declarada)
 
 - **Cambiar un plan ya tiene servicio y comando** (§4, ENT-07): el rastro de plan se consulta
   con `--list` y la escritura va por `npm run entitlements:subscription`.
