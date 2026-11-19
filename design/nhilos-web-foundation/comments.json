@@ -12,6 +12,41 @@
       "sentAt": "2026-11-05T01:35:12.844Z",
       "resolvedAt": "2026-11-05T01:36:34.804Z",
       "screenshot": ".screenshots/0f1xyllm.png"
+    },
+    {
+      "id": "7axaie4e",
+      "file": "07-precios.html",
+      "selector": "#cuanto > div",
+      "excerpt": "LA PREGUNTA DEL PRESUPUESTO ¿Cuánto cuesta NHILOS POS? Esencial cuesta US$49 al mes con setup de US$149. Operación, US$89 al mes con setup de US$250. Pro, US$149 al mes con setup de US$450. Enterprise se cotiza según la operación. Es una suscripción mensual por negocio: no por puesto, no por termina",
+      "comment": "Esta sección se ve poco estetica",
+      "createdAt": "2026-11-19T20:02:07.031Z",
+      "status": "resolved",
+      "sentAt": "2026-11-19T20:02:07.071Z",
+      "resolvedAt": "2026-11-19T20:16:39.632Z",
+      "screenshot": ".screenshots/7axaie4e.png",
+      "resolution": "Lead sin repetición: los números ya no van en prosa (los muestran las filas una sola vez). Filas de tarifa con tarjeta, hover esmeralda y precio con peso visual — el acabado del sistema."
+    },
+    {
+      "id": "53wlyq0r",
+      "file": "07-precios.html",
+      "selector": "#cancelar > div > p:nth-of-type(2)",
+      "excerpt": "Los términos de contrato (permanencia, renovación y qué se desactiva si dejas de pagar) se entregan por escrito en la cotización, con tu operación y tu alcance sobre la mesa: es la parte que se firma, y no se improvisa. Lo que sí se afirma desde hoy:",
+      "comment": "Esos detalles en parentesis no me gusta, no los pongamos, se sobre entiende con terminos de contrato lo que incluye",
+      "createdAt": "2026-11-19T20:02:49.021Z",
+      "status": "open",
+      "sentAt": "2026-11-19T20:02:49.052Z",
+      "resolvedAt": null
+    },
+    {
+      "id": "0854wtfr",
+      "file": "07-precios.html",
+      "selector": "#crecer > div > p:nth-of-type(2)",
+      "excerpt": "Esencial es una entrada real, no un anzuelo: se empieza en modo simple (reventa, stock y métricas) y se activa el control que el negocio pida (recetas, insumos, kardex) en el mismo sistema. Subir de plan agrega packs, terminales y reportes sin cambiar de producto ni volver a cargar nada. El alcance",
+      "comment": "Revisar el texto y el tema de los parentesis",
+      "createdAt": "2026-11-19T20:03:09.455Z",
+      "status": "open",
+      "sentAt": "2026-11-19T20:03:09.477Z",
+      "resolvedAt": null
     }
   ]
 }

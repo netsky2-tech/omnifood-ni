@@ -204,13 +204,14 @@
 
     /* Respuesta directa en líneas de tarifa: nombre, puntos conductores y monto en monoespaciada.
        Composición de menú/tarifario; ni el home ni el hub la usan. */
-    .rate-rows { margin-top: var(--space-6); max-width: 640px; }
-    .rate-row { display: flex; align-items: baseline; padding-block: var(--space-3); }
+    .rate-rows { margin-top: var(--space-6); display: grid; gap: var(--space-4); max-width: 640px; }
+    .rate-row { display: flex; align-items: baseline; padding: var(--space-5) var(--space-5); background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); transition: border-color var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out); }
+    .rate-row:hover { border-color: var(--web-emerald-500); transform: translateY(-1px); }
     .rate-row .r-plan { font-weight: 600; color: var(--web-text-primary); }
-    .rate-row .r-dots { flex: 1; border-bottom: 1px dotted var(--web-border-manual); margin: 0 var(--space-4); transform: translateY(-4px); }
-    .rate-row .r-amount { font-family: var(--font-mono); font-weight: 700; font-variant-numeric: tabular-nums; color: var(--web-text-primary); white-space: nowrap; }
+    .rate-row .r-dots { flex: 1; border-bottom: 1px solid var(--web-border-manual); margin: 0 var(--space-4); transform: translateY(-4px); opacity: .5; }
+    .rate-row .r-amount { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-body-lg); font-variant-numeric: tabular-nums; color: var(--web-emerald-700); white-space: nowrap; }
     .rate-row .r-note { font-size: var(--text-body-sm); color: var(--web-text-muted); margin-left: var(--space-4); white-space: nowrap; }
-    @media (max-width: 520px) { .rate-row { flex-wrap: wrap; } .rate-row .r-dots { display: none; } .rate-row .r-note { margin-left: 0; } }
+    @media (max-width: 520px) { .rate-row { flex-wrap: wrap; row-gap: var(--space-2); } .rate-row .r-dots { display: none; } .rate-row .r-note { margin-left: 0; } }
 
     /* Tabla comparativa completa de los tres planes: la tabla es la respuesta, no un adorno. */
     .compare-table-wrap { margin-top: var(--space-6); overflow-x: auto; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); background: var(--web-bg-canvas); }
@@ -385,7 +386,7 @@
       <div class="container reveal">
         <p class="eyebrow">La pregunta del presupuesto</p>
         <h2 class="h-lg" id="cuanto-title">¿Cuánto cuesta NHILOS POS?</h2>
-        <p class="lead" style="margin-top: var(--space-4);">Esencial cuesta US$49 al mes con setup de US$149. Operación, US$89 al mes con setup de US$250. Pro, US$149 al mes con setup de US$450. Enterprise se cotiza según la operación. Es una suscripción mensual por negocio: no por puesto, no por terminal, no por usuario de caja. Los precios son netos en dólares con referencia BCN; el IVA va aparte.</p>
+        <p class="lead" style="margin-top: var(--space-4);">La suscripción es mensual y por negocio: no por puesto, no por terminal, no por usuario de caja. Los precios son netos en dólares con referencia BCN; el IVA va aparte. Enterprise se cotiza según la operación.</p>
         <div class="rate-rows stagger">
           <div class="rate-row">
             <span class="r-plan">Esencial</span>
