@@ -122,6 +122,15 @@ class HardwareSettingsView extends StatelessWidget {
                                   }
                                 },
                         ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Simulador: Impresión simulada (solo pruebas / demo) — no válida para activación en producción.',
+                          key: const Key('mock_driver_hint'),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: Colors.blueGrey.shade700),
+                        ),
                       ],
                     ),
                   ),
@@ -490,10 +499,11 @@ class HardwareSettingsView extends StatelessWidget {
     // decides the copy, never the status the double reports.
     if (viewModel.config.driverType == PrinterDriverType.mock) {
       statusColor = Colors.blueGrey;
-      statusTitle = 'Modo Simulador (sin impresora física)';
+      statusTitle = 'Modo Simulador — Impresión simulada (solo pruebas / demo)';
       statusDescription =
-          'Este terminal no tiene una impresora configurada: los comprobantes '
-          'no se imprimen. Elegí Sunmi V2s o Q80 / iPos cuando la impresora '
+          'Este terminal no tiene una impresora física configurada: los '
+          'comprobantes no se imprimen y no es válida para activación en '
+          'producción. Elegí Sunmi V2s o Q80 / iPos cuando la impresora '
           'esté conectada.';
       statusIcon = Icons.info;
     }

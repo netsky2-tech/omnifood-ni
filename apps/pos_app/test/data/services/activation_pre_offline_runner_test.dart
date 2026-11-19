@@ -862,6 +862,92 @@ void main() {
       });
     });
 
+    group('Issue #961 — printer driverType & simulated evidence in detailsSanitizedJson', () {
+      Future<void> setConfiguredDriver(String wireValue) async {
+        await database.localConfigDao.saveConfig(
+          LocalConfigEntity(
+            key: PrinterConfigService.driverTypeKey,
+            value: wireValue,
+          ),
+        );
+      }
+
+      Future<void> setContractVersion(int version) async {
+        final attempt =
+            await database.activationAttemptLocalDao.getAttemptById(attemptId);
+        await database.activationAttemptLocalDao.updateAttempt(
+          attempt!.copyWith(contractVersion: version),
+        );
+      }
+
+      Future<PreOfflineRunnerSummary> runPreOffline() =>
+          runner.runPreOfflineChecks(
+            const PreOfflineRunnerParams(
+              attemptId: attemptId,
+              tenantId: tenantId,
+              authorizedUserId: authorizedUserId,
+              authorizedUserPin: validPin,
+            ),
+          );
+
+      test('V2 records driverType=IPOS_Q80 and simulated=false for a real configured driver even with injected test printerPort', () async {
+        await setContractVersion(2);
+        await setConfiguredDriver('IPOS_Q80');
+
+        final summary = await runPreOffline();
+
+        expect(summary.isReadyForOffline, isTrue);
+        final availableDetails = jsonDecode(
+          summary.checks['PRINTER_AVAILABLE']!.detailsSanitizedJson!,
+        ) as Map<String, dynamic>;
+        final printDetails = jsonDecode(
+          summary.checks['NON_FISCAL_TEST_PRINT']!.detailsSanitizedJson!,
+        ) as Map<String, dynamic>;
+
+        expect(availableDetails['driverType'], equals('IPOS_Q80'));
+        expect(availableDetails['simulated'], isFalse);
+        expect(printDetails['driverType'], equals('IPOS_Q80'));
+        expect(printDetails['simulated'], isFalse);
+      });
+
+      test('V2 records driverType=MOCK and simulated=true when mock driver is configured', () async {
+        await setContractVersion(2);
+        await setConfiguredDriver('MOCK');
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['PRINTER_AVAILABLE']!.status, equals('PASS'));
+        expect(summary.checks['NON_FISCAL_TEST_PRINT']!.status, equals('PASS'));
+
+        final availableDetails = jsonDecode(
+          summary.checks['PRINTER_AVAILABLE']!.detailsSanitizedJson!,
+        ) as Map<String, dynamic>;
+        final printDetails = jsonDecode(
+          summary.checks['NON_FISCAL_TEST_PRINT']!.detailsSanitizedJson!,
+        ) as Map<String, dynamic>;
+
+        expect(availableDetails['driverType'], equals('MOCK'));
+        expect(availableDetails['simulated'], isTrue);
+        expect(printDetails['driverType'], equals('MOCK'));
+        expect(printDetails['simulated'], isTrue);
+      });
+
+      test('V1 TEST_PRINT also records driverType=MOCK and simulated=true when mock driver is configured', () async {
+        await setContractVersion(1);
+        await setConfiguredDriver('MOCK');
+
+        final summary = await runPreOffline();
+
+        expect(summary.checks['TEST_PRINT']!.status, equals('PASS'));
+        final printDetails = jsonDecode(
+          summary.checks['TEST_PRINT']!.detailsSanitizedJson!,
+        ) as Map<String, dynamic>;
+
+        expect(printDetails['driverType'], equals('MOCK'));
+        expect(printDetails['simulated'], isTrue);
+      });
+    });
+
   });
 
   group('ONB1.8A–B — Offline Restart Durability (Disk Persistence Roundtrip)', () {

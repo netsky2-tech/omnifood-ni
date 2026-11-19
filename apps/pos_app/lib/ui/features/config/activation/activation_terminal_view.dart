@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../core/localization/label_map.dart';
 import '../../../../data/database/app_database.dart';
+import '../../../../data/models/activation/activation_check_result_local_entity.dart';
 import '../../../../data/services/sync_service.dart';
 import 'activation_session_view_model.dart';
 
@@ -441,6 +443,39 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               ),
               ...checks.entries
                   .map((entry) => _buildCheckRow(entry.key, entry.value.status)),
+              if (_hasSimulatedPrinterEvidence(checks)) ...[
+                const SizedBox(height: 8),
+                Container(
+                  key: const Key('pre_offline_mock_printer_warning'),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade700),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.amber.shade900,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Impresión simulada (driver mock) — no válida para activación en producción',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
             if (blockers.isNotEmpty) ...[
               const SizedBox(height: 8),
@@ -959,6 +994,35 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
     final tail = blocker.substring(separatorIndex + 1).trim();
     final localizedHead = localize(head, kActivationBlockerLabels);
     return tail.isEmpty ? localizedHead : '$localizedHead — $tail';
+  }
+
+  /// Issue #961: returns true when any recorded printer check carries evidence
+  /// produced by the mock/simulator driver (`driverType == 'MOCK'` or
+  /// `simulated == true`). Malformed or absent JSON fails safe to false.
+  bool _hasSimulatedPrinterEvidence(
+    Map<String, ActivationCheckResultLocalEntity> checks,
+  ) {
+    const printerCodes = <String>[
+      'PRINTER_AVAILABLE',
+      'NON_FISCAL_TEST_PRINT',
+      'TEST_PRINT',
+    ];
+    for (final code in printerCodes) {
+      final raw = checks[code]?.detailsSanitizedJson;
+      if (raw == null || raw.trim().isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map) continue;
+        if (decoded['simulated'] == true) return true;
+        final driver = decoded['driverType'];
+        if (driver is String && driver.trim().toUpperCase() == 'MOCK') {
+          return true;
+        }
+      } catch (_) {
+        // Ignore non-JSON details; do not crash the view.
+      }
+    }
+    return false;
   }
 
   /// One row per check the runner actually reported: its localized code and

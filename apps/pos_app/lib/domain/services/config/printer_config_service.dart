@@ -363,7 +363,9 @@ class PrinterConfigService {
     ));
   }
 
-  String _driverCode(PrinterDriverType driverType) {
+  /// Canonical wire value for [PrinterDriverType], matching the `@JsonValue`
+  /// annotations in `printer_config.dart` and the local SQLite config storage.
+  static String driverTypeWireValue(PrinterDriverType driverType) {
     switch (driverType) {
       case PrinterDriverType.mock:
         return 'MOCK';
@@ -375,6 +377,9 @@ class PrinterConfigService {
         return 'IPOS_Q80';
     }
   }
+
+  String _driverCode(PrinterDriverType driverType) =>
+      driverTypeWireValue(driverType);
 
   void dispose() {
     _configStreamController.close();

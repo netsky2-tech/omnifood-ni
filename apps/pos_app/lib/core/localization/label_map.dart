@@ -71,6 +71,8 @@ const Map<String, String> kActivationBlockerLabels = <String, String>{
       'La verificación de la secuencia fiscal no produjo un folio verificable. Revise la serie fiscal en Configuración del Negocio e intente de nuevo.',
   'ACTIVATION_CONTRACT_MISMATCH':
       'Este terminal está ejecutando una versión anterior del sistema de activación. Actualice la aplicación para completar la activación sin emitir una factura.',
+  'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED':
+      'La impresión de prueba se realizó con el driver simulado (mock). Configure una impresora física real en Configuración → Hardware e Impresora y vuelva a intentarlo.',
   // Round-2 F-10d: the verification sale fails closed when the terminal has
   // no FX rates yet (a freshly installed terminal never receives them before
   // activation). The copy names the exact screen that owns the two fields.

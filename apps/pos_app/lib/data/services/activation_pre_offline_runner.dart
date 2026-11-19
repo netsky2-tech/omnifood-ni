@@ -182,10 +182,33 @@ class ActivationPreOfflineRunner {
     // 4. PRINTER_AVAILABLE
     // Resolve dynamically from persisted config so a profile configured
     // after app startup is honored without requiring a restart.
+    // Issue #961: always capture the configured driverType from
+    // PrinterConfigService (never from the injected test port type) so the
+    // backend can distinguish a real hardware driver from the simulator.
+    PrinterConfig? printerAvailableConfig;
+    try {
+      printerAvailableConfig = await _printerConfigService.getPrinterConfig();
+    } catch (_) {
+      printerAvailableConfig = null;
+    }
     final effectivePrinter = _injectedPrinterPort ??
-        PrinterResolver.resolve(await _printerConfigService.getPrinterConfig());
+        PrinterResolver.resolve(
+          printerAvailableConfig ??
+              await _printerConfigService.getPrinterConfig(),
+        );
     final printerStatus = await effectivePrinter.checkStatus();
     final printerIsReady = printerStatus == PrinterStatus.ready;
+    final printerAvailableDriverType = printerAvailableConfig?.driverType;
+    final printerAvailableDetails = <String, Object?>{
+      'printerStatus': printerStatus.name,
+      'isReady': printerIsReady,
+    };
+    if (printerAvailableDriverType != null) {
+      printerAvailableDetails['driverType'] =
+          PrinterConfigService.driverTypeWireValue(printerAvailableDriverType);
+      printerAvailableDetails['simulated'] =
+          printerAvailableDriverType == PrinterDriverType.mock;
+    }
     final check4 = ActivationCheckResultLocalEntity(
       id: const Uuid().v4(),
       tenantId: trimmedTenantId,
@@ -195,10 +218,7 @@ class ActivationPreOfflineRunner {
       evidenceType: 'HARDWARE_PRINTER_STATUS',
       evidenceRef: printerStatus.name,
       recordedAt: now,
-      detailsSanitizedJson: jsonEncode({
-        'printerStatus': printerStatus.name,
-        'isReady': printerIsReady,
-      }),
+      detailsSanitizedJson: jsonEncode(printerAvailableDetails),
     );
     checks['PRINTER_AVAILABLE'] = check4;
     if (!printerIsReady) {
@@ -215,6 +235,7 @@ class ActivationPreOfflineRunner {
     bool rucPresent = false;
     String? rucHash;
     bool printerProfileConfigured = false;
+    PrinterDriverType? testPrintDriverType = printerAvailableDriverType;
     if (printerIsReady) {
       bool profileConfigured = false;
       PrinterConfig? effectiveConfig;
@@ -226,6 +247,9 @@ class ActivationPreOfflineRunner {
         }
       } catch (_) {
         effectiveConfig = null;
+      }
+      if (effectiveConfig != null) {
+        testPrintDriverType = effectiveConfig.driverType;
       }
       printerProfileConfigured = profileConfigured;
       final effectiveRucRaw = effectiveConfig?.fiscalRuc?.trim();
@@ -301,6 +325,12 @@ class ActivationPreOfflineRunner {
       'printerProfileConfigured': printerProfileConfigured,
       if (!testPrintPass) 'failure': testPrintFailure,
     };
+    if (testPrintDriverType != null) {
+      testPrintEvidence['driverType'] =
+          PrinterConfigService.driverTypeWireValue(testPrintDriverType);
+      testPrintEvidence['simulated'] =
+          testPrintDriverType == PrinterDriverType.mock;
+    }
     final rucHashValue = rucHash;
     if (rucHashValue != null) {
       testPrintEvidence['rucHash'] = rucHashValue;
