@@ -43,6 +43,14 @@ import {
   createIdentityJwtTestConfigProvider,
 } from '../support/identity-jwt-test.fixture';
 import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
+import {
   provisionDeviceSyncCredential,
   signDeviceSyncAccessToken,
   type ProvisionedDeviceSyncCredential,
@@ -155,6 +163,7 @@ async function withIsolatedSchema(
   let admin: DataSource | null = null;
   let dataSource: DataSource | null = null;
   let app: INestApplication | null = null;
+  let entitlementsFixture: EntitlementsFixture | null = null;
   const provisionedDevices: ProvisionedDeviceSyncCredential[] = [];
 
   try {
@@ -233,6 +242,17 @@ async function withIsolatedSchema(
       }),
     );
 
+    // ENT-03 (issue #984): the count-session route is PREMIUM
+    // (@RequireCapability('inventory.retail')); the device tenant must
+    // really resolve as entitled (PRO) through the real resolver against
+    // the fixture's contract tables.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      tenantId,
+      'PRO',
+    );
+
     // The application runs as the restricted role: NOSUPERUSER NOBYPASSRLS,
     // not the table owner, so FORCED RLS applies to every query it makes.
     dataSource = new DataSource({
@@ -297,6 +317,11 @@ async function withIsolatedSchema(
         },
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture?.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     }).compile();
 
@@ -317,6 +342,8 @@ async function withIsolatedSchema(
     });
   } finally {
     if (app) await app.close();
+    if (entitlementsFixture)
+      await closeEntitlementsFixture(entitlementsFixture);
     if (dataSource?.isInitialized) await dataSource.destroy();
     if (admin?.isInitialized) {
       for (const device of provisionedDevices) {

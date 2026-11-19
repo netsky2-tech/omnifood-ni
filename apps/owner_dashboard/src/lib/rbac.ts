@@ -132,6 +132,23 @@ export const SURFACE_PREMIUM_CAPABILITIES: Record<string, string[]> = {
   "promotions.convenio": ["promotions.convenio"],
 };
 
+/**
+ * Capability key that gates one premium surface.
+ *
+ * The map is `Record<string, string[]>`, so under `noUncheckedIndexedAccess`
+ * both the lookup and its first element are optional. Call sites used to write
+ * `MAP[surface][0]!`, which still fails the project build: the assertion sat on
+ * the element instead of on the lookup. Resolving it here keeps the runtime
+ * failure explicit and the call sites honest.
+ */
+export const surfacePremiumCapability = (surface: string): string => {
+  const [capabilityKey] = SURFACE_PREMIUM_CAPABILITIES[surface] ?? [];
+  if (!capabilityKey) {
+    throw new Error(`no premium capability declared for surface "${surface}"`);
+  }
+  return capabilityKey;
+};
+
 export type RouteAccessResult =
   | { allowed: true }
   | { allowed: false; reason: "role" }

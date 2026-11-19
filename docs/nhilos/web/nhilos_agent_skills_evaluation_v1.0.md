@@ -92,3 +92,19 @@ intervalos de 1.2 s. La hoja de contactos mostró lo que la sección no comunica
 - el salto temporal hacia el estado sincronizado no está señalado en el video.
 
 Esa lectura es el insumo del rediseño de la sección, no una opinión.
+
+---
+
+## Extensión: Creative Marketing Intelligence System (`social-media-skills/skills`, v1.3 · 18/11/2026)
+
+| Repositorio | Qué es | Licencia | Veredicto |
+|---|---|---|---|
+| **`social-media-skills/skills`** | Colección modular de 106 skills de estrategia, investigación, copywriting y pre-producción para redes sociales | MIT | **Adoptado selectivamente (14 de 106)** + **5 skills propias** (`creative-brief-director`, `creative-critic`, `art-direction`, `creative-content-review`, `content-performance-analyst`) |
+
+**Criterio de selección (por qué 14 + 5 y no las 106):**
+1. **Encaje con la arquitectura de 6 fases en bucle cerrado:** Las 14 elegidas cubren Inteligencia (`Fase 01`), Estrategia (`Fase 02`), Desarrollo Creativo (`Fase 03`) y Adaptación Multi-Formato (`content-repurposing`), conectadas a `nhilos_content_system_v1.0.md` y `product_claim_audit_od02_v1.3.md`.
+2. **Licencia comercial:** Licencia **MIT**, apta para uso comercial en marketing de software B2B.
+3. **Separación entre creatividad y ejecución (Remotion + Three.js):** `creative-brief-director` bloquea el brief de 9 puntos antes de producir, `creative-critic` cuestiona adversarialmente ideas, guiones y sofisticación visual decorativa, y `art-direction` (`Fase 04`) emite el **Production Brief** para Remotion y Three.js.
+4. **Cero métricas vanidosas y calidad verificada:** `creative-content-review` (`Fase 05`) audita mensaje, claridad (`360px`), ritmo, coherencia visual, calidad técnica y objetivo comercial; `content-performance-analyst` (`Fase 06`) evalúa retención, completado, guardados/compartidos, comentarios comerciales y leads (prohibido medir éxito solo por vistas) para retroalimentar `Fase 01`.
+
+Ver arquitectura completa en [`docs/nhilos/content/creative_marketing_intelligence_system_v1.0.md`](../content/creative_marketing_intelligence_system_v1.0.md).

@@ -89,7 +89,28 @@ writeFileSync(
   path.join(OUTPUT, "_redirects"),
   "/04-sintesis-hibrida.html / 301\n",
 );
-writeFileSync(path.join(OUTPUT, "robots.txt"), "User-agent: *\nAllow: /\n");
+writeFileSync(
+  path.join(OUTPUT, "robots.txt"),
+  "User-agent: *\nAllow: /\n\nSitemap: https://nhilospos.com/sitemap.xml\n",
+);
+
+// El sitemap se genera en cada build para que `lastmod` no quede mintiendo:
+// refleja cuándo se publicó el contenido, no cuándo alguien recordó actualizarlo.
+// Solo la raíz: es la única página pública. Las rutas internas del home viven en
+// anclas, y las páginas P0 todavía no existen.
+writeFileSync(
+  path.join(OUTPUT, "sitemap.xml"),
+  [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    "  <url>",
+    "    <loc>https://nhilospos.com/</loc>",
+    `    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>`,
+    "  </url>",
+    "</urlset>",
+    "",
+  ].join("\n"),
+);
 
 for (const entry of INTERNAL_ENTRIES) {
   if (existsSync(path.join(OUTPUT, entry))) {
@@ -111,4 +132,4 @@ if (!html.includes("NHILOS POS")) {
 console.log(`[nhilos-web] Source: ${path.relative(ROOT, SOURCE)}/${ENTRY}`);
 console.log(`[nhilos-web] Output: ${path.relative(ROOT, OUTPUT)} (${files.length} files, ${bytes(total)})`);
 console.log(`[nhilos-web] Largest asset: ${path.relative(OUTPUT, largest.file)} (${bytes(largest.size)})`);
-console.log("[nhilos-web] Public build contains index.html, 404.html, media/, fonts/, _headers, _redirects and robots.txt only.");
+console.log("[nhilos-web] Public build contains index.html, 404.html, media/, fonts/, _headers, _redirects, robots.txt and sitemap.xml only.");

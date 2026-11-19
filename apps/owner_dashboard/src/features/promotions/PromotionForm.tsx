@@ -43,7 +43,7 @@ import { DialogFooter } from '@/components/ui/dialog';
 import { getApiErrorMessage } from '@/lib/api-error';
 import { useEntitlements } from '@/features/entitlements/use-entitlements';
 import { PremiumLocked } from '@/features/entitlements/premium-locked';
-import { SURFACE_PREMIUM_CAPABILITIES } from '@/lib/rbac';
+import { surfacePremiumCapability } from '@/lib/rbac';
 
 interface PromotionFormProps {
   initialData?: Promotion | null;
@@ -270,7 +270,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const convenioLocked =
     !entitlementsPending &&
     watchedType === PromotionType.CONVENIO &&
-    !has(SURFACE_PREMIUM_CAPABILITIES['promotions.convenio'][0]!);
+    !has(surfacePremiumCapability('promotions.convenio'));
 
   return (
     // noValidate: the application's own zod validation (via the RHF
@@ -496,7 +496,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
 
         {convenioLocked && (
           <PremiumLocked
-            capability={SURFACE_PREMIUM_CAPABILITIES['promotions.convenio'][0]!}
+            capability={surfacePremiumCapability('promotions.convenio')}
             featureName="Convenios corporativos (B2B)"
           />
         )}
