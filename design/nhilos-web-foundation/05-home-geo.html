@@ -197,6 +197,38 @@
   <link rel="preload" href="fonts/jetbrains-mono-500.woff2" as="font" type="font/woff2" crossorigin>
 
   <link rel="stylesheet" href="assets/site.css">
+  <style>
+    /* T10b (S7-S11): carril horizontal de #como-funciona en móvil. Las capturas no
+       se encogen — a ~78vw "Facturas: 2" y "Vuelto: C$ 275.00" siguen legibles y cada
+       marco se muestra completo. CSS puro (overflow-x + scroll-snap): desliza aunque
+       site.js nunca cargue. El carril desliza por dentro; la página no gana desborde
+       horizontal. En escritorio (min-width: 768px) la fila de cuatro no cambia. */
+    /* Los cuatro pasos tienen textos de distinta longitud y las capturas tienen
+       dos proporciones distintas (1080x2316 y 800x1280). Sin esto, cada marco
+       arranca a otra altura y las cuatro etiquetas caen en cuatro lineas distintas.
+       Se alinean por abajo: el marco se pega al fondo de su celda. */
+    .hilo-step { display: flex; flex-direction: column; }
+    .hilo-proof { margin: auto 0 0; }
+
+    @media (max-width: 767.98px) {
+      .hilo { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: var(--space-5); padding-bottom: var(--space-4); }
+      .hilo::before { display: none; }
+      .hilo-step { flex: 0 0 78vw; width: 78vw; scroll-snap-align: center; padding-inline: var(--space-2); }
+    }
+    /* Tres trampas, medidas: cuatro en fila solo donde la captura sigue legible
+       (a 1280 son ~286 px de captura; a 1024 serian 222 y ya no se lee "Facturas: 2").
+       Entre 768 y 1279 dos columnas, que es lo que site.css ya decidia bajo 900. */
+    @media (min-width: 768px) and (max-width: 1279.98px) {
+      .hilo { grid-template-columns: 1fr 1fr; gap: var(--space-6); }
+      .hilo::before { display: none; }
+      .hilo-step { flex: none; width: auto; padding-inline: 0; }
+    }
+    @media (min-width: 1280px) {
+      .hilo { grid-template-columns: repeat(4, 1fr); }
+      .hilo::before { display: block; }
+      .hilo-step { flex: none; width: auto; padding-inline: 0; }
+    }
+  </style>
   <noscript>
     <style>
       .reveal, .stagger > *, .hero .hero-in, .hero .device-wrap, .hero .chip, .hilo .hilo-num { opacity: 1 !important; transform: none !important; }
@@ -322,7 +354,7 @@
             <span class="hilo-num" aria-hidden="true">01</span>
             <h3>El pedido entra</h3>
             <p>Terminal táctil con fotos, modificadores y códigos EAN-13 para lo que se escanea.</p>
-            <figure class="hilo-proof" style="margin: var(--space-4) 0 0;">
+            <figure class="hilo-proof">
               <div class="device" style="width: 100%; aspect-ratio: 1080 / 2316;">
                 <img src="media/pos_04_carrito_barra.webp" width="1080" height="2316" alt="Catálogo de la terminal NHILOS POS con fotos y precios en córdobas y la barra del carrito con Total: C$ 75.00 y 1 producto agregado" loading="lazy">
               </div>
@@ -334,7 +366,7 @@
             <!-- CLAIM GUARD (#993/#983): este paso decía "A cocina o barra por pantalla KDS o impresora". KDS no se vende (#993) y la impresión genérica no está implementada (#983, solo integrada en Sunmi/iPOS). El despacho a cocina vuelve aquí cuando #993 cierre. -->
             <h3>El pedido queda registrado</h3>
             <p>Cada comanda se registra en el sistema con sus modificadores, sin papeles ni notas a mano.</p>
-            <figure class="hilo-proof" style="margin: var(--space-4) 0 0;">
+            <figure class="hilo-proof">
               <div class="device" style="width: 100%; aspect-ratio: 1080 / 2316;">
                 <img src="media/pos_10_historial_ventas.webp" width="1080" height="2316" alt="Historial de ventas de la terminal NHILOS POS con Facturas: 2, Total: C$ 165.00 y Anuladas: 0" loading="lazy">
               </div>
@@ -345,7 +377,7 @@
             <span class="hilo-num" aria-hidden="true">03</span>
             <h3>El cobro cierra</h3>
             <p>En córdobas o dólares, o ambos en el mismo ticket, con tu tasa configurada.</p>
-            <figure class="hilo-proof" style="margin: var(--space-4) 0 0;">
+            <figure class="hilo-proof">
               <div class="device" style="width: 100%; aspect-ratio: 800 / 1280;">
                 <img src="media/pos_07_cobro_efectivo_vuelto.webp" width="800" height="1280" alt="Pantalla de cobro de la terminal NHILOS POS con C$ 500.00 recibido en efectivo y Vuelto: C$ 275.00" loading="lazy">
               </div>
@@ -356,7 +388,7 @@
             <span class="hilo-num" aria-hidden="true">04</span>
             <h3>El cuadre queda</h3>
             <p>Apertura, ventas, anulaciones con motivo, arqueo y cierre firmado por usuario.</p>
-            <figure class="hilo-proof" style="margin: var(--space-4) 0 0;">
+            <figure class="hilo-proof">
               <div class="device" style="width: 100%; aspect-ratio: 800 / 1280;">
                 <img src="media/pos_16_cierre_turno_corte_z.webp" width="800" height="1280" alt="Arqueo ciego y cierre de turno en la terminal NHILOS POS con totales contados en córdobas y dólares y el botón Cerrar Turno (Corte Z)" loading="lazy">
               </div>

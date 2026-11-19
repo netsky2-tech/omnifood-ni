@@ -220,3 +220,27 @@ test("T10 S2: captures shown complete at their real file dimensions", () => {
     assert.equal(Number(ar[2]), h, cap + " frame aspect");
   }
 });
+
+// T10b (S7-S11): on mobile the four steps become a CSS-only horizontal snap rail
+// (~78vw cards so the next one peeks), while desktop (min-width: 1280px) stays a
+// single row of four. The rule is page-local in the artboard (site.css is out of
+// scope for this task) and must not depend on site.js. Every var(--*) the rule
+// names must exist in assets/site.css: a missing token fails silently.
+test("T10b S7-S10: page-local CSS-only snap rail under 768px; desktop stays a row", () => {
+  const block = src.match(/\/\* T10b[\s\S]*?<\/style>/);
+  assert.ok(block, "T10b page-local style block exists in 05-home-geo.html");
+  const rail = block[0];
+  // S8/S9/S10: the mobile rail rule — overflow-x + scroll-snap, no JS involved
+  assert.match(rail, /@media \(max-width: 767\.98px\)/);
+  assert.match(rail, /\.hilo \{[^}]*overflow-x: auto[^}]*scroll-snap-type:/, "rail scrolls itself with snap");
+  assert.match(rail, /\.hilo-step \{[^}]*scroll-snap-align:/, "cards snap");
+  assert.match(rail, /78vw/, "card width ~78vw so the next capture peeks");
+  assert.equal(rail.includes("<script"), false, "rail is pure CSS, works if site.js never loads");
+  // S7: desktop pinned as a row of four from 768px up (site.css collapses to
+  // 2 columns at <=900px, which contradicts S7's min-width: 1280px contract)
+  assert.match(rail, /@media \(min-width: 1280px\) \{[\s\S]*?\.hilo \{[^}]*grid-template-columns: repeat\(4, 1fr\)/);
+  // every token the rail rule names must be defined in site.css
+  const css = fs.readFileSync(path.join(ROOT, "design/nhilos-web-foundation/assets/site.css"), "utf8");
+  for (const m of rail.matchAll(/var\((--[a-z0-9-]+)\)/g))
+    assert.ok(css.includes(`${m[1]}:`), `token ${m[1]} must exist in site.css`);
+});
