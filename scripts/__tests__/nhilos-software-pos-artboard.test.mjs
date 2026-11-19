@@ -347,3 +347,22 @@ test("T9: every var(--*) token referenced by the page is defined in assets/site.
   const missing = used.filter((t) => !defined.has(t));
   assert.deepEqual(missing, [], `tokens used but not defined in site.css: ${missing.join(", ")}`);
 });
+
+// T10 S7 — la voz del sitio. El copy habla de la operación del lector, nunca del
+// sitio ni de cómo está organizado ("esta página orienta y reparte" le habla al
+// visitante sobre el sitio, no sobre su negocio). La única exención son las
+// etiquetas de demostración (demo-tag, hero-proof-note): apparatus de honestidad.
+// Y BOM es terminología de ingeniería (Bill of Materials); el avatar dice
+// "recetas e insumos". En alt/title sobrevive porque describe la pantalla real
+// del producto, que se llama así.
+test("S7 voice: el copy no narra el sitio y no usa jerga de ingeniería", () => {
+  const spoken = txt(vis.replace(/class="(?:demo-tag|hero-proof-note)"[\s\S]*?<\/(p|figcaption)>/g, ""));
+  const banned = [
+    /esta página/i, /página dueña/i, /orienta y reparte/i,
+    /ya aceptó que necesita/i, /mantenida en un solo lugar/i,
+    /respuesta orientativa/i, /enunciada aquí/i,
+  ];
+  for (const b of banned) assert.doesNotMatch(spoken, b, `narración de sitio: ${b}`);
+  assert.doesNotMatch(spoken, /\bBOM\b/);
+  assert.doesNotMatch(JSON.stringify(ld), /\bBOM\b/);
+});

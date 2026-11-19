@@ -14,6 +14,7 @@ const COPY = path.join(ROOT, "docs/nhilos/web/nhilos_web_home_copy_v1.0.md");
 const src = fs.readFileSync(ART, "utf8");
 const body = src.split("<body>")[1];
 const vis = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<!--[\s\S]*?-->/g, "");
+const ldHome = [...src.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(m => JSON.parse(m[1]));
 const txt = (s) => s.replace(/<[^>]+>/g, " ").replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
 const ld = JSON.parse(src.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
 const faq = ld["@graph"].find((n) => n["@type"] === "FAQPage").mainEntity;
@@ -264,4 +265,19 @@ test("T10b S7-S10: page-local CSS-only snap rail under 768px; desktop stays a ro
   const css = fs.readFileSync(path.join(ROOT, "design/nhilos-web-foundation/assets/site.css"), "utf8");
   for (const m of rail.matchAll(/var\((--[a-z0-9-]+)\)/g))
     assert.ok(css.includes(`${m[1]}:`), `token ${m[1]} must exist in site.css`);
+});
+
+// T11 — la voz del sitio, aplicada también al home (hoy limpio: la guardia lo fija).
+// BOM es jerga de ingeniería; en alt/title sobrevive solo cuando la pantalla real
+// del producto se llama así.
+test("voice: el home no narra el sitio y no usa jerga de ingeniería", () => {
+  const spoken = txt(vis.replace(/class="demo-tag"[\s\S]*?<\/figcaption>/g, ""));
+  const banned = [
+    /esta página/i, /página dueña/i, /orienta y reparte/i,
+    /ya aceptó que necesita/i, /mantenida en un solo lugar/i,
+    /respuesta orientativa/i, /enunciada aquí/i,
+  ];
+  for (const b of banned) assert.doesNotMatch(spoken, b, `narración de sitio: ${b}`);
+  assert.doesNotMatch(spoken, /\bBOM\b/);
+  for (const block of ldHome) assert.doesNotMatch(JSON.stringify(block), /\bBOM\b/);
 });

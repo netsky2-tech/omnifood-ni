@@ -122,3 +122,14 @@ Medido sobre la página construida, no a ojo:
 **L7 — pausa del 2026-11-18 (fin de sesión).** El hub está **publicado** en `https://nhilospos.com/software-pos/` y verificado en vivo: 42/42 pruebas, build de 2,9 MB con 26 assets referenciados, cero jerga interna, cero claims vetados. T1 (build multi-página), T2 (hub), T7 (una sola bifurcación), T8 (densidad) y los dos clips reales están en `main`. **T9 corriendo** al momento de pausar: fila 01 del libro de rutas y las dos secciones de una columna. Al retomar: verificar T9 con capturas reales (iframe para 390), commitear, y decidir si el hub necesita su propia pasada de material —hoy tiene tres secciones con medios y el home seis—. Pendiente aparte: el experimento 3D (T6) y la pasada de material sobre el home.
 
 **Aprendizajes que cuestan caro si se olvidan:** `var(--text-heading-lg)` no existe en `assets/site.css` y una regla con un token inexistente falla **en silencio** (el fork renderizaba a tamaño de cuerpo); verificar cada `var(--*)` contra el archivo antes de nombrarlo. Headless congela los reveal a media animación: inyectar el estado final antes de capturar. Chrome clampa el ancho de ventana a ~500 px y recorta sin avisar: medir 390 por iframe de ancho fijo.
+
+### S7 — La voz del sitio (corrección del fundador)
+
+El fundador, verbatim del 2026-11-19: «Me preocupa que no estemos poniendo textos adecuados o que usemos terminologías internas como "BOM"», señalando tres frases publicadas: «Esta página orienta y reparte; el detalle de método vive en cada página especializada.», «Quien llega aquí ya aceptó que necesita un sistema; la pregunta real es si resuelve su operación.», «Tres preguntas llegan una y otra vez. Aquí va la respuesta orientativa; el método completo vive en la página dueña de cada tema.». Y su directiva: «Vamos a seguir esa metodología en todas las paginas que hagamos, justo como hicimos con la HOME» (la guía SEO de 7 pasos de `Downloads/guia SEO con IA.pdf`).
+
+**Regla de voz:** el copy habla de la operación del lector, nunca del sitio ni de cómo está organizado. Jerga de ingeniería (BOM) queda fuera del texto visible y del JSON-LD; sobrevive solo en `alt`/`title` cuando la pantalla real del producto se llama así. La etiqueta de demostración es apparatus de honestidad, exenta.
+
+### T10 — Corrección de voz del hub y del home
+
+Hub (7): tres narraciones de sitio eliminadas o reescritas a operación, "mantenida en un solo lugar" y "no en esta página" fuera, dos "Receta BOM por plato" → "Receta por plato con sus insumos", y la meta-frase de la prueba técnica fuera. Home (2): pack Cocina "Recetas y BOM" → "Recetas e insumos" y `featureList[2]` del JSON-LD espejado. Guardia de voz en las dos suites, probada roja antes del verde.
+
