@@ -31,11 +31,20 @@ import {
   createIdentityJwtConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 describe('Loyalty API (E2E / Integration)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
   let app: INestApplication<App>;
   let jwtService: JwtService;
+  let entitlementsFixture: EntitlementsFixture;
 
   // In-memory stores
   let dbPrograms: LoyaltyProgram[] = [];
@@ -185,6 +194,15 @@ describe('Loyalty API (E2E / Integration)', () => {
   };
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): LoyaltyController is class-level
+    // @RequireCapability('loyalty'), so every request must pass through the
+    // REAL resolver with a really entitled tenant (PRO grants `loyalty`).
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      'tenant-A',
+      'PRO',
+    );
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = jwtSecret;
     process.env.JWT_ISSUER = 'omnifood-admin';
@@ -225,6 +243,11 @@ describe('Loyalty API (E2E / Integration)', () => {
           useValue: customerRepo,
         },
         { provide: DataSource, useValue: mockDataSource },
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
         {
           provide: TicketPaidHandler,
           useValue: { handle: jest.fn().mockResolvedValue([]) },
@@ -315,6 +338,7 @@ describe('Loyalty API (E2E / Integration)', () => {
 
   afterAll(async () => {
     if (app) await app.close();
+    await closeEntitlementsFixture(entitlementsFixture);
   });
 
   beforeEach(() => {

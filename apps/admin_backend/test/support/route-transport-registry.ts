@@ -451,6 +451,12 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
     reason: 'liveness and health probe endpoints',
   },
   {
+    controller: 'EntitlementsController',
+    transport: 'human',
+    reason:
+      'authenticated tenant reads: the effective entitlements snapshot (any role) and the audited overrides (OWNER only); there is no write path by design (issue #984 ENT-06)',
+  },
+  {
     controller: 'AuthController',
     transport: 'human',
     overrides: [

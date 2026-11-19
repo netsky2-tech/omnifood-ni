@@ -26,7 +26,7 @@ import { useEntitlements } from "@/features/entitlements/use-entitlements";
 import { PremiumLocked } from "@/features/entitlements/premium-locked";
 import {
   canAccessPremiumSurface,
-  SURFACE_PREMIUM_CAPABILITIES,
+  surfacePremiumCapability,
 } from "@/lib/rbac";
 import type { MovementType, AlertSeverity, KardexFilters } from "./types";
 
@@ -819,7 +819,7 @@ export function InventoryPage() {
         {activeTab === "valuation" &&
           (valuationLocked ? (
             <PremiumLocked
-              capability={SURFACE_PREMIUM_CAPABILITIES["inventory.valuation"][0]!}
+              capability={surfacePremiumCapability("inventory.valuation")}
               featureName="Valoración de inventario"
             />
           ) : (
@@ -829,7 +829,7 @@ export function InventoryPage() {
         {activeTab === "suppliers" &&
           (suppliersLocked ? (
             <PremiumLocked
-              capability={SURFACE_PREMIUM_CAPABILITIES["inventory.suppliers"][0]!}
+              capability={surfacePremiumCapability("inventory.suppliers")}
               featureName="Proveedores"
             />
           ) : (
@@ -838,7 +838,7 @@ export function InventoryPage() {
         {activeTab === "purchases" &&
           (purchasesLocked ? (
             <PremiumLocked
-              capability={SURFACE_PREMIUM_CAPABILITIES["inventory.purchases"][0]!}
+              capability={surfacePremiumCapability("inventory.purchases")}
               featureName="Compras"
             />
           ) : (

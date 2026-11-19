@@ -191,12 +191,63 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
     IconData iconData;
     String tooltip;
 
+    // Issue #987: the advisory connectivity flag can stay offline for up to a
+    // full 30 s health-poll cycle after the backend is actually reachable
+    // (the native signal only flips the state UP after an HTTP verification,
+    // and never fires when the WiFi link itself never dropped). Because
+    // triggerManualSync() has no connectivity gate, a pass can drain the
+    // outbox inside that window; the server has then confirmed every record,
+    // and claiming "Venta local protegida — 0 pendiente(s)" is a
+    // self-contradiction. The truth signal is the server's own
+    // acknowledgement: lastSyncTime is set only when a pass completes with
+    // every domain confirmed. The reverse stays honest: an empty local queue
+    // without an accepted pass (never synced, or the last pass failed) never
+    // turns green.
+    // R3-003: green must be bound to the sync pass, not to a bare
+    // timestamp. `lastSyncTime` is stamped only by an accepted pass, but by
+    // itself it survives everything that happens afterwards: a later failed
+    // or degraded pass leaves it untouched, and the old denylist
+    // (`!= error && != syncing`) let any status it forgot about — notably
+    // `auditDegraded`, the settled state of a pass that did NOT fully
+    // confirm the device — keep the green alive. Instead of denying the
+    // known-bad states, allow only the settled states that legitimately
+    // carry the acceptance: the service announces every pass with
+    // `syncing` and settles it into `idle` (fully accepted), `error`
+    // (failed) or `auditDegraded` (partially confirmed), so a failed or
+    // degraded pass can never leave green behind and a pass in progress is
+    // never green. `offline` is the network drop AFTER that acceptance —
+    // no new pass has run, so the evidence still stands. The pre-first-pass
+    // initial `idle` is gated out by `lastSyncTime != null`.
+    final bool lastPassAcceptedByServer =
+        syncService?.lastSyncTime != null &&
+        (status == CloudSyncStatus.idle ||
+            status == CloudSyncStatus.offline);
+    final bool businessQueueEmpty =
+        _pendingCount == 0 && _pendingAuditCount == 0;
+
     if (!isOnline || status == CloudSyncStatus.offline) {
-      // §35.4: no connection is "local sale protected", not a catastrophe.
-      // Serene amber, never alarm red.
-      iconColor = NhilosColors.warning;
-      iconData = Icons.cloud_off;
-      tooltip = 'Venta local protegida — $_pendingCount pendiente(s)';
+      if (businessQueueEmpty && lastPassAcceptedByServer) {
+        // #987: the cloud just confirmed the queue is empty — the sale is
+        // protected in the cloud, not merely locally. Render immediately;
+        // this branch is driven by the status-stream refresh that fires on
+        // every pass completion, not by the connectivity poll.
+        iconColor = NhilosColors.success;
+        iconData = Icons.cloud_done;
+        tooltip = 'Nube Sincronizada';
+      } else if (_pendingCount == 0) {
+        // #987: with zero pending business documents there is no unprotected
+        // sale, so the "local sale protected" claim (and its count) must not
+        // render. Plain offline is the honest state.
+        iconColor = NhilosColors.warning;
+        iconData = Icons.cloud_off;
+        tooltip = 'Sin Conexión (Offline)';
+      } else {
+        // §35.4: no connection is "local sale protected", not a catastrophe.
+        // Serene amber, never alarm red.
+        iconColor = NhilosColors.warning;
+        iconData = Icons.cloud_off;
+        tooltip = 'Venta local protegida — $_pendingCount pendiente(s)';
+      }
     } else if (status == CloudSyncStatus.syncing) {
       iconColor = NhilosColors.brandPrimary;
       iconData = Icons.sync;

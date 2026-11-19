@@ -374,6 +374,133 @@ async function seed() {
         }
       }
 
+      // 4b. Opening kardex entries (INITIAL_STOCK) — required by the
+      // running-balance trigger (issue #986). The seed sets stock values
+      // directly, so every insumo that ends up with stock needs a ledger
+      // opening row or the first recipe-driven sale is rejected with
+      // "inventory_kardex balance invariant violated" and the terminal
+      // retries forever. Entry shape mirrors src/scripts/seed-test-data.ts.
+      //
+      // Concurrency (review finding R3-001): the whole seed runs inside
+      // runInTenantTransaction, so a partial failure rolls back — but that
+      // alone does not serialize concurrent runs, because READ COMMITTED
+      // gives every statement a fresh snapshot: two seed processes can both
+      // observe an empty coverage set before either commits, then both race
+      // the INSERTs. This block therefore takes a transaction-scoped
+      // advisory lock keyed on the tenant BEFORE reading coverage. A second
+      // run blocks here until the first commits or rolls back, and its
+      // coverage read — a fresh snapshot in READ COMMITTED — then sees the
+      // first run's committed opening rows and skips. The lock is released
+      // automatically at commit/rollback, so a crashed process cannot leak
+      // it across the pool. Cost: seed runs of the SAME tenant briefly
+      // serialize at this block (seeding is an operator action, not a hot
+      // path); different tenants never contend because the key includes the
+      // tenant id. This mirrors the advisory-lock convention the
+      // running-balance trigger itself uses (migration
+      // 1774000000000-EnforceInventoryKardexRunningBalance). The lock only
+      // guards this seed's decide-then-insert step: it never bypasses the
+      // append-only or running-balance triggers, which still evaluate on
+      // every INSERT below.
+      //
+      // Idempotency: an insumo with NO kardex rows gets an opening entry; an
+      // insumo that already has ledger history is left untouched — inserting
+      // an opening row over an existing chain would itself violate the
+      // running-balance invariant. Insumos with zero or null stock get no
+      // opening entry. Re-running the seed therefore never duplicates
+      // opening entries or shifts balances — and with the lock above that
+      // now holds for concurrent runs too, not only serial ones. Only
+      // INSERTs happen here, so the append-only trigger is never bypassed.
+      //
+      // Ledger divergence (review finding R1-001): the mere presence of
+      // history is NOT proof of a consistent chain. The first sale writes
+      // stock_before from insumos.stock (invoices.service.ts), and the
+      // running-balance trigger requires it to equal the ledger's latest
+      // stock_after. An insumo whose chain ends at a balance different from
+      // its insumos.stock (partial or drifted history) would fail its first
+      // sale anyway, and this seed cannot repair an existing append-only
+      // chain. Rather than skip that silently and hand over a tenant that
+      // breaks on the first sale, the seed refuses with the exact insumos
+      // listed. Consistent history (latest ledger balance == insumos.stock)
+      // is skipped as before, so serial re-runs change nothing.
+      await manager.query(
+        `SELECT pg_advisory_xact_lock(hashtext($1), hashtext('inventory_kardex_seed_opening'))`,
+        [DEMO_TENANT_ID],
+      );
+      const kardexCovered: unknown = await manager.query(
+        `SELECT DISTINCT ON (insumo_id) insumo_id, stock_after
+           FROM inventory_kardex
+          WHERE tenant_id = $1
+          ORDER BY insumo_id, id DESC`,
+        [DEMO_TENANT_ID],
+      );
+      interface KardexCoverageRow {
+        insumo_id: string;
+        stock_after: string;
+      }
+      const ledgerBalanceByInsumoId = new Map<string, number>(
+        (Array.isArray(kardexCovered)
+          ? (kardexCovered as KardexCoverageRow[])
+          : []
+        ).map((row) => [row.insumo_id, Number(row.stock_after)]),
+      );
+      interface DemoInsumoRow {
+        id: string;
+        name: string;
+        stock: string;
+        costo_promedio_nio: string;
+      }
+      const rawDemoInsumos: unknown = await manager.query(
+        `SELECT id, name, stock, costo_promedio_nio FROM insumos WHERE tenant_id = $1`,
+        [DEMO_TENANT_ID],
+      );
+      const demoInsumos: DemoInsumoRow[] = Array.isArray(rawDemoInsumos)
+        ? (rawDemoInsumos as DemoInsumoRow[])
+        : [];
+      // Compare at the ledger's numeric(14,4) scale, matching the
+      // ROUND(..., 4) the running-balance trigger applies.
+      const round4 = (value: number) => Math.round(value * 10000) / 10000;
+
+      const divergentInsumos: string[] = [];
+      let openingEntriesCreated = 0;
+      for (const dbInsumo of demoInsumos) {
+        const stock = Number(dbInsumo.stock);
+        // No opening entry for insumos with zero or null stock.
+        if (!(stock > 0)) {
+          continue;
+        }
+        const ledgerBalance = ledgerBalanceByInsumoId.get(dbInsumo.id);
+        if (ledgerBalance !== undefined) {
+          // Insumo already has kardex history: left untouched. But if its
+          // chain ends at a balance different from insumos.stock, the first
+          // sale will violate the running-balance invariant — refuse loudly
+          // instead of seeding a tenant that breaks (R1-001).
+          if (round4(ledgerBalance) !== round4(stock)) {
+            divergentInsumos.push(
+              `"${dbInsumo.name}" (${dbInsumo.id}): latest ledger balance ${ledgerBalance} != insumos.stock ${stock}`,
+            );
+          }
+          continue;
+        }
+        const avgCost = Number(dbInsumo.costo_promedio_nio);
+        await manager.query(
+          `INSERT INTO inventory_kardex (tenant_id, insumo_id, movement_type, quantity, unit_cost_nio, total_cost_nio, stock_before, stock_after, source_document_type, source_document_id, occurred_at)
+           VALUES ($1, $2, 'INITIAL_STOCK', $3, $4, $5, 0.0000, $3, 'SEED', 'seed-initial', NOW())`,
+          [DEMO_TENANT_ID, dbInsumo.id, stock, avgCost, stock * avgCost],
+        );
+        openingEntriesCreated++;
+        console.log(`✅ Kardex init: ${dbInsumo.name} stock=${stock}`);
+      }
+      if (divergentInsumos.length > 0) {
+        throw new Error(
+          `DEMO_SEED_KARDEX_DIVERGENCE: ${divergentInsumos.length} insumo(s) have kardex history whose latest balance does not match insumos.stock. ` +
+            `The first sale of each would fail with "inventory_kardex balance invariant violated", and this seed cannot repair an existing append-only ledger. ` +
+            `Reconcile these insumos (align insumos.stock with the ledger or load the missing history) before seeding:\n  - ${divergentInsumos.join('\n  - ')}`,
+        );
+      }
+      if (openingEntriesCreated === 0) {
+        console.log('♻️  Kardex opening entries already present for all insumos with stock');
+      }
+
       // 5. Modifier Groups for Hot Coffee & Beverages
       const lecheGroup = await manager.findOne(ModifierGroup, { where: { tenant_id: DEMO_TENANT_ID, name: 'Tipo de Leche' } });
       let modLeche: ModifierGroup;

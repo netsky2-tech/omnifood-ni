@@ -42,6 +42,14 @@ import {
   createIdentityJwtConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 const postgresConnection = {
   host: process.env.DB_HOST ?? '127.0.0.1',
@@ -55,6 +63,7 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
   let app: INestApplication;
   let jwtService: JwtService;
+  let entitlementsFixture: EntitlementsFixture;
   let dataSource: DataSource;
   let schema: string;
   let tenantAId: string;
@@ -62,6 +71,12 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
   let customerAId: string;
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): LoyaltyController is class-level
+    // @RequireCapability('loyalty'); both tenants that make HTTP requests
+    // must really resolve as entitled (PRO), so the tenant-B isolation case
+    // still reaches the handler and gets its handler-level 404.
+    entitlementsFixture = await openEntitlementsFixture();
+
     process.env.NODE_ENV = 'test';
     process.env.JWT_SECRET = jwtSecret;
     process.env.JWT_ISSUER = 'omnifood-admin';
@@ -144,6 +159,17 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
 
     tenantAId = 'tenant-e2e-a';
     tenantBId = 'tenant-e2e-b';
+
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      tenantAId,
+      'PRO',
+    );
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      tenantBId,
+      'PRO',
+    );
     await bootstrap.query(
       `INSERT INTO "${schema}".tenants (id, name) VALUES ($1, $2)`,
       [tenantAId, 'Tenant A'],
@@ -246,6 +272,11 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
         JwtService,
         TenantInterceptor,
         createIdentityJwtConfigProvider(),
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     }).compile();
 
@@ -259,6 +290,7 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
 
   afterAll(async () => {
     if (app) await app.close();
+    await closeEntitlementsFixture(entitlementsFixture);
     if (dataSource?.isInitialized) {
       await dataSource.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
       await dataSource.destroy();

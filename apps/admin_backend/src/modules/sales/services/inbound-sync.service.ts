@@ -1035,7 +1035,16 @@ export class InboundSyncService {
       .andWhere('rv.publication_state = :publicationState', {
         publicationState: RecipePublicationState.PUBLISHED,
       })
-      .andWhere('rv.fecha_inicio_vigencia <= :now', { now })
+      // Issue #985: una receta publicada sin fecha de inicio de vigencia es
+      // válida y tiene que viajar al terminal. `fecha_inicio_vigencia <= :now`
+      // descarta los NULL por la semántica de tres valores de SQL, así que la
+      // receta nunca llegaba, la venta se aceptaba como
+      // APPLIED_INVENTORY_PENDING y el stock del insumo no se movía en silencio.
+      // Misma forma que en sale-inventory-outcome.service.ts.
+      .andWhere(
+        '(rv.fecha_inicio_vigencia IS NULL OR rv.fecha_inicio_vigencia <= :now)',
+        { now },
+      )
       .andWhere(
         '(rv.fecha_fin_vigencia IS NULL OR rv.fecha_fin_vigencia > :now)',
         {

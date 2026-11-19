@@ -12,6 +12,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Observable } from 'rxjs';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
+import { DataSource } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
@@ -30,6 +31,13 @@ import {
   createIdentityJwtConfigProvider,
   createIdentityJwtTestConfigProvider,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
+import { EntitlementsService } from '../../src/modules/entitlements/entitlements.service';
 
 const TEST_TENANT_ID = 'tenant-production-close';
 
@@ -148,9 +156,23 @@ const validProductionClosePayload = {
 
 describe('Production close route (integration)', () => {
   let app: INestApplication<App>;
+  let entitlementsFixture: EntitlementsFixture;
   const replayProductionClose = jest.fn();
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): POST /inventory/production-orders/close is a
+    // PREMIUM route (@RequireCapability('inventory.cooking')) resolved by
+    // the REAL CapabilitiesGuard, so the device tenant must really resolve
+    // as entitled (PRO) against the fixture's real contract tables. The
+    // suite has no DataSource of its own, so the fixture's real connection
+    // serves the `DataSource` token directly.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      TEST_TENANT_ID,
+      'PRO',
+    );
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [InventoryMovementController],
       providers: [
@@ -189,6 +211,8 @@ describe('Production close route (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
+        { provide: DataSource, useValue: entitlementsFixture.dataSource },
+        EntitlementsService,
       ],
     })
       // Device transport routes (movements/sync, shrinkage,
@@ -230,6 +254,7 @@ describe('Production close route (integration)', () => {
 
   afterAll(async () => {
     await app?.close();
+    await closeEntitlementsFixture(entitlementsFixture);
   });
 
   it('passes the device-principal tenant-scoped production close document to the replay service', async () => {

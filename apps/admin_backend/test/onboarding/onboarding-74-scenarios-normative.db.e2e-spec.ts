@@ -84,6 +84,13 @@ import { IndustryTemplateController } from '../../src/modules/onboarding/control
 import { ImportStagingController } from '../../src/modules/onboarding/controllers/import-staging.controller';
 import { OnboardingCatalogController } from '../../src/modules/onboarding/controllers/onboarding-catalog.controller';
 import { ActivationController } from '../../src/modules/onboarding/controllers/activation.controller';
+// ENT-03b (issue #984): ActivationController's device-credential routes
+// consult the terminal seat quota through the real TenantQuotaService
+// (backed by the real EntitlementsService), both resolved against this
+// suite's own real DataSource — the same object graph OnboardingModule
+// provides.
+import { EntitlementsService } from '../../src/modules/entitlements/entitlements.service';
+import { TenantQuotaService } from '../../src/modules/entitlements/tenant-quota.service';
 import { OnboardingTelemetryController } from '../../src/modules/onboarding/controllers/onboarding-telemetry.controller';
 
 import { OnboardingSessionService } from '../../src/modules/onboarding/services/onboarding-session.service';
@@ -480,6 +487,8 @@ async function with74ScenariosIsolatedSchema(
         },
         { provide: DataSource, useValue: dataSource },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+        EntitlementsService,
+        TenantQuotaService,
         {
           provide: 'TenantRepository',
           useValue: dataSource.getRepository(Tenant),
