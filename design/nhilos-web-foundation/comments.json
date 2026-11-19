@@ -105,9 +105,10 @@
       "excerpt": "04",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(4): Touch target under 44 px.\n\"Cómo funciona\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:17:58.057Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:17:58.122Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:09:41.767Z",
+      "resolution": "Mismo caso: fix de componente ya desplegado (site.css .spine a = 44px target, ec6d74f8). Obsoleto al momento de su captura."
     },
     {
       "id": "nc3vkw4g",
