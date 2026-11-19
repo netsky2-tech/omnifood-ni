@@ -94,3 +94,13 @@ T10 dio al home la evidencia del turno, pero a 390 `#como-funciona` pasó de **9
   - Commit: fdd140fd. Suite 15/15 PASS.
 
 **L8 — T10, T10b y la corrección de bandas.** `#como-funciona` ganó las cuatro capturas (T10, 480 → 1142 px en escritorio), el carril móvil (T10b, 3843 → 1174 px a 390) y tres trampas de ancho medidas. El error de spec fue mio: escribí "escritorio desde 768, cuatro en fila" sin hacer la cuenta. A 800 px cada captura queda en 158 px y no se lee `Facturas: 2`; a 1024, 222. La fila de cuatro solo desde 1280 (~286 px), entre 768 y 1279 dos columnas. Probado rojo: la guardia falla si la fila de cuatro vuelve a 768. Y las cuatro etiquetas se alinearon por abajo porque los marcos tienen dos proporciones distintas; los techos quedan a otra altura porque las capturas no se recortan.
+
+### T11 — Antes y después empareja por tema
+
+Las dos listas se leían como paralelas pero solo la primera fila lo era. Los pares verdaderos, verificados contra las secciones del propio home: inventario↔kardex, descuadres-sin-saber-por-qué↔cada-evento-con-fecha-hora-usuario (no sabías por qué porque nada quedaba atribuido), miedo-a-la-DGI↔correlativo-auditado, equipo-que-se-traba↔el-cobro-corre-en-tu-terminal.
+
+Una sola frase nueva en todo el intercambio —"El cobro corre en tu terminal, sin esperar a la nube."— y es una afirmación ya vendida por la sección offline. La fila que salió (cuadre exacto en dos monedas) no se perdió: vive en "Cobra en córdobas y dólares sin descuadres", su sección propia, con captura.
+
+Guardia: las cuatro filas emparejan por tema, y falla si alguien reordena sin reemparejar.
+
+**Aceptación cumplida:** 21/21 y 29/29, cero copy nuevo inventado, el paralelismo fila por fila fijado por prueba.

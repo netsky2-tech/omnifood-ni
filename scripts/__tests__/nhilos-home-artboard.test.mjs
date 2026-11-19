@@ -136,6 +136,27 @@ test("C6: no duplicated/stray script close tag", () => {
   assert.equal(/<\/script>\s*<\/script>/.test(src), false);
 });
 
+
+// T11: Antes y después empareja por tema, fila por fila. El orden de la lista
+// "Con NHILOS" tiene que responder punto a punto al de "Antes": inventario↔kardex,
+// descuadres↔atribución, DGI↔correlativo auditado, equipo lento↔cobro local.
+test("antes-despues: las cuatro filas emparejan por tema", () => {
+  const sec = vis.split(/<section\b/).find(x => x.includes('id="antes-despues"'));
+  const before = [...sec.matchAll(/ba-before[\s\S]*?<ul>([\s\S]*?)<\/ul>/g)].flatMap(m => [...m[1].matchAll(/<li>([\s\S]*?)<\/li>/g)].map(x => txt(x[1])));
+  const after = [...sec.matchAll(/ba-after[\s\S]*?<ul>([\s\S]*?)<\/ul>/g)].flatMap(m => [...m[1].matchAll(/<li>([\s\S]*?)<\/li>/g)].map(x => txt(x[1])));
+  assert.equal(before.length, 4); assert.equal(after.length, 4);
+  const pairs = [
+    [/cuaderno|excel/i, /kardex/i],
+    [/descuadre/i, /fecha, hora y usuario/i],
+    [/dgi/i, /correlativo/i],
+    [/hora pico/i, /tu terminal/i],
+  ];
+  pairs.forEach(([b, a], i) => {
+    assert.match(before[i], b, `par ${i + 1} (antes): ${before[i]}`);
+    assert.match(after[i], a, `par ${i + 1} (despues): ${after[i]}`);
+  });
+});
+
 // Depth rule: body H2 sections <=120 words (FAQ exempt per v1.5; demo measured on copy column only;
 // T10 figcaptions exempt — the capture caption "Captura real de la terminal · datos de demostración"
 // is media apparatus mandated verbatim by odd/tasks/nhilos-home-redesign.md T10 S1, not copy)
