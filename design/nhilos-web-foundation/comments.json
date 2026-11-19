@@ -69,9 +69,10 @@
       "excerpt": "01",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(1): Touch target under 44 px.\n\"Inicio\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:17:48.287Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:17:48.386Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T21:58:05.304Z",
+      "resolution": "Target táctil 44px con margen negativo: el círculo visible queda en 26px (estética intacta) pero el área de toque cumple WCAG 2.5.8. Corregido en site.css — el spine es componente del sistema y el fix aplica a home y hub de una vez."
     },
     {
       "id": "kv466f9i",
@@ -80,9 +81,10 @@
       "excerpt": "02",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(2): Touch target under 44 px.\n\"Producto\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:17:51.200Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:17:51.221Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:02:36.781Z",
+      "resolution": "Mismo defecto que el ítem anterior (a:nth-of-type(1)) y ya corregido en el mismo commit: el fix vive en site.css, componente del sistema compartido por home y hub — todos los enlaces del spine (los 12) miden ahora 44×44 de target con el círculo visible en 26px. Este comentario quedó obsoleto al momento de su captura."
     },
     {
       "id": "egs7bwmx",
@@ -91,9 +93,10 @@
       "excerpt": "03",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(3): Touch target under 44 px.\n\"Sin internet\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:17:55.577Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:17:55.581Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:04:11.671Z",
+      "resolution": "Mismo defecto de clase ya corregido en el componente: site.css `.spine a` mide 44×44 de target (círculo visible 26px) desde el commit ec6d74f8 — cubre los 12 enlaces, incluido este. Obsoleto al momento de su captura."
     },
     {
       "id": "undui9ie",
