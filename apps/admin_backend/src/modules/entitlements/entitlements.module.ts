@@ -17,6 +17,7 @@ import {
   IdentityJwtConfigModule,
   type IdentityJwtConfig,
 } from '../identity/config/identity-jwt.config';
+import { TenantSubscriptionService } from './tenant-subscription.service';
 
 /**
  * Issue #984 entitlements.
@@ -36,6 +37,9 @@ import {
  * (internal CLI only) and serves their read side. There is still no HTTP write
  * path: the backend has no platform role, so an OWNER-guarded write would let
  * a tenant grant itself the top plan.
+ * ENT-07: `TenantSubscriptionService` writes audited plan changes and add-ons
+ * (internal CLI only, same no-write-route decision) with the same
+ * transaction + audit row + snapshot post-condition shape as the exceptions.
  *
  * The controller is guarded by `@UseGuards(AuthGuard,
  * AuthoritativeCurrentUserGuard)`, so this module must resolve what those
@@ -76,6 +80,7 @@ import {
     EntitlementsService,
     TenantQuotaService,
     EntitlementOverridesService,
+    TenantSubscriptionService,
     // The guard chain of EntitlementsController (AuthGuard →
     // AuthoritativeCurrentUserGuard), resolved in THIS module's context.
     AuthGuard,
@@ -86,6 +91,7 @@ import {
     EntitlementsService,
     TenantQuotaService,
     EntitlementOverridesService,
+    TenantSubscriptionService,
   ],
 })
 export class EntitlementsModule {}
