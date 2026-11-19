@@ -10,7 +10,6 @@ import { Insumo } from '../../inventory/entities/insumo.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
 import { RecipeDetail } from '../../inventory/entities/recipe-detail.entity';
 import { InboundSyncService } from './inbound-sync.service';
-import type { InboundSyncQueryDto } from '../dto/inbound-sync.dto';
 
 /**
  * R3-002 (review finding): the recipe-version validity window is pinned by
@@ -118,7 +117,13 @@ describe('InboundSyncService recipe-version validity window (db - Real PostgreSQ
          ($2, $5, 'Producto vigencia futura',  'ud'),
          ($3, $5, 'Producto vigencia vencida', 'ud'),
          ($4, $5, 'Producto vigencia activa',  'ud')`,
-      [productNullId, productFutureId, productExpiredId, productInsideId, tenantId],
+      [
+        productNullId,
+        productFutureId,
+        productExpiredId,
+        productInsideId,
+        tenantId,
+      ],
     );
 
     await bootstrap.query(
@@ -179,7 +184,14 @@ describe('InboundSyncService recipe-version validity window (db - Real PostgreSQ
       username: fixture.runtimeRoleName,
       password: fixture.runtimeRolePassword,
       schema: fixture.schema,
-      entities: [Tenant, Product, UomConversion, Insumo, RecipeVersion, RecipeDetail],
+      entities: [
+        Tenant,
+        Product,
+        UomConversion,
+        Insumo,
+        RecipeVersion,
+        RecipeDetail,
+      ],
       ...poolCleanupExtra,
     });
     await runtime.initialize();
@@ -213,7 +225,7 @@ describe('InboundSyncService recipe-version validity window (db - Real PostgreSQ
       (manager) =>
         service.getInboundDeltas(
           tenantId,
-          { types: 'recipeversions' } as InboundSyncQueryDto,
+          { types: 'recipeversions' },
           undefined,
           manager,
         ),
@@ -230,13 +242,16 @@ describe('InboundSyncService recipe-version validity window (db - Real PostgreSQ
 
       // Read the delivered version through the public response shape, not the
       // query builder: the insumo closure must have come through too.
-      const response = await runInTenantTransaction(runtime, tenantId, (manager) =>
-        service.getInboundDeltas(
-          tenantId,
-          { types: 'recipeversions' } as InboundSyncQueryDto,
-          undefined,
-          manager,
-        ),
+      const response = await runInTenantTransaction(
+        runtime,
+        tenantId,
+        (manager) =>
+          service.getInboundDeltas(
+            tenantId,
+            { types: 'recipeversions' },
+            undefined,
+            manager,
+          ),
       );
       const delivered = response.deltas.recipeVersions.find(
         (version) => version.id === versionNullId,
