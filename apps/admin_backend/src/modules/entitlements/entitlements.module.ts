@@ -6,6 +6,7 @@ import { TenantSubscription } from './entities/tenant-subscription.entity';
 import { TenantEntitlementOverride } from './entities/tenant-entitlement-override.entity';
 import { TenantEntitlementChangeHistory } from './entities/tenant-entitlement-change-history.entity';
 import { EntitlementsController } from './entitlements.controller';
+import { EntitlementOverridesService } from './entitlement-overrides.service';
 import { EntitlementsService } from './entitlements.service';
 import { TenantQuotaService } from './tenant-quota.service';
 import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
@@ -28,8 +29,13 @@ import {
  * endpoints of other modules (which import this module); the administrative
  * write paths land in later slices and are deliberately absent here.
  * ENT-03b: `TenantQuotaService` counts seats (`limits.terminals`) and owner
+ * ENT-03b: `TenantQuotaService` counts seats (`limits.terminals`) and owner
  * accounts (`limits.owner_accounts`) — a count that blocks enrolment only,
  * never the sale (catalog §6.2).
+ * ENT-06: `EntitlementOverridesService` grants and revokes audited exceptions
+ * (internal CLI only) and serves their read side. There is still no HTTP write
+ * path: the backend has no platform role, so an OWNER-guarded write would let
+ * a tenant grant itself the top plan.
  *
  * The controller is guarded by `@UseGuards(AuthGuard,
  * AuthoritativeCurrentUserGuard)`, so this module must resolve what those
@@ -69,12 +75,17 @@ import {
   providers: [
     EntitlementsService,
     TenantQuotaService,
+    EntitlementOverridesService,
     // The guard chain of EntitlementsController (AuthGuard →
     // AuthoritativeCurrentUserGuard), resolved in THIS module's context.
     AuthGuard,
     AuthoritativeCurrentUserGuard,
     CurrentUserAuthorizationService,
   ],
-  exports: [EntitlementsService, TenantQuotaService],
+  exports: [
+    EntitlementsService,
+    TenantQuotaService,
+    EntitlementOverridesService,
+  ],
 })
 export class EntitlementsModule {}
