@@ -261,9 +261,10 @@
       "excerpt": "/",
       "comment": "Accessibility check on body > main > nav > div > ol > li:nth-of-type(2): Low contrast.\n\"/\" is 1.6 : 1 (#cccccc on #ffffff); WCAG AA needs 4.5 : 1.\nFix it so it meets WCAG 2.2 AA, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:39.900Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:39.919Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:59:04.166Z",
+      "resolution": "Ya corregido preventivamente en el mismo commit c37b8cf4: al arreglar el del hub unifiqué /precios/, que tenía el mismo patrón. El separador usa --web-text-muted (#5B6B7C, 5.47:1 AA). Obsoleto al momento de su captura."
     },
     {
       "id": "rpzhakst",
