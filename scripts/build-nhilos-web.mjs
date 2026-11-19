@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import {
   copyFileSync,
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -107,9 +106,44 @@ for (const page of PAGES) {
   writeFileSync(target, html);
 }
 copyFileSync(path.join(SOURCE, NOT_FOUND), path.join(OUTPUT, NOT_FOUND));
-for (const dir of PUBLIC_DIRS) {
-  cpSync(path.join(SOURCE, dir), path.join(OUTPUT, dir), { recursive: true });
+// Solo se publica el media que alguna página referencia.
+//
+// El banco de capturas de `design/` es material de trabajo: versiones descartadas,
+// loops de capacidades que todavía no vendemos y pruebas de cámara. Copiarlo
+// entero al dominio público no cuesta ancho de banda por página, pero publica
+// cosas que nadie decidió publicar — incluido un clip de KDS mientras el sitio
+// afirma que el KDS no se vende.
+const referenced = new Set();
+const scan = (text) => {
+  for (const match of text.matchAll(/(?:^|["'(/])((?:media|fonts)\/[^"')\s,]+)/g)) {
+    referenced.add(match[1]);
+  }
+};
+for (const page of PAGES) {
+  scan(readFileSync(path.join(OUTPUT, page.out), "utf8"));
 }
+scan(readFileSync(path.join(OUTPUT, NOT_FOUND), "utf8"));
+for (const hashed of hashedAssets.values()) {
+  if (/\.(css|js)$/.test(hashed)) {
+    scan(readFileSync(path.join(OUTPUT, hashed), "utf8"));
+  }
+}
+
+let publishedAssets = 0;
+for (const rel of [...referenced].sort()) {
+  const from = path.join(SOURCE, rel);
+  if (!existsSync(from)) {
+    fail(`a page references an asset that does not exist: ${rel}`);
+  }
+  const to = path.join(OUTPUT, rel);
+  mkdirSync(path.dirname(to), { recursive: true });
+  copyFileSync(from, to);
+  publishedAssets += statSync(to).size;
+}
+
+const withheld = PUBLIC_DIRS.flatMap((dir) => walk(path.join(SOURCE, dir))).filter(
+  (file) => !referenced.has(path.relative(SOURCE, file).split(path.sep).join("/")),
+);
 
 writeFileSync(
   path.join(OUTPUT, "_headers"),
@@ -190,4 +224,7 @@ console.log(`[nhilos-web] Source: ${path.relative(ROOT, SOURCE)} (${PAGES.length
 console.log(`[nhilos-web] Output: ${path.relative(ROOT, OUTPUT)} (${files.length} files, ${bytes(total)})`);
 console.log(`[nhilos-web] Largest asset: ${path.relative(OUTPUT, largest.file)} (${bytes(largest.size)})`);
 console.log(`[nhilos-web] Shared stylesheet: ${[...hashedAssets.values()].join(", ")}`);
+console.log(
+  `[nhilos-web] Media: ${referenced.size} referenced (${bytes(publishedAssets)}) published, ${withheld.length} unreferenced left in design/`,
+);
 console.log(`[nhilos-web] Pages: ${PAGES.map((page) => `${page.out} -> ${page.url}`).join(", ")}`);
