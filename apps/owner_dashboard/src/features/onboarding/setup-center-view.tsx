@@ -21,6 +21,7 @@ import { isApiError } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { localize, backendActivationErrorLabels, lifecycleStateLabels, onboardingBlockerLabels, onboardingWarningLabels } from "@/lib/labels";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
+import { AddTerminalKitDialog } from "@/features/devices/add-terminal-kit-dialog";
 import { useSeedCatalogDefaults } from "@/features/catalog/use-catalog";
 import { useHasPermission } from "@/features/users/use-has-permission";
 import { AppPermission } from "@/features/users/types";
@@ -50,6 +51,7 @@ import {
   ExternalLink,
   Smartphone,
   Ban,
+  QrCode,
 } from "lucide-react";
 
 interface SetupCenterViewProps {
@@ -152,6 +154,7 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
 
   const isActivated = progress.currentLifecycle === OnboardingLifecycleState.ACTIVATED;
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [installKitOpen, setInstallKitOpen] = useState(false);
   const { data: activeAttempt } = useActiveActivationAttempt();
   const startActivationAttempt = useStartActivationAttempt();
   const cancelActivationAttempt = useCancelActivationAttempt();
@@ -679,27 +682,41 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
               Requiere permiso de activación (onboarding:activation:manage)
             </span>
           )}
-          {(!linkingCode || linkingIsExpired) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {(!linkingCode || linkingIsExpired) && (
+              <Button
+                size="sm"
+                data-testid="generate-linking-code-btn"
+                onClick={() =>
+                  generateLinkingCode.mutate(undefined, {
+                    onSuccess: (data) => {
+                      setLinkingCode(data);
+                      setLinkingNowMs(Date.now());
+                    },
+                  })
+                }
+                disabled={generateLinkingCode.isPending || !hasActivationPermission || isAwaitingDeviceChecks}
+                className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
+              >
+                <Smartphone className="h-4 w-4" />
+                {generateLinkingCode.isPending
+                  ? "Generando código..."
+                  : "Generar código de vinculación"}
+              </Button>
+            )}
             <Button
+              type="button"
+              variant="outline"
               size="sm"
-              data-testid="generate-linking-code-btn"
-              onClick={() =>
-                generateLinkingCode.mutate(undefined, {
-                  onSuccess: (data) => {
-                    setLinkingCode(data);
-                    setLinkingNowMs(Date.now());
-                  },
-                })
-              }
-              disabled={generateLinkingCode.isPending || !hasActivationPermission || isAwaitingDeviceChecks}
+              data-testid="open-install-kit-dialog-btn"
+              onClick={() => setInstallKitOpen(true)}
+              disabled={!hasActivationPermission}
               className="flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-[#013a57] focus-visible:ring-offset-2"
             >
-              <Smartphone className="h-4 w-4" />
-              {generateLinkingCode.isPending
-                ? "Generando código..."
-                : "Generar código de vinculación"}
+              <QrCode className="h-4 w-4" aria-hidden="true" />
+              Abrir kit QR de instalación
             </Button>
-          )}
+          </div>
           {isAwaitingDeviceChecks && !linkingCode && (
             <p className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
               <AlertTriangle className="h-3 w-3 shrink-0" />
@@ -1442,6 +1459,12 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
         open={catalogModalOpen}
         onOpenChange={setCatalogModalOpen}
         onNavigateToTab={onNavigateToTab}
+      />
+
+      {/* POS Install Kit QR Dialog (issue #958) */}
+      <AddTerminalKitDialog
+        open={installKitOpen}
+        onOpenChange={setInstallKitOpen}
       />
     </div>
   );

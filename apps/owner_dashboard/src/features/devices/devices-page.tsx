@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RefreshCw, Smartphone } from "lucide-react";
+import { Plus, RefreshCw, Smartphone } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -16,6 +16,7 @@ import { getApiErrorMessage } from "@/lib/api-error";
 import { useCanRevokeDevice } from "@/features/auth/permissions";
 import { useDevices } from "./use-devices";
 import { RevokeDeviceModal } from "./revoke-device-modal";
+import { AddTerminalKitDialog } from "./add-terminal-kit-dialog";
 import type { DeviceSyncStatus, TerminalDevice } from "./types";
 
 interface BadgeTone {
@@ -260,6 +261,7 @@ export function DevicesPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useDevices();
   const devices = data ?? [];
   const [revokingDevice, setRevokingDevice] = useState<TerminalDevice | null>(null);
+  const [addKitOpen, setAddKitOpen] = useState(false);
   const canRevoke = useCanRevokeDevice();
 
   const activeCount = devices.filter((d) => d.status === "ACTIVE").length;
@@ -279,19 +281,30 @@ export function DevicesPage() {
             de las terminales de punto de venta.
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="gap-1.5"
-        >
-          <RefreshCw
-            className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
-            aria-hidden="true"
-          />
-          Actualizar
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="gap-1.5"
+          >
+            <RefreshCw
+              className={cn("h-3.5 w-3.5", isFetching && "animate-spin")}
+              aria-hidden="true"
+            />
+            Actualizar
+          </Button>
+          <Button
+            size="sm"
+            data-testid="add-terminal-header-btn"
+            onClick={() => setAddKitOpen(true)}
+            className="gap-1.5"
+          >
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            Agregar terminal
+          </Button>
+        </div>
       </div>
 
       {/* §41 P0: SUMMARY → DETAIL. Executive counts first, device rows below. */}
@@ -356,6 +369,17 @@ export function DevicesPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Actualmente no existen terminales asociadas a este negocio.
           </p>
+          <div className="mt-4">
+            <Button
+              size="sm"
+              data-testid="add-terminal-empty-btn"
+              onClick={() => setAddKitOpen(true)}
+              className="gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+              Agregar terminal
+            </Button>
+          </div>
         </div>
       ) : (
         devices.length > 0 && (
@@ -386,6 +410,8 @@ export function DevicesPage() {
           if (!open) setRevokingDevice(null);
         }}
       />
+
+      <AddTerminalKitDialog open={addKitOpen} onOpenChange={setAddKitOpen} />
     </div>
   );
 }

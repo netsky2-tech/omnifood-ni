@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, RequestMethod } from '@nestjs/common';
 import helmet from 'helmet';
 import { json, urlencoded, Express, Request, Response, NextFunction } from 'express';
 import { AppModule } from './core/app/app.module';
@@ -32,8 +32,13 @@ async function bootstrap() {
   const expressApp = app.getHttpAdapter().getInstance() as Express;
   expressApp.set('trust proxy', trustProxyHops);
 
-  // Global prefix
-  app.setGlobalPrefix('api');
+  // Global prefix (exclude root Install Kit and Android App Links endpoints)
+  app.setGlobalPrefix('api', {
+    exclude: [
+      { path: 'i/:token', method: RequestMethod.GET },
+      { path: '.well-known/assetlinks.json', method: RequestMethod.GET },
+    ],
+  });
 
   // Request logging
   const logger = new Logger('HTTP');

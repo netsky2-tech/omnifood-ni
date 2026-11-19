@@ -61,6 +61,11 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["nhilosAppLinkHost"] =
+            (project.findProperty("NHILOS_APP_LINK_HOST") as? String)
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: "api.nhilospos.com"
     }
 
     buildFeatures {

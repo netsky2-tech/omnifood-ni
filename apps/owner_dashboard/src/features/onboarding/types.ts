@@ -294,3 +294,37 @@ export interface StartActivationDto {
   idempotencyKey?: string;
   posBuild?: string;
 }
+
+/**
+ * Request body for POST /onboarding/install-tokens (issue #958).
+ */
+export interface CreateInstallTokenDto {
+  label?: string;
+  revokePrevious?: boolean;
+}
+
+/**
+ * Response of POST /onboarding/install-tokens (issue #958).
+ * Plaintext `token` is returned exactly once on creation and never persisted.
+ */
+export interface CreateInstallTokenResponse {
+  id: string;
+  token: string;
+  tokenPrefix: string;
+  label: string | null;
+  createdAt: string;
+}
+
+/**
+ * Safe projection returned by GET /onboarding/install-tokens (issue #958).
+ */
+export interface InstallTokenListItem {
+  id: string;
+  tokenPrefix: string;
+  label: string | null;
+  createdAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  useCount: number;
+  active: boolean;
+}

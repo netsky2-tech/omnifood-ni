@@ -9,6 +9,9 @@ import type {
   StartActivationDto,
   GenerateLinkingCodeResponse,
   LinkingCodeResponse,
+  CreateInstallTokenDto,
+  CreateInstallTokenResponse,
+  InstallTokenListItem,
 } from "./types";
 
 export function isVersionConflictError(error: unknown): boolean {
@@ -98,4 +101,68 @@ export async function generateLinkingCode(): Promise<GenerateLinkingCodeResponse
  */
 export async function fetchLinkingCodes(): Promise<LinkingCodeResponse[]> {
   return api.get<LinkingCodeResponse[]>("/onboarding/activation/linking-codes");
+}
+
+/**
+ * Lists the tenant's POS install kit tokens (issue #958).
+ */
+export async function listInstallTokens(): Promise<InstallTokenListItem[]> {
+  return api.get<InstallTokenListItem[]>("/onboarding/install-tokens");
+}
+
+/**
+ * Creates a new POS install kit token for the caller's tenant (issue #958).
+ * Plaintext `token` is returned once in the response.
+ */
+export async function createInstallToken(
+  dto: CreateInstallTokenDto = {},
+): Promise<CreateInstallTokenResponse> {
+  return api.post<CreateInstallTokenResponse>("/onboarding/install-tokens", dto);
+}
+
+/**
+ * Revokes an install kit token by id (issue #958).
+ */
+export async function revokeInstallToken(tokenId: string): Promise<void> {
+  await api.delete<void>(`/onboarding/install-tokens/${encodeURIComponent(tokenId)}`);
+}
+
+/**
+ * Builds the stable public install kit URL (`https://<host>/i/<token>` or
+ * `https://<host>/i/<token>?code=<CODE>`) from the dashboard's API base URL,
+ * stripping any trailing `/api` or `/api/` prefix cleanly (issue #958).
+ *
+ * When `apiBaseUrl` is relative (e.g. `/api` in local Vite dev) or empty,
+ * falls back to `window.location.origin` if available, or returns a
+ * root-relative `/i/<token>` path in non-browser contexts.
+ */
+export function buildInstallKitUrl(
+  apiBaseUrl: string,
+  token: string,
+  linkingCode?: string,
+): string {
+  const normalizedBase = apiBaseUrl
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/i, "")
+    .replace(/\/+$/, "");
+
+  const encodedToken = encodeURIComponent(token.trim());
+  const path = `/i/${encodedToken}`;
+  const trimmedCode = linkingCode?.trim();
+  const query = trimmedCode ? `?code=${encodeURIComponent(trimmedCode)}` : "";
+
+  if (normalizedBase.length > 0) {
+    return `${normalizedBase}${path}${query}`;
+  }
+
+  if (
+    typeof window !== "undefined" &&
+    typeof window.location?.origin === "string" &&
+    /^https?:\/\//i.test(window.location.origin)
+  ) {
+    return `${window.location.origin}${path}${query}`;
+  }
+
+  return `${path}${query}`;
 }
