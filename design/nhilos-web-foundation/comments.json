@@ -297,9 +297,10 @@
       "excerpt": "03",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(3): Touch target under 44 px.\n\"Planes\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:56.558Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:56.563Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T23:07:33.107Z",
+      "resolution": "Mismo componente del sistema: site.css .spine a = 44px target desde ec6d74f8, compartido por las tres páginas. Obsoleto al momento de su captura."
     },
     {
       "id": "9xkpc081",
