@@ -139,3 +139,11 @@ pos_offline_cola_sync_poster.cf458b78.webp
 Al reemplazar un recurso, actualizar las referencias en el artboard y comprobar con
 `curl` que el borde devuelve el tamaño nuevo. Una verificación con `?v=aleatorio`
 no cuenta: esquiva la caché que ve el visitante.
+
+## Hero en movimiento — requisitos de captura (2026-11-19)
+
+**Camino A (inmediato, sin captura nueva):** `pos_hero_live_loop.mp4` ya existe —grabación de pantalla real de la terminal con la demo, 6,78 s, 1080×2316—. Re-encode a ~600 KB (`-threads 1`) e inserción en el marco de terminal del hero, como en el hub.
+
+**Camino B (upgrade, cámara real):** vertical 4K/1080, trípode, luz difusa sin reflejos, pantalla legible; la mano entra, sostiene la terminal real de NHILOS con el catálogo demo visible, un toque real; 6–10 s; primer y último frame casi idénticos para el loop; pantalla limpia (sin notificaciones ni datos personales); prohibido fondo verde o equipos ajenos. Entrega a `Pictures/nhilos/recursos/` — el procesado (re-encode, loop, verificación de frames) lo hace el agente.
+
+Referencia del defecto que se repite: `pos_on_hand.mp4` es sintético (fondo verde que aparece, notch de iPhone, mano que cambia de forma entre frames) y está prohibido por la regla de medios auténticos.
