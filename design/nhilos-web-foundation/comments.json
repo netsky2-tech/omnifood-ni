@@ -237,9 +237,10 @@
       "excerpt": "09",
       "comment": "Accessibility advice on #spineNav > a:nth-of-type(9): Touch target under 44 px.\n\"Preguntas\" is 26 × 26 px; 44 × 44 px is recommended for touch.\nConsider fixing it, keeping the design's tokens.",
       "createdAt": "2026-11-19T21:18:33.907Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T21:18:33.928Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T22:49:11.862Z",
+      "resolution": "Mismo componente: site.css .spine a = 44px target desde ec6d74f8, compartido por las tres páginas. Obsoleto al momento de su captura."
     },
     {
       "id": "0h51ltnd",
