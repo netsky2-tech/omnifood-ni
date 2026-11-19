@@ -33,9 +33,10 @@
       "excerpt": "Los términos de contrato (permanencia, renovación y qué se desactiva si dejas de pagar) se entregan por escrito en la cotización, con tu operación y tu alcance sobre la mesa: es la parte que se firma, y no se improvisa. Lo que sí se afirma desde hoy:",
       "comment": "Esos detalles en parentesis no me gusta, no los pongamos, se sobre entiende con terminos de contrato lo que incluye",
       "createdAt": "2026-11-19T20:02:49.021Z",
-      "status": "open",
+      "status": "resolved",
       "sentAt": "2026-11-19T20:02:49.052Z",
-      "resolvedAt": null
+      "resolvedAt": "2026-11-19T20:22:30.792Z",
+      "resolution": "Paréntesis eliminado: \"Los términos de contrato se entregan por escrito en la cotización...\" — la enumeración sobraba."
     },
     {
       "id": "0854wtfr",
