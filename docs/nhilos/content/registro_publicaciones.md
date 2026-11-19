@@ -50,7 +50,7 @@ Copy de TikTok, verbatim:
 ### Jueves 19/11 · Bimoneda en teléfono
 
 - **Archivo:** `apps/showcase_video/out/pieza2_digital.mp4`, 18 s, 1080×1920, 540 fotogramas
-- **Gancho en pantalla:** "20 ventas al día con billete de $20."
+- **Gancho en pantalla:** "Si cada vuelto de $20 te cuesta C$1." (reformulado en la Compuerta 1; sustituye a "20 ventas al día con billete de $20")
 - **CTA primario:** comentar `DEMO` (uno solo, sin pedir guardado en la misma pieza)
 - **Redes:** Instagram, Facebook, TikTok, simultáneo
 - **Métricas:** pendientes
@@ -71,7 +71,7 @@ Copy de Instagram y Facebook, verbatim:
 
 Copy de TikTok, verbatim:
 
-> 20 ventas con billete de $20 y un córdoba de redondeo en cada una: C$600 al mes que nadie ve 📉
+> 20 ventas con billete de $20 y, si el redondeo te cuesta C$1 en cada una, C$600 al mes que nadie ve 📉
 >
 > El vuelto se calcula a ojo y la diferencia se acumula sin aparecer en ningún reporte.
 >
@@ -96,6 +96,14 @@ Notas de publicación:
   respuesta cuesta más que no pedirlo.
 - No citar el tipo de cambio exacto en el copy: cambia todos los días y el video
   muestra el del día de la grabación.
+- La cifra `C$1` por venta es **hipotética**: en todo copy debe ir con el
+  condicional `si`, como en la pieza. Sin el `si`, el `C$600 al mes` se vuelve una
+  afirmación que el material no sostiene.
+- **Atención de comentarios `DEMO` (estándar NHILOS):** no se entregan cuentas
+  gratuitas ni accesos a la libre. Quien comente `DEMO` (o pregunte por el sistema)
+  se atiende con demo personalizada guiada sobre su operación real vía
+  `https://www.nhilospos.com/#demo` → WhatsApp `+505 8194 8526`
+  (ver [guion_respuestas_cta_dm_v1.0.md](./guion_respuestas_cta_dm_v1.0.md)).
 
 ### Viernes 20/11 · Macro-zoom de venta por código en cafetería
 
@@ -111,7 +119,7 @@ Copy de Instagram y Facebook, verbatim:
 >
 > En este ejemplo real de caja con datos de prueba ves el flujo directo: buscar por código corto (`104 + Enter`), enviar directo al carrito (`Americano 12oz · C$ 100.00`), cobrar con `C$ 200.00` y ver el vuelto exacto (`C$ 100.00`) al instante en la misma pantalla.
 >
-> 📩 Comenta DEMO abajo y te enviamos el acceso directo.
+> 📩 Comenta DEMO abajo y coordinamos una demostración personalizada con el escenario de tu negocio.
 >
 > #CafeteriasNicaragua #PuntoDeVenta #ControlDeCaja #GestionDeNegocios #NHILOS
 
@@ -121,6 +129,13 @@ Copy de TikTok, verbatim:
 >
 > En una cafetería real, el mostrador no se traba si el cajero digita el código corto del artículo, presiona Enter para sumarlo al carrito y cierra el cobro en la misma pantalla.
 >
-> Comenta DEMO abajo para enviarte el acceso directo.
+> Comenta DEMO abajo y coordinamos tu demo personalizada.
 >
 > #negociosnicaragua #cafeteriasnicaragua #puntodeventa #controldecaja #nhilosapp
+
+Notas de publicación:
+
+- Copy actualizado antes de publicar para alinearse al estándar comercial de NHILOS:
+  no prometer "acceso directo" ni prueba libre; toda `DEMO` se coordina de forma
+  personalizada vía `https://www.nhilospos.com/#demo` y WhatsApp `+505 8194 8526`
+  (ver [guion_respuestas_cta_dm_v1.0.md](./guion_respuestas_cta_dm_v1.0.md)).

@@ -79,6 +79,13 @@ Una sola palabra clave por pieza, coherente con el objeto que se entrega:
 `CONTROL` para auditoría de caja, `DEMO` para producto. Un solo llamado por
 pieza: pedir dos cosas reduce la probabilidad de cumplir cualquiera.
 
+- **Estándar comercial de `DEMO`:** NHILOS **no ofrece acceso gratuito ni cuentas
+  abiertas a la libre**. Todo copy y guion con CTA `DEMO` debe prometer una
+  **demostración personalizada y guiada** armada sobre la operación real del
+  prospecto (vía `https://www.nhilospos.com/#demo` → WhatsApp `+505 8194 8526`),
+  nunca *"acceso directo"* ni *"prueba libre"*. Ver
+  [guion_respuestas_cta_dm_v1.0.md](./guion_respuestas_cta_dm_v1.0.md).
+
 ## La matriz de lo ya publicado
 
 Así está el mapa hoy. Casi todo cae en la misma celda, y eso es la monotonía
