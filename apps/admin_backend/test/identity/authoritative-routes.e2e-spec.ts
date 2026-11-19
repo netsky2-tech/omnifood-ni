@@ -46,6 +46,13 @@ import { getOptionsToken, getStorageToken } from '@nestjs/throttler';
 import { UserRole } from '../../src/modules/identity/entities/user.entity';
 import { User } from '../../src/modules/identity/entities/user.entity';
 import { DataSource } from 'typeorm';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 @Controller('identity')
 class SensitiveIdentityController {
@@ -155,6 +162,8 @@ describe('authoritative identity routes (e2e)', () => {
 });
 
 describe('authoritative remaining sensitive routes (e2e)', () => {
+  let entitlementsFixture: EntitlementsFixture;
+
   const jwtEnvironment = {
     JWT_SECRET: 'test-only-jwt-secret-with-at-least-thirty-two-bytes',
     JWT_ISSUER: 'omnifood-admin-test',
@@ -213,6 +222,13 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): InventoryMovementController carries
+    // CapabilitiesGuard, so the module must provide the real
+    // EntitlementsService. No guarded route is reached with passing
+    // upstream guards in this suite (the 401s fire first), so no
+    // entitlement rows are seeded.
+    entitlementsFixture = await openEntitlementsFixture();
+
     loginUser.password_hash = await bcrypt.hash('correct-password', 4);
     const module = await Test.createTestingModule({
       imports: [
@@ -286,6 +302,11 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
         },
         { provide: CatalogService, useValue: catalogService },
         { provide: getRepositoryToken(User), useValue: users },
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
         {
           // Issue #556 stage 12d: login resolves the tenant slug through
           // `query` and binds the user read through the transaction manager.
@@ -404,5 +425,8 @@ describe('authoritative remaining sensitive routes (e2e)', () => {
       .expect(403);
   });
 
-  afterAll(async () => app.close());
+  afterAll(async () => {
+    await app.close();
+    await closeEntitlementsFixture(entitlementsFixture);
+  });
 });

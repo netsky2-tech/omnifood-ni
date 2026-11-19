@@ -774,6 +774,12 @@ describe('InboundSyncService', () => {
     );
   });
 
+  // R3-002: the NULL-start validity contract is now pinned by BEHAVIOUR in
+  // `inbound-sync.db.spec.ts` (real PostgreSQL, migration-built schema), not
+  // by asserting the literal SQL string here. A string assertion would break
+  // on any equivalent rewrite (e.g. a `.where` group or COALESCE) without
+  // any observable change.
+
   it('filters deltas by numeric timestamp sinceVersion', async () => {
     const sinceTimestamp = '1787745600000';
     await service.getInboundDeltas(

@@ -30,6 +30,7 @@
   <meta name="twitter:title" content="NHILOS POS · Sistema POS en Nicaragua">
   <meta name="twitter:description" content="POS táctil que sigue vendiendo sin internet. Correlativos inalterables DT 09-2007, inventario con recetas y bimoneda córdobas/dólares.">
   <meta name="twitter:image" content="https://www.nhilospos.com/media/og-home.jpg">
+  <!-- CLAIM GUARD (#993/#983/#994): el schema ya no menciona KDS (no se vende: #993), comandas a cocina por LAN (#994, topología sin validar) ni impresión genérica (#983, solo integrada en Sunmi/iPOS). Esas capacidades vuelven al featureList y a las respuestas cuando #993 y #994 cierren. -->
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -95,7 +96,6 @@
         "Inventario con descuento por recetas (BOM) y kardex para productos de producción",
         "Modo de reventa simple para tiendas y misceláneas, sin recetas",
         "Cobro bimoneda en córdobas y dólares",
-        "Comandas a cocina por pantalla KDS o impresora",
         "Arqueos y cierres de turno con auditoría por usuario",
         "Sincronización automática con panel web al reconectar"
       ],
@@ -118,7 +118,7 @@
           "name": "¿Cuánto cuesta NHILOS POS?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "NHILOS POS se cotiza según tu operación en Nicaragua: número de terminales, locales y si activas recetas. No se vende por licencia de pago único; es cobro mensual por terminal. Como referencia, los POS para restaurantes suelen publicar planes de entrada entre $21 y $50 USD al mes. La cotización sale de una demo o de WhatsApp, sin compromiso."
+            "text": "NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US$149, Operación US$89 con setup de US$250 y Pro US$149 con setup de US$450; Enterprise se cotiza según la operación. No se vende por licencia de pago único: es suscripción mensual por negocio, con packs de capacidad de US$39 al mes. La cotización final sale de una demo o de WhatsApp, sin compromiso."
           }
         },
         {
@@ -126,7 +126,7 @@
           "name": "¿NHILOS POS funciona sin internet?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Sí: NHILOS POS funciona sin internet en cualquier negocio de Nicaragua; es su característica principal. La terminal tiene el catálogo cargado y sigue cobrando, emitiendo tickets con numeración consecutiva y enviando comandas a cocina por la red local del negocio. Al volver el internet, las ventas se sincronizan al panel web automáticamente, en orden y sin duplicar."
+            "text": "Sí: NHILOS POS funciona sin internet en cualquier negocio de Nicaragua; es su característica principal. La terminal tiene el catálogo cargado y sigue cobrando, emitiendo tickets con numeración consecutiva. Al volver el internet, las ventas se sincronizan al panel web automáticamente, en orden y sin duplicar."
           }
         },
         {
@@ -150,7 +150,7 @@
           "name": "¿Cómo funciona NHILOS POS en un food park con varios puestos?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "En un food park de Nicaragua, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve la vista consolidada de todas las marcas. Un puesto que revende trabaja en modo simple y una cocina que prepara platos activa recetas e insumos: ambos modos conviven en el mismo sistema."
+            "text": "En un food park de Nicaragua, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve su operación desde el panel web. Un puesto que revende trabaja en modo simple y una cocina que prepara platos activa recetas e insumos: ambos modos conviven en el mismo sistema."
           }
         },
         {
@@ -158,7 +158,7 @@
           "name": "¿Qué incluye la implementación de NHILOS POS y cuánto tarda?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "La implementación de NHILOS POS en Nicaragua incluye la carga inicial de tu catálogo (productos, insumos y precios), la configuración de terminales y red local, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo y el acompañamiento en el primer turno real. El tiempo depende de tu catálogo: un mostrador simple arranca en días; un restaurante con recetas toma más. El cronograma real viene en la cotización."
+            "text": "La implementación de NHILOS POS en Nicaragua incluye el alta de tu catálogo con plantillas (productos, insumos y precios), la configuración de tus terminales, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo y el acompañamiento en el primer turno real. El setup cubre una puesta en marcha con una sesión de trabajo: la migración extra de datos se cotiza aparte. El tiempo depende de tu catálogo: un mostrador simple arranca en días; un restaurante con recetas toma más. El cronograma real viene en la cotización."
           }
         },
         {
@@ -166,7 +166,7 @@
           "name": "¿Necesito comprar equipo especial para usar NHILOS POS?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "NHILOS POS opera en terminales táctiles Android y no exige hardware propietario para negocios en Nicaragua. Si ya tienes equipo, se evalúa si sirve; si no, se cotiza el kit completo (terminal, impresora térmica y gaveta de dinero) con proveedores locales. Las comandas salen a cocina por pantalla KDS o por impresora, según tu operación."
+            "text": "NHILOS POS opera en terminales táctiles Android y no exige hardware propietario para negocios en Nicaragua. Si ya tienes equipo, se evalúa si sirve; si no, el equipo se cotiza aparte según tu mostrador."
           }
         },
         {
@@ -440,10 +440,43 @@
     @media (max-width: 1024px) { .seg-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 520px) { .seg-grid { grid-template-columns: 1fr; } }
 
-    /* ===== Precios ===== */
-    .pricing-note { margin-top: var(--space-5); display: grid; gap: var(--space-3); }
-    .pricing-note li { list-style: none; display: grid; grid-template-columns: 18px 1fr; gap: var(--space-2); color: var(--web-text-secondary); }
-    .pricing-note li::before { content: "✓"; color: var(--web-status-ok); font-weight: 700; }
+    /* ===== Precios: planes, notas, packs de capacidad, add-ons y condiciones ===== */
+    .plan-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-5); margin-top: var(--space-8); align-items: stretch; }
+    .plan-card { display: flex; flex-direction: column; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-card); }
+    .plan-name { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); }
+    .plan-price { margin-top: var(--space-3); display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+    .plan-amount { font-family: var(--font-display); font-size: clamp(2.25rem, 3.2vw, 2.75rem); line-height: 1; font-weight: 800; letter-spacing: -0.02em; color: var(--web-navy-900); font-variant-numeric: tabular-nums; }
+    .plan-per { font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-muted); }
+    .plan-setup { margin-top: var(--space-2); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--web-text-muted); }
+    .plan-for { margin-top: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .plan-list { list-style: none; margin: var(--space-4) 0 0; padding: var(--space-4) 0 0; border-top: 1px solid var(--web-border-hairline); display: grid; gap: var(--space-2); }
+    .plan-list li { display: grid; grid-template-columns: 16px 1fr; gap: var(--space-2); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .plan-list li::before { content: "✓"; color: var(--web-status-ok); font-weight: 700; }
+    .pack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); margin-top: var(--space-6); }
+    .pack-card { background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5); box-shadow: var(--shadow-card); }
+    .pack-card h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+    .pack-price { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500; color: var(--web-text-muted); }
+    .pack-card p { margin-top: var(--space-3); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .pack-note { margin-top: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    /* Notas de los planes bajo la grilla: capacidad fiscal, terminal y Enterprise (banda continua con #precios) */
+    #precios { padding-bottom: 0; }
+    .section-pricing-notes { padding-top: var(--space-6); }
+    .plan-fiscal { max-width: 72ch; font-size: var(--text-body-md); line-height: 1.6; color: var(--web-text-primary); }
+    .plan-terminal-note, .plan-enterprise-line { max-width: 72ch; margin-top: var(--space-3); font-size: var(--text-body-sm); line-height: 1.6; color: var(--web-text-secondary); }
+    /* Add-ons: bloque propio y compacto, lista de definición (nombre a la izquierda, precio en mono a la derecha) */
+    .section-addons { padding-block: var(--space-8); }
+    .addons-list { margin: var(--space-5) 0 0; max-width: 560px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden; }
+    .addon-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-5); }
+    .addon-row + .addon-row { border-top: 1px solid var(--web-border-hairline); }
+    .addon-row dt { font-family: var(--font-subheading); font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
+    .addon-row dd { margin: 0; font-family: var(--font-mono); font-size: 0.8125rem; color: var(--web-text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .section-condiciones { padding-block: var(--space-8); }
+    .fineprint { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); }
+    .fineprint-title { font-family: var(--font-subheading); font-size: var(--text-eyebrow); font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--web-text-primary); }
+    .fineprint-list { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; gap: var(--space-3); }
+    .fineprint-list li { font-size: var(--text-body-sm); line-height: 1.6; color: var(--web-text-muted); padding-left: 16px; position: relative; }
+    .fineprint-list li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-navy-100); }
+    @media (max-width: 720px) { .plan-grid { grid-template-columns: 1fr; } .pack-grid { grid-template-columns: 1fr; } }
 
     /* ===== FAQ unificado (estilo taste: un contenedor, celdas con hairlines internas) ===== */
     .faq-wrap { margin: var(--space-8) auto 0; max-width: 1080px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
@@ -712,8 +745,9 @@
           </div>
           <div class="hilo-step">
             <span class="hilo-num" aria-hidden="true">02</span>
-            <h3>La comanda sale</h3>
-            <p>A cocina o barra por pantalla KDS o impresora, según el área.</p>
+            <!-- CLAIM GUARD (#993/#983): este paso decía "A cocina o barra por pantalla KDS o impresora". KDS no se vende (#993) y la impresión genérica no está implementada (#983, solo integrada en Sunmi/iPOS). El despacho a cocina vuelve aquí cuando #993 cierre. -->
+            <h3>El pedido queda registrado</h3>
+            <p>Cada comanda se registra en el sistema con sus modificadores, sin papeles ni notas a mano.</p>
           </div>
           <div class="hilo-step">
             <span class="hilo-num" aria-hidden="true">03</span>
@@ -803,7 +837,7 @@
           <div class="seg-grid stagger">
             <div class="seg-card">
               <h3>Food parks</h3>
-              <p>Varias marcas, cajas compartidas, vista consolidada para el administrador.</p>
+              <p>Varias marcas en un solo park, cada puesto con su catálogo y su cobro.</p>
             </div>
             <div class="seg-card">
               <h3>Restaurantes</h3>
@@ -834,14 +868,118 @@
       </div>
     </section>
 
-    <!-- 8 · PRECIOS -->
+    <!-- 8 · PRECIOS: PLANES -->
     <section class="section section-subtle" id="precios" aria-labelledby="precios-title">
       <div class="container reveal">
-        <p class="eyebrow">Inversión</p>
+        <p class="eyebrow">Precios</p>
         <h2 class="h-lg" id="precios-title">¿Cuánto cuesta un sistema POS para restaurante en Nicaragua?</h2>
-        <p class="lead" style="margin-top: var(--space-4);">Depende de tu operación: terminales, locales y si activas recetas. Cotización sin compromiso por WhatsApp o demo, sin licencias pesadas de una vez.</p>
-        <h3 class="h-md" style="margin-top: var(--space-8);">La implementación depende de tu catálogo</h3>
-        <p class="lead" style="margin-top: var(--space-3);">Un mostrador simple arranca en días; un restaurante con recetas toma un poco más, porque cada receta se define con precisión. Te decimos el cronograma real en la cotización.</p>
+        <p class="lead" style="margin-top: var(--space-4);">Planes mensuales por negocio; setup cobrado una vez.</p>
+        <div class="plan-grid stagger">
+          <article class="plan-card">
+            <h3 class="plan-name">Esencial</h3>
+            <p class="plan-price"><span class="plan-amount">US$49</span><span class="plan-per">/mes</span></p>
+            <p class="plan-setup">Setup: US$149</p>
+            <p class="plan-for">Pulperías, kioscos, food trucks, cafeterías pequeñas</p>
+            <ul class="plan-list">
+              <li>1 terminal habilitada</li>
+              <li>Catálogo, caja y turnos</li>
+              <li>Doble tipo de cambio</li>
+              <li>Inventario simple</li>
+              <li>Reportes esenciales</li>
+              <li>Portal del propietario</li>
+              <li>Usuarios POS ilimitados</li>
+              <li>2 cuentas de propietario</li>
+            </ul>
+          </article>
+          <article class="plan-card">
+            <h3 class="plan-name">Operación</h3>
+            <p class="plan-price"><span class="plan-amount">US$89</span><span class="plan-per">/mes</span></p>
+            <p class="plan-setup">Setup: US$250</p>
+            <p class="plan-for">Food parks, bares, cafeterías con mesa, tiendas medianas</p>
+            <ul class="plan-list">
+              <li>Todo lo de Esencial</li>
+              <li>1 pack a elección</li>
+              <li>Clientes, promociones y lealtad</li>
+              <li>Reportes operativos</li>
+            </ul>
+          </article>
+          <article class="plan-card">
+            <h3 class="plan-name">Pro</h3>
+            <p class="plan-price"><span class="plan-amount">US$149</span><span class="plan-per">/mes</span></p>
+            <p class="plan-setup">Setup: US$450</p>
+            <p class="plan-for">Restaurantes, minimarkets, farmacias piloto, alto flujo</p>
+            <ul class="plan-list">
+              <li>Todo lo de Operación</li>
+              <li>Ambos packs incluidos</li>
+              <li>2 terminales habilitadas</li>
+              <li>4 cuentas de propietario</li>
+              <li>Reportes de margen y kardex valorizado</li>
+              <li>Soporte prioritario</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8a · PRECIOS: NOTAS DE LOS PLANES (soporte bajo la grilla, misma banda que #precios) -->
+    <section class="section section-subtle section-pricing-notes" id="precios-notas" aria-label="Información de los planes">
+      <div class="container reveal">
+        <!-- CLAIM GUARD (#983): el documento de precios lista "facturación impresa DGI" en Esencial, pero la impresión genérica (adaptador ESC/POS) es el issue #983 y sigue abierta. "Facturación impresa" vuelve a esta sección cuando #983 cierre. No publicar la mecánica como "electrónica" ni como "autorizada por la DGI": la autorización pertenece al contribuyente, no al software. -->
+        <p class="plan-fiscal">Facturación: todos los planes emiten factura con la mecánica que exige la DT 09-2007: consecutivo inalterable, anulación solo con motivo auditado y libros de ventas exportables.</p>
+        <p class="plan-terminal-note">Una terminal es un punto de cobro habilitado, no un equipo. El sistema corre en un Android que ya tengas, o en un kit que cotizamos aparte según tu mostrador.</p>
+        <p class="plan-enterprise-line">¿Cadenas o requerimientos a medida? Enterprise se cotiza según el alcance.</p>
+      </div>
+    </section>
+
+    <!-- 8b · PRECIOS: PACKS DE CAPACIDAD -->
+    <section class="section" id="packs" aria-labelledby="packs-title">
+      <div class="container reveal">
+        <h2 class="h-md" id="packs-title">Packs de capacidad</h2>
+        <p class="lead" style="margin-top: var(--space-3);">Dos packs de capacidad: se elige por tu operación, no por tu rubro.</p>
+        <div class="pack-grid stagger">
+          <article class="pack-card">
+            <h3>Retail <span class="pack-price">US$39/mes</span></h3>
+            <p>Kardex, costo promedio ponderado, proveedores, compras, conteos, mermas, alertas de stock, código de barras, lotes y vencimiento.</p>
+          </article>
+          <article class="pack-card">
+            <h3>Cocina <span class="pack-price">US$39/mes</span></h3>
+            <p>Recetas y BOM, subrecetas, modificadores, producción, combos, márgenes por plato, menú QR.</p>
+          </article>
+        </div>
+        <p class="pack-note">Operación incluye un pack a elección; el segundo cuesta US$29/mes. En Esencial un pack se agrega por US$39/mes (total US$88): la mejor ruta casi siempre es subir a Operación por US$89, que además incluye promociones y lealtad. Pro incluye ambos packs.</p>
+      </div>
+    </section>
+
+    <!-- 8c · PRECIOS: ADD-ONS -->
+    <section class="section section-subtle section-addons" id="addons" aria-labelledby="addons-title">
+      <div class="container reveal">
+        <h2 class="h-md" id="addons-title">Add-ons</h2>
+        <dl class="addons-list">
+          <div class="addon-row">
+            <dt>Terminal adicional</dt>
+            <dd>US$40/mes (US$29 en Pro)</dd>
+          </div>
+          <div class="addon-row">
+            <dt>Cuenta de propietario adicional</dt>
+            <dd>US$10/mes</dd>
+          </div>
+        </dl>
+        <p class="pack-note">La activación de una terminal adicional lleva una cuota única de enrolamiento, además de la mensualidad. Este bloque no es el catálogo completo: el detalle de cada add-on se cotiza según tu operación.</p>
+      </div>
+    </section>
+
+    <!-- 8d · PRECIOS: CONDICIONES DEL SERVICIO -->
+    <section class="section section-condiciones" id="condiciones" aria-labelledby="condiciones-title">
+      <div class="container reveal">
+        <div class="fineprint">
+          <h2 class="fineprint-title" id="condiciones-title">Condiciones del servicio</h2>
+          <ul class="fineprint-list">
+            <li>El hardware se cobra aparte, como kit o aprovisionamiento, nunca dentro de la mensualidad.</li>
+            <li>El setup no es reembolsable.</li>
+            <li>Precios netos: el IVA y cualquier tributo aplicable se agregan según la ley y el comprobante correspondiente.</li>
+            <li>El portal del propietario se habilita al terminar la puesta en marcha.</li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -860,11 +998,12 @@
           </div>
           <div class="faq-cell">
             <h3>¿Cuánto cuesta NHILOS POS?</h3>
-            <p>NHILOS POS se cotiza según tu operación en Nicaragua: número de terminales, locales y si activas recetas. No se vende por licencia de pago único; es cobro mensual por terminal. Como referencia, los POS para restaurantes suelen publicar planes de entrada entre $21 y $50 USD al mes. La cotización sale de una demo o de WhatsApp, sin compromiso.</p>
+            <p>NHILOS POS publica precios para Nicaragua: Esencial US$49 al mes con setup de US$149, Operación US$89 con setup de US$250 y Pro US$149 con setup de US$450; Enterprise se cotiza según la operación. No se vende por licencia de pago único: es suscripción mensual por negocio, con packs de capacidad de US$39 al mes. La cotización final sale de una demo o de WhatsApp, sin compromiso.</p>
           </div>
+          <!-- CLAIM GUARD (#994/#993): esta respuesta decía "enviando comandas a cocina por la red local del negocio". La concurrencia LAN no es capacidad vigente (#994) y el despacho a cocina depende de #993. Vuelve cuando #994 cierre. -->
           <div class="faq-cell">
             <h3>¿NHILOS POS funciona sin internet?</h3>
-            <p>Sí: NHILOS POS funciona sin internet en cualquier negocio de Nicaragua; es su característica principal. La terminal tiene el catálogo cargado y sigue cobrando, emitiendo tickets con numeración consecutiva y enviando comandas a cocina por la red local del negocio. Al volver el internet, las ventas se sincronizan al panel web automáticamente, en orden y sin duplicar.</p>
+            <p>Sí: NHILOS POS funciona sin internet en cualquier negocio de Nicaragua; es su característica principal. La terminal tiene el catálogo cargado y sigue cobrando, emitiendo tickets con numeración consecutiva. Al volver el internet, las ventas se sincronizan al panel web automáticamente, en orden y sin duplicar.</p>
           </div>
           <div class="faq-cell">
             <h3>¿NHILOS POS emite facturación válida para la DGI de Nicaragua?</h3>
@@ -874,17 +1013,20 @@
             <h3>¿Sirve NHILOS POS para una tienda o miscelánea que no cocina nada?</h3>
             <p>Sí: NHILOS POS, disponible en todo Nicaragua, cubre la reventa pura en modo simple. Das de alta el producto con costo y precio, y el sistema lleva stock, ventas, arqueos y métricas del turno, sin recetas. Es el mismo sistema que usa un restaurante con el control ajustado a tu negocio; si mañana agregas algo que se prepara, lo activas en el mismo catálogo.</p>
           </div>
+          <!-- CLAIM GUARD (#994/#51): esta respuesta decía "ve la vista consolidada de todas las marcas"; la consolidación multi-sucursal no existe y no se vende dashboard consolidado. Hoy es verdadero: una suscripción por park, sus propios puestos y marcas. -->
           <div class="faq-cell">
             <h3>¿Cómo funciona NHILOS POS en un food park con varios puestos?</h3>
-            <p>En un food park de Nicaragua, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve la vista consolidada de todas las marcas. Un puesto que revende trabaja en modo simple y una cocina que prepara platos activa recetas e insumos: ambos modos conviven en el mismo sistema.</p>
+            <p>En un food park de Nicaragua, NHILOS POS maneja el catálogo por puesto y el cobro por terminal, y el administrador del park ve su operación desde el panel web. Un puesto que revende trabaja en modo simple y una cocina que prepara platos activa recetas e insumos: ambos modos conviven en el mismo sistema.</p>
           </div>
+          <!-- CLAIM GUARD (#994): esta respuesta decía "la configuración de terminales y red local"; la concurrencia LAN no es capacidad vigente (#994). El alcance real del setup: plantilla + una sesión; la migración extra se cotiza aparte. -->
           <div class="faq-cell">
             <h3>¿Qué incluye la implementación de NHILOS POS y cuánto tarda?</h3>
-            <p>La implementación de NHILOS POS en Nicaragua incluye la carga inicial de tu catálogo (productos, insumos y precios), la configuración de terminales y red local, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo y el acompañamiento en el primer turno real. El tiempo depende de tu catálogo: un mostrador simple arranca en días; un restaurante con recetas toma más. El cronograma real viene en la cotización.</p>
+            <p>La implementación de NHILOS POS en Nicaragua incluye el alta de tu catálogo con plantillas (productos, insumos y precios), la configuración de tus terminales, la configuración fiscal con tu RUC y tu autorización DGI, la capacitación del equipo y el acompañamiento en el primer turno real. El setup cubre una puesta en marcha con una sesión de trabajo: la migración extra de datos se cotiza aparte. El tiempo depende de tu catálogo: un mostrador simple arranca en días; un restaurante con recetas toma más. El cronograma real viene en la cotización.</p>
           </div>
+          <!-- CLAIM GUARD (#993/#983): esta respuesta enumeraba "kit completo (terminal, impresora térmica y gaveta de dinero)" y "comandas por pantalla KDS o impresora". El kit de estación está bloqueado hasta cerrar #983 y KDS no se vende (#993). El hardware se cotiza aparte por escenario; nada más. -->
           <div class="faq-cell">
             <h3>¿Necesito comprar equipo especial para usar NHILOS POS?</h3>
-            <p>NHILOS POS opera en terminales táctiles Android y no exige hardware propietario para negocios en Nicaragua. Si ya tienes equipo, se evalúa si sirve; si no, se cotiza el kit completo (terminal, impresora térmica y gaveta de dinero) con proveedores locales. Las comandas salen a cocina por pantalla KDS o por impresora, según tu operación.</p>
+            <p>NHILOS POS opera en terminales táctiles Android y no exige hardware propietario para negocios en Nicaragua. Si ya tienes equipo, se evalúa si sirve; si no, el equipo se cotiza aparte según tu mostrador.</p>
           </div>
           <div class="faq-cell">
             <h3>¿Dónde quedan mis datos si se daña la terminal o se va el internet?</h3>
@@ -1097,7 +1239,7 @@
             entry.target.classList.add('is-visible', 'is-drawn');
             io.unobserve(entry.target); // una sola vez: sin re-entradas que cansan
           });
-        }, { threshold: 0.18, rootMargin: '0px 0px -8% 0px' });
+        }, { threshold: 0, rootMargin: '0px 0px -8% 0px' }); // threshold 0: un ratio fijo nunca se alcanza en elementos más altos que el viewport (p. ej. el FAQ en móvil); revela al entrar, una sola vez
         revealables.forEach(function (el) { io.observe(el); });
       }
 

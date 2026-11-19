@@ -309,6 +309,54 @@ SCENES = [
         "rate": "-2%",
         "pitch": "+0Hz",
     },
+    # ================================================================
+    # PARTE 12: Semana 4 - Pieza 2 (Jueves 19/11) Video Físico en Mostrador
+    # ================================================================
+    {
+        "filename": "fisico_1_vo.mp3",
+        "text": "Así cobra Nilos POS en un teléfono normal: dólares, vuelto exacto en córdobas, y la venta sigue aunque se caiga el internet. Comenta DEMO y te paso el acceso.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "-2%",
+        "pitch": "+0Hz",
+    },
+    # ================================================================
+    # PARTE 13: Semana 4 - Viernes 20/11 Cafetería Búsqueda por Código (25s)
+    # ================================================================
+    {
+        "filename": "viernes20_1_hook.mp3",
+        "text": "Ocho de la mañana: fila llena y cajero nuevo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+4%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "viernes20_2_math.mp3",
+        "text": "Si busca cada orden quince segundos, veinte cafés frenan cinco minutos tu mostrador.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+4%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "viernes20_3_sku.mp3",
+        "text": "En Nilos digitas el código corto, presionas Enter y entra directo al carrito. Tocas cobrar.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "viernes20_4_checkout.mp3",
+        "text": "Paga con doscientos córdobas: vuelto exacto al instante y ágil desde el día uno.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+2%",
+        "pitch": "+0Hz",
+    },
+    {
+        "filename": "viernes20_5_cta.mp3",
+        "text": "Comenta DEMO abajo para enviarte el acceso directo.",
+        "voice": "es-MX-JorgeNeural",
+        "rate": "+6%",
+        "pitch": "+0Hz",
+    },
 ]
 
 async def generate_all(only: str = ""):

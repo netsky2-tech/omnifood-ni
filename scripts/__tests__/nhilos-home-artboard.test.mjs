@@ -34,6 +34,28 @@ test("S6: no banned claims (factura electrónica only as documented denial)", ()
     assert.match(src.slice(Math.max(0, m.index - 60), m.index + 80), /sin llamar factura electrónica a una facturación computarizada/);
 });
 
+// Internal vocabulary must never reach a customer.
+// Two leaks shipped on 2026-11-18: "entitlements (issue #984)" in the service
+// conditions and "(según go-live)" in the plan list. Both were caught by the
+// founder, not by a test, so this guards the class instead of the instance.
+// Case-insensitive terms cannot collide with Spanish words; TODO and QA are
+// matched as uppercase words because "todo" is ordinary Spanish.
+test("public copy carries no internal vocabulary (visible text and JSON-LD)", () => {
+  const visible = txt(vis);
+  const schema = JSON.stringify(ld);
+  const insensitive = ["issue #", "entitlements", "go-live", "golive", "backlog", "sprint", "staging", "hotfix"];
+  for (const term of insensitive) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.equal((visible.match(new RegExp(escaped, "gi")) || []).length, 0, `visible copy leaks "${term}"`);
+    assert.equal((schema.match(new RegExp(escaped, "gi")) || []).length, 0, `JSON-LD leaks "${term}"`);
+  }
+  for (const term of ["TODO", "QA", "WIP"]) {
+    const word = new RegExp(`\\b${term}\\b`);
+    assert.equal((visible.match(word) || []).length, 0, `visible copy leaks "${term}"`);
+    assert.equal((schema.match(word) || []).length, 0, `JSON-LD leaks "${term}"`);
+  }
+});
+
 // v1.5 unified FAQ: one block, both anchors, 10 questions
 test("v1.5: unified FAQ — one section with #faq and #faq-geo anchors, 10 cells", () => {
   assert.ok(src.includes('id="faq"'));

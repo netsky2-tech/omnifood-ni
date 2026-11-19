@@ -30,6 +30,14 @@ import {
   createIdentityJwtTestConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -60,6 +68,7 @@ async function withIsolatedSchema(
   const schema = `${schemaPrefix}_${randomUUID().replace(/-/g, '')}`;
   let dataSource: DataSource | null = null;
   let app: INestApplication | null = null;
+  let entitlementsFixture: EntitlementsFixture | null = null;
 
   try {
     await bootstrap.initialize();
@@ -90,6 +99,17 @@ async function withIsolatedSchema(
         `E2E Tenant ${schemaPrefix}`,
         normalizeTenantSlug(`E2E Tenant ${schemaPrefix}`),
       ],
+    );
+
+    // ENT-03 (issue #984): RecipeController is class-level
+    // @RequireCapability('inventory.cooking') — every route of this suite
+    // runs through the REAL CapabilitiesGuard, so the tenant must really
+    // resolve as entitled (PRO) against the fixture's contract tables.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      tenantId,
+      'PRO',
     );
 
     const recipeService = new RecipeService(
@@ -131,6 +151,11 @@ async function withIsolatedSchema(
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture?.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     }).compile();
 
@@ -152,6 +177,8 @@ async function withIsolatedSchema(
     });
   } finally {
     if (app) await app.close();
+    if (entitlementsFixture)
+      await closeEntitlementsFixture(entitlementsFixture);
     if (dataSource?.isInitialized) await dataSource.destroy();
     if (bootstrap.isInitialized) {
       await bootstrap.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
