@@ -237,9 +237,12 @@ test("T10 S2: captures shown complete at their real file dimensions", () => {
     const { w, h } = webpSize(path.join(ROOT, "design/nhilos-web-foundation", cap));
     const img = hiloSteps[i].match(/<img\b[^>]*>/)[0];
     assert.match(img, new RegExp(`width="${w}" height="${h}"`), cap);
+    // T10c (corrección del fundador, 2026-11-19): los cuatro marcos comparten el aspect del
+    // terminal (1080/2316) para que ningún paso se vea más bajo que sus vecinos; las capturas
+    // 800x1280 encajan con letterbox dentro de la pantalla del marco (object-fit: contain,
+    // sin recorte). La guardia ya no iguala el aspect del marco al de cada archivo.
     const ar = hiloSteps[i].match(/aspect-ratio: (\d+) \/ (\d+)/);
-    assert.equal(Number(ar[1]), w, cap + " frame aspect");
-    assert.equal(Number(ar[2]), h, cap + " frame aspect");
+    assert.equal(`${ar[1]}/${ar[2]}`, "1080/2316", cap + " frame uses the terminal bezel aspect");
   }
 });
 
@@ -280,4 +283,22 @@ test("voice: el home no narra el sitio y no usa jerga de ingeniería", () => {
   for (const b of banned) assert.doesNotMatch(spoken, b, `narración de sitio: ${b}`);
   assert.doesNotMatch(spoken, /\bBOM\b/);
   for (const block of ldHome) assert.doesNotMatch(JSON.stringify(block), /\bBOM\b/);
+});
+
+// T10c (corrección del fundador, 2026-11-19): los cuatro bezels comparten el aspect del
+// terminal (1080/2316) — antes, los pasos 03/04 (800x1280) se veían visiblemente más bajos.
+// Las dos capturas 800x1280 encajan con letterbox dentro de la pantalla oscura del marco vía
+// object-fit: contain (site.css), sin recorte, y conservan sus dimensiones reales en
+// width/height. El carril móvil de T10b no cambia.
+test("T10c: all four device frames share the terminal aspect 1080/2316; 800x1280 captures keep real dimensions", () => {
+  for (const [i, step] of hiloSteps.entries()) {
+    const ar = step.match(/aspect-ratio: (\d+) \/ (\d+)/);
+    assert.ok(ar, `step ${i + 1} frame aspect`);
+    assert.equal(`${ar[1]}/${ar[2]}`, "1080/2316", `step ${i + 1} bezel aspect`);
+  }
+  for (const i of [2, 3]) {
+    const { w, h } = webpSize(path.join(ROOT, "design/nhilos-web-foundation", HILO_CAPTURES[i]));
+    const img = hiloSteps[i].match(/<img\b[^>]*>/)[0];
+    assert.match(img, new RegExp(`width="${w}" height="${h}"`), HILO_CAPTURES[i] + " keeps real dimensions");
+  }
 });

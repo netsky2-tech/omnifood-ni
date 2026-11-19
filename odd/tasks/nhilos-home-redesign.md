@@ -104,3 +104,5 @@ Una sola frase nueva en todo el intercambio —"El cobro corre en tu terminal, s
 Guardia: las cuatro filas emparejan por tema, y falla si alguien reordena sin reemparejar.
 
 **Aceptación cumplida:** 21/21 y 29/29, cero copy nuevo inventado, el paralelismo fila por fila fijado por prueba.
+
+**L9 — evidencia de la fila 02 elegida por lo que la pantalla muestra, no por lo que dice el nombre del archivo.** La fila DGI del libro de rutas del hub llevó `dsh_06_fiscal.webp`, no `dsh_03_historial_comprobantes.webp`: el archivo con nombre suggestivo muestra el resumen de Ventas, sin comprobantes ni consecutivo — la misma clase de defecto de rótulo falso que la corrección §5 ya sustituyó una vez. Descubierto antes de editar (lectura real de la imagen), decisión del padre: opción 1. La guardia del hub fija la fila 02 POR CONTENIDO (archivo + alt con "auditoría de secuencia"), para que un cambio de vuelta a un asset cuyo nombre parece correcto pero cuya pantalla no prueba la afirmación falle ruidosamente.

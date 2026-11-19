@@ -176,22 +176,25 @@
     .hub-hero h1 { font-size: var(--text-display-xl); line-height: 1.06; font-weight: 800; letter-spacing: -0.03em; margin-bottom: var(--space-6); }
     .hub-hero h1 em { font-style: normal; color: var(--web-navy-800); }
     .hub-hero .lead { margin-bottom: var(--space-6); }
-    /* El fork llena la columna: dos filas de altura completa con tipografía display; la nota
-       de capturas va pegada debajo del fork, no clavada al fondo de la columna. */
-    .hero-questions { display: grid; grid-template-rows: 1fr 1fr auto; }
-    /* El control de la bifurcación: las dos preguntas SON el control. Sin JS son anclas a #formas;
-       con JS el script las asciende a botones, el estado vive en el contenedor (data-mode="" cuando
-       no hay nada elegido) y aria-pressed solo anuncia una forma elegida: elegir la activa la deselecciona. */
-    .hero-question { font-family: var(--font-display); font-size: var(--text-display-lg); font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; display: flex; align-items: center; gap: var(--space-4); width: 100%; color: var(--web-text-primary); text-decoration: none; background: none; border: 0; border-top: 1px solid var(--web-border-hairline); padding: var(--space-4) 0; cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out); }
-    .hero-question:nth-child(2) { border-bottom: 1px solid var(--web-border-hairline); }
-    .hero-question:hover, .hero-question:focus-visible { color: var(--web-navy-800); border-top-color: var(--web-navy-800); }
-    .hero-question[aria-pressed="true"] { color: var(--web-emerald-700); }
+    /* El fork llena la columna: dos filas de altura completa con tipografía display, precedidas
+       por la microcopy de affordance; la nota de capturas va pegada debajo del fork. */
+    /* El control de la bifurcación: las dos preguntas SON el control, y se ven como control:
+       filas interactivas con borde, superficie propia, cursor de puntero, hover y chevrón (T12).
+       Sin JS son anclas a #formas; con JS el script las asciende a botones, el estado vive en el
+       contenedor (data-mode="" cuando no hay nada elegido) y aria-pressed solo anuncia una forma
+       elegida: elegir la activa la deselecciona. */
+    .hero-questions { display: grid; grid-template-rows: auto 1fr 1fr auto; gap: var(--space-4); }
+    .hero-fork-label { font-family: var(--font-subheading); font-size: var(--text-body-sm); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--web-text-muted); margin: 0; }
+    .hero-question { font-family: var(--font-display); font-size: var(--text-display-lg); font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; display: flex; align-items: center; gap: var(--space-4); width: 100%; color: var(--web-text-primary); text-decoration: none; background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); cursor: pointer; text-align: left; transition: color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
+    .hero-question:hover, .hero-question:focus-visible { color: var(--web-navy-800); border-color: var(--web-navy-800); background: var(--web-bg-canvas); }
+    .hero-question[aria-pressed="true"] { color: var(--web-emerald-700); border-color: var(--web-emerald-700); background: var(--web-bg-canvas); }
     .hero-question .idx { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-heading-md); color: var(--web-emerald-700); }
-    .hero-questions .hero-proof-note { margin-top: var(--space-4); }
+    .hero-question .q-arrow { margin-left: auto; font-family: var(--font-mono); font-weight: 700; font-size: var(--text-heading-md); color: var(--web-emerald-700); transition: transform var(--motion-fast) var(--ease-out); }
+    .hero-question:hover .q-arrow, .hero-question:focus-visible .q-arrow, .hero-question[aria-pressed="true"] .q-arrow { transform: translateX(4px); }
+    .hero-questions .hero-proof-note { margin-top: 0; }
     @media (max-width: 1024px) {
       .hub-hero-grid { grid-template-columns: 1fr; gap: var(--space-6); align-items: start; }
-      .hero-questions { grid-template-rows: auto auto auto; }
-      .hero-question:nth-child(2) { margin-left: var(--space-5); }
+      .hero-questions { grid-template-rows: auto auto auto auto; }
     }
 
     /* Banda comparativa a-vs-b (patrón nuevo: tensión entre dos columnas con costura central) */
@@ -271,10 +274,16 @@
        la etiqueta de demostración no infle la pista; en móvil se apila y el bezel se ajusta al
        ancho disponible. */
     .ledger-split { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-8); align-items: start; }
-    .ledger-media { justify-self: end; max-width: 320px; min-width: 0; }
+    .ledger-media { justify-self: end; max-width: 480px; min-width: 0; }
     .ledger-media .media-video { margin: 0; }
     .ledger-media .demo-tag { display: block; }
-    @media (max-width: 900px) { .ledger-split { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); } .ledger-media { justify-self: start; max-width: none; } .ledger-media .media-video.device { width: min(320px, 100%); } }
+    .ledger-media .capture-frame { margin: 0; }
+    /* La familia mide parejo: la captura horizontal del panel cabe en ~480px de ancho (300px de
+       alto a 16:10) y el clip vertical de la fila 01 se acota por ALTURA — a 420px su ancho
+       natural es ~196px — para que ninguna fila force una banda vacía. El video contiene en su
+       marco: la evidencia nunca se recorta para encajar. */
+    .ledger-media .media-video.device { width: auto; height: 420px; max-width: 100%; }
+    @media (max-width: 900px) { .ledger-split { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); } .ledger-media { justify-self: start; max-width: none; } .ledger-media .media-video.device { width: min(320px, 100%); height: auto; } .ledger-media .capture-frame { max-width: 480px; } }
 
     /* Condiciones de compra: costo y equipo comparten una banda — una pregunta por columna,
        con costura vertical; en móvil se apilan con filete superior. La sección termina donde
@@ -380,8 +389,9 @@
           </div>
         </div>
         <div class="hero-questions hero-in" style="--hero-delay: 360ms;">
-          <a href="#formas" class="hero-question" data-mode-target="a"><span class="idx">A</span>¿Vendes lo que compras?</a>
-          <a href="#formas" class="hero-question" data-mode-target="b"><span class="idx">B</span>¿Lo que vendes se cocina?</a>
+          <p class="hero-fork-label">Elige cómo vendes:</p>
+          <a href="#formas" class="hero-question" data-mode-target="a"><span class="idx">A</span>¿Vendes lo que compras?<span class="q-arrow" aria-hidden="true">→</span></a>
+          <a href="#formas" class="hero-question" data-mode-target="b"><span class="idx">B</span>¿Lo que vendes se cocina?<span class="q-arrow" aria-hidden="true">→</span></a>
           <p class="hero-proof-note">Las capturas de esta página son de la interfaz real de NHILOS POS · datos de demostración.</p>
         </div>
       </div>
@@ -564,22 +574,38 @@
           </div>
           <div class="ledger-row">
             <span class="ledger-num" aria-hidden="true">02</span>
-            <div>
-              <div class="ledger-head">
-                <h3>DGI y facturación</h3>
-                <span class="ledger-dest"><a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a></span>
+            <div class="ledger-split">
+              <div class="ledger-copy">
+                <div class="ledger-head">
+                  <h3>DGI y facturación</h3>
+                  <span class="ledger-dest"><a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a></span>
+                </div>
+                <p>Mecánica DT 09-2007 con consecutivo inalterable y anulación con motivo auditado. La autorización la posee tu negocio como contribuyente; el sistema garantiza la mecánica.</p>
               </div>
-              <p>Mecánica DT 09-2007 con consecutivo inalterable y anulación con motivo auditado. La autorización la posee tu negocio como contribuyente; el sistema garantiza la mecánica.</p>
+              <div class="ledger-media">
+                <figure class="capture-frame">
+                  <img src="media/dsh_06_fiscal.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: módulo Fiscal con el resumen mensual, las facturas emitidas y las pestañas de anulaciones y auditoría de secuencia, datos de demostración" loading="lazy" title="NHILOS POS: módulo Fiscal">
+                </figure>
+                <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
+              </div>
             </div>
           </div>
           <div class="ledger-row">
             <span class="ledger-num" aria-hidden="true">03</span>
-            <div>
-              <div class="ledger-head">
-                <h3>Inventario</h3>
-                <span class="ledger-dest"><a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a></span>
+            <div class="ledger-split">
+              <div class="ledger-copy">
+                <div class="ledger-head">
+                  <h3>Inventario</h3>
+                  <span class="ledger-dest"><a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a></span>
+                </div>
+                <p>Cada venta descuenta lo que consumió, en recetas o en stock simple, y el costo queda reflejado donde el dueño puede verlo.</p>
               </div>
-              <p>Cada venta descuenta lo que consumió, en recetas o en stock simple, y el costo queda reflejado donde el dueño puede verlo.</p>
+              <div class="ledger-media">
+                <figure class="capture-frame">
+                  <img src="media/dsh_15_inventario.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: inventario con la valoración de existencias, el stock por insumo con su costo y las pestañas de kardex y alertas, datos de demostración" loading="lazy" title="NHILOS POS: inventario y valoración">
+                </figure>
+                <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
+              </div>
             </div>
           </div>
         </div>

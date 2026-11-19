@@ -366,3 +366,60 @@ test("S7 voice: el copy no narra el sitio y no usa jerga de ingeniería", () => 
   assert.doesNotMatch(spoken, /\bBOM\b/);
   assert.doesNotMatch(JSON.stringify(ld), /\bBOM\b/);
 });
+
+// T12 / Fix 1 (corrección del fundador, 2026-11-19): la bifurcación del hero se leía como
+// texto, no como navegación. Las dos preguntas son controles reales: llevan microcopy de
+// affordance encima del par, filas con borde, cursor de puntero, hover y chevrón. La
+// conducta (deselección al re-clic, aria-pressed, scroll con reduced-motion, data-mode)
+// la fijan las guardias de interacción existentes, que no cambian.
+test("T12 fix1: hero fork reads as navigation — affordance label, bordered rows, chevron, pointer", () => {
+  const hero = src.split('id="inicio"')[1].split("</section>")[0];
+  const label = hero.match(/<p class="hero-fork-label">([^<]+)<\/p>/);
+  assert.ok(label, "the fork carries its affordance microcopy line");
+  assert.equal(label[1], "Elige cómo vendes:");
+  assert.ok(hero.indexOf('class="hero-fork-label"') < hero.indexOf('class="hero-question"'), "microcopy sits above the pair");
+  const qs = [...hero.matchAll(/<a\b[^>]*class="hero-question"[\s\S]*?<\/a>/g)];
+  assert.equal(qs.length, 2);
+  for (const q of qs) assert.match(q[0], /<span class="q-arrow" aria-hidden="true">/, "each row ends in a chevron");
+  const css = src.split("<style>")[1].split("</style>")[0];
+  const rule = css.match(/\.hero-question\s*\{[^}]*\}/)[0];
+  assert.match(rule, /cursor:\s*pointer/, "rows announce clickability");
+  assert.match(rule, /border:\s*1px solid/, "rows are bordered interactive surfaces");
+  assert.match(rule, /border-radius:/, "rows read as buttons, not list separators");
+  assert.match(rule, /background:/, "rows carry a surface, not bare text on canvas");
+  assert.match(css, /\.hero-question:hover[^{]*\{/, "hover state exists");
+});
+
+// T12 / Fix 2 (corrección del fundador, 2026-11-19): el libro de rutas lee como una familia —
+// las tres filas llevan copia + evidencia. Las filas 02 y 03 llevan capturas reales del panel
+// (1440x900, sin recorte: dimensiones reales en width/height + aspect-ratio inline, etiqueta
+// verbatim). La fila 02 está fijada POR CONTENIDO a la pantalla de Fiscal: el archivo
+// dsh_03_historial_comprobantes.webp muestra el resumen de Ventas, no comprobantes — el mismo
+// defecto de rótulo falso que la corrección §5 ya sustituyó una vez. Un cambio futuro de vuelta
+// a un asset cuyo nombre parece correcto pero cuya pantalla no prueba la afirmación debe fallar
+// ruidosamente: por eso la guardia exige el archivo Y el alt con "auditoría de secuencia".
+test("T12 fix2: ledger rows 02/03 carry real panel evidence as one family with row 01", () => {
+  const nums = [...src.matchAll(/<span class="ledger-num" aria-hidden="true">0(\d)<\/span>/g)].map((m) => m.index);
+  assert.equal(nums.length, 3);
+  const row = (i) => src.slice(nums[i], nums[i + 1] ?? src.indexOf("</section>", nums[2]));
+  assert.match(row(0), /data-media-slot="venta-offline-terminal"/, "row 01 keeps its portrait terminal clip");
+  for (const [i, file] of [[1, "dsh_06_fiscal.webp"], [2, "dsh_15_inventario.webp"]]) {
+    const r = row(i);
+    const imgs = r.match(/<img\b[^>]*>/g) || [];
+    const evidence = imgs.find((t) => t.includes(file));
+    assert.ok(evidence, `row 0${i + 1} evidence is ${file}`);
+    assert.match(evidence, /width="1440" height="900"/, "real dimensions in width/height");
+    assert.match(evidence, /aspect-ratio:\s*1440 \/ 900/, "inline aspect-ratio; the capture is shown complete, no crop");
+    assert.match(r, /Captura real del panel de administración · datos de demostración/, "verbatim demo label");
+    assert.match(r, /class="ledger-split"/, "copy and evidence share the row");
+    assert.ok(r.indexOf('class="ledger-copy"') < r.indexOf('class="ledger-media"'), "copy precedes evidence");
+    assert.doesNotMatch(r, /pos_11|kds/i, "KDS imagery stays banned (#993)");
+  }
+  const row2img = (row(1).match(/<img\b[^>]*>/g) || []).find((t) => t.includes("dsh_06_fiscal.webp"));
+  assert.ok(row2img, "row 02 uses the Fiscal screen");
+  assert.match(row2img, /auditoría de secuencia/i, "row 02 alt must name what the screen actually shows");
+});
+test("T12 fix2: ledger evidence is never cropped (object-fit: cover stays out of the page CSS)", () => {
+  const css = src.split("<style>")[1].split("</style>")[0];
+  assert.doesNotMatch(css, /object-fit:\s*cover/);
+});
