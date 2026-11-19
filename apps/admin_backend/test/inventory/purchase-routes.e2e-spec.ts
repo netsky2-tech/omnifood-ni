@@ -43,6 +43,14 @@ import {
   createIdentityJwtTestConfigProvider,
   signIdentityJwtAccessToken,
 } from '../support/identity-jwt-test.fixture';
+import {
+  closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
+  openEntitlementsFixture,
+  seedActiveSubscription,
+  type EntitlementsFixture,
+} from '../support/entitlements-fixture';
 
 interface PurchasePreviewResponseBody extends PurchasePreview {
   statusCode?: number;
@@ -254,8 +262,26 @@ describe('Inventory purchase routes (integration)', () => {
 
   let currentInsumo = buildInsumoRecord();
   let existingPurchaseDocument: { id: string } | null = null;
+  let entitlementsFixture: EntitlementsFixture;
 
   beforeAll(async () => {
+    // ENT-03 (issue #984): the premium inventory routes carry
+    // @RequireCapability('inventory.retail') resolved by the REAL
+    // CapabilitiesGuard, so every tenant that reaches a route must really
+    // resolve as entitled (PRO grants inventory.retail) against the
+    // fixture's real contract tables.
+    entitlementsFixture = await openEntitlementsFixture();
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      'tenant-A',
+      'PRO',
+    );
+    await seedActiveSubscription(
+      entitlementsFixture.dataSource,
+      'tenant-XYZ',
+      'PRO',
+    );
+
     const fxRateResolverService = {
       getBcnRateByInvoiceDate,
       resolveBcnRateByDate,
@@ -320,6 +346,11 @@ describe('Inventory purchase routes (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     })
       // Device transport routes (movements/sync, shrinkage, purchases) declare
@@ -424,6 +455,7 @@ describe('Inventory purchase routes (integration)', () => {
 
   afterAll(async () => {
     await app.close();
+    await closeEntitlementsFixture(entitlementsFixture);
   });
 
   const signToken = (

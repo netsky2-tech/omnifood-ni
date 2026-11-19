@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
 import { PromotionForm } from './PromotionForm';
 import { promotionFormSchema } from './schema';
 import { PromotionType, type Promotion } from '@/types/promotions';
@@ -331,6 +332,44 @@ describe('PromotionForm', () => {
     expect(
       screen.getByRole('combobox', { name: 'Alcance del Descuento' }),
     ).toBeInTheDocument();
+  });
+
+  it('locks the convenio fields with the upgrade copy when promotions.convenio is missing (ENT-05b)', async () => {
+    // The suite stubs @tanstack/react-query; feed the entitlements hook a
+    // settled snapshot that includes promotions but NOT promotions.convenio.
+    (useQuery as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: {
+        version: 1,
+        planCode: 'OPERACION',
+        status: 'active',
+        supportTier: 'standard',
+        capabilities: ['core.sales', 'promotions'],
+        limits: {},
+        addOns: [],
+        issuedAt: '2026-11-17T00:00:00Z',
+        expiresAt: '2026-11-18T00:00:00Z',
+      },
+      isPending: false,
+    });
+    renderForm(null);
+
+    const selectTrigger = screen.getByRole('combobox', { name: /tipo de promoci/i });
+    fireEvent.click(selectTrigger);
+
+    const convenioOptions = screen.getAllByText('Convenio con Cliente');
+    fireEvent.click(convenioOptions[convenioOptions.length - 1]!);
+
+    // The exact contractual upgrade copy names the missing key...
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'La función requiere el plan o el complemento que incluye "promotions.convenio". Actualice su plan para usarla.',
+        ),
+      ).toBeInTheDocument();
+    });
+    // ...and the convenio discount fields are replaced, not erroring.
+    expect(screen.queryByLabelText('Porcentaje de Descuento *')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Crear' })).toBeDisabled();
   });
 
   it('shows discount fields for FIXED_DISCOUNT type', async () => {    renderForm(null);

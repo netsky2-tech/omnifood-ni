@@ -41,6 +41,9 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { DialogFooter } from '@/components/ui/dialog';
 import { getApiErrorMessage } from '@/lib/api-error';
+import { useEntitlements } from '@/features/entitlements/use-entitlements';
+import { PremiumLocked } from '@/features/entitlements/premium-locked';
+import { surfacePremiumCapability } from '@/lib/rbac';
 
 interface PromotionFormProps {
   initialData?: Promotion | null;
@@ -257,6 +260,17 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
   const discountIsPercentage =
     watchedType === PromotionType.PERCENTAGE_DISCOUNT ||
     watchedType === PromotionType.CONVENIO;
+
+  // ENT-05b: the convenio form path is a premium surface
+  // (promotions.convenio, catalog v1.1 H2). Composition, not replacement:
+  // the role RBAC still governs the page; this only narrows the convenio
+  // fields for tenants whose plan/add-on does not include the key. While the
+  // snapshot is in flight nothing is locked; a failed snapshot fails closed.
+  const { has, isPending: entitlementsPending } = useEntitlements();
+  const convenioLocked =
+    !entitlementsPending &&
+    watchedType === PromotionType.CONVENIO &&
+    !has(surfacePremiumCapability('promotions.convenio'));
 
   return (
     // noValidate: the application's own zod validation (via the RHF
@@ -480,7 +494,14 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
           </div>
         )}
 
-        {showDiscountFields && (
+        {convenioLocked && (
+          <PremiumLocked
+            capability={surfacePremiumCapability('promotions.convenio')}
+            featureName="Convenios corporativos (B2B)"
+          />
+        )}
+
+        {showDiscountFields && !convenioLocked && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="discount_value">
@@ -629,7 +650,7 @@ export function PromotionForm({ initialData, onSuccess, onCancel }: PromotionFor
         <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
+        <Button type="submit" disabled={isSubmitting || convenioLocked}>
           {isSubmitting ? 'Guardando...' : isEditing ? 'Actualizar' : 'Crear'}
         </Button>
       </DialogFooter>

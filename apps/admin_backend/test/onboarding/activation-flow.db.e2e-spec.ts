@@ -49,6 +49,12 @@ import { InvoicesService } from '../../src/modules/sales/services/invoices.servi
 import { SupportOverrideAction } from '../../src/modules/onboarding/dto/activation.dto';
 import { ActivationController } from '../../src/modules/onboarding/controllers/activation.controller';
 import { ActivationService } from '../../src/modules/onboarding/services/activation.service';
+// ENT-03b (issue #984): the device-credential routes consult the terminal
+// seat quota through the real TenantQuotaService (backed by the real
+// EntitlementsService), both resolved against this suite's own real
+// DataSource — the same object graph OnboardingModule provides.
+import { EntitlementsService } from '../../src/modules/entitlements/entitlements.service';
+import { TenantQuotaService } from '../../src/modules/entitlements/tenant-quota.service';
 import { FiscalConfigVersionService } from '../../src/modules/onboarding/services/fiscal-config-version.service';
 import { OnboardingCatalogService } from '../../src/modules/onboarding/services/onboarding-catalog.service';
 import { OnboardingSessionService } from '../../src/modules/onboarding/services/onboarding-session.service';
@@ -314,6 +320,8 @@ describe('ONB1.7A–C Activation Flow (E2E with Real PostgreSQL Persistence)', (
         },
         OnboardingCatalogService,
         ActivationService,
+        EntitlementsService,
+        TenantQuotaService,
       ],
     }).compile();
 

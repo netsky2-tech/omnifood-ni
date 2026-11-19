@@ -45,6 +45,16 @@ import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-tra
 // device secret always comes from DEVICE_SYNC_JWT_CONFIG.
 import { DeviceSyncJwtConfigModule } from './config/device-sync-jwt.config';
 import { SyncTransportGuard } from './guards/sync-transport.guard';
+// ENT-03b (issue #984): the owner-account quota counts active OWNER users —
+// a count that blocks creating or promoting another OWNER only, never login,
+// sync or any sale path. The two stateless services are provided DIRECTLY
+// instead of importing EntitlementsModule: importing it would pull its
+// TypeORM forFeature repositories into this module, and the module-only
+// harness (identity.module.spec.ts) overrides repositories one by one on a
+// fake DataSource. Both services only need a DataSource, so this is the
+// same object graph EntitlementsModule would create.
+import { EntitlementsService } from '../entitlements/entitlements.service';
+import { TenantQuotaService } from '../entitlements/tenant-quota.service';
 
 @Module({
   imports: [
@@ -103,6 +113,9 @@ import { SyncTransportGuard } from './guards/sync-transport.guard';
     HumanAuthorizationMetricsService,
     RecoveryTokenService,
     HumanAuthorizationPepperStartupGuard,
+    // ENT-03b: the OWNER-account quota for UserService (see import note).
+    EntitlementsService,
+    TenantQuotaService,
   ],
   exports: [
     JwtModule,

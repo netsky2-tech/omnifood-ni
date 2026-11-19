@@ -12,6 +12,7 @@ import { MovementType } from '../entities/inventory-movement.entity';
 
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
+import { CapabilitiesGuard } from '../../entitlements/guards/capabilities.guard';
 
 describe('InventoryReportsController', () => {
   let controller: InventoryReportsController;
@@ -81,6 +82,9 @@ describe('InventoryReportsController', () => {
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      // ENT-03: guard behavior has its own spec in src/modules/entitlements.
+      .overrideGuard(CapabilitiesGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

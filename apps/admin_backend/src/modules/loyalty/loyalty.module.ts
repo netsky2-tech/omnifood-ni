@@ -20,8 +20,12 @@ import { LoyaltySyncIngestionService } from './services/loyalty-sync-ingestion.s
 import { LoyaltyProgramBackfillService } from './services/loyalty-program-backfill.service';
 import { IdentityModule } from '../identity/identity.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 
 @Module({
+  // ENT-03: EntitlementsModule provides EntitlementsService for the
+  // CapabilitiesGuard on LoyaltyController. LoyaltySyncController stays
+  // deliberately UNGATED (fiscal/transactional net — catalog §7).
   imports: [
     TypeOrmModule.forFeature([
       LoyaltyProgram,
@@ -33,6 +37,7 @@ import { DeviceSyncModule } from '../identity/device-sync.module';
     ]),
     IdentityModule,
     DeviceSyncModule,
+    EntitlementsModule,
   ],
   controllers: [LoyaltyController, LoyaltySyncController],
   providers: [

@@ -22,6 +22,7 @@ import {
   UserCircle,
   ChevronLeft,
   ChevronRight,
+  Lock,
   LogOut,
   X,
 } from "lucide-react";
@@ -29,7 +30,8 @@ import { cn } from "@/lib/utils";
 import { useUiStore } from "@/features/auth/ui-store";
 import { useAuthStore } from "@/features/auth/auth-store";
 import { useLogout } from "@/features/auth/auth-hooks";
-import { canAccessRoute } from "@/lib/rbac";
+import { canAccessRoute, canAccessPremiumRoute } from "@/lib/rbac";
+import { useEntitlements } from "@/features/entitlements/use-entitlements";
 
 interface NavItem {
   label: string;
@@ -71,6 +73,11 @@ export function Sidebar() {
   } = useUiStore();
   const user = useAuthStore((s) => s.user);
   const logout = useLogout();
+  // ENT-05b: premium nav items are marked (not hidden) when the tenant lacks
+  // the capability. Role filtering below stays untouched: a role denial hides
+  // the item exactly as before; only an entitlement denial marks it. While
+  // the snapshot is in flight nothing is marked (no premature locks).
+  const { capabilities, isPending: entitlementsPending } = useEntitlements();
 
   // Auto-close mobile drawer when navigating (#509: location.key captures query/hash navigations too)
   useEffect(() => {
@@ -136,6 +143,11 @@ export function Sidebar() {
                 item.path === "/"
                   ? location.pathname === "/"
                   : location.pathname.startsWith(item.path);
+              // Role denial was already filtered out above, so a false result
+              // here is an entitlement denial: mark the item with a lock.
+              const premiumLocked =
+                !entitlementsPending &&
+                !canAccessPremiumRoute(user?.role, capabilities, item.path);
 
               // B.7: When navigating back to Dashboard from a destination page
               // that was reached via contextual navigation (source=dashboard),
@@ -166,8 +178,18 @@ export function Sidebar() {
                       ? "bg-white/15 text-white font-semibold shadow-xs"
                       : "text-white/70 hover:bg-white/10 hover:text-white",
                   )}
-                  aria-label={item.label}
-                  title={collapsed ? item.label : undefined}
+                  aria-label={
+                    premiumLocked
+                      ? `${item.label} (requiere actualizar su plan)`
+                      : item.label
+                  }
+                  title={
+                    collapsed
+                      ? item.label
+                      : premiumLocked
+                        ? "Requiere actualizar su plan"
+                        : undefined
+                  }
                 >
                   {isActive && (
                     <span
@@ -178,7 +200,13 @@ export function Sidebar() {
                     />
                   )}
                   <Icon className="h-5 w-5 shrink-0 transition-transform duration-150 group-hover:scale-105" aria-hidden="true" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
+                  {!collapsed && <span className="truncate flex-1">{item.label}</span>}
+                  {premiumLocked && (
+                    <Lock
+                      className="h-3.5 w-3.5 shrink-0 text-white/50"
+                      aria-hidden="true"
+                    />
+                  )}
                 </Link>
               );
             })}

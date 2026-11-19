@@ -19,6 +19,8 @@ import '../../domain/models/inventory/production_order_document.dart';
 import '../../domain/security/cloud_auth_unavailable_exception.dart';
 import '../../domain/security/device_sync_exceptions.dart';
 import '../../domain/services/inventory/authority_hydration_status.dart';
+import '../../domain/services/entitlements/entitlement_snapshot_service.dart';
+import '../../domain/services/sync/sync_failure_classification.dart';
 import '../database/app_database.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
@@ -288,6 +290,46 @@ class SyncService {
   /// diagnostics; never part of [lastSyncError].
   String? get lastAuditOutcome => _lastAuditOutcome;
 
+  /// ENT-04 (catalog §6.3): the entitlement snapshot cache, when wired. When
+  /// null (legacy constructors / tests) every plan-refusal behaviour stays
+  /// inert and sync behaves exactly as before.
+  final EntitlementSnapshotService? _entitlements;
+
+  /// Capability or limit keys the current plan does not include, learned from
+  /// the last plan refusal (403 `CAPABILITY_REQUIRED` body or 409
+  /// `QUOTA_EXCEEDED` `limitKey`). The UI (ENT-05) reads this to show the
+  /// upgrade message; it is never a sales gate (catalog §7).
+  final Set<String> _planBlockedCapabilities = <String>{};
+
+  /// Domains that received a plan refusal: they stop being retried in the
+  /// automatic cycle until the entitlement snapshot changes (§6.3 point 2),
+  /// and are cleared when a changed snapshot arrives (§6.3 point 3).
+  final Set<String> _planBlockedDomains = <String>{};
+
+  /// The backend's own refusal code from the last plan refusal
+  /// (`CAPABILITY_REQUIRED` / `QUOTA_EXCEEDED`), for diagnostics and UI copy.
+  String? _planBlockedReason;
+
+  /// The snapshot instance observed when the last plan refusal was recorded.
+  /// A different (non-identical) snapshot after a refresh means the plan was
+  /// regularised: the held domains are released (§6.3 point 3). The snapshot
+  /// service guarantees a new instance only when the content changed.
+  Object? _blockedAtSnapshot;
+
+  /// Capability/limit keys the current plan refuses, for the ENT-05 upgrade
+  /// surface. Empty when nothing is plan-blocked.
+  Set<String> get planBlockedCapabilities =>
+      Set.unmodifiable(_planBlockedCapabilities);
+
+  /// Domains currently held by a plan refusal.
+  Set<String> get planBlockedDomains => Set.unmodifiable(_planBlockedDomains);
+
+  /// The refusal code of the last plan refusal, or null.
+  String? get planBlockedReason => _planBlockedReason;
+
+  /// True when the last pass left at least one domain plan-blocked.
+  bool get isPlanBlocked => _planBlockedDomains.isNotEmpty;
+
   SyncService(
     this._auditRepository,
     this._salesRepository,
@@ -300,6 +342,7 @@ class SyncService {
     OhacOutboxRegistry? ohacOutboxRegistry,
     void Function(OhacObservabilityFact fact)? ohacFactObserver,
     Future<String?> Function()? resolveActingUserId,
+    EntitlementSnapshotService? entitlements,
   }) : _role = role,
        _database = database,
        _connectivityService = connectivityService,
@@ -308,7 +351,8 @@ class SyncService {
            (database != null ? FiscalInboxHandler(database) : null),
        _ohacOutboxRegistry = ohacOutboxRegistry ?? OhacOutboxRegistry(),
        _ohacFactObserver = ohacFactObserver,
-       _resolveActingUserId = resolveActingUserId;
+       _resolveActingUserId = resolveActingUserId,
+       _entitlements = entitlements;
 
   /// Test/production seam for OHAC observability facts (design §12): when
   /// null, facts go to `developer.log` via [logOhacFact].
@@ -767,6 +811,31 @@ class SyncService {
     // D-18: audit degradation is recomputed from scratch on every pass.
     _auditStreamDegraded = false;
     _lastAuditOutcome = null;
+    // ENT-04 (catalog §9): refresh the entitlement snapshot on every sync
+    // pass. This is the mechanism that re-opens a plan-blocked domain once
+    // the plan is regularised: a changed snapshot emits on `onChanged`, the
+    // constructor listener clears the plan-block state, and the queue drains
+    // without intervention (§6.3 point 3). `refresh()` never throws.
+    try {
+      await _entitlements?.refresh();
+    } catch (e) {
+      developer.log(
+        '[SYNC_ENTITLEMENTS] snapshot refresh threw unexpectedly; ignoring.',
+        name: 'SyncService',
+        error: e,
+      );
+    }
+    // ENT-04 (§6.3 point 3): a refresh that produced a DIFFERENT snapshot
+    // means the plan was regularised — release every plan-blocked domain so
+    // this pass retries it and the queue drains without intervention. The
+    // snapshot service only swaps its instance when the content changed, so
+    // an unchanged plan never unblocks (and never floods the server).
+    final currentSnapshot = _entitlements?.snapshot;
+    if (_planBlockedDomains.isNotEmpty &&
+        currentSnapshot != null &&
+        !identical(currentSnapshot, _blockedAtSnapshot)) {
+      _clearPlanBlocked();
+    }
     _updateStatus(CloudSyncStatus.syncing);
     developer.log('[SYNC_MANUAL] triggered=true', name: 'SyncService');
 
@@ -969,6 +1038,15 @@ class SyncService {
           _lastSyncError = domainErrorSummary.isEmpty
               ? authMessage
               : '$authMessage; $domainErrorSummary';
+        } else if (_planBlockedDomains.isNotEmpty) {
+          // ENT-04 (§6.3): a plan refusal is not an auth failure and must not
+          // read as a dead session. The queued records stay pending; the
+          // owner sees the upgrade message through planBlockedCapabilities.
+          final planMessage =
+              'PLAN_BLOCKED: El plan actual no incluye la capacidad o cuota requerida; las operaciones quedan pendientes hasta regularizar el plan';
+          _lastSyncError = domainErrorSummary.isEmpty
+              ? planMessage
+              : '$planMessage; $domainErrorSummary';
         } else {
           _lastSyncError = domainErrorSummary;
         }
@@ -1036,10 +1114,66 @@ class SyncService {
     return '${e.response?.statusCode}: ${e.message ?? 'rejected by the cloud'}';
   }
 
+  /// ENT-04 (§6.3): clears every plan-refusal mark. Called when a changed
+  /// entitlement snapshot arrives so the held domains retry and drain.
+  void _clearPlanBlocked() {
+    if (_planBlockedDomains.isEmpty && _planBlockedCapabilities.isEmpty) return;
+    developer.log(
+      '[SYNC_PLAN] snapshot changed — releasing plan-blocked domains: '
+      '${_planBlockedDomains.join(", ")}',
+      name: 'SyncService',
+    );
+    _planBlockedDomains.clear();
+    _planBlockedCapabilities.clear();
+    _planBlockedReason = null;
+  }
+
+  /// Records a plan refusal from the backend's own words (catalog §6.3):
+  /// every record stays pending, the domain stops being retried until the
+  /// snapshot changes, and NOTHING is dropped — discarding would destroy
+  /// client work and inventory evidence.
+  void _recordPlanBlocked(String domain, DioException dioErr) {
+    final data = dioErr.response?.data;
+    final body = data is Map ? data : null;
+    final code = body?['code'];
+    _planBlockedReason = code is String && code.trim().isNotEmpty
+        ? code.trim()
+        : 'PLAN_BLOCKED';
+    final missing = body?['missingCapabilities'];
+    if (missing is List) {
+      _planBlockedCapabilities.addAll(missing.whereType<String>());
+    }
+    // 409 QUOTA_EXCEEDED carries the limit key instead of capability keys.
+    final limitKey = body?['limitKey'];
+    if (limitKey is String && limitKey.trim().isNotEmpty) {
+      _planBlockedCapabilities.add(limitKey.trim());
+    }
+    _planBlockedDomains.add(domain);
+    _blockedAtSnapshot = _entitlements?.snapshot;
+    developer.log(
+      '[SYNC_PLAN] domain=$domain plan-blocked code=$_planBlockedReason '
+      'capabilities=$_planBlockedCapabilities — records stay pending, '
+      'domain retries stop until the snapshot changes',
+      name: 'SyncService',
+    );
+  }
+
   Future<bool> _runDomain(
     String domain,
     Future<void> Function() operation,
   ) async {
+    // ENT-04 (§6.3 point 2): a domain that received a plan refusal stops
+    // being retried in the automatic cycle so the server is not flooded. The
+    // records keep their pending state; the domain is released when the
+    // entitlement snapshot changes (_clearPlanBlocked).
+    if (_planBlockedDomains.contains(domain)) {
+      developer.log(
+        '[SYNC_PLAN] domain=$domain skipped: plan-blocked until the '
+        'entitlement snapshot changes',
+        name: 'SyncService',
+      );
+      return false;
+    }
     // Auth failures are domain-scoped (issue #473): they set the pass-wide
     // _authBlocked observability flags but must not suppress independent
     // later domains in the same pass.
@@ -1049,7 +1183,7 @@ class SyncService {
     } on DioException catch (dioErr, stackTrace) {
       // ignore: avoid_print
       print('[SyncDomainError] DioException in domain $domain: ${dioErr.message} status=${dioErr.response?.statusCode} data=${dioErr.response?.data}');
-      final statusCode = dioErr.response?.statusCode;
+      final classification = classifySyncFailure(dioErr);
       if (dioErr.error is DeviceSyncRevokedException ||
           (dioErr.response?.data is Map &&
               (dioErr.response?.data['code'] == 'DEVICE_REVOKED' ||
@@ -1060,13 +1194,18 @@ class SyncService {
           '[SYNC_AUTH] credential_revoked=true — device sync credential revoked',
           name: 'SyncService',
         );
-      } else if (statusCode == 401 ||
-          statusCode == 403 ||
+      } else if (classification.planBlocked) {
+        // ENT-04 (§6.3, product-owner decision): a plan refusal must NOT
+        // look like a dead session. The records stay pending, nothing is
+        // dropped, the domain stops retrying, and the missing capability is
+        // recorded for the ENT-05 upgrade surface.
+        _recordPlanBlocked(domain, dioErr);
+      } else if (classification.authBlocked ||
           dioErr.error is DeviceSyncUnavailableException) {
         _authBlocked = true;
         _syncBlockedReason = 'AUTH_BLOCKED';
         developer.log(
-          '[SYNC_AUTH] credential_blocked=true — device sync auth unavailable or blocked (HTTP $statusCode)',
+          '[SYNC_AUTH] credential_blocked=true — device sync auth unavailable or blocked (HTTP ${dioErr.response?.statusCode})',
           name: 'SyncService',
         );
       } else {
@@ -2193,6 +2332,16 @@ class SyncService {
           'Failed to sync purchase ${purchase.id}: ${e.message}',
           name: 'SyncService',
         );
+        // ENT-04 (catalog §6.3): the decision ORDER is the rule and lives in
+        // `purchaseRejectionAction`. A plan refusal (403 CAPABILITY_REQUIRED /
+        // 409 QUOTA_EXCEEDED) NEVER drops the purchase — discarding would
+        // destroy client work and inventory evidence. The row stays pending;
+        // rethrowing lets _runDomain record the plan block and stop retrying
+        // the domain until the entitlement snapshot changes.
+        if (purchaseRejectionAction(e) ==
+            PurchaseRejectionAction.rethrowForPlanBlock) {
+          rethrow;
+        }
         if (_isPermanentRejection(e)) {
           // The cloud refused this purchase for a reason retrying cannot fix
           // (a malformed id, a duplicate invoice, a validation failure).

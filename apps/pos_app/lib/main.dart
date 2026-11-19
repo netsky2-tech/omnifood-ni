@@ -59,6 +59,7 @@ import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
 import 'data/services/terminal_identity_service.dart';
+import 'domain/services/entitlements/entitlement_snapshot_service.dart';
 import 'core/di/ota_providers.dart';
 import 'domain/services/update/ota_discovery_service.dart';
 import 'domain/services/update/ota_update_coordinator.dart';
@@ -274,6 +275,19 @@ void main() async {
     configDao: database.localConfigDao,
     clock: StopwatchMonotonicClock(),
     bootSessionId: const Uuid().v4(),
+  );
+  // ENT-04: offline entitlement snapshot cache (catalog §6). Same storage
+  // precedent as the capability cache above: a JSON payload under
+  // `local_configs` keyed `entitlements:<tenantId>`, no Floor entity. It
+  // rides the human app client (Bearer token) and never gates the sale path.
+  final entitlementSnapshotService = EntitlementSnapshotService(
+    configDao: database.localConfigDao,
+    dio: dio,
+    resolveTenantId: () async =>
+        (await database.localConfigDao.getConfigByKey(
+          TenantConfigService.tenantIdKey,
+        ))
+            ?.value,
   );
   final credentialStore = FlutterSecureCloudCredentialStore();
   final barrierStore = SharedPreferencesCloudRevocationBarrierStore();
@@ -529,6 +543,9 @@ void main() async {
     // same acting-operator identity the cash path uses
     // (AuthRepository.getCurrentUser). Optional callback, sync-time call.
     resolveActingUserId: () async => (await authRepository.getCurrentUser())?.id,
+    // ENT-04 (catalog §6.3): plan refusals are recorded here and released
+    // when the snapshot changes; the UI (ENT-05) watches the same service.
+    entitlements: entitlementSnapshotService,
   );
   activeSyncService = syncService;
 
@@ -541,6 +558,11 @@ void main() async {
   final isTerminalLinked = initialRoute == '/';
   if (isTerminalLinked) {
     connectivityService.start();
+    // ENT-04: load the last stored snapshot (local SQLite, cheap, awaited)
+    // and fire-and-forget the backend refresh so the first frame never waits
+    // on the network. Both calls swallow their own failures by contract.
+    await entitlementSnapshotService.load();
+    unawaited(entitlementSnapshotService.refresh());
     syncService.start();
 
     // #528 R1+R2: the retention/lifecycle trigger. The purge existed inside
@@ -832,6 +854,13 @@ void main() async {
         Provider<SalesRepositoryImpl>.value(value: salesRepository),
         Provider<DgiNumberingService>.value(value: numberingService),
         Provider<SyncService>.value(value: syncService),
+        // ENT-05: the plan snapshot the BohRouteGuard reads to decide the
+        // premium-locked state. `load()` already ran at startup (before
+        // runApp, awaited when linked; failures degrade to `empty()`), so
+        // the first frame already knows the plan without blocking the UI.
+        Provider<EntitlementSnapshotService>.value(
+          value: entitlementSnapshotService,
+        ),
         Provider<DeviceSyncBootstrapCoordinator>.value(
           value: deviceSyncBootstrapCoordinator,
         ),
@@ -996,6 +1025,9 @@ class MyApp extends StatelessWidget {
           '/inventory/suppliers': (context) => const BohRouteGuard(
             permission: BohPermission.shell,
             featureLabel: 'Proveedores',
+            // ENT-05: premium (catalog §3 — suppliers CRUD is deferred but
+            // the directory belongs to the retail pack).
+            capability: 'inventory.retail',
             child: SupplierView(),
           ),
           '/inventory/warehouses': (context) => const BohRouteGuard(
@@ -1006,51 +1038,61 @@ class MyApp extends StatelessWidget {
           '/inventory/purchases': (context) => const BohRouteGuard(
             permission: BohPermission.purchasesView,
             featureLabel: 'Compras',
+            capability: 'inventory.retail',
             child: PurchaseView(),
           ),
           '/inventory/shrinkage': (context) => const BohRouteGuard(
             permission: BohPermission.shrinkageView,
             featureLabel: 'Mermas',
+            capability: 'inventory.retail',
             child: ShrinkageView(),
           ),
           '/inventory/alerts': (context) => const BohRouteGuard(
             permission: BohPermission.alertsView,
             featureLabel: 'Alertas',
+            capability: 'inventory.retail',
             child: ForensicAlertView(),
           ),
           '/inventory/alerts/stock': (context) => const BohRouteGuard(
             permission: BohPermission.alertsView,
             featureLabel: 'Alertas de Stock',
+            capability: 'inventory.retail',
             child: StockAlertsView(),
           ),
           '/inventory/counts': (context) => const BohRouteGuard(
             permission: BohPermission.countsView,
             featureLabel: 'Conteos y ajustes',
+            capability: 'inventory.retail',
             child: PhysicalCountView(),
           ),
           '/inventory/kardex': (context) => const BohRouteGuard(
             permission: BohPermission.kardexView,
             featureLabel: 'Kardex',
+            capability: 'inventory.retail',
             child: KardexView(),
           ),
           '/inventory/production': (context) => const BohRouteGuard(
             permission: BohPermission.productionView,
             featureLabel: 'Producción',
+            capability: 'inventory.cooking',
             child: ProductionOrderView(),
           ),
           '/inventory/recipes': (context) => const BohRouteGuard(
             permission: BohPermission.recipesView,
             featureLabel: 'Recetas',
+            capability: 'inventory.cooking',
             child: RecipeView(),
           ),
           '/inventory/reports/valuation': (context) => const BohRouteGuard(
             permission: BohPermission.valuationView,
             featureLabel: 'Existencias & Valorización',
+            capability: 'reports.margins',
             child: InventoryValuationView(),
           ),
           '/inventory/reports/cogs': (context) => const BohRouteGuard(
             permission: BohPermission.cogsView,
             featureLabel: 'Costo de Ventas (COGS)',
+            capability: 'reports.margins',
             child: CogsReportView(),
           ),
           '/sales/tables': (context) => const TableLayoutView(),

@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
 import 'package:pos_app/ui/features/inventory/boh/boh_permissions.dart';
+import 'package:pos_app/domain/services/entitlements/entitlement_snapshot_service.dart';
 import 'package:pos_app/ui/widgets/app_drawer.dart';
+import 'package:pos_app/ui/widgets/premium_locked_view.dart';
 
 class BohNavigationShellView extends StatelessWidget {
   const BohNavigationShellView({super.key});
@@ -164,11 +166,17 @@ class BohRouteGuard extends StatelessWidget {
     required this.permission,
     required this.featureLabel,
     required this.child,
+    this.capability,
   });
 
   final String permission;
   final String featureLabel;
   final Widget child;
+
+  /// ENT-05 (catalog §6.3): premium capability required to open the route
+  /// (e.g. `inventory.retail`). Null for nucleus routes — they are never
+  /// gated by a plan (catalog §7).
+  final String? capability;
 
   @override
   Widget build(BuildContext context) {
@@ -182,12 +190,42 @@ class BohRouteGuard extends StatelessWidget {
         }
 
         if (hasBohPermission(snapshot.data?.role, permission)) {
+          final capability = this.capability;
+          if (capability == null) {
+            return child;
+          }
+          // ENT-05 (catalog §6.3): the role/permission check above already
+          // won. Now the plan: a premium capability the snapshot does not
+          // include renders the locked screen INSTEAD of the child, with the
+          // upgrade reason visible — never a cryptic error or a silent 403.
+          // Fail-closed (§6.6): without a snapshot service in scope there is
+          // no snapshot, and "no snapshot" never grants premium
+          // capabilities. This is safe because only premium keys are ever
+          // passed here (nucleus routes carry no [capability]).
+          final entitlements = _maybeEntitlements(context);
+          if (entitlements == null || !entitlements.has(capability)) {
+            return PremiumLockedView(
+              capability: capability,
+              featureLabel: featureLabel,
+            );
+          }
           return child;
         }
 
         return BohAccessDeniedView(featureLabel: featureLabel);
       },
     );
+  }
+
+  /// Best-effort read of the entitlement snapshot service. Missing from
+  /// scope (bare tests, previews) is NOT an error and MUST NOT throw: the
+  /// guard degrades to the locked state for premium capabilities only.
+  EntitlementSnapshotService? _maybeEntitlements(BuildContext context) {
+    try {
+      return context.read<EntitlementSnapshotService>();
+    } on ProviderNotFoundException {
+      return null;
+    }
   }
 }
 

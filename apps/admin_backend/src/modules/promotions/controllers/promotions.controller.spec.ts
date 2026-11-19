@@ -6,6 +6,7 @@ import { PromotionsService } from '../services/promotions.service';
 import { Promotion, PromotionType } from '../entities/promotion.entity';
 import { AuthGuard } from '../../identity/guards/auth.guard';
 import { RolesGuard } from '../../identity/guards/roles.guard';
+import { CapabilitiesGuard } from '../../entitlements/guards/capabilities.guard';
 
 describe('PromotionsController', () => {
   const jwtSecret = 'test-only-jwt-secret-with-at-least-thirty-two-bytes';
@@ -56,6 +57,10 @@ describe('PromotionsController', () => {
       .overrideGuard(AuthGuard)
       .useValue({ canActivate: () => true })
       .overrideGuard(RolesGuard)
+      .useValue({ canActivate: () => true })
+      // ENT-03: the guard is endpoint infrastructure; the entitlement
+      // behavior has its own spec in src/modules/entitlements.
+      .overrideGuard(CapabilitiesGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

@@ -24,11 +24,16 @@ import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-
 import { RolesGuard } from '../identity/guards/roles.guard';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { UserRole } from '../identity/entities/user.entity';
+import { CapabilitiesGuard } from '../entitlements/guards/capabilities.guard';
+import { RequireCapability } from '../entitlements/decorators/require-capability.decorator';
 
 @Controller('recipes')
 @UseInterceptors(TenantInterceptor)
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
 @Roles(UserRole.OWNER, UserRole.MANAGER)
+// ENT-03 (issue #984): recipes/BOM are the `inventory.cooking` pack
+// (catalog §3) — every verb of this controller is gated.
+@RequireCapability('inventory.cooking')
 export class RecipeController {
   constructor(
     private readonly recipeService: RecipeService,

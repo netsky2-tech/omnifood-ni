@@ -426,7 +426,7 @@ async function seed() {
         `SELECT pg_advisory_xact_lock(hashtext($1), hashtext('inventory_kardex_seed_opening'))`,
         [DEMO_TENANT_ID],
       );
-      const kardexCovered = await manager.query(
+      const kardexCovered: unknown = await manager.query(
         `SELECT DISTINCT ON (insumo_id) insumo_id, stock_after
            FROM inventory_kardex
           WHERE tenant_id = $1
@@ -438,9 +438,10 @@ async function seed() {
         stock_after: string;
       }
       const ledgerBalanceByInsumoId = new Map<string, number>(
-        (Array.isArray(kardexCovered) ? kardexCovered : []).map(
-          (row: KardexCoverageRow) => [row.insumo_id, Number(row.stock_after)],
-        ),
+        (Array.isArray(kardexCovered)
+          ? (kardexCovered as KardexCoverageRow[])
+          : []
+        ).map((row) => [row.insumo_id, Number(row.stock_after)]),
       );
       interface DemoInsumoRow {
         id: string;
@@ -452,9 +453,9 @@ async function seed() {
         `SELECT id, name, stock, costo_promedio_nio FROM insumos WHERE tenant_id = $1`,
         [DEMO_TENANT_ID],
       );
-      const demoInsumos = (
-        Array.isArray(rawDemoInsumos) ? rawDemoInsumos : []
-      ) as DemoInsumoRow[];
+      const demoInsumos: DemoInsumoRow[] = Array.isArray(rawDemoInsumos)
+        ? (rawDemoInsumos as DemoInsumoRow[])
+        : [];
       // Compare at the ledger's numeric(14,4) scale, matching the
       // ROUND(..., 4) the running-balance trigger applies.
       const round4 = (value: number) => Math.round(value * 10000) / 10000;

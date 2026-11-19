@@ -86,6 +86,9 @@ import { FulfillmentModule } from '../fulfillment/fulfillment.module';
 import { AuditModule } from '../audit/audit.module';
 import { SalesModule } from '../sales/sales.module';
 import { TenantModule } from '../tenant/tenant.module';
+// ENT-03b (issue #984): provides TenantQuotaService for the terminal seat
+// quota enforced at the two enrolment endpoints of ActivationController.
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { CompanyLogoService } from './services/company-logo.service';
 import { CompanyLogoController } from './controllers/company-logo.controller';
 import { CompanyLogoDeviceController } from './controllers/company-logo-device.controller';
@@ -111,6 +114,8 @@ export const getRequiredOnboardingJwtSecret = (
     // P3 slice 1: the logo storage seam (TenantBrandAssetService) is
     // tenant-owned; onboarding only orchestrates upload + revision bump.
     TenantModule,
+    // ENT-03b: terminal seat quota for the enrolment endpoints.
+    EntitlementsModule,
     TypeOrmModule.forFeature([
       IndustryTemplate,
       TemplateInsumo,

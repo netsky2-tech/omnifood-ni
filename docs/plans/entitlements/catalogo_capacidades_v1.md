@@ -1,0 +1,252 @@
+# Catálogo de capacidades y entitlements por plan — v1
+
+- **Issue:** [#984](https://github.com/netsky2-tech/omnifood-ni/issues/984)
+- **Autoridad comercial:** `docs/finance/estrategia_precios_nhilos_pos_v1.md` §4 (planes, packs, add-ons y matriz de capacidades).
+- **Ejecución:** `odd/tasks/plan-entitlements-tenant-capabilities.md` (slices ENT-01 … ENT-06).
+- **Estado:** **congelado**. Las tres decisiones estructurales (#1 clientes, #2 kardex, #3 límite de terminales) fueron confirmadas por el dueño del producto el 2026-11-17 y se codifican en ENT-01.
+
+## 1. Propósito
+
+Este documento congela el **registro de claves de capacidad**, su **mapeo a planes y add-ons**, los **límites** y las **reglas de resolución**. Es el contrato entre el negocio y el código: una sola tabla de mapeo, sin `if` por rubro dispersos.
+
+Regla de entrada: **una clave solo entra al catálogo si la función existe en el repositorio**. Una clave que gatea algo inexistente es una promesa de venta falsa. Por eso cada clave lleva su estado real y su evidencia.
+
+## 2. Vocabulario
+
+| Término | Significado |
+|---|---|
+| `plan_code` | `ESENCIAL`, `OPERACION`, `PRO` (catálogo) y `ENTERPRISE` (fuera del catálogo automático) |
+| `capability_key` | Clave estable del catálogo: `<área>.<función>`, en inglés, nunca traducida ni renombrada |
+| `add_on` | Compra adicional que suma capacidades o límites (`pack.retail`, `terminal.extra`, …) |
+| `entitlement` | Capacidad **efectiva** de un tenant, ya resuelta |
+| `override` | Excepción auditada (actor, motivo, expiración) sobre una capacidad o límite |
+| **no gated** | Capacidad del núcleo: aparece en la lista efectiva pero **ningún guard puede denegarla** |
+
+> **No confundir con `TenantCapabilityService`.** Ese servicio existente (`apps/admin_backend/src/modules/identity/controllers/capability.controller.ts:40`) versiona *contratos de auditoría* por tenant, con TTL de 24 h y activación OWNER. No es un catálogo de planes. Los entitlements viven en su propio módulo (`entitlements`) y **no** reutilizan esa tabla ni ese servicio.
+
+## 3. Registro de claves
+
+`tipo`: `flag` (booleano) o `limit` (número, `null` = ilimitado). `gated`: si un guard puede denegarla.
+
+### Núcleo — siempre activo, **no gated**
+
+| Clave | Tipo | Estado en código | Evidencia |
+|---|---|---|---|
+| `core.sales` | flag | EXISTE | `apps/admin_backend/src/modules/sales/controllers/invoices.controller.ts:47` |
+| `core.fiscal_invoice` | flag | EXISTE (factura, anulación, nota de crédito, reimpresión) | `admin-invoices.controller.ts:106,119`; reimpresión POS `apps/pos_app/lib/data/repositories/sales/sales_repository_impl.dart:723` |
+| `core.cash_shifts` | flag | EXISTE | `sales/controllers/cash-shift.controller.ts:36` |
+| `core.catalog` | flag | EXISTE | `catalog` (`catalog.controller.ts:35`), `products` (`product.controller.ts:38`) |
+| `core.customers` | flag | EXISTE | módulo `customers` |
+| `core.fx_dual` | flag | EXISTE (doble tipo de cambio en el ticket) | `receipt_layout_formatter.dart` (conversión NIO/USD) |
+| `core.inventory_simple` | flag | EXISTE (insumos: stock y movimientos) | `insumo.controller.ts:38` |
+| `core.reports_essential` | flag | EXISTE | `sales/controllers/reports.controller.ts:89` |
+| `core.owner_portal` | flag | EXISTE | `apps/owner_dashboard/src/lib/rbac.ts:36` |
+| `core.pos_users` | limit | EXISTE (usuarios POS ilimitados) | matriz de la autoridad §4 |
+
+### Packs — gated
+
+| Clave | Tipo | Estado en código | Evidencia | Cobertura real |
+|---|---|---|---|---|
+| `inventory.retail` | flag | **EXISTE** con dos huecos | kardex `inventory-reports.controller.ts:126`; compras `inventory-movement.controller.ts:146,193`; conteos `:420`; mermas `:388`; alertas `inventory-reports.controller.ts:149`; CPP `apps/pos_app/lib/domain/services/inventory/kardex_recalculation_engine.dart` | Proveedores: tabla + RLS sí (`1809270000000-EnforceInventoryRls.ts:57`), **sin CRUD propio**. Código de barras: solo campo + búsqueda. Lotes: `lotCode` en movimientos, **sin vencimientos** |
+| `inventory.cooking` | flag | **EXISTE** con dos huecos | recetas `recipe.controller.ts:28`; subrecetas `bom-explosion.service.ts`; modificadores `modifiers.controller.ts:40`; producción `inventory-movement.controller.ts:441`; márgenes por plato `inventory-reports.controller.ts:58` | Combos: solo tipo de promoción `COMBO_PACKAGE`. Menú QR: página de dashboard, **sin endpoint que sirva el menú** |
+
+### Transversales — gated
+
+| Clave | Tipo | Estado en código | Evidencia |
+|---|---|---|---|
+| `promotions` | flag | EXISTE | `promotions.controller.ts:23` |
+| `promotions.convenio` | flag | EXISTE (convenios B2B: cliente empresa con RUC, código, contador de usos, reporte y export propios) | `promotion.entity.ts:20` (`CONVENIO`), migración `1810100000000`, `sales-reports.service.ts:1097` |
+| `loyalty` | flag | EXISTE | `loyalty.controller.ts:67` |
+| `reports.margins` | flag | EXISTE (valorización y COGS **de inventario**) | `inventory-reports.controller.ts:45,116` |
+
+`promotions.convenio` **requiere** `promotions`: el resolver rechaza un contrato que compre
+convenios sin promociones (`CAPABILITY_PREREQUISITE_MISSING`) en lugar de conceder una función
+que no puede operar.
+
+El **costo por plato** (`dish-margins`, `theoretical-cost` en `inventory-reports.controller.ts:58,71`)
+pertenece a `inventory.cooking`, no a `reports.margins`: es una función de recetas. Tenerlo en dos
+claves era un doble gating real — un cliente con Operación + pack Cocina podía o no verlo según
+el orden de los guards.
+| `support.priority` | — | **AUSENTE** | sin coincidencias en `admin_backend/src` |
+
+`support.priority` **no entra como capacidad gateable**: es una obligación de servicio (SLA), no una función del producto. Se modela como atributo del `tenant_subscription` (`support_tier`), visible en el dashboard y auditable, sin guard. Diferido hasta que exista el flujo de soporte.
+
+### Límites — gated por conteo
+
+| Clave | Tipo | Incluido | Add-on | Estado en código |
+|---|---|---|---|---|
+| `limits.terminals` | limit | Esencial 1 · Operación 1 · Pro 2 | `terminal.extra` (sin tope duro) | **AUSENTE** como cuota; el fleet de terminales sí existe (`identity/controllers/device-sync-token.controller.ts:35`) |
+| `limits.owner_accounts` | limit | 2 · 2 · 4 | `owner.account.extra` | EXISTE como usuarios (`identity/controllers/users.controller.ts:38`); no hay cuota |
+
+`terminal.extra` y `owner.account.extra` se agregan al catálogo porque la autoridad los vende; su **enforcement** es ENT-03 y requiere la decisión #3.
+
+## 4. Matriz plan → capacidad
+
+Tomada de la autoridad §4 y de la matriz de capacidades, sin agregar nada:
+
+| Clave | ESENCIAL | OPERACION | PRO |
+|---|:---:|:---:|:---:|
+| núcleo (`core.*`) | Sí | Sí | Sí |
+| `inventory.retail` | Add-on | 1 pack incluido | Sí |
+| `inventory.cooking` | Add-on | 1 pack incluido | Sí |
+| `promotions` | No | Sí | Sí |
+| `loyalty` | No | Sí | Sí |
+| `promotions.convenio` | Add-on | Add-on | Sí |
+| `reports.margins` | No | Add-on | Sí |
+| `limits.terminals` | 1 | 1 | 2 |
+| `limits.owner_accounts` | 2 | 2 | 4 |
+| `support_tier` | estándar | estándar | prioritario |
+
+## 5. Precios y reglas de add-on (autoridad §4)
+
+| Concepto | Precio | Regla |
+|---|---|---|
+| Pack en `ESENCIAL` | +US$39 | Válvula de escape, no ruta de venta: se cotiza primero `OPERACION` |
+| Segundo pack en `OPERACION` | +US$29 | El primero va incluido |
+| Terminal adicional | US$40/mes (US$29 en Pro; US$35 SOHO) | Sin tope duro por plan |
+| Cuenta owner adicional | US$10/mes | Sobre las incluidas |
+| Setup de terminal adicional | US$75 (US$50 SOHO) | Enrolamiento |
+| **Bundle Marketing** (`bundle.marketing`) | US$19 | `promotions` + `loyalty`; disponible en Esencial, incluido en Operación y Pro |
+| **Bundle Inteligencia de costos** (`bundle.cost_intelligence`) | US$19 | `reports.margins`: valorización, COGS, márgenes; disponible en Operación, incluido en Pro |
+| **Bundle Convenios B2B** (`bundle.convenio`) | US$15 | `promotions.convenio`; **requiere `promotions` activo**; incluido en Pro |
+
+Coherencia de escalera con los bundles (verificada al congelarlos):
+
+- Operación 89 + Cocina 29 + Inteligencia 19 = **137** < Pro **149** → Pro sigue ganando por
+  packs, terminales y soporte.
+- Esencial 49 + Marketing 19 = **68** < Operación **89** → Operación sigue ganando porque
+  incluye un pack.
+
+Reglas de negocio que el catálogo **no** implementa (son de venta, no de código): descuento anual máximo, setup no reembolsable, ofrecer upgrade cuando dos add-ons superan US$30/mes.
+
+## 6. Resolución de capacidades efectivas
+
+```
+efectivas = base(plan) ∪ addons(activos) ∪ overrides(vigentes)
+```
+
+1. **Plan** aporta sus claves y límites incluidos. `ESENCIAL` no habilita ningún pack salvo add-on.
+2. **Add-ons** suman: `pack.*` enciende la clave del pack; `terminal.extra` y `owner.account.extra` incrementan el límite en 1 cada uno (sin tope duro).
+3. **Overrides** ganan sobre plan y add-ons, con `actor`, `motivo` y `expires_at` obligatorios; al vencer dejan de aplicar sin borrar el registro.
+4. **Sin suscripción**: el tenant recibe el **núcleo** y un estado explícito `sin_plan` en el snapshot. Nunca "todas las capacidades".
+5. **Suscripción vencida o suspendida**: se conserva el núcleo; las premium caen.
+6. **Snapshot ausente, vencido o corrupto en el POS**: se conserva el núcleo; las premium se consideran no disponibles. La venta, la factura, la anulación, la reimpresión y el cierre de caja **no dependen de ninguna de estas reglas**.
+
+### 6.1 Decisiones de implementación (ENT-02, OUR DECISION)
+
+Dos casos que las reglas de arriba no fijaban y que el código resolvió explícitamente. Se
+registran aquí porque cambian lo que el cliente puede hacer, no por ser un detalle interno:
+
+1. **Una suscripción suspendida o vencida conserva sus cuotas de hardware** (terminales y
+   cuentas owner del contrato), aunque pierda todas las capacidades premium. Motivo: la cuota es
+   un hecho comercial, no una función; una mora no debe impedir reponer un terminal averiado ni
+   dejar a un negocio sin operar. Las capacidades premium sí caen.
+2. **Un tenant sin suscripción (`sin_plan`) recibe el suelo de `ESENCIAL`** (1 terminal, 2
+   cuentas owner) y nunca más. Motivo: `sin_plan` no puede ser un estado con más permisos que el
+   plan más barato, y a la vez un tenant recién creado debe poder enrolar su primer terminal.
+
+Ambas se implementan en `entitlement-resolution.ts` y se prueban en
+`entitlement-resolution.spec.ts`. Cambiarlas exige un slice nuevo, no un ajuste de código.
+
+### 6.2 Cuotas: asientos activos con ventana de gracia (ENT-03b, OUR DECISION)
+
+Decisión del dueño del producto para `limits.terminals` y `limits.owner_accounts`. No es gating
+de función: es conteo, y nunca puede tocar la venta ni el camino fiscal.
+
+**Terminales.** Ocupa asiento toda credencial de sincronización que no esté dada de baja
+(`revoked_at IS NULL`, estado distinto de `REVOKED`/`RETIRED`) y que haya tenido actividad en los
+últimos **30 días**. La actividad es `max(issued_at, rotated_at)`, y `rotated_at` se refresca en
+cada renovación de token: un POS vivo renueva y conserva su asiento, uno averiado deja de contar
+a los 30 días de su última renovación.
+
+- La **baja explícita** (`POST identity/device-sync/credentials/:id/revoke`) libera el asiento de
+  inmediato: es el camino normal cuando se reemplaza un equipo.
+- La **ventana de gracia** existe para el equipo que murió y nadie dio de baja: se libera solo.
+- El enrolamiento se bloquea únicamente cuando los asientos ocupados llegan al límite. Nunca se
+  revoca una credencial existente por cuota, y ningún terminal en operación se detiene.
+
+**Cuentas owner.** Se cuentan los usuarios con rol `OWNER` activos. Crear otra cuenta owner, o
+ascender a alguien a `OWNER`, se bloquea al llegar al límite. Sin ventana de gracia: una cuenta es
+una persona y se desactiva en el acto.
+
+**Nada de esto se aplica** a la renovación de token, a la sincronización, a la baja de credencial
+(debe funcionar incluso sobre cuota) ni a ningún endpoint de venta, facturación o caja.
+
+### 6.3 Respuesta del POS a un rechazo de plan (ENT-04, OUR DECISION)
+
+Prohibido descartar y prohibido bloquear la venta. Cuando el backend responde 403 (capacidad no
+incluida) o 409 (cuota agotada) a una operación que el POS ya capturó sin conexión:
+
+1. La operación **se conserva** en la cola local con su motivo (`capability_denied` /
+   `quota_exceeded`), marcada como pendiente de plan y no como fallida.
+2. El POS **deja de reintentarla** en el ciclo automático para no inundar el servidor, pero la
+   muestra al propietario con el mensaje de upgrade.
+3. Cuando el plan se regulariza (snapshot nuevo con la capacidad o la cuota), la cola la
+   **reintenta y se vacía** sin intervención.
+4. La venta, la factura, la anulación, la reimpresión y el cierre de caja **nunca** se encolan
+   contra un plan: el núcleo no se gatea, así que no pueden recibir 403 por esta vía.
+5. Una operación nunca se borra por un rechazo de plan. Borrarla destruiría trabajo del cliente y
+   evidencia de inventario; el costo de conservarla es una fila, el de perderla es un descuadre
+   que nadie puede reconstruir.
+
+## 7. Claves que ningún guard puede tocar
+
+Lista cerrada, y el motivo de cada una:
+
+- `core.sales`, `core.fiscal_invoice`, `core.cash_shifts` — **DGI y cobro**: ninguna regla de plan puede impedir emitir, anular, reimprimir ni cerrar caja (restricción del issue y `AGENTS.md`).
+- `core.customers` — el nombre y RUC del cliente se imprimen en la factura fiscal; gatearlo tocaría el camino fiscal.
+- `core.catalog`, `core.inventory_simple` — sin catálogo y sin stock no hay venta válida.
+- `core.fx_dual` — el ticket bimoneda es formato de impresión fiscal vigente.
+
+Cualquier clave nueva que se proponga como gateable debe justificar por qué **no** está en esta lista.
+
+## 8. Claves diferidas (no se gatean todavía)
+
+| Clave o función | Motivo | Qué falta |
+|---|---|---|
+| `support.priority` | Ausente en código; es SLA, no función | Flujo de soporte |
+| Vencimientos de lote | Solo `lotCode` en movimientos | Registro y reporte de vencimiento |
+| Combos administrables | Hoy solo tipo de promoción | Módulo de combos |
+| Menú QR servido | Página de dashboard sin endpoint | Endpoint público del menú |
+| CRUD de proveedores | Tabla y RLS sí, sin controlador | Controlador `suppliers` |
+
+Regla: la clave se agrega al catálogo **cuando la función existe y se puede demostrar**, no antes.
+
+## 9. Contrato del snapshot (lo consumen ENT-02 y ENT-04)
+
+```json
+{
+  "version": 1,
+  "planCode": "OPERACION",
+  "status": "active",
+  "supportTier": "standard",
+  "capabilities": ["core.sales", "core.fiscal_invoice", "inventory.retail"],
+  "limits": { "limits.terminals": 1, "limits.owner_accounts": 2 },
+  "addOns": ["pack.retail"],
+  "issuedAt": "2026-11-17T00:00:00Z",
+  "expiresAt": "2026-11-18T00:00:00Z"
+}
+```
+
+- `version` permite evolucionar el contrato sin romper POS desplegados.
+- `expiresAt` es el TTL del snapshot (**propuesta: 24 h**, alineado con el TTL que ya usa `TenantCapabilityService`); se refresca al sincronizar.
+- `limits` con valor `null` significa ilimitado.
+- El POS guarda el snapshot en SQLite y **nunca** decide la venta por él.
+
+## 10. Decisiones confirmadas
+
+### ✔ #1 — `core.customers` es núcleo, no premium
+
+La autoridad se contradice: la fila de `OPERACION` en §4 lista "clientes" como agregado del plan, pero la matriz de capacidades los marca "Sí" en los tres planes. **Confirmada: núcleo.** Razón: el nombre y RUC del cliente se imprimen en la factura fiscal; gatearlo convierte una decisión comercial en un riesgo DGI. Un tenant `ESENCIAL` que no puede registrar al cliente no puede emitir la factura que el Estado le exige.
+
+### ✔ #2 — Kardex: movimientos en el pack, valorización en Pro
+
+El issue pone "kardex" en `inventory.retail` y la autoridad pone "kardex valorizado" en `reports.margins` (Pro). **Confirmada:** el **kardex de movimientos** (entradas, salidas, saldos) va con `inventory.retail`; el **kardex valorizado, COGS y márgenes** van con `reports.margins`. Son dos productos distintos: uno dice qué se movió, el otro cuánto costó.
+
+### ✔ #3 — Límite de terminales: bloquear enrolamiento, nunca la venta
+
+`limits.terminals` no existe como cuota en el código; el fleet sí. **Confirmada:** al superar el límite, el backend **rechaza enrolar un terminal nuevo** (mensaje de upgrade), pero un terminal ya enrolado y activo **sigue vendiendo aunque el plan esté vencido o el snapshot falte**. Nunca se revoca un terminal en operación por plan: dejar a un negocio sin facturar es peor que el ingreso no cobrado.
+
+## 11. Fuera de alcance
+
+Pasarela de pagos y cobro recurrente, facturación electrónica DGI, autoservicio de cambio de plan, medición de uso por transacción, motor de reglas genérico, `Enterprise` en el catálogo automático.

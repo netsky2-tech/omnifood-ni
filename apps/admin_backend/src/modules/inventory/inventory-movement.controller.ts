@@ -51,6 +51,8 @@ import { CountSessionService } from './count-session.service';
 import { CountSessionDocumentDto } from './dto/count-session-document.dto';
 import { ProductionOrderDocumentDto } from './dto/production-order-document.dto';
 import { ProductionService } from './production.service';
+import { CapabilitiesGuard } from '../entitlements/guards/capabilities.guard';
+import { RequireCapability } from '../entitlements/decorators/require-capability.decorator';
 
 const TERMINAL_IDEMPOTENCY_PREFIX = 'production';
 
@@ -144,8 +146,10 @@ export class InventoryMovementController {
   // distinct `/inventory/reports/alerts` report surface remains intact.
 
   @Post('purchase')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): the purchase CPP preview belongs to the retail pack.
+  @RequireCapability('inventory.retail')
   /**
    * Read-only CPP preview for the owner dashboard's projected-cost card.
    * The DTO is the preview-specific wall WITHOUT `id` (the manual purchase
@@ -175,8 +179,11 @@ export class InventoryMovementController {
   }
 
   @Get('fx/bcn')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): the BCN rate exists only to cost purchases → the
+  // retail pack travels with it.
+  @RequireCapability('inventory.retail')
   async getBcnFxRate(@Query() query: GetBcnFxRateQueryDto) {
     return this.fxRateResolverService.getBcnRateByInvoiceDate(
       query.invoiceDate,
@@ -191,8 +198,10 @@ export class InventoryMovementController {
    * exposes history and costs for the office.
    */
   @Get('purchases')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): purchase history → `inventory.retail` (catalog §3).
+  @RequireCapability('inventory.retail')
   async listPurchases(
     @Query() query: ListPurchasesQueryDto,
     @GetTenantId() tenantId: string,
@@ -221,8 +230,12 @@ export class InventoryMovementController {
   // 2026-09-21). Device identity alone is not recorded as sufficient
   // authority; authorization is captured at authoring time, not at transmit
   // time.
-  @UseGuards(SyncTransportGuard)
+  @UseGuards(SyncTransportGuard, CapabilitiesGuard)
   @RequireSyncScopes('sync:push')
+  // ENT-03 (issue #984): purchase recording (device sync) → `inventory.retail`.
+  // The tenant comes from the device principal, which the guard reads exactly
+  // like @GetTenantId does.
+  @RequireCapability('inventory.retail')
   async recordPurchase(
     @Body() dto: PurchaseDocumentDto,
     @GetTenantId() tenantId: string,
@@ -262,8 +275,11 @@ export class InventoryMovementController {
    * evidence and `listSuppliers` in the purchase service.
    */
   @Get('suppliers')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): suppliers are a `inventory.retail` function
+  // (catalog §3 evidence row).
+  @RequireCapability('inventory.retail')
   async listSuppliers(
     @GetTenantId() tenantId: string,
     @Query() query?: ListSuppliersQueryDto,
@@ -279,8 +295,10 @@ export class InventoryMovementController {
    * tenant comes from the authenticated human session, never from the body.
    */
   @Post('suppliers')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): suppliers → `inventory.retail`.
+  @RequireCapability('inventory.retail')
   async createSupplier(
     @Body() dto: CreateSupplierDto,
     @GetTenantId() tenantId: string,
@@ -299,8 +317,10 @@ export class InventoryMovementController {
    * Modifies contact info, credit terms, name, or active status.
    */
   @Put('suppliers/:id')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): suppliers → `inventory.retail`.
+  @RequireCapability('inventory.retail')
   async updateSupplier(
     @Param('id') id: string,
     @Body() dto: UpdateSupplierDto,
@@ -331,8 +351,10 @@ export class InventoryMovementController {
    * stays shared with the device path in `recordPurchase`.
    */
   @Post('purchases/manual')
-  @UseGuards(AuthGuard, RolesGuard)
+  @UseGuards(AuthGuard, RolesGuard, CapabilitiesGuard)
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): manual purchase entry → `inventory.retail`.
+  @RequireCapability('inventory.retail')
   async recordManualPurchase(
     @Body() dto: ManualPurchaseDto,
     @GetTenantId() tenantId: string,
@@ -365,8 +387,15 @@ export class InventoryMovementController {
   }
 
   @Post('purchases/:id/correction')
-  @UseGuards(AuthGuard, AuthoritativeCurrentUserGuard, RolesGuard)
+  @UseGuards(
+    AuthGuard,
+    AuthoritativeCurrentUserGuard,
+    RolesGuard,
+    CapabilitiesGuard,
+  )
   @Roles(UserRole.OWNER, UserRole.MANAGER)
+  // ENT-03 (issue #984): purchase corrections → `inventory.retail`.
+  @RequireCapability('inventory.retail')
   async correctPurchase(
     @Param('id') id: string,
     @Body() dto: PurchaseCorrectionDto,
@@ -386,8 +415,11 @@ export class InventoryMovementController {
   }
 
   @Post('shrinkage')
-  @UseGuards(SyncTransportGuard)
+  @UseGuards(SyncTransportGuard, CapabilitiesGuard)
   @RequireSyncScopes('sync:push')
+  // ENT-03 (issue #984): waste/shrinkage writes → `inventory.retail`
+  // (catalog §3: mermas).
+  @RequireCapability('inventory.retail')
   async recordShrinkage(
     @Body() dto: CreateShrinkageDto,
     @GetTenantId() tenantId: string | undefined,
@@ -426,8 +458,10 @@ export class InventoryMovementController {
   // 2026-09-21). Device identity alone is not recorded as sufficient
   // authority; authorization is captured at authoring time, not at transmit
   // time.
-  @UseGuards(SyncTransportGuard)
+  @UseGuards(SyncTransportGuard, CapabilitiesGuard)
   @RequireSyncScopes('sync:push')
+  // ENT-03 (issue #984): counts → `inventory.retail` (catalog §3: conteos).
+  @RequireCapability('inventory.retail')
   async recordCountSession(
     @Body() dto: CountSessionDocumentDto,
     @GetTenantId() tenantId: string | undefined,
@@ -447,8 +481,13 @@ export class InventoryMovementController {
   // 2026-09-21). Device identity alone is not recorded as sufficient
   // authority; authorization is captured at authoring time, not at transmit
   // time. The terminal is bound from the authenticated device principal.
-  @UseGuards(SyncTransportGuard)
+  @UseGuards(SyncTransportGuard, CapabilitiesGuard)
   @RequireSyncScopes('sync:push')
+  // ENT-03 (issue #984): production close is a COOKING function (catalog §3
+  // lists producción under `inventory.cooking`, evidence
+  // inventory-movement.controller.ts:441), so it travels with the cooking
+  // pack — NOT with inventory.retail.
+  @RequireCapability('inventory.cooking')
   async closeProductionOrder(
     @Body() dto: ProductionOrderDocumentDto,
     @GetTenantId() tenantId: string,
@@ -469,8 +508,11 @@ export class InventoryMovementController {
   // 2026-09-21). Device identity alone is not recorded as sufficient
   // authority; authorization is captured at authoring time, not at transmit
   // time.
-  @UseGuards(SyncTransportGuard)
+  @UseGuards(SyncTransportGuard, CapabilitiesGuard)
   @RequireSyncScopes('sync:push')
+  // ENT-03 (issue #984): recipe version sync is a COOKING function (catalog
+  // §3: recetas), NOT inventory.retail.
+  @RequireCapability('inventory.cooking')
   async ingestRecipeVersion(
     @Body() dto: SyncRecipeVersionDocumentDto,
     @GetTenantId() tenantId: string,

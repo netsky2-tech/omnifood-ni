@@ -54,6 +54,7 @@ import {
 import { UomConversionCalculator } from './uom-conversion-calculator';
 import { ForensicAlertEmailDispatcher } from './forensic-alert-email.dispatcher';
 import { IdentityModule } from '../identity/identity.module';
+import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { DeviceSyncModule } from '../identity/device-sync.module';
 import { TenantModule } from '../tenant/tenant.module';
 import { CountSessionService } from './count-session.service';
@@ -76,6 +77,11 @@ import { InventoryDivergenceController } from './controllers/inventory-divergenc
 @Module({
   imports: [
     IdentityModule,
+    // ENT-03: EntitlementsModule provides EntitlementsService for the
+    // CapabilitiesGuard on the premium inventory controllers (retail/cooking
+    // packs, reports.margins). InsumoController stays UNGATED: it is the
+    // evidence for the nucleus key `core.inventory_simple` (catalog §7).
+    EntitlementsModule,
     AuditModule,
     NotificationsModule,
     DeviceSyncModule,

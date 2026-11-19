@@ -105,6 +105,21 @@ import { DeviceSyncCredentialEvent } from '../../modules/identity/entities/devic
 import { ForensicAlert } from '../../modules/inventory/entities/forensic-alert.entity';
 import { DeviceSyncModule } from '../../modules/identity/device-sync.module';
 import { AppRelease } from '../../modules/releases/entities/app-release.entity';
+import {
+  PlanCapability,
+} from '../../modules/entitlements/entities/plan-capability.entity';
+import {
+  TenantSubscription,
+} from '../../modules/entitlements/entities/tenant-subscription.entity';
+import {
+  TenantEntitlementOverride,
+} from '../../modules/entitlements/entities/tenant-entitlement-override.entity';
+import {
+  TenantEntitlementChangeHistory,
+} from '../../modules/entitlements/entities/tenant-entitlement-change-history.entity';
+import {
+  EntitlementsModule,
+} from '../../modules/entitlements/entitlements.module';
 import { ReleasesModule } from '../../modules/releases/releases.module';
 export const getRequiredConfigValue = (
   configService: ConfigService,
@@ -221,6 +236,12 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     DeviceSyncCredentialEvent,
     ForensicAlert,
     AppRelease,
+    // ENT-01 (#984): the plan catalog is GLOBAL (no tenant_id); the other
+    // three carry tenant_id and are covered by 1810400000000-CreateEntitlementsTables RLS.
+    PlanCapability,
+    TenantSubscription,
+    TenantEntitlementOverride,
+    TenantEntitlementChangeHistory,
   ],
   synchronize: false,
 });
@@ -259,6 +280,7 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     FulfillmentModule,
     DeviceSyncModule,
     ReleasesModule,
+    EntitlementsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

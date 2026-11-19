@@ -85,10 +85,125 @@ export const ACTION_ROLE_PERMISSIONS: Record<AppAction, UserRole[]> = {
 export function canAccessRoute(role: UserRole | undefined | null, path: string): boolean {
   const effectiveRole = role ?? "OWNER";
   // Normalize path (strip trailing slash)
-  const normalized = path === "/" ? "/" : path.replace(/\/$/, "");
+  const normalized = normalizeRoutePath(path);
   const allowed = ROUTE_ROLE_PERMISSIONS[normalized];
   if (!allowed) return true; // Unspecified routes (e.g. 404) allowed
   return allowed.includes(effectiveRole);
+}
+
+export function normalizeRoutePath(path: string): string {
+  return path === "/" ? "/" : path.replace(/\/$/, "");
+}
+
+/*
+ * Premium route → capability keys (ENT-05b, issue #984).
+ *
+ * Authority: docs/plans/entitlements/catalogo_capacidades_v1.md §3/§9 and the
+ * ENT-05 spec. COMPOSITION, NOT REPLACEMENT: the role check in
+ * ROUTE_ROLE_PERMISSIONS always runs first (see evaluateRouteAccess); the
+ * entitlement check only narrows access further for premium surfaces.
+ *
+ * ANY-of semantics: a route unlocks when the tenant holds at least one of the
+ * listed capability keys. `core.*` keys are deliberately absent — catalog §7
+ * forbids gating sales, invoices, cash shifts, customers, catalog, simple
+ * inventory or dual-currency printing (rbac-premium.test.ts pins this).
+ *
+ * /inventory is intentionally NOT mapped: it hosts core tabs (insumos) plus
+ * premium ones, so its premium tabs are gated per-surface through
+ * SURFACE_PREMIUM_CAPABILITIES below.
+ */
+export const ROUTE_PREMIUM_CAPABILITIES: Record<string, string[]> = {
+  "/promotions": ["promotions"],
+  "/loyalty": ["loyalty"],
+  "/recipes": ["inventory.cooking"],
+  "/dish-margins": ["inventory.cooking"],
+  "/kardex": ["inventory.retail"],
+};
+
+/*
+ * Premium surfaces (tabs / form paths) that live inside routes which also
+ * carry core functionality. Same contract as the route map; the UI renders a
+ * PremiumLocked state for the surface when the tenant holds none of the keys.
+ */
+export const SURFACE_PREMIUM_CAPABILITIES: Record<string, string[]> = {
+  "inventory.valuation": ["reports.margins"],
+  "inventory.purchases": ["inventory.retail"],
+  "inventory.suppliers": ["inventory.retail"],
+  "promotions.convenio": ["promotions.convenio"],
+};
+
+/**
+ * Capability key that gates one premium surface.
+ *
+ * The map is `Record<string, string[]>`, so under `noUncheckedIndexedAccess`
+ * both the lookup and its first element are optional. Call sites used to write
+ * `MAP[surface][0]!`, which still fails the project build: the assertion sat on
+ * the element instead of on the lookup. Resolving it here keeps the runtime
+ * failure explicit and the call sites honest.
+ */
+export const surfacePremiumCapability = (surface: string): string => {
+  const [capabilityKey] = SURFACE_PREMIUM_CAPABILITIES[surface] ?? [];
+  if (!capabilityKey) {
+    throw new Error(`no premium capability declared for surface "${surface}"`);
+  }
+  return capabilityKey;
+};
+
+export type RouteAccessResult =
+  | { allowed: true }
+  | { allowed: false; reason: "role" }
+  | { allowed: false; reason: "entitlement"; capability: string };
+
+export function isPremiumRoute(path: string): boolean {
+  return normalizeRoutePath(path) in ROUTE_PREMIUM_CAPABILITIES;
+}
+
+/**
+ * Composed access decision for a route: the ROLE check first (unchanged
+ * RBAC), the ENTITLEMENT check second. A role denial must surface as the
+ * existing unauthorized behavior; an entitlement denial carries the missing
+ * capability so the UI can render the PremiumLocked upgrade copy.
+ */
+export function evaluateRouteAccess(
+  role: UserRole | undefined | null,
+  capabilities: readonly string[] | undefined | null,
+  path: string,
+): RouteAccessResult {
+  if (!canAccessRoute(role, path)) {
+    return { allowed: false, reason: "role" };
+  }
+  const required = ROUTE_PREMIUM_CAPABILITIES[normalizeRoutePath(path)];
+  if (required && required.length > 0) {
+    const held = capabilities ?? [];
+    if (!required.some((key) => held.includes(key))) {
+      return { allowed: false, reason: "entitlement", capability: required[0]! };
+    }
+  }
+  return { allowed: true };
+}
+
+/** Boolean convenience over evaluateRouteAccess (role check runs first). */
+export function canAccessPremiumRoute(
+  role: UserRole | undefined | null,
+  capabilities: readonly string[] | undefined | null,
+  path: string,
+): boolean {
+  return evaluateRouteAccess(role, capabilities, path).allowed;
+}
+
+/**
+ * Surface-level entitlement check for premium tabs/form paths inside core
+ * routes. Unmapped surfaces are never gated; a missing capabilities list is
+ * denied on mapped surfaces (fail closed, catalog §6.6).
+ */
+export function canAccessPremiumSurface(
+  capabilities: readonly string[] | undefined | null,
+  surface: string,
+): boolean {
+  const required = SURFACE_PREMIUM_CAPABILITIES[surface];
+  if (!required) return true;
+  const held = capabilities ?? [];
+  return required.some((key) => held.includes(key));
 }
 
 export function canPerformAction(role: UserRole | undefined | null, action: AppAction): boolean {

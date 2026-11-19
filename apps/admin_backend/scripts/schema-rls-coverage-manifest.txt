@@ -38,18 +38,19 @@
 #
 # The three declared command sets, and why each group is declared as it is:
 #
-#   direct:SIUD (52) — ordinary business tables whose lifecycle reads, inserts,
+#   direct:SIUD (56) — ordinary business tables whose lifecycle reads, inserts,
 #                   updates AND deletes rows; their write paths mutate and
 #                   remove state as part of normal operation.
-#   direct:SI    (10) — append-only ledgers (sync credential events, human-auth
+#   direct:SI    (14) — append-only ledgers (sync credential events, human-auth
 #                   epochs/snapshots/recovery events/terminal ack history/
 #                   verification events, remediation receipts, topology
 #                   revisions, kardex_correction and sys_parametros_config
-#                   after slice 10 split their FOR ALL policies): rows are
+#                   after slice 10 split their FOR ALL policies, plus the
+#                   ENT-01 (#984) change-history audit trail): rows are
 #                   written once and never mutated, and the immutability
 #                   triggers plus the missing UPDATE/DELETE policies both
 #                   enforce that.
-#   direct:SIU   (7)  — queue/state tables that mutate rows in place but never
+#   direct:SIU   (8)  — queue/state tables that mutate rows in place but never
 #                   delete them (recovery tokens, rollout cohorts, tenant
 #                   publication state, terminal ack floor, inventory_sync_outbox,
 #                   kardex_recalculate_queue after slice 10 split its FOR ALL
@@ -64,7 +65,7 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (71 entries: 52 direct:SIUD + 11 direct:SI + 8 direct:SIU; entry ORDER is
+# (78 entries: 56 direct:SIUD + 14 direct:SI + 8 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest for pre-existing entries)
 # ---------------------------------------------------------------------------
 batch_outflow_traces|direct:SI
@@ -135,6 +136,11 @@ product_import_sessions|direct:SIUD
 legacy_import_integrity_reports|direct:SIUD
 promotions|direct:SIUD
 tenant_capability_event|direct:SIUD
+# ENT-01 (#984): plan/override change audit trail — append-only, no U/D policy.
+tenant_entitlement_change_history|direct:SI
+# ENT-01 (#984): the tenant's commercial contract and its audited exceptions.
+tenant_entitlement_override|direct:SIUD
+tenant_subscription|direct:SIUD
 tenant_fulfillment_records|direct:SIUD
 tenant_topology_revisions|direct:SI
 tenant_brand_assets|direct:SIU
@@ -156,7 +162,7 @@ security_profiles|parent-owned
 shrinkage_details|parent-owned
 
 # ---------------------------------------------------------------------------
-# global — reviewed platform / pre-tenant / infrastructure exceptions. (9)
+# global — reviewed platform / pre-tenant / infrastructure exceptions. (11)
 # ---------------------------------------------------------------------------
 # TypeORM migration ledger; the bootstrap record of the schema itself.
 migrations|global
@@ -173,6 +179,11 @@ template_products|global
 template_recipe_items|global
 # Banco Central de Nicaragua reference exchange rates: platform reference data.
 inventory_bcn_fx_rates|global
+# ENT-01 (#984): the GLOBAL plan → capability catalog, frozen in
+# docs/plans/entitlements/catalogo_capacidades_v1.md §4 and seeded from the
+# code registry by 1810400000000-CreateEntitlementsTables. No tenant_id: every
+# tenant reads the same catalog, read-only, like uom_catalog.
+plan_capability|global
 # Migration-time capture of the prior RLS state of the credit-note tables,
 # used by AddCreditNoteProvenance to re-apply guards; schema infrastructure.
 credit_note_provenance_rls_baseline|global
