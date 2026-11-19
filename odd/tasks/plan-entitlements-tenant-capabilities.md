@@ -352,6 +352,34 @@ docs/operations/entitlement_overrides_runbook.md
   vez. Bajo riesgo mientras el único escritor sea el CLI, pero es un invariante sin dientes en la
   base.
 
+### ENT-08 — Backfill de clientes existentes y provisión con plan
+
+Status: pending.
+
+Motivo (decisión del dueño, 2026-11-19): al desplegar, todo tenant sin fila en
+`tenant_subscription` queda en `sin_plan` —núcleo y suelo de ESENCIAL—, así que los clientes que
+hoy operan perderían compras, recetas, promociones y márgenes de un día para otro. El cliente en
+producción (SOHO) usaba **todas** las opciones de la app y el panel: se le asigna el plan que da
+ese acceso completo, y lo mismo a todo tenant existente.
+
+Specs:
+
+- **S16.** Una migración asigna `PRO` (acceso completo) a todo tenant **sin** suscripción, de forma
+  idempotente, con su fila de rastro (`change_type = 'plan'`, `previous_value_json` nulo,
+  `new_value_json` con el contrato creado, `actor = 'migration:#984-backfill'` y un motivo que
+  explique por qué). Sin rastro no hay backfill.
+- **S17.** La bajada (`down`) elimina solo las suscripciones creadas por esta migración, marcadas
+  con `notes = 'backfill:#984'`, y **deja** las filas de rastro: el historial es append-only por
+  trigger y borrarlo contradiría la garantía de ENT-06. Se documenta esa asimetría.
+- **S18.** `npm run provision` crea el tenant **operable en un solo comando**: acepta
+  `--plan=<code>` (por defecto `PRO` mientras dure la etapa fundador), `--support-tier` y
+  `--add-ons`, y crea la suscripción auditada con actor (el OWNER recién creado) y motivo, usando
+  `TenantSubscriptionService` — no SQL suelto.
+- **S19.** Un plan o add-on inválido se rechaza **antes** de crear el tenant, con código estable y
+  salida 1: no se deja un tenant a medio provisionar.
+- **S20.** El runbook explica el backfill, cómo verificarlo y cómo provisionar con plan; y advierte
+  que un tenant sin suscripción queda en núcleo a propósito, no por olvido.
+
 ## Criterios de aceptación
 
 - [x] Fuente única de verdad de plan y capacidades por tenant, con RLS probado.
