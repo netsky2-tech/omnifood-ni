@@ -308,6 +308,8 @@ test("T10c: all four device frames share the terminal aspect 1080/2316; 800x1280
 // afirmación sobre NUESTROS precios — mientras NHILOS no esté inscrita no recauda
 // IVA, así que "incluido", "aparte" y "se agrega" son falsos y verificables por el
 // comprador. Tampoco "netos": es la misma promesa con otra palabra.
+// Alcance: SOLO el IVA de nuestros precios. El IVA del cliente (app, capturas,
+// régimen cuota fija o general) es un dato verdadero de su operación y no se toca.
 test("S9: la página no afirma nada sobre IVA en sus precios", () => {
   const plain = vis.replace(/<[^>]+>/g, " ");
   assert.equal(/\bIVA\b/.test(plain), false, "el texto visible no puede hablar de IVA");

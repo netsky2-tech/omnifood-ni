@@ -281,6 +281,16 @@ Lecturas de éxito al checkpoint de 28 días (coincide con el primer checkpoint 
 - **Title (≤60):** `Precios de NHILOS POS en Nicaragua · Planes desde US$49`
 - **Description (≤155):** `Esencial US$49, Operación US$89 y Pro US$149 al mes. Setups desde US$149. Suscripción por negocio, hardware aparte. Cotiza tu NHILOS POS.`
 
+### 2.9 Regla de impuestos: lo nuestro, no lo del cliente
+
+**Ninguna página publica afirmaciones sobre IVA en NUESTROS precios** — ni "IVA incluido", ni "IVA aparte", ni "más IVA", ni "precios netos". Mientras NHILOS no esté inscrita como recaudador, no cobra IVA: esas formulaciones son falsas, y "neto" es la misma promesa con otra palabra. El precio publicado es la cifra que se cobra.
+
+**Alcance — solo nuestro lado.** Aclaración del fundador, verbatim: *"es solo referente al IVA de nuestro lado; en el app, las capturas y demás es válido porque corresponde al cliente y al régimen si es cuota fija o régimen general. Solo es nuestro pricing/servicio."* Esta regla **no toca el producto**: el módulo fiscal calcula y muestra el IVA del negocio que factura —recaudado, neto a pagar, notas de crédito— porque esa es la obligación del contribuyente según el régimen en que tribute, no la nuestra. Tampoco tocan sus capturas ni sus `alt`: el IVA que aparece ahí es un dato verdadero del cliente y no debe "corregirse".
+
+**Excepción declarada en las guardias.** S9 prohíbe la palabra en el texto visible y en el JSON-LD de estas tres páginas, y la frase de claim en todo el archivo; el `alt`/`title` de una captura puede nombrar IVA cuando la pantalla real lo muestra (verificado: *IVA Recaudado C$2,108.25* en el módulo Fiscal). Una página futura que explique el régimen del cliente (p. ej. `/facturacion-dgi/`) declara su propia versión de esta regla en su suite, con el mismo criterio: claim sobre precios prohibido, dato del cliente permitido.
+
+Cuando NHILOS se inscriba, esta regla se reemplaza en la misma sesión en que cambie el estatus, y el texto nuevo se justifica contra el comprobante fiscal real.
+
 ## 3. Brief — `/software-pos/` (hub, G2 — término cabeza)
 
 > **Escrito 2026-11-18.** El hub no es un home más largo: quien llega ya aceptó que necesita un sistema y está resolviendo **si esta categoría de producto resuelve su operación**. El hub responde tres cosas y se aparta: qué hace un POS por un negocio nicaragüense, cuál de las dos formas de operación es la suya, y a dónde ir después. El detalle de método es de los hijos; el hub orienta.
