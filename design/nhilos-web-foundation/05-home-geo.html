@@ -228,6 +228,10 @@
       .hilo::before { display: block; }
       .hilo-step { flex: none; width: auto; padding-inline: 0; }
     }
+    /* Los enlaces de las tarjetas de segmento: afiliados al sistema de tokens;
+       sin ellos el <a> heredaría el color del texto y se vería como texto plano. */
+    .seg-card a { color: var(--web-emerald-700); font-weight: 600; text-decoration: none; }
+    .seg-card a:hover { text-decoration: underline; }
   </style>
   <noscript>
     <style>
@@ -475,11 +479,11 @@
           <div class="seg-grid stagger">
             <div class="seg-card">
               <h3>Food parks</h3>
-              <p>Varias marcas en un solo park, cada puesto con su catálogo y su cobro.</p>
+              <p>Varias marcas en un solo park, cada puesto con su catálogo y su cobro. <a href="/software-pos/food-parks/">software para food park</a>.</p>
             </div>
             <div class="seg-card">
               <h3>Restaurantes</h3>
-              <p>Velocidad en mostrador y mesa, modificadores rápidos, arqueos por turno.</p>
+              <p>Velocidad en mostrador y mesa, modificadores rápidos, arqueos por turno. <a href="/software-pos/restaurantes/">sistema POS para restaurante</a>.</p>
             </div>
             <div class="seg-card">
               <h3>Cafeterías</h3>
@@ -766,7 +770,7 @@
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a class="wordmark" href="#inicio"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <a class="wordmark" href="/"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
           <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
           <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
           <p class="footer-contact">
@@ -780,31 +784,28 @@
           </div>
         </div>
         <div>
-          <h3 class="footer-col-title">Producto</h4>
+          <h3 class="footer-col-title">Producto</h3>
           <ul class="footer-list">
-            <li><a href="#que-es">¿Qué es NHILOS POS?</a></li>
-            <li><a href="#offline">Operación sin internet</a></li>
-            <li><a href="#fiscal">Facturación DT 09-2007</a></li>
-            <li><a href="#inventario">Inventario y kardex</a></li>
-            <li><a href="#segmentos">Segmentos</a></li>
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li><a href="/software-pos/sin-internet/">Sin internet</a></li>
+            <li><a href="/precios/">Precios</a></li>
+            <li><a href="/facturacion-dgi/">Facturación DGI</a></li>
+            <li><a href="/inventario/">Inventario</a></li>
           </ul>
         </div>
         <div>
-          <h3 class="footer-col-title">Empresa</h4>
+          <h3 class="footer-col-title">Segmentos</h3>
           <ul class="footer-list">
-            <li><a href="#precios">Precios y cotización</a></li>
-            <li><a href="#demo">Solicitar una demo</a></li>
-            <li><a href="#faq">Preguntas frecuentes</a></li>
+            <li><a href="/software-pos/restaurantes/">Restaurantes</a></li>
+            <li><a href="/software-pos/food-parks/">Food parks</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Contacto</h3>
+          <ul class="footer-list">
             <li><a href="https://wa.me/50581948526">WhatsApp directo</a></li>
-          </ul>
-        </div>
-        <div>
-          <h3 class="footer-col-title">Legal &amp; DGI</h4>
-          <ul class="footer-list">
-            <li><a href="#fiscal">Mecánica normativa DT 09-2007</a></li>
-            <li><a href="#fiscal">Correlativos inalterables</a></li>
-            <li><a href="#fiscal">Anulación con motivo auditado</a></li>
-            <li><a href="#precios">Cotización según operación</a></li>
+            <li><a href="/demo/">Solicitar una demo</a></li>
           </ul>
         </div>
       </div>
