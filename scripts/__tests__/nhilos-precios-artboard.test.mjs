@@ -12,6 +12,16 @@ const ART = path.join(ROOT, "design/nhilos-web-foundation/07-precios.html");
 const HOME = path.join(ROOT, "design/nhilos-web-foundation/05-home-geo.html");
 const FINANCE = path.join(ROOT, "docs/finance/estrategia_precios_nhilos_pos_v1.md");
 const BUILD = path.join(ROOT, "scripts/build-nhilos-web.mjs");
+
+// Route registry, parsed from the PAGES array of the build script: a route is
+// linkable exactly when it ships there. The parse is guarded (exactly nine
+// routes) so a broken regex cannot silently empty the allowlists below.
+const PUBLISHED_ROUTES = (() => {
+  const buildSrc = fs.readFileSync(BUILD, "utf8");
+  const urls = [...buildSrc.matchAll(/source:\s*(?:"[^"]+"|\bENTRY\b)[\s\S]*?url:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(urls.length, 9, "the build script must declare exactly 9 published routes");
+  return new Set(urls);
+})();
 const SITE_CSS = path.join(ROOT, "design/nhilos-web-foundation/assets/site.css");
 
 const src = fs.readFileSync(ART, "utf8");
@@ -203,12 +213,12 @@ test("B5: all in-page anchors resolve", () => {
   for (const m of vis.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.has(m[1]), m[1]);
 });
 
-// Sin enlaces muertos: solo páginas existentes (/, /software-pos/, /precios/) + anchors.
-// Hijas pendientes (/demo/, /facturacion-dgi/, /inventario/): texto plano + comentario, nunca href.
+// Sin enlaces muertos: toda ruta interna debe existir en el registro del build
+// (PUBLISHED_ROUTES). Pendiente (/software-pos/hardware/): texto plano + comentario, nunca href.
 test("links: no dead hrefs; pending pages are plain text with a comment, never hrefs", () => {
-  const allowedInternal = new Set(["/", "/precios/", "/software-pos/"]);
+  const allowedInternal = PUBLISHED_ROUTES;
   for (const m of vis.matchAll(/href="(\/[^"]*)"/g)) assert.ok(allowedInternal.has(m[1]), `unexpected internal href: ${m[1]}`);
-  for (const pending of ["/demo/", "/facturacion-dgi/", "/inventario/", "/software-pos/hardware/"]) {
+  for (const pending of ["/software-pos/hardware/"]) {
     assert.equal(vis.includes(`href="${pending}"`), false, `href to unpublished page ${pending}`);
     assert.match(src, new RegExp(`<!--[^>]*${pending.replace(/\//g, "\\/")}[^>]*-->`), `${pending} must be declared pending in a comment`);
   }

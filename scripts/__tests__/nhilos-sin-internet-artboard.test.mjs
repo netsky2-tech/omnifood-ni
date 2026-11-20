@@ -11,6 +11,16 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..",
 const ART = path.join(ROOT, "design/nhilos-web-foundation/11-sin-internet.html");
 const MEDIA_DIR = path.join(ROOT, "design/nhilos-web-foundation/media");
 const BUILD = path.join(ROOT, "scripts/build-nhilos-web.mjs");
+
+// Route registry, parsed from the PAGES array of the build script. The parse is
+// guarded (exactly nine routes) so a broken regex cannot silently weaken the
+// pending-route assertions below.
+const PUBLISHED_ROUTES = (() => {
+  const buildSrc = fs.readFileSync(BUILD, "utf8");
+  const urls = [...buildSrc.matchAll(/source:\s*(?:"[^"]+"|\bENTRY\b)[\s\S]*?url:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(urls.length, 9, "the build script must declare exactly 9 published routes");
+  return new Set(urls);
+})();
 const DESIGN_JSON = path.join(ROOT, "design/nhilos-web-foundation/design.json");
 const SITE_CSS = path.join(ROOT, "design/nhilos-web-foundation/assets/site.css");
 
@@ -397,7 +407,9 @@ test("G26 (S14/S15/S16): outbound links, 3-level BreadcrumbList, 5 events, Whats
   for (const route of ['href="/"', 'href="/software-pos/"', 'href="/facturacion-dgi/"', 'href="/precios/"', 'href="/demo/"']) {
     assert.ok(vis.includes(route), `missing outbound link ${route}`);
   }
-  for (const pending of ["/software-pos/restaurantes/", "/software-pos/food-parks/", "/software-pos/hardware/"]) {
+  // /software-pos/restaurantes/ y /software-pos/food-parks/ ya se publicaron: dejaron
+  // la lista de pendientes. Sigue vetado /software-pos/hardware/.
+  for (const pending of ["/software-pos/hardware/"]) {
     assert.ok(!new RegExp(`href="${pending.replace(/\//g, "\\/")}"`).test(vis), `pending route ${pending} must not be a live link`);
     assert.ok(src.includes(pending), `pending route ${pending} must be documented as comment/plain text`);
   }

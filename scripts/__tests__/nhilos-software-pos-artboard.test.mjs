@@ -13,6 +13,16 @@ const ART = path.join(ROOT, "design/nhilos-web-foundation/06-software-pos.html")
 const MEDIA = path.join(ROOT, "design/nhilos-web-foundation");
 const BUILD = path.join(ROOT, "scripts/build-nhilos-web.mjs");
 
+// Route registry, parsed from the PAGES array of the build script: a route is
+// linkable exactly when it ships there. The parse is guarded (exactly nine
+// routes) so a broken regex cannot silently empty the allowlist below.
+const PUBLISHED_ROUTES = (() => {
+  const buildSrc = fs.readFileSync(BUILD, "utf8");
+  const urls = [...buildSrc.matchAll(/source:\s*(?:"[^"]+"|\bENTRY\b)[\s\S]*?url:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(urls.length, 9, "the build script must declare exactly 9 published routes");
+  return new Set(urls);
+})();
+
 const src = fs.readFileSync(ART, "utf8");
 const body = src.split("<body>")[1];
 const vis = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<!--[\s\S]*?-->/g, "");
@@ -146,11 +156,14 @@ test("B5: all in-page anchors resolve", () => {
   for (const m of vis.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.has(m[1]), m[1]);
 });
 
-// Sin enlaces muertos: solo URLs reales publicadas; cero hrefs a hijos no publicados
+// Sin enlaces muertos: toda ruta interna debe existir en el registro del build
+// (PUBLISHED_ROUTES); cero hrefs a los hijos del hub que siguen sin publicarse
+// (comida-rapida, bares, caja, multisucursal, hardware). La regex sigue siendo la
+// guardia que impide enlazar una ruta futura que aún no existe.
 test("links: no dead hrefs; hub children are never linked before they exist", () => {
-  const allowedInternal = new Set(["/", "/precios/", "/facturacion-dgi/", "/inventario/", "/demo/"]);
+  const allowedInternal = PUBLISHED_ROUTES;
   for (const m of vis.matchAll(/href="(\/[^"]*)"/g)) assert.ok(allowedInternal.has(m[1]), `unexpected internal href: ${m[1]}`);
-  assert.equal(/href="\/software-pos\/(?!index)/.test(vis), false, "href to an unpublished hub child");
+  assert.equal(/href="\/software-pos\/(comida-rapida|bares|caja|multisucursal|hardware)\//.test(vis), false, "href to an unpublished hub child");
   const allowedExternal = new Set([
     "https://wa.me/50581948526",
     "https://www.instagram.com/nhilosapp/",

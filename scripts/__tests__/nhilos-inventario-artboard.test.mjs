@@ -11,6 +11,16 @@ const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..",
 const ART = path.join(ROOT, "design/nhilos-web-foundation/09-inventario.html");
 const PRECIOS = path.join(ROOT, "design/nhilos-web-foundation/07-precios.html");
 const BUILD = path.join(ROOT, "scripts/build-nhilos-web.mjs");
+
+// Route registry, parsed from the PAGES array of the build script: a route is
+// linkable exactly when it ships there. The parse is guarded (exactly nine
+// routes) so a broken regex cannot silently empty the allowlist below.
+const PUBLISHED_ROUTES = (() => {
+  const buildSrc = fs.readFileSync(BUILD, "utf8");
+  const urls = [...buildSrc.matchAll(/source:\s*(?:"[^"]+"|\bENTRY\b)[\s\S]*?url:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(urls.length, 9, "the build script must declare exactly 9 published routes");
+  return new Set(urls);
+})();
 const DESIGN_JSON = path.join(ROOT, "design/nhilos-web-foundation/design.json");
 const SITE_CSS = path.join(ROOT, "design/nhilos-web-foundation/assets/site.css");
 
@@ -457,15 +467,15 @@ test("G26 (S1/S14/S15/S16): PAGES, design.json, WhatsApp, events, BreadcrumbList
   assert.equal(bc.itemListElement[0].name, "Inicio");
   assert.equal(bc.itemListElement[1].name, "Inventario");
 
-  // Internal links: only published pages (/, /software-pos/, /precios/, /facturacion-dgi/); pending pages never href
-  const allowedInternal = new Set(["/", "/software-pos/", "/precios/", "/facturacion-dgi/"]);
+  // Internal links: only routes in the build registry (PUBLISHED_ROUTES); pending pages never href
+  const allowedInternal = PUBLISHED_ROUTES;
   for (const m of vis.matchAll(/href="(\/[^"]*)"/g)) {
     assert.ok(allowedInternal.has(m[1]), `unexpected internal href: ${m[1]}`);
   }
   assert.ok(vis.includes('href="/facturacion-dgi/"'), "missing link to /facturacion-dgi/");
   assert.ok(vis.includes('href="/software-pos/"'), "missing link to /software-pos/");
   assert.ok(vis.includes('href="/precios/"'), "missing link to /precios/");
-  for (const pending of ["/demo/", "/inventario/restaurantes/", "/inventario/food-parks/", "/recursos/merma/", "/recursos/costeo-recetas/"]) {
+  for (const pending of ["/inventario/restaurantes/", "/inventario/food-parks/", "/recursos/merma/", "/recursos/costeo-recetas/"]) {
     assert.equal(vis.includes(`href="${pending}"`), false, `dead href to unpublished page: ${pending}`);
     assert.match(src, new RegExp(`<!--[^>]*${pending.replace(/\//g, "\\/")}[^>]*-->`), `pending page ${pending} must be declared in comment`);
   }

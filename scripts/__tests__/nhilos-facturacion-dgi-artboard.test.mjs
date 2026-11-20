@@ -10,6 +10,16 @@ import path from "node:path";
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
 const ART = path.join(ROOT, "design/nhilos-web-foundation/08-facturacion-dgi.html");
 const BUILD = path.join(ROOT, "scripts/build-nhilos-web.mjs");
+
+// Route registry, parsed from the PAGES array of the build script: a route is
+// linkable exactly when it ships there. The parse is guarded (exactly nine
+// routes) so a broken regex cannot silently empty the allowlist below.
+const PUBLISHED_ROUTES = (() => {
+  const buildSrc = fs.readFileSync(BUILD, "utf8");
+  const urls = [...buildSrc.matchAll(/source:\s*(?:"[^"]+"|\bENTRY\b)[\s\S]*?url:\s*"([^"]+)"/g)].map((m) => m[1]);
+  assert.equal(urls.length, 9, "the build script must declare exactly 9 published routes");
+  return new Set(urls);
+})();
 const DESIGN_JSON = path.join(ROOT, "design/nhilos-web-foundation/design.json");
 const SITE_CSS = path.join(ROOT, "design/nhilos-web-foundation/assets/site.css");
 const CLAIM_AUDIT = path.join(ROOT, "docs/nhilos/branding/claims/product_claim_audit_od02_v1.3.md");
@@ -463,14 +473,14 @@ test("G25 (S13/S14/S15): WhatsApp, measurement events, BreadcrumbList, Organizat
   assert.equal(bc.itemListElement[0].name, "Inicio");
   assert.equal(bc.itemListElement[1].name, "Facturación DGI");
 
-  // Internal links: only published pages (/, /software-pos/, /precios/); pending pages never href
-  const allowedInternal = new Set(["/", "/software-pos/", "/precios/"]);
+  // Internal links: only routes in the build registry (PUBLISHED_ROUTES); pending pages never href
+  const allowedInternal = PUBLISHED_ROUTES;
   for (const m of vis.matchAll(/href="(\/[^"]*)"/g)) {
     assert.ok(allowedInternal.has(m[1]), `unexpected internal href: ${m[1]}`);
   }
   assert.ok(vis.includes('href="/precios/"'), "missing link to /precios/");
   assert.ok(vis.includes('href="/software-pos/"'), "missing link to /software-pos/");
-  for (const pending of ["/inventario/", "/demo/", "/software-pos/sin-internet/", "/facturacion-dgi/restaurantes/", "/facturacion-dgi/como-anular-factura-vet/"]) {
+  for (const pending of ["/facturacion-dgi/restaurantes/", "/facturacion-dgi/como-anular-factura-vet/"]) {
     assert.equal(vis.includes(`href="${pending}"`), false, `dead href to unpublished page: ${pending}`);
     assert.match(src, new RegExp(`<!--[^>]*${pending.replace(/\//g, "\\/")}[^>]*-->`), `pending page ${pending} must be noted in HTML comment`);
   }
