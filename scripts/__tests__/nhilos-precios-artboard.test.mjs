@@ -300,3 +300,25 @@ test("S8: precios registered in PAGES with its canonical url", () => {
   const buildSrc = fs.readFileSync(BUILD, "utf8");
   assert.match(buildSrc, /source: "07-precios\.html", out: "precios\/index\.html", url: "\/precios\/"/);
 });
+
+// El IVA del cliente es un dato real de su operación: el módulo fiscal lo calcula,
+// la pantalla lo muestra y el alt puede nombrarlo. Lo que no puede existir es una
+// afirmación sobre NUESTROS precios — mientras NHILOS no esté inscrita no recauda
+// IVA, así que "incluido", "aparte" y "se agrega" son falsos y verificables por el
+// comprador. Tampoco "netos": es la misma promesa con otra palabra.
+test("S9: la página no afirma nada sobre IVA en sus precios", () => {
+  const plain = vis.replace(/<[^>]+>/g, " ");
+  assert.equal(/\bIVA\b/.test(plain), false, "el texto visible no puede hablar de IVA");
+  const jsonLd = (src.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/) || [])[1] || "";
+  assert.equal(/\bIVA\b/.test(jsonLd), false, "el schema no puede hablar de IVA");
+  assert.equal(
+    /IVA\s+(incluido|aparte)|incluye(?:n)?\s+IVA|\bel\s+IVA\b|más\s+IVA/i.test(src),
+    false,
+    "ninguna afirmación de IVA sobre precios es verdadera hoy",
+  );
+  assert.equal(
+    /(?:precios?|dólares|USD)\s+netos?\b/i.test(src),
+    false,
+    "'neto' promete un impuesto que no cobramos",
+  );
+});

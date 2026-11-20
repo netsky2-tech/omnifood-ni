@@ -184,7 +184,7 @@ Contenido: keyword exacta + un renglón — precios públicos, sin llamar para s
 
 #### H2: `¿Cuánto cuesta NHILOS POS?`
 
-Contenido: respuesta directa en las primeras líneas — Esencial US$49/mes con setup US$149, Operación US$89 con setup US$250, Pro US$149 con setup US$450; Enterprise por cotización. Suscripción mensual por negocio; precios netos en USD con referencia BCN, IVA aparte. *Por qué: es la pregunta #1 del avatar ("¿Cuánto al mes?") y candidato a featured snippet con la pregunta exacta; quien escanea decide en 10 segundos si sigue leyendo.*
+Contenido: respuesta directa en las primeras líneas — Esencial US$49/mes con setup US$149, Operación US$89 con setup US$250, Pro US$149 con setup US$450; Enterprise por cotización. Suscripción mensual por negocio; precios en USD con referencia BCN para el cobro en córdobas. *Por qué: es la pregunta #1 del avatar ("¿Cuánto al mes?") y candidato a featured snippet con la pregunta exacta; quien escanea decide en 10 segundos si sigue leyendo.*
 
 #### H2: `Planes y precios: qué incluye cada uno`
 
@@ -232,7 +232,7 @@ Contenido: Esencial es la entrada real, no un señuelo — se empieza en modo si
 
 #### H2: `Preguntas frecuentes sobre los precios de NHILOS POS`
 
-Contenido: acordeón con schema `FAQPage` sobre las preguntas exactas — ¿Cuánto cuesta NHILOS POS al mes?, ¿El precio es por negocio o por terminal? (por negocio), ¿Qué incluye el setup y por qué se cobra aparte?, ¿Puedo pagar en córdobas? (precios en USD con referencia BCN, netos, IVA aparte), ¿Hay descuentos o promociones? (no se publican descuentos ni urgencia; la condición final sale de la cotización), ¿Qué pasa si dejo de pagar?, ¿Necesito comprar equipo? *Por qué: el patrón FAQ ya captura snippets en el cluster (home); las preguntas de precio repetidas en WhatsApp se responden una vez aquí.*
+Contenido: acordeón con schema `FAQPage` sobre las preguntas exactas — ¿Cuánto cuesta NHILOS POS al mes?, ¿El precio es por negocio o por terminal? (por negocio), ¿Qué incluye el setup y por qué se cobra aparte?, ¿Puedo pagar en córdobas? (precios en USD; el cobro en córdobas usa la referencia BCN del día), ¿Hay descuentos o promociones? (no se publican descuentos ni urgencia; la condición final sale de la cotización), ¿Qué pasa si dejo de pagar?, ¿Necesito comprar equipo? *Por qué: el patrón FAQ ya captura snippets en el cluster (home); las preguntas de precio repetidas en WhatsApp se responden una vez aquí.*
 
 #### H2: `Cotiza NHILOS POS con tu operación real`
 
@@ -1341,3 +1341,8 @@ Toda página hija se construye con el proceso de 7 pasos de la guía SEO (avatar
 ### v2.1 — Auditoría de contenido de /precios/ (2026-11-19, fundador)
 
 Correcciones sobre la página publicada: H2 del setup de "es un casco" (palabra sin significado para el lector) a "¿Qué compra exactamente el setup?"; OmniFood Care es nombre interno del proyecto y no va en la página (ahora "plan de soporte extendido"); la regla de packs se publica como consejo de compra sin aritmética de totales (el "total US$88" sonaba a doble cobro); terminal integrada se describe por lo que el comprador recibe, no por el estado del roadmap (#983); "dicho tal cual" eliminado (narración de sitio); la comparación con el POS barato se reescribe como escenarios de riesgo, no como regaño. Guardia S6 afinada: la impresora integrada de la terminal física es hardware vendido y se puede nombrar; lo vetado es prometer impresión externa (#983).
+
+### v2.3 — Sin afirmaciones de IVA (2026-11-19, fundador)
+
+NHILOS no está inscrita como recaudador de IVA, así que ni "IVA incluido" ni "IVA aparte" son verdad: se retiraron las seis afirmaciones que había (cinco en `/precios/`, una en la home) y "netos" salió con ellas, porque es la misma promesa con otra palabra. Lo que queda es el hecho útil: precios en USD y, para el cobro en córdobas, la referencia del BCN del día. Regla permanente en §2.9 con su excepción declarada (el `alt` de la captura fiscal, donde el IVA es dato del cliente). Guardia S9 en los tres suites, probada en RED contra los seis textos retirados.
+
