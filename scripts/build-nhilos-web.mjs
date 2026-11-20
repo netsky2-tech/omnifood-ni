@@ -108,11 +108,12 @@ for (const file of walk(path.join(SOURCE, ASSETS_DIR))) {
 
 for (const page of PAGES) {
   let html = readFileSync(path.join(SOURCE, page.source), "utf8");
-  // media/ y fonts/ viven en la raíz del dominio. Una referencia relativa en una
-  // página hija (/software-pos/) resuelve contra la URL de la página y da 404 —
-  // así murieron los dos clips del hub en producción sin que ninguna prueba lo
-  // viera. Absoluta en todas las páginas, raíz incluida, para que no vuelva.
-  html = html.replace(/(\s(?:src|poster|href)=")(media|fonts)\//g, "$1/$2/");
+  // media/, fonts/ y assets/ viven en la raíz del dominio. Una referencia relativa
+  // en una página hija (/software-pos/) resuelve contra la URL de la página y da
+  // 404 — así murieron los dos clips del hub y así la hoja de estilos del hub se
+  // sirvió como text/html durante días. Absoluta en todas las páginas, raíz
+  // incluida, para que no vuelva.
+  html = html.replace(/(\s(?:src|poster|href)=")(media|fonts|assets)\//g, "$1/$2/");
   for (const [from, to] of hashedAssets) {
     html = html.replaceAll(`"${from}"`, `"${to}"`);
     // Las páginas que no viven en la raíz (p. ej. /software-pos/) referencian
@@ -121,6 +122,18 @@ for (const page of PAGES) {
   }
   const target = path.join(OUTPUT, page.out);
   mkdirSync(path.dirname(target), { recursive: true });
+  // Guardia de clase: una página publicada no puede dejar NINGUNA referencia
+  // relativa a assets/, media/ ni fonts/. El navegador la resuelve contra su
+  // propia URL; si la página vive en un subdirectorio, el servidor responde HTML
+  // con 404 y el recurso muere en silencio (una hoja de estilos servida como
+  // text/html desestiliza la página entera).
+  const relativeRefs = [...html.matchAll(/\s(?:src|poster|href)="((?:assets|media|fonts)\/[^"]*)"/g)];
+  if (relativeRefs.length > 0) {
+    fail(
+      `${page.out} keeps relative references that break under a subdirectory: ` +
+        relativeRefs.map((m) => m[1]).join(", "),
+    );
+  }
   writeFileSync(target, html);
 }
 copyFileSync(path.join(SOURCE, NOT_FOUND), path.join(OUTPUT, NOT_FOUND));

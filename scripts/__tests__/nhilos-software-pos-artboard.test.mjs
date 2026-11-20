@@ -239,6 +239,26 @@ test("B1b: every referenced media file exists on disk and is tracked by git", ()
   }
 });
 
+// B1c: la página PUBLICADA se mira como la mira el navegador. Una referencia
+// relativa en una página hija (/software-pos/) resuelve contra su propia URL: el
+// servidor responde su 404 en HTML y el recurso muere en silencio. Así estuvo la
+// hoja de estilos del hub servida como text/html, desestilizando la página entera.
+test("B1c: the published hub page references its assets from the root, and they exist", () => {
+  execSync("node scripts/build-nhilos-web.mjs", { cwd: ROOT, stdio: "pipe" });
+  const dist = path.join(ROOT, "dist/nhilos-web");
+  const built = fs.readFileSync(path.join(dist, "software-pos/index.html"), "utf8");
+  const refs = [...built.matchAll(/\s(?:src|poster|href)="(\/(?:assets|media|fonts)\/[^"]*)"/g)].map((m) => m[1]);
+  assert.ok(refs.some((r) => r.endsWith(".css")), "the hub must publish its stylesheet from the domain root");
+  for (const ref of new Set(refs)) {
+    assert.ok(fs.existsSync(path.join(dist, ref)), `${ref} is requested from the root but not published there`);
+  }
+  assert.equal(
+    /(?:src|poster|href)="(?:assets|media|fonts)\//.test(built),
+    false,
+    "no relative asset reference may survive in a published page",
+  );
+});
+
 // B2: meta exacta del brief §3.8
 test("B2: title/description match brief §3.8 and canonical is the hub URL", () => {
   assert.equal(src.match(/<title>([^<]+)<\/title>/)[1], "Sistema POS en Nicaragua · NHILOS POS, venta local-first");
