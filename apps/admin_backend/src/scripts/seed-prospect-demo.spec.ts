@@ -692,5 +692,22 @@ describe('seed-prospect-demo unit & triangulation suite', () => {
         seedProspectDemo(baseConfig(), ctx.deps, { NODE_ENV: 'test' }),
       ).rejects.toThrow('Catalog seeding wrote 0 values');
     });
+
+    it('seeds complete DGI authorization metadata and contact fields in configureFiscalSetup', async () => {
+      const ctx = createMockOrchestrationContext();
+      await seedProspectDemo(baseConfig(), ctx.deps, { NODE_ENV: 'test' });
+
+      expect(ctx.mocks.configureFiscalSetup).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          dgiAuthorizationCode: 'DGI-DEMO-2026-001',
+          dgiAuthorizationIssuedAt: '2026-01-01',
+          dgiAuthorizationExpiresAt: '2027-12-31',
+          phone: '+505 8194 8526',
+          address: 'Managua, Nicaragua',
+        }),
+        expect.any(String),
+      );
+    });
   });
 });
