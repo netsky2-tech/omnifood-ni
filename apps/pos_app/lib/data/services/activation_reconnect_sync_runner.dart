@@ -360,6 +360,16 @@ class ActivationReconnectSyncRunner {
       targetStatus = 'ACTIVATED_WITH_WARNING';
     } else {
       targetStatus = 'FAILED';
+      final failureCode = finalizeResult.failureCode?.trim();
+      if (failureCode != null && failureCode.isNotEmpty) {
+        errors.add(
+          '$failureCode: La activación fue rechazada por el servidor.',
+        );
+      } else if (errors.isEmpty) {
+        errors.add(
+          'ACTIVATION_FINALIZE_REJECTED: La activación fue rechazada por el servidor.',
+        );
+      }
     }
 
     attempt = attempt.copyWith(

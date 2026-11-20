@@ -673,5 +673,21 @@ void main() {
       expect(message, isNot(contains('Revise la conexión')));
       expect(message, isNot(contains('SOME_UNKNOWN_BLOCKER_XYZ')));
     });
+
+    test('maps ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED to Spanish copy',
+        () {
+      final message = ActivationSessionViewModel.friendlyError([
+        'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED: La activación fue rechazada por el servidor.',
+      ]);
+      expect(message.trim(), isNotEmpty);
+      expect(message.toLowerCase(), contains('impresora'));
+      expect(message, isNot(contains('ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED')));
+    });
+
+    test('returns a non-empty fallback when rawErrors is empty (never blank red box)',
+        () {
+      final message = ActivationSessionViewModel.friendlyError(const []);
+      expect(message.trim(), isNotEmpty);
+    });
   });
 }
