@@ -275,7 +275,7 @@ test("G16 (S12): audited recipes clip exists on disk with poster, dimensions, an
   assert.ok(videoTag.includes(`src="media/${clip}"`), "video tag must reference audited recipes clip");
   assert.ok(videoTag.includes(`poster="media/${poster}"`), "video tag must reference audited poster");
   assert.ok(/width="1440"/.test(videoTag) && /height="900"/.test(videoTag), "video tag must declare width=1440 height=900");
-  assert.ok(/preload="metadata"/.test(videoTag), "video tag must use preload=metadata");
+  assert.ok(/preload="none"/.test(videoTag), "video tag must use preload=none: site.js owns the gated start");
   assert.ok(!/\bautoplay\b/i.test(videoTag), "video tag must not autoplay");
   assert.ok(txt(vis).includes("Grabación real del panel web · datos de demostración"), "missing mandatory demo-tag text");
 });

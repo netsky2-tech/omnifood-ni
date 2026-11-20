@@ -267,7 +267,7 @@ test("G16 (S13): sale clip metadata describes queue badge '2' and success bar, n
   assert.ok(blockLower.includes("pos_offline_venta_exitosa.30ccc3cc.mp4"), "must use audited sale video");
   assert.ok(blockLower.includes("pos_offline_venta_exitosa_poster.ea6487ab.webp"), "must use audited sale poster");
   assert.ok(!blockLower.includes("autoplay"), "video must not use autoplay attribute (S20)");
-  assert.ok(blockLower.includes('preload="metadata"'), "video must use preload='metadata' (S20)");
+  assert.ok(blockLower.includes('preload="none"'), "video must use preload='none': nothing downloads before the gated start (S20)");
   assert.ok(blockLower.includes("muted") && blockLower.includes("playsinline"), "video must be muted and playsinline");
   assert.ok(blockLower.includes("venta procesada con éxito"), "caption/label must reference 'Venta procesada con éxito'");
   assert.ok(blockLower.includes("cola") && blockLower.includes("2"), "caption/label must reference queue badge '2'");

@@ -163,6 +163,7 @@ function runSiteJsWithForm(controls) {
       hidden: false,
     },
     FormData: MockFormData,
+    navigator: { connection: undefined },
     setTimeout,
     requestAnimationFrame: (fn) => fn(),
     encodeURIComponent,

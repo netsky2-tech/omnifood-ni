@@ -156,6 +156,32 @@ for (const page of PAGES) {
     // assets con ruta absoluta; reescribir también esa forma con el nombre hasheado.
     html = html.replaceAll(`"/${from}"`, `"/${to}"`);
   }
+  // Los comentarios de autor no son contenido: viajaban al HTML público con marcas
+  // de trabajo interno ("pending route", rutas que aún no existen, recordatorios de
+  // guardia). Se eliminan del artefacto, no del fuente.
+  html = html.replace(/<!--(?!\[if)[\s\S]*?-->/g, "");
+
+  // Frase cortada: un enlace inline comentado deja la preposición colgando y el
+  // texto termina en "…se trabajan completos en." El comentario se veía en el
+  // fuente, el hueco en la página. Esta guardia lo mide sobre el texto visible.
+  const visible = html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&[a-z]+;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  // El límite se pide por espacio y no con \b: en JavaScript "ñ" no es carácter de
+  // palabra, así que \bal\. muerde dentro de "señal." y la guardia grita por una
+  // frase que está bien. Un falso positivo aquí cuesta credibilidad en cada build.
+  const dangling = [...visible.matchAll(
+    /(?:^|\s)((?:en|de|con|para|por|según|sin|desde|hacia|sobre|entre|al|del|como))\.(?=\s|$)/gu,
+  )].map((m) => `${m[1]}.`);
+  if (dangling.length > 0) {
+    fail(
+      `${page.out} cierra una frase con una preposición suelta (${[...new Set(dangling)].join(", ")}): ` +
+        `un enlace comentado dejó el hueco. Cierra la frase o enlaza una ruta publicada.`,
+    );
+  }
   const target = path.join(OUTPUT, page.out);
   mkdirSync(path.dirname(target), { recursive: true });
   // Guardia de clase: una página publicada no puede dejar NINGUNA referencia

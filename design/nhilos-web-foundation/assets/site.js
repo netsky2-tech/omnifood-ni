@@ -29,20 +29,40 @@
       assignStagger(document);
 
       /* ---- Hero: entrada secuenciada (badge -> h1 -> lead -> ctas -> bezel -> chips) ---- */
+      /* ---- Gate de conexión: un video que se va a abortar no arranca nunca ----
+         Con saveData o red lenta (2g/slow-2g) el video queda en su poster;
+         el usuario puede arrancarlo por su cuenta si la página ya tenía botón. */
+      /* nhilos-video-gate:start */
+      function nhilosVideoGate(conn) {
+        if (!conn) return true;
+        if (conn.saveData) return false;
+        var et = conn.effectiveType;
+        if (et === '2g' || et === 'slow-2g') return false;
+        return true;
+      }
+      /* nhilos-video-gate:end */
+      var videoGateOpen = nhilosVideoGate(navigator.connection || navigator.mozConnection || navigator.webkitConnection);
+
+      /* ---- Único punto de arranque: consulta el gate y prefers-reduced-motion ---- */
+      function tryPlay(v) {
+        if (reduced || !videoGateOpen) return;
+        if (v && v.paused) {
+          var p = v.play();
+          if (p && p.catch) p.catch(function () {});
+        }
+      }
+
       var heroVideo = document.querySelector('.hero video');
       function armHeroVideo() {
         // La media arranca cuando su contenedor terminó de entrar: nunca compite con la coreografía.
         setTimeout(function () {
-          if (heroVideo && heroVideo.paused) {
-            var p = heroVideo.play();
-            if (p && p.catch) p.catch(function () {});
-          }
+          tryPlay(heroVideo);
         }, 1150);
       }
       if (reduced || !('IntersectionObserver' in window)) {
         docEl.classList.add('hero-ready');
         // Con preferencia de movimiento reducido la media queda quieta en su primer frame.
-        if (heroVideo && !reduced && heroVideo.paused) { var pv = heroVideo.play(); if (pv && pv.catch) pv.catch(function () {}); }
+        if (heroVideo && !reduced) tryPlay(heroVideo);
         if (heroVideo && reduced) heroVideo.pause();
       } else {
         // Doble rAF: garantiza que el estado inicial pintado sea el pre-animación (sin flash).
@@ -69,7 +89,9 @@
         revealables.forEach(function (el) { io.observe(el); });
       }
 
-      /* ---- Videos: máximo uno activo en toda la página ---- */
+      /* ---- Videos: máximo uno activo en toda la página, arranque por intersección ----
+         Con preload="none" nada se descarga hasta que el video entra al viewport
+         y el gate de conexión lo autoriza. */
       var videos = Array.prototype.slice.call(document.querySelectorAll('video'));
       if (videos.length && 'IntersectionObserver' in window && !reduced) {
         var vio = new IntersectionObserver(function (entries) {
@@ -77,7 +99,7 @@
             var v = entry.target;
             if (entry.intersectionRatio >= 0.12) {
               videos.forEach(function (other) { if (other !== v && !other.paused) other.pause(); });
-              if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+              tryPlay(v);
             } else if (!v.paused) {
               v.pause();
             }

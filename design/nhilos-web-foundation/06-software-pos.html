@@ -154,10 +154,9 @@
 }
   </script>
 
-  <link rel="preload" href="/fonts/plus-jakarta-sans-700.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="/fonts/jetbrains-mono-500.woff2" as="font" type="font/woff2" crossorigin>
 
+  <link rel="preload" href="fonts/plus-jakarta-sans-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/site.css">
   <!-- Reglas exclusivas de esta página: solo patrones que el home no tiene.
        Todo consume tokens var(--*) de assets/site.css; sin hex, stacks ni sombras nuevos. -->
@@ -351,7 +350,7 @@
 
   <header class="site-header">
     <div class="container site-header-inner">
-      <a class="wordmark" href="/"><img src="/media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+      <a class="wordmark" href="/"><img src="/assets/logo-64.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
       <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
@@ -517,7 +516,7 @@
                  costo recalculado en Kardex (NIC 2). No muestra el descuento por venta: eso vive en el kardex.
                  Etiqueta "datos de demostración" obligatoria. -->
             <figure class="media-slot media-video capture-frame" data-media-slot="recetas-descuento-dashboard">
-              <video src="media/dsh_bom_recetas.13330051.mp4" poster="media/dsh_bom_recetas_poster.7fa0d248.webp" width="1440" height="900" muted loop playsinline preload="metadata" disablepictureinpicture title="NHILOS POS: recetas y BOM con costo por receta y costo recalculado en kardex al recibir un lote"></video>
+              <video src="media/dsh_bom_recetas.13330051.mp4" poster="media/dsh_bom_recetas_poster.7fa0d248.webp" width="1440" height="900" muted loop playsinline preload="none" disablepictureinpicture title="NHILOS POS: recetas y BOM con costo por receta y costo recalculado en kardex al recibir un lote"></video>
             </figure>
             <p class="demo-tag">Grabación real del panel de administración · datos de demostración</p>
           </div>
@@ -580,7 +579,7 @@
                      de cola en 2) es visible en toda la grabación y la venta queda en cola, sin sincronizar.
                      No muestra el momento de la reconexión. Etiqueta "datos de demostración" obligatoria. -->
                 <figure class="media-slot media-video device device-offline" data-media-slot="venta-offline-terminal">
-                  <video src="media/pos_offline_venta_exitosa.30ccc3cc.mp4" poster="media/pos_offline_venta_exitosa_poster.ea6487ab.webp" width="720" height="1544" muted loop playsinline preload="metadata" disablepictureinpicture title="NHILOS POS: cobro completándose con la red caída, la venta queda en cola"></video>
+                  <video src="media/pos_offline_venta_exitosa.30ccc3cc.mp4" poster="media/pos_offline_venta_exitosa_poster.ea6487ab.webp" width="720" height="1544" muted loop playsinline preload="none" disablepictureinpicture title="NHILOS POS: cobro completándose con la red caída, la venta queda en cola"></video>
                 </figure>
                 <p class="demo-tag">Grabación real de la terminal · datos de demostración</p>
               </div>
@@ -704,7 +703,7 @@
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a class="wordmark" href="/"><img src="/media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <a class="wordmark" href="/"><img src="/assets/logo-64.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
           <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
           <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
           <p class="footer-contact">

@@ -174,6 +174,8 @@
 }
   </script>
 
+  <link rel="preload" href="fonts/plus-jakarta-sans-latin-var.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-latin-var.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="assets/site.css">
 
   <style>
@@ -1019,7 +1021,7 @@
   <header class="site-header" id="inicio">
     <div class="container site-header-inner">
       <a class="wordmark" href="/" aria-label="NHILOS POS, ir al inicio">
-        <img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
+        <img src="assets/logo-64.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
         NHILOS <span class="pos">POS</span>
       </a>
       <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
@@ -1227,7 +1229,7 @@
             <div class="rst-op-card">
               <span class="rst-op-idx">04</span>
               <strong>Arqueo firmado por usuario</strong>
-              <p>Al cerrar turno, cada cajero declara su conteo y deja el arqueo firmado por usuario. El cierre de caja detallado se amplía en la guía de cierre de caja y arqueo<!-- pending route: /software-pos/caja/ -->.</p>
+              <p>Al cerrar turno, cada cajero declara su conteo y deja el arqueo firmado por usuario. El detalle del cierre queda en el reporte del turno.</p>
             </div>
           </div>
         </div>
@@ -1278,7 +1280,7 @@
                 muted
                 loop
                 playsinline
-                preload="metadata"
+                preload="none"
                 disablepictureinpicture
                 title="Pantalla Recetas y BOM de NHILOS POS: costo de Capuchino Vainilla 12oz pasando de C$24.50 tachado a C$20 tras recibir un lote de leche, con aviso Costo recalculado en Kardex (NIC 2)"
               ></video>
@@ -1299,7 +1301,7 @@
           <div class="rst-video-aside">
             <h4>Costo por plato para decidir tu menú a tiempo</h4>
             <p>La grabación muestra el recálculo automático en el panel web cuando se recibe un lote de leche: el costo de receta de Capuchino Vainilla 12oz pasa de C$24.50 tachado a C$20 frente a su precio de carta de C$115.00. Lo que ves aquí es el recálculo del costo, no la pantalla de venta en caja.</p>
-            <p>Valuación, conteos físicos y control de merma se trabajan completos en<!-- pending route: /inventario/restaurantes/ -->.</p>
+            <p>Valuación, conteos físicos y control de merma se trabajan completos en <a href="/inventario/">el control de inventario</a>.</p>
             <a class="rst-video-link" href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>
           </div>
         </div>
@@ -1397,7 +1399,7 @@
         </div>
 
         <div class="rst-fiscal-split">
-          <p><strong>División clara:</strong> NHILOS sostiene la mecánica normativa del sistema; la autorización ante la DGI (carta, código y numeración) la posee tu negocio como contribuyente<!-- pending route: /facturacion-dgi/restaurantes/ -->.</p>
+          <p><strong>División clara:</strong> NHILOS sostiene la mecánica normativa del sistema; la autorización ante la DGI (carta, código y numeración) la posee tu negocio como contribuyente. La mecánica completa se explica en <a href="/facturacion-dgi/">facturación DGI</a>.</p>
           <a class="rst-video-link" href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>
         </div>
       </div>
@@ -1423,7 +1425,7 @@
               <li>Cuántas cajas o terminales operan en tu local.</li>
               <li>Si arrancas en modo simple o con recetas y descuento de insumos desde el inicio.</li>
               <li>El alcance de la implementación y capacitación para tu equipo, detallado en cada plan público.</li>
-              <li>Si más adelante abres otros locales, se evalúa aparte en su alcance correspondiente<!-- pending route: /software-pos/multisucursal/ -->.</li>
+              <li>Si más adelante abres otros locales, se evalúa aparte en su alcance correspondiente.</li>
             </ul>
           </div>
         </div>
@@ -1504,7 +1506,7 @@
     <div class="container">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a class="wordmark" href="/"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <a class="wordmark" href="/"><img src="assets/logo-64.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
           <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
           <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, comiderías, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
           <p class="footer-contact">

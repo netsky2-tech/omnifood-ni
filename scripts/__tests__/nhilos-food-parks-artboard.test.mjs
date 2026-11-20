@@ -376,7 +376,7 @@ test("G18 (S16.18): zero catálogo hidratado, outbox, or visible BOM", () => {
 });
 
 // G19 (S11 / S16.19): Audited media exist on disk with dimensions, poster, no autoplay, demo-tag
-test("G19 (S11): audited media exist with dimensions, poster, preload=metadata, no autoplay, demo-tag", () => {
+test("G19 (S11): audited media exist with dimensions, poster, preload=none, no autoplay, demo-tag", () => {
   const { vis } = loadPage();
   const requiredFiles = [
     "dsh_bom_recetas.13330051.mp4",
@@ -392,7 +392,7 @@ test("G19 (S11): audited media exist with dimensions, poster, preload=metadata, 
   const videoTags = [...vis.matchAll(/<video\b[^>]*>/g)].map((m) => m[0]);
   assert.equal(videoTags.length, 1, "expected exactly 1 audited video element");
   assert.match(videoTags[0], /poster="media\/dsh_bom_recetas_poster\.7fa0d248\.webp"/);
-  assert.match(videoTags[0], /preload="metadata"/);
+  assert.match(videoTags[0], /preload="none"/, "video must ship preload=none: site.js starts it on intersection");
   assert.match(videoTags[0], /width="\d+"/);
   assert.match(videoTags[0], /height="\d+"/);
   assert.doesNotMatch(videoTags[0], /\bautoplay\b/i, "video must not autoplay");

@@ -198,7 +198,7 @@ test("C1/C2: video markup is autoplay-free, posterred, and demo-labelled; poster
   for (const m of vis.matchAll(/<video\b[^>]*>/g)) {
     assert.match(m[0], /muted/);
     assert.match(m[0], /playsinline/);
-    assert.match(m[0], /preload="metadata"/);
+    assert.match(m[0], /preload="none"/);
     assert.match(m[0], /poster="media\//);
     assert.equal(/autoplay/.test(m[0]), false, "no autoplay: site.js owns playback");
     const poster = (m[0].match(/poster="([^"]+)"/) || [])[1];
