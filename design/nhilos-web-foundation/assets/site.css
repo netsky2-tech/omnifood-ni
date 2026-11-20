@@ -5,14 +5,14 @@
     /* ==========================================================
        NHILOS Web Design System — tokens (design/system.md v1.0)
        ========================================================== */
-    @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/plus-jakarta-sans-600.woff2') format('woff2'); }
-    @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/plus-jakarta-sans-700.woff2') format('woff2'); }
-    @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url('fonts/plus-jakarta-sans-800.woff2') format('woff2'); }
-    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url('fonts/inter-400.woff2') format('woff2'); }
-    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/inter-500.woff2') format('woff2'); }
-    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url('fonts/inter-600.woff2') format('woff2'); }
-    @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('fonts/jetbrains-mono-500.woff2') format('woff2'); }
-    @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 700; font-display: swap; src: url('fonts/jetbrains-mono-700.woff2') format('woff2'); }
+    /* Una fuente por familia. Los nueve archivos anteriores eran tres binarios
+       idénticos repetidos por peso, y encima eran el slice vietnamita: el navegador
+       dibujaba 'A' y 'Ä' con la webfont y todo lo demás con la del sistema. Estos
+       tres declaran el eje completo, así que 400, 500, 600, 700 y 800 salen del
+       mismo archivo en lugar de pedir tres descargas de los mismos bytes. */
+    @font-face { font-family: 'Plus Jakarta Sans'; font-style: normal; font-weight: 200 800; font-display: swap; src: url('fonts/plus-jakarta-sans-latin-var.woff2') format('woff2'); }
+    @font-face { font-family: 'Inter'; font-style: normal; font-weight: 100 900; font-display: swap; src: url('fonts/inter-latin-var.woff2') format('woff2'); }
+    @font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 100 800; font-display: swap; src: url('fonts/jetbrains-mono-latin-var.woff2') format('woff2'); }
 
     :root {
       /* 3.1 Navy ramp */
