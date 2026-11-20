@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Software para food park en Nicaragua | NHILOS POS</title>
+  <meta name="description" content="Un sistema para todo el food park: cada puesto con su catálogo y su cobro, y la operación visible en el panel web. Pide una demo. NHILOS POS.">
+  <link rel="canonical" href="https://nhilospos.com/software-pos/food-parks/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_NI">
+  <meta property="og:site_name" content="NHILOS POS">
+  <meta property="og:title" content="Software para food park en Nicaragua | NHILOS POS">
+  <meta property="og:description" content="Un sistema para todo el food park: cada puesto con su catálogo y su cobro, y la operación visible en el panel web. Pide una demo. NHILOS POS.">
+  <meta property="og:url" content="https://nhilospos.com/software-pos/food-parks/">
+  <meta name="robots" content="index, follow">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="media/favicon-192.png">
+  <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+  <meta name="theme-color" content="#001829">
+
+  <!-- Social sharing -->
+  <meta property="og:image" content="https://nhilospos.com/media/og-home.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Terminal NHILOS POS en mano con la interfaz real del sistema de punto de venta">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Software para food park en Nicaragua | NHILOS POS">
+  <meta name="twitter:description" content="Un sistema para todo el food park: cada puesto con su catálogo y su cobro, y la operación visible en el panel web. Pide una demo. NHILOS POS.">
+  <meta name="twitter:image" content="https://nhilospos.com/media/og-home.jpg">
+
+  <!-- CLAIM GUARD (brief /software-pos/food-parks/ §6 + odd/tasks/nhilos-web-food-parks.md S1-S20):
+       1. Catalogo (S5b): el catalogo es uno y se organiza por puesto mediante categorias; sin catalogo ni inventario aislado por puesto.
+       2. Escala (S5c): abierto a parks de 3-4 puestos, patios familiares, plazas de comidas y food courts; sin lenguaje de cadena ni mall.
+       3. Administrador (S6.2): formula techo verbatim del home v1.8; sin vista consolidada ni dashboard de cadena.
+       4. Fiscal (S7/S8.6/L10): solo las dos estructuras soportadas; sin tercera estructura como capacidad; sin promesa de exportacion de libros.
+       5. Operacion (S8): sin caja compartida, sin coordinacion LAN entre terminales, sin KDS ni envio por red a cocina.
+       6. Evidencia (S11): media auditada con limite declarado; media-slot dos-puestos documentado sin capturas inventadas. -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://nhilospos.com/#organization",
+      "name": "NHILOS POS",
+      "url": "https://nhilospos.com/",
+      "description": "Sistema de punto de venta local-first para food parks, restaurantes, comiderías, cafeterías y comercios de mostrador en Nicaragua. Funciona sin internet, con mecánica de facturación conforme a la DT 09-2007 y control de inventario a la medida.",
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Managua"
+        },
+        {
+          "@type": "Country",
+          "name": "Nicaragua"
+        }
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "sales",
+        "telephone": "+505 8194 8526",
+        "availableLanguage": "Spanish",
+        "hoursAvailable": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "00:00",
+          "closes": "23:59"
+        }
+      },
+      "sameAs": [
+        "https://www.instagram.com/nhilosapp/",
+        "https://www.facebook.com/nhilosapp",
+        "https://www.tiktok.com/@nhilosapp"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://nhilospos.com/software-pos/food-parks/#breadcrumb",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Inicio",
+          "item": "https://nhilospos.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Software POS",
+          "item": "https://nhilospos.com/software-pos/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Food parks",
+          "item": "https://nhilospos.com/software-pos/food-parks/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://nhilospos.com/software-pos/food-parks/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "¿Cada puesto necesita su propio sistema?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No: en Nicaragua, NHILOS POS cubre el park bajo una suscripción como negocio cuando los puestos operan bajo la misma administración. El catálogo es uno y se organiza por puesto mediante categorías, con su propia terminal para cobrar cada sección; si cada locatario independiente factura con su propio RUC, contrata su propia suscripción y opera con su autorización."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Puede el administrador ver la operación del park?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, con NHILOS POS el administrador del park ve su operación desde el panel web, y las ventas de los puestos llegan al panel cuando la conexión está disponible. El acceso al portal del propietario queda habilitado al terminar la puesta en marcha, sin prometer paneles de múltiples cadenas ni reportes entre sucursales."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Un puesto que revende y una cocina pueden usar el mismo sistema?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí: en Nicaragua, NHILOS POS permite que puestos de reventa en modo simple y cocinas con recetas e insumos convivan dentro del mismo park. El control de ingredientes se activa por puesto y no obliga a todo el park a llevar recetas; el detalle completo está en control de inventario y kardex: recetas, insumos y merma."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué pasa con la facturación de cada puesto?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS aplica en cada comprobante de cada puesto la mecánica que exige la DT 09-2007: numeración consecutiva inalterable y anulación solo con motivo auditado. La autorización ante la DGI la posee siempre el contribuyente que emite, y la división completa se explica en mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Funciona sin internet?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí: en Nicaragua, cada terminal enrolada de NHILOS POS sigue cobrando cuando se cae la red siempre que quedó configurada con tu catálogo, emitiendo el ticket con su correlativo consecutivo y guardando cada venta para subirla en orden al reconectar. No hay comunicación entre terminales por red local, y los límites completos están en cómo sigue la venta sin internet: POS sin conexión."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cuánto cuesta para el park?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, la suscripción de NHILOS POS se cotiza por negocio y no por puesto ni por marca, mientras que las terminales adicionales se suman como complemento con enrolamiento. Los planes públicos, el alcance de la implementación y el detalle de terminales están en ver planes y precios de NHILOS POS."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="stylesheet" href="assets/site.css">
+
+  <style>
+    /* Patrones exclusivos de /software-pos/food-parks/ (fpk-*) sobre tokens de site.css */
+
+    /* ---- Hero oscuro con tablero arquitectonico del park ---- */
+    .fpk-hero {
+      background:
+        radial-gradient(640px 440px at 88% 14%, rgba(0, 191, 129, 0.14), transparent 72%),
+        radial-gradient(520px 360px at 10% 92%, rgba(0, 80, 122, 0.34), transparent 70%),
+        var(--web-navy-950);
+      color: var(--web-text-on-dark);
+      padding: var(--space-8) 0 var(--space-12);
+      border-bottom: 1px solid var(--web-border-dark);
+    }
+    .fpk-hero .breadcrumb {
+      margin-bottom: var(--space-6);
+      color: var(--web-text-on-dark-muted);
+      font-size: 0.85rem;
+    }
+    .fpk-hero .breadcrumb ol {
+      list-style: none;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0;
+      margin: 0;
+    }
+    .fpk-hero .breadcrumb li + li::before {
+      content: "/";
+      margin-right: 0.4rem;
+      color: rgba(255, 255, 255, 0.35);
+    }
+    .fpk-hero .breadcrumb a {
+      color: var(--web-text-on-dark-muted);
+      text-decoration: none;
+    }
+    .fpk-hero .breadcrumb a:hover {
+      color: var(--web-emerald-400);
+      text-decoration: underline;
+    }
+    .fpk-hero .breadcrumb [aria-current="page"] {
+      color: #FFFFFF;
+      font-weight: 500;
+    }
+    .fpk-hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.82fr);
+      gap: var(--space-10);
+      align-items: start;
+    }
+    .fpk-eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--web-emerald-400);
+      margin: 0 0 var(--space-3);
+    }
+    .fpk-hero h1 {
+      font-size: clamp(2rem, 3.6vw, 3rem);
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+      color: #FFFFFF;
+      margin: 0 0 var(--space-5);
+      max-width: 22ch;
+    }
+    .fpk-quick {
+      background: rgba(255, 255, 255, 0.045);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-left: 3px solid var(--web-emerald-500);
+      border-radius: var(--radius-md);
+      padding: var(--space-4) var(--space-5);
+      margin-bottom: var(--space-6);
+      max-width: 62ch;
+    }
+    .fpk-quick p {
+      margin: 0;
+      font-size: 1.02rem;
+      line-height: 1.62;
+      color: var(--web-text-on-dark);
+    }
+    .fpk-hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      align-items: center;
+    }
+    .fpk-hero-actions .btn {
+      min-height: 44px;
+    }
+
+    /* Tablero esquematico de puestos en hero (sin simular capturas) */
+    .fpk-board {
+      background: rgba(0, 24, 41, 0.72);
+      border: 1px solid var(--web-border-dark);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .fpk-board-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: var(--space-3);
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid var(--web-border-dark);
+    }
+    .fpk-board-title {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--web-emerald-400);
+    }
+    .fpk-board-sub {
+      font-size: 0.78rem;
+      color: var(--web-text-on-dark-muted);
+    }
+    .fpk-stall-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: var(--space-2) var(--space-3);
+      align-items: center;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-sm);
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .fpk-stall-name {
+      font-weight: 600;
+      font-size: 0.94rem;
+      color: #FFFFFF;
+    }
+    .fpk-stall-detail {
+      grid-column: 1 / -1;
+      font-size: 0.82rem;
+      color: var(--web-text-on-dark-muted);
+      line-height: 1.45;
+    }
+    .fpk-mode-tag {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 0.22rem 0.55rem;
+      border-radius: var(--radius-full);
+      white-space: nowrap;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      color: var(--web-text-on-dark);
+      background: rgba(255, 255, 255, 0.06);
+    }
+    .fpk-mode-tag.is-recipe {
+      border-color: rgba(0, 191, 129, 0.45);
+      color: var(--web-emerald-400);
+      background: rgba(0, 191, 129, 0.12);
+    }
+    .fpk-board-foot {
+      margin-top: var(--space-1);
+      padding-top: var(--space-3);
+      border-top: 1px dashed rgba(255, 255, 255, 0.18);
+      font-size: 0.82rem;
+      color: var(--web-text-on-dark-muted);
+      line-height: 1.5;
+    }
+    .fpk-board-foot strong {
+      color: #FFFFFF;
+      font-weight: 600;
+    }
+
+    /* ---- Secciones editoriales base ---- */
+    .fpk-section {
+      padding: var(--space-12) 0;
+      background: var(--web-bg-canvas);
+      border-bottom: 1px solid var(--web-border-hairline);
+    }
+    .fpk-section.is-subtle {
+      background: var(--web-bg-subtle);
+    }
+    .fpk-section.is-dark {
+      background: var(--web-navy-950);
+      color: var(--web-text-on-dark);
+      border-bottom-color: var(--web-border-dark);
+    }
+    .fpk-kicker {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--web-emerald-700);
+      margin: 0 0 var(--space-2);
+    }
+    .fpk-section.is-dark .fpk-kicker {
+      color: var(--web-emerald-400);
+    }
+    .fpk-section h2 {
+      font-size: clamp(1.65rem, 2.7vw, 2.25rem);
+      line-height: 1.18;
+      letter-spacing: -0.02em;
+      color: var(--web-navy-900);
+      margin: 0 0 var(--space-4);
+      max-width: 28ch;
+    }
+    .fpk-section.is-dark h2 {
+      color: #FFFFFF;
+    }
+    .fpk-lead {
+      font-size: 1.04rem;
+      line-height: 1.68;
+      color: var(--web-text-secondary);
+      max-width: 66ch;
+      margin: 0 0 var(--space-5);
+    }
+    .fpk-section.is-dark .fpk-lead {
+      color: var(--web-text-on-dark-muted);
+    }
+    .fpk-subhead {
+      font-size: clamp(1.2rem, 1.9vw, 1.42rem);
+      line-height: 1.28;
+      color: var(--web-navy-900);
+      margin: var(--space-8) 0 var(--space-3);
+      letter-spacing: -0.015em;
+    }
+    .fpk-inline-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      min-height: 44px;
+      color: var(--web-emerald-700);
+      font-weight: 600;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .fpk-inline-link:hover {
+      color: var(--web-navy-900);
+    }
+    .fpk-section.is-dark .fpk-inline-link {
+      color: var(--web-emerald-400);
+    }
+    .fpk-section.is-dark .fpk-inline-link:hover {
+      color: #FFFFFF;
+    }
+
+    /* ---- S5b precision callout ---- */
+    .fpk-catalog-note {
+      background: var(--web-bg-subtle);
+      border: 1px solid var(--web-border-hairline);
+      border-left: 3px solid var(--web-navy-900);
+      border-radius: var(--radius-md);
+      padding: var(--space-4) var(--space-5);
+      max-width: 68ch;
+      margin: var(--space-4) 0 var(--space-6);
+    }
+    .fpk-catalog-note p {
+      margin: 0;
+      font-size: 0.96rem;
+      line-height: 1.62;
+      color: var(--web-text-primary);
+    }
+
+    /* ---- H3 puestos: triada operativa ---- */
+    .fpk-puesto-triad {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-4);
+      margin-top: var(--space-4);
+    }
+    .fpk-triad-item {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+      box-shadow: var(--shadow-card);
+    }
+    .fpk-triad-num {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      color: var(--web-emerald-700);
+      margin-bottom: var(--space-2);
+    }
+    .fpk-triad-title {
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--web-navy-900);
+      margin: 0 0 var(--space-2);
+    }
+    .fpk-triad-item p {
+      margin: 0;
+      font-size: 0.93rem;
+      line-height: 1.58;
+      color: var(--web-text-secondary);
+    }
+
+    /* ---- S5c: matriz de formatos pequenos y medianos ---- */
+    .fpk-scale-panel {
+      margin-top: var(--space-4);
+      background: var(--web-bg-subtle);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+    }
+    .fpk-format-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-3);
+      list-style: none;
+      padding: 0;
+      margin: var(--space-4) 0;
+    }
+    .fpk-format-grid li {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-4);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      color: var(--web-text-primary);
+    }
+    .fpk-format-grid strong {
+      display: block;
+      color: var(--web-navy-900);
+      margin-bottom: 0.2rem;
+    }
+    .fpk-symmetry {
+      margin: var(--space-4) 0 0;
+      padding-top: var(--space-4);
+      border-top: 1px solid var(--web-border-hairline);
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: var(--web-text-secondary);
+    }
+
+    /* ---- Escenario de evidencia auditada (video o captura) ---- */
+    .fpk-media-stage {
+      margin-top: var(--space-8);
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+      gap: var(--space-6);
+      align-items: start;
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      box-shadow: var(--shadow-card);
+    }
+    .fpk-media-frame {
+      margin: 0;
+    }
+    .fpk-media-frame video,
+    .fpk-media-frame img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--web-border-hairline);
+      background: var(--web-navy-950);
+    }
+    .fpk-media-aside {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .fpk-media-aside p {
+      margin: 0;
+      font-size: 0.94rem;
+      line-height: 1.6;
+      color: var(--web-text-secondary);
+    }
+    .fpk-video-btn {
+      align-self: flex-start;
+      min-height: 44px;
+      padding: 0 var(--space-4);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--web-navy-900);
+      background: var(--web-navy-900);
+      color: #FFFFFF;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .fpk-video-btn:hover {
+      background: var(--web-navy-800);
+    }
+
+    /* ---- H2 2: Formula techo + frontera del panel + roles + tabla fiscal S7 ---- */
+    .fpk-ceiling {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-left: 3px solid var(--web-emerald-500);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+      max-width: 68ch;
+      margin-bottom: var(--space-6);
+      box-shadow: var(--shadow-card);
+    }
+    .fpk-ceiling p {
+      margin: 0;
+      font-size: 1.04rem;
+      line-height: 1.65;
+      color: var(--web-navy-900);
+      font-weight: 500;
+    }
+    .fpk-boundary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-5);
+      margin-bottom: var(--space-8);
+    }
+    .fpk-boundary-col {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+    }
+    .fpk-boundary-col.is-limit {
+      background: var(--web-navy-50);
+    }
+    .fpk-boundary-label {
+      font-family: var(--font-mono);
+      font-size: 0.76rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--web-emerald-700);
+      margin: 0 0 var(--space-3);
+    }
+    .fpk-boundary-col.is-limit .fpk-boundary-label {
+      color: var(--web-navy-800);
+    }
+    .fpk-boundary-list {
+      margin: 0;
+      padding-left: 1.15rem;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+      font-size: 0.94rem;
+      line-height: 1.58;
+      color: var(--web-text-secondary);
+    }
+
+    .fpk-roles-split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-4);
+      margin-top: var(--space-3);
+      margin-bottom: var(--space-8);
+    }
+    .fpk-role-card {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+    }
+    .fpk-role-card strong {
+      display: block;
+      font-size: 1rem;
+      color: var(--web-navy-900);
+      margin-bottom: var(--space-2);
+    }
+    .fpk-role-card p {
+      margin: 0;
+      font-size: 0.94rem;
+      line-height: 1.6;
+      color: var(--web-text-secondary);
+    }
+
+    /* Tabla de quien emite (S7) */
+    .fpk-fiscal-wrap {
+      margin-top: var(--space-6);
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+    }
+    .fpk-fiscal-head {
+      padding: var(--space-4) var(--space-5);
+      background: var(--web-navy-900);
+      color: #FFFFFF;
+    }
+    .fpk-fiscal-head p {
+      margin: 0;
+      font-size: 0.92rem;
+      color: var(--web-text-on-dark-muted);
+    }
+    .fpk-fiscal-head strong {
+      display: block;
+      font-size: 1.02rem;
+      color: #FFFFFF;
+      margin-bottom: 0.2rem;
+    }
+    .fpk-fiscal-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+    .fpk-fiscal-table th,
+    .fpk-fiscal-table td {
+      text-align: left;
+      padding: var(--space-4) var(--space-5);
+      border-top: 1px solid var(--web-border-hairline);
+      vertical-align: top;
+      line-height: 1.55;
+    }
+    .fpk-fiscal-table th {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--web-text-muted);
+      background: var(--web-bg-subtle);
+    }
+    .fpk-fiscal-table td {
+      color: var(--web-text-secondary);
+    }
+    .fpk-fiscal-table td:first-child {
+      font-weight: 600;
+      color: var(--web-navy-900);
+    }
+    .fpk-status-yes {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      font-weight: 600;
+      color: var(--web-emerald-700);
+      background: var(--web-emerald-50);
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-full);
+    }
+
+    /* ---- H2 3: Mapa del park mixto ---- */
+    .fpk-park-map {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-4);
+      margin: var(--space-5) 0 var(--space-6);
+    }
+    .fpk-map-node {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-top: 3px solid var(--web-navy-700);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+      box-shadow: var(--shadow-card);
+    }
+    .fpk-map-node.is-kitchen {
+      border-top-color: var(--web-emerald-500);
+    }
+    .fpk-map-badge {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.2rem 0.5rem;
+      border-radius: var(--radius-xs);
+      background: var(--web-navy-50);
+      color: var(--web-navy-900);
+      margin-bottom: var(--space-3);
+    }
+    .fpk-map-node.is-kitchen .fpk-map-badge {
+      background: var(--web-emerald-50);
+      color: var(--web-emerald-700);
+    }
+    .fpk-map-node strong {
+      display: block;
+      font-size: 1rem;
+      color: var(--web-navy-900);
+      margin-bottom: var(--space-2);
+    }
+    .fpk-map-node p {
+      margin: 0;
+      font-size: 0.92rem;
+      line-height: 1.58;
+      color: var(--web-text-secondary);
+    }
+
+    /* ---- H2 4: Banda oscura sin internet + captura vertical ---- */
+    .fpk-offline-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
+      gap: var(--space-8);
+      align-items: center;
+    }
+    .fpk-offline-points {
+      list-style: none;
+      padding: 0;
+      margin: var(--space-5) 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+    }
+    .fpk-offline-points li {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--web-border-dark);
+      border-radius: var(--radius-sm);
+      padding: var(--space-3) var(--space-4);
+      font-size: 0.94rem;
+      line-height: 1.58;
+      color: var(--web-text-on-dark);
+    }
+    .fpk-phone-card {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .fpk-phone-card img {
+      display: block;
+      width: 100%;
+      max-width: 270px;
+      height: auto;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 20px 44px rgba(0, 0, 0, 0.42);
+    }
+    .fpk-phone-card figcaption {
+      font-size: 0.84rem;
+      line-height: 1.5;
+      color: var(--web-text-on-dark-muted);
+      text-align: center;
+      max-width: 34ch;
+    }
+
+    /* ---- H2 5: Facturacion DGI ---- */
+    .fpk-dgi-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--space-5);
+      margin: var(--space-5) 0 var(--space-4);
+    }
+    .fpk-dgi-card {
+      background: var(--web-bg-subtle);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+    }
+    .fpk-dgi-card strong {
+      display: block;
+      font-size: 1rem;
+      color: var(--web-navy-900);
+      margin-bottom: var(--space-2);
+    }
+    .fpk-dgi-card p {
+      margin: 0;
+      font-size: 0.94rem;
+      line-height: 1.6;
+      color: var(--web-text-secondary);
+    }
+
+    /* ---- H2 6: Costo para el park ---- */
+    .fpk-pricing-card {
+      background: var(--web-bg-elevated);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr);
+      gap: var(--space-6);
+      align-items: center;
+      box-shadow: var(--shadow-card);
+    }
+    .fpk-pricing-card p {
+      margin: 0 0 var(--space-3);
+      font-size: 0.98rem;
+      line-height: 1.65;
+      color: var(--web-text-secondary);
+    }
+    .fpk-pricing-card p:last-child {
+      margin-bottom: 0;
+    }
+    .fpk-pricing-cta {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      padding-left: var(--space-5);
+      border-left: 1px solid var(--web-border-hairline);
+    }
+    .fpk-pricing-cta span {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--web-text-muted);
+    }
+
+    /* ---- H2 8: Cierre CTA ---- */
+    .fpk-close-band {
+      background:
+        radial-gradient(560px 360px at 84% 20%, rgba(0, 191, 129, 0.16), transparent 72%),
+        var(--web-navy-950);
+      color: var(--web-text-on-dark);
+      padding: var(--space-12) 0;
+    }
+    .fpk-close-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+      gap: var(--space-8);
+      align-items: center;
+    }
+    .fpk-close-band h2 {
+      color: #FFFFFF;
+      font-size: clamp(1.7rem, 2.8vw, 2.3rem);
+      line-height: 1.16;
+      margin: 0 0 var(--space-4);
+    }
+    .fpk-close-band p {
+      color: var(--web-text-on-dark-muted);
+      font-size: 1.02rem;
+      line-height: 1.65;
+      margin: 0 0 var(--space-5);
+      max-width: 58ch;
+    }
+    .fpk-close-list {
+      list-style: none;
+      padding: var(--space-5);
+      margin: 0;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--web-border-dark);
+      border-radius: var(--radius-md);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      font-size: 0.94rem;
+      line-height: 1.55;
+      color: var(--web-text-on-dark);
+    }
+    .fpk-close-list li {
+      padding-left: var(--space-4);
+      position: relative;
+    }
+    .fpk-close-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.58em;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--web-emerald-400);
+    }
+
+    /* ---- Responsive (390px y tablets) ---- */
+    @media (max-width: 960px) {
+      .fpk-hero-grid,
+      .fpk-media-stage,
+      .fpk-offline-grid,
+      .fpk-pricing-card,
+      .fpk-close-grid {
+        grid-template-columns: 1fr;
+      }
+      .fpk-puesto-triad,
+      .fpk-format-grid,
+      .fpk-park-map {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .fpk-pricing-cta {
+        padding-left: 0;
+        padding-top: var(--space-4);
+        border-left: 0;
+        border-top: 1px solid var(--web-border-hairline);
+      }
+    }
+    @media (max-width: 640px) {
+      .fpk-hero {
+        padding: var(--space-6) 0 var(--space-8);
+      }
+      .fpk-section,
+      .fpk-close-band {
+        padding: var(--space-8) 0;
+      }
+      .fpk-puesto-triad,
+      .fpk-format-grid,
+      .fpk-boundary,
+      .fpk-roles-split,
+      .fpk-park-map,
+      .fpk-dgi-cards {
+        grid-template-columns: 1fr;
+      }
+      .fpk-fiscal-table,
+      .fpk-fiscal-table thead,
+      .fpk-fiscal-table tbody,
+      .fpk-fiscal-table tr,
+      .fpk-fiscal-table td {
+        display: block;
+        width: 100%;
+      }
+      .fpk-fiscal-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+      }
+      .fpk-fiscal-table tr {
+        padding: var(--space-4);
+        border-top: 1px solid var(--web-border-hairline);
+      }
+      .fpk-fiscal-table td {
+        padding: var(--space-1) 0;
+        border-top: 0;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .fpk-hero *,
+      .fpk-section *,
+      .fpk-close-band * {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <nav class="spine" id="spineNav" aria-label="Secciones de esta página">
+    <span class="spine-progress" id="spineProgress" aria-hidden="true"></span>
+    <a href="#que-es" data-target="que-es" data-label="Qué es" aria-label="Qué es NHILOS POS en un food park"><span class="num">01</span></a>
+    <a href="#administrador" data-target="administrador" data-label="Administrador" aria-label="Cómo opera el administrador del park"><span class="num">02</span></a>
+    <a href="#mixto" data-target="mixto" data-label="Mixto" aria-label="Puestos que revenden y cocinas"><span class="num">03</span></a>
+    <a href="#sin-internet" data-target="sin-internet" data-label="Sin red" aria-label="Sin internet en el park"><span class="num">04</span></a>
+    <a href="#facturacion" data-target="facturacion" data-label="DT 09-2007" aria-label="Facturación por puesto"><span class="num">05</span></a>
+    <a href="#costo" data-target="costo" data-label="Costo" aria-label="Cuánto cuesta para el park"><span class="num">06</span></a>
+    <a href="#preguntas" data-target="preguntas" data-label="Preguntas" aria-label="Preguntas frecuentes"><span class="num">07</span></a>
+    <a href="#demo" data-target="demo" data-label="Demo" aria-label="Solicitar demo"><span class="num">08</span></a>
+    <a href="#inicio" class="spine-top" data-label="Volver arriba" aria-label="Volver arriba"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+  </nav>
+
+  <button type="button" class="back-top" id="backTop" aria-label="Volver arriba">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <header class="site-header" id="inicio">
+    <div class="container site-header-inner">
+      <a class="wordmark" href="/" aria-label="NHILOS POS, ir al inicio">
+        <img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
+        NHILOS <span class="pos">POS</span>
+      </a>
+      <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
+        <a href="/software-pos/">Software POS</a>
+        <a href="/precios/">Precios</a>
+        <a href="/facturacion-dgi/">Facturación DGI</a>
+        <a href="/inventario/">Inventario</a>
+        <a href="/demo/" class="btn btn-primary" data-event="cta_demo_foodpark">Solicitar una demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Hero con breadcrumb de 3 niveles, H1 con segmento y respuesta rapida en los primeros 150 px -->
+    <section class="fpk-hero">
+      <div class="container">
+        <nav class="breadcrumb" aria-label="Ruta de navegación">
+          <ol>
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li aria-current="page">Food parks</li>
+          </ol>
+        </nav>
+
+        <div class="fpk-hero-grid">
+          <div>
+            <p class="fpk-eyebrow">Food parks y food courts · Managua y toda Nicaragua</p>
+            <h1>Software para food park: cada puesto con su catálogo y su cobro, en un solo sistema</h1>
+            <div class="fpk-quick">
+              <p>Un sistema para todo el park: cada puesto con su catálogo y su cobro, el administrador ve la operación desde el panel web. Puestos de reventa y cocinas con recetas conviven en el mismo sistema. Correlativo DT 09-2007.</p>
+            </div>
+            <div class="fpk-hero-actions">
+              <a class="btn btn-on-dark" href="/demo/" data-event="cta_demo_foodpark">Solicitar una demo</a>
+              <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=food-parks" data-event="cta_whatsapp_foodpark">Hablar por WhatsApp</a>
+            </div>
+          </div>
+
+          <aside class="fpk-board" aria-label="Esquema de operación por puesto en un food park">
+            <div class="fpk-board-head">
+              <span class="fpk-board-title">Esquema del park</span>
+              <span class="fpk-board-sub">1 suscripción · puestos por categoría</span>
+            </div>
+            <div class="fpk-stall-row">
+              <span class="fpk-stall-name">Puesto 01 · Bebidas y botanas</span>
+              <span class="fpk-mode-tag">Modo simple</span>
+              <span class="fpk-stall-detail">Terminal propia · cobro bimoneda · arqueo por turno</span>
+            </div>
+            <div class="fpk-stall-row">
+              <span class="fpk-stall-name">Puesto 02 · Cocina y platos</span>
+              <span class="fpk-mode-tag is-recipe">Con recetas</span>
+              <span class="fpk-stall-detail">Terminal propia · descuento de insumos y costo por plato</span>
+            </div>
+            <div class="fpk-stall-row">
+              <span class="fpk-stall-name">Puesto 03 · Postres y café</span>
+              <span class="fpk-mode-tag">Modo simple</span>
+              <span class="fpk-stall-detail">Terminal propia · misma mecánica de correlativo DT 09-2007</span>
+            </div>
+            <div class="fpk-board-foot">
+              <strong>Panel web del administrador:</strong> las ventas de los puestos llegan al panel cuando la conexión está disponible.
+            </div>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 1: Definicion, precision de catalogo S5b y amplitud S5c -->
+    <section class="fpk-section" id="que-es" data-event="foodpark_llega_puestos">
+      <div class="container">
+        <p class="fpk-kicker">01 · Alcance real</p>
+        <h2>¿Qué es NHILOS POS en un food park?</h2>
+        <p class="fpk-lead">En Nicaragua, un food park o food court suele empezar resolviendo cada puesto con un cuaderno o con una caja de un solo rubro, y ahí no se distingue lo que vende cada puesto. Con NHILOS POS, el park contrata una suscripción como negocio; cada puesto opera su sección del catálogo y cobra en su terminal, con cobro bimoneda en córdobas y dólares y correlativo DT 09-2007. Los puestos de reventa (bebidas embotelladas, botanas, postres comprados) trabajan en modo simple, mientras las cocinas activan recetas e insumos dentro del mismo sistema.</p>
+
+        <div class="fpk-catalog-note">
+          <p><strong>Qué significa "cada puesto con su catálogo":</strong> el catálogo es uno y se organiza por puesto mediante categorías. Cada puesto tiene su sección, con sus platos y sus precios, y su propia terminal para cobrar su turno.</p>
+        </div>
+
+        <h3 class="fpk-subhead">Cada puesto: su catálogo, su cobro, su turno</h3>
+        <div class="fpk-puesto-triad">
+          <div class="fpk-triad-item">
+            <div class="fpk-triad-num">01 / SECCIÓN</div>
+            <p class="fpk-triad-title">Productos y precios ordenados por puesto</p>
+            <p>El cajero abre la categoría que corresponde a su puesto, selecciona los productos con sus precios definidos y cobra sin buscar entre artículos ajenos.</p>
+          </div>
+          <div class="fpk-triad-item">
+            <div class="fpk-triad-num">02 / COBRO</div>
+            <p class="fpk-triad-title">Terminal propia y pago bimoneda</p>
+            <p>Cada terminal registra sus ventas en córdobas o dólares, calcula el vuelto y emite el comprobante con su correlativo consecutivo sin depender de otra caja.</p>
+          </div>
+          <div class="fpk-triad-item">
+            <div class="fpk-triad-num">03 / TURNO</div>
+            <p class="fpk-triad-title">Arqueo por turno y usuario</p>
+            <p>Al cierre de jornada, cada puesto realiza su apertura y arqueo por turno y usuario para cuadrar efectivo, pagos electrónicos y anulaciones del día.</p>
+          </div>
+        </div>
+
+        <h3 class="fpk-subhead">Tres puestos o veinte: el park también es pequeño</h3>
+        <div class="fpk-scale-panel">
+          <p class="fpk-lead" style="margin-bottom: var(--space-3);">Un food park en Managua o en cualquier departamento de Nicaragua no tiene que ser un complejo enorme para ordenar sus puestos. El mismo sistema cubre operaciones pequeñas y medianas sin exigir estructura corporativa:</p>
+          <ul class="fpk-format-grid">
+            <li><strong>Park de tres o cuatro puestos</strong>Patio pequeño con varias barras o cocinas que necesitan orden desde el primer día.</li>
+            <li><strong>Patio de comidas familiar</strong>Un solo dueño con varios puestos propios bajo una misma administración.</li>
+            <li><strong>Plaza de comidas</strong>Espacio abierto de barrio o carretera con ofertas distintas en un mismo lugar.</li>
+            <li><strong>Food court de centro comercial</strong>Puestos con giro rápido en mostrador que cobran en su propia terminal.</li>
+            <li><strong>Park con locatarios independientes</strong>Cada locatario factura su propia operación con su suscripción y autorización.</li>
+            <li><strong>Park con un puesto que cocina y otro que revende</strong>Cocinas con recetas conviviendo con puestos de bebidas o botanas en modo simple.</li>
+          </ul>
+          <p class="fpk-symmetry"><strong>Si todos los puestos son del mismo dueño:</strong> no necesitas la historia de locatarios. Operas con una suscripción, tus puestos organizados por categorías y tus terminales cobrando en orden.</p>
+        </div>
+
+        <!-- media-slot: dos-puestos — falta captura de dos terminales o del panel con ventas de dos puestos -->
+        <div class="fpk-media-stage">
+          <figure class="fpk-media-frame">
+            <video id="fpkRecetasVideo" width="1440" height="900" muted loop playsinline preload="metadata" poster="media/dsh_bom_recetas_poster.7fa0d248.webp">
+              <source src="media/dsh_bom_recetas.13330051.mp4" type="video/mp4">
+            </video>
+          </figure>
+          <div class="fpk-media-aside">
+            <span class="demo-tag">Grabación real del panel web · datos de demostración</span>
+            <p><strong>Qué prueba esta grabación:</strong> el recálculo automático del costo por plato en el panel web de un negocio de demostración (NHILOS Market &amp; Café) cuando entra un nuevo lote de insumo.</p>
+            <p><strong>Límite declarado:</strong> esta grabación corresponde al panel de un solo negocio; no muestra varios puestos ni dos terminales cobrando en simultáneo.</p>
+            <button type="button" class="fpk-video-btn" id="fpkPlayRecetas" aria-pressed="false">Reproducir recálculo de costo</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 2: Administrador del park, roles y tabla de las dos estructuras fiscales S7 -->
+    <section class="fpk-section is-subtle" id="administrador" data-event="foodpark_admin_lee">
+      <div class="container">
+        <p class="fpk-kicker">02 · Gobernanza del park</p>
+        <h2>¿Cómo opera el administrador del park?</h2>
+
+        <div class="fpk-ceiling">
+          <p>En la administración de food park, el administrador del park ve su operación desde el panel web, y las ventas de los puestos llegan al panel cuando la conexión está disponible.</p>
+        </div>
+
+        <div class="fpk-boundary">
+          <div class="fpk-boundary-col">
+            <p class="fpk-boundary-label">Qué ve el panel web</p>
+            <ul class="fpk-boundary-list">
+              <li>Las ventas registradas por los puestos conforme cada terminal sincroniza al tener conexión.</li>
+              <li>El catálogo organizado por categorías, precios, recetas de las cocinas que las activen y costos.</li>
+              <li>Sesiones de caja, arqueos por turno y usuario, y el historial de anulaciones con motivo.</li>
+            </ul>
+          </div>
+          <div class="fpk-boundary-col is-limit">
+            <p class="fpk-boundary-label">Qué no hace el sistema</p>
+            <ul class="fpk-boundary-list">
+              <li>No junta varios negocios distintos en un tablero de cadena ni promete métricas entre sucursales separadas.</li>
+              <li>No ofrece una caja única para cobrar varios puestos a la vez: cada terminal cobra lo suyo.</li>
+              <li>No comunica terminales entre sí ni envía pedidos de forma automática hacia monitores externos de cocina.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 class="fpk-subhead">Roles: el administrador administra, el locatario opera</h3>
+        <div class="fpk-roles-split">
+          <div class="fpk-role-card">
+            <strong>Administración del park</strong>
+            <p>Accede al portal del propietario en web, habilitado al terminar la puesta en marcha. Gestiona el catálogo por categorías, revisa cierres de turno y consulta las ventas que llegan desde las terminales.</p>
+          </div>
+          <div class="fpk-role-card">
+            <strong>Operación del puesto</strong>
+            <p>Opera directamente en su terminal enrolada para cobrar pedidos, registrar pagos bimoneda y cerrar su arqueo de turno sin entrar a la configuración general del negocio.</p>
+          </div>
+        </div>
+
+        <div class="fpk-fiscal-wrap">
+          <div class="fpk-fiscal-head">
+            <strong>Quién emite en un food park: las dos estructuras soportadas</strong>
+            <p>Rige un principio simple: quien vende es quien factura. El sistema registra al emisor, no lo sustituye.</p>
+          </div>
+          <table class="fpk-fiscal-table">
+            <thead>
+              <tr>
+                <th scope="col">Estructura del park</th>
+                <th scope="col">Quién emite</th>
+                <th scope="col">Cómo se organiza en NHILOS POS</th>
+                <th scope="col">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>El park es dueño de sus marcas y factura todo bajo su RUC</td>
+                <td>El park, con su autorización DGI</td>
+                <td>Un negocio, una suscripción, una autorización y una serie para sus puestos organizados por categorías.</td>
+                <td><span class="fpk-status-yes">Soportado</span></td>
+              </tr>
+              <tr>
+                <td>Cada locatario independiente tiene su RUC y vende lo suyo</td>
+                <td>Cada locatario, con su propia autorización DGI</td>
+                <td>Cada locatario contrata su propia suscripción y opera con su propia autorización y correlativo.</td>
+                <td><span class="fpk-status-yes">Soportado</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 3: Puestos que revenden y cocinas que preparan -->
+    <section class="fpk-section" id="mixto">
+      <div class="container">
+        <p class="fpk-kicker">03 · Operación mixta</p>
+        <h2>Puestos que revenden y cocinas que preparan, en el mismo park</h2>
+        <p class="fpk-lead">En un software para food park con múltiples puestos es normal que una barra venda gaseosas o postres listos mientras el puesto de al lado prepara platos con varios ingredientes. En NHILOS POS el control se activa por puesto, no por todo el park: quien revende trabaja en modo simple y quien cocina activa recetas e insumos.</p>
+
+        <div class="fpk-park-map">
+          <article class="fpk-map-node">
+            <span class="fpk-map-badge">Modo simple</span>
+            <strong>Puesto de bebidas y botanas</strong>
+            <p>Cobra productos terminados con control de unidades en catálogo, sin cargar recetas ni ingredientes donde no hace falta.</p>
+          </article>
+          <article class="fpk-map-node is-kitchen">
+            <span class="fpk-map-badge">Recetas e insumos</span>
+            <strong>Cocina de platos preparados</strong>
+            <p>Cada plato vendido descuenta sus ingredientes y refleja el costo por plato para proteger el margen de cada receta.</p>
+          </article>
+          <article class="fpk-map-node">
+            <span class="fpk-map-badge">Modo simple</span>
+            <strong>Puesto de postres o cafetería rápida</strong>
+            <p>Empieza en modo simple y puede sumar recetas solo en las bebidas o preparaciones que realmente lo necesiten.</p>
+          </article>
+        </div>
+
+        <div class="fpk-media-stage">
+          <figure class="fpk-media-frame">
+            <img src="media/dsh_16_recetas_bom.webp" width="1440" height="900" loading="lazy" alt="Panel web de NHILOS POS con productos que tienen receta activa junto a productos de venta directa con stock por unidad">
+          </figure>
+          <div class="fpk-media-aside">
+            <span class="demo-tag">Captura real del panel web · datos de demostración</span>
+            <p><strong>Qué muestra esta captura:</strong> en un mismo catálogo conviven productos con receta activa y costo calculado (Café Americano, Capuchino Vainilla) junto a productos sin receta vigente que se controlan por unidad (Croissant, Iced Chai Latte).</p>
+            <p>Recetas, kardex y merma se trabajan completos en la guía dedicada:</p>
+            <a class="fpk-inline-link" href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>
+            <!-- Ruta pendiente: /inventario/food-parks/ (sin enlace hasta publicarse) -->
+            <!-- Ruta pendiente: /software-pos/comida-rapida/ (sin enlace hasta publicarse) -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 4: Sin internet en el park -->
+    <section class="fpk-section is-dark" id="sin-internet">
+      <div class="container">
+        <div class="fpk-offline-grid">
+          <div>
+            <p class="fpk-kicker">04 · Sábado sin señal</p>
+            <h2>¿Qué pasa cuando se cae el internet en el park?</h2>
+            <p class="fpk-lead">Cuando falla el enlace del local en hora pico, cada terminal enrolada sigue cobrando con su catálogo cargado y emite el ticket con su correlativo consecutivo. Al volver la red, las ventas pendientes suben al panel web en orden.</p>
+            <ul class="fpk-offline-points">
+              <li><strong>Condición clara:</strong> la terminal debe haber quedado configurada con tu catálogo antes del corte.</li>
+              <li><strong>Cada terminal por su lado:</strong> no hay comunicación entre terminales por red local mientras no existe conexión.</li>
+              <li><strong>Sincronización al reconectar:</strong> la cola de ventas se vacía en orden hacia el panel del administrador cuando regresa la señal.</li>
+            </ul>
+            <a class="fpk-inline-link" href="/software-pos/sin-internet/">cómo sigue la venta sin internet: POS sin conexión</a>
+          </div>
+
+          <figure class="fpk-phone-card">
+            <img src="media/pos_offline_cola_sync_poster.cf458b78.webp" width="720" height="1544" loading="lazy" alt="Terminal NHILOS POS mostrando indicador de una venta en cola sin conexión">
+            <span class="demo-tag">Captura editada de terminal real · datos de demostración</span>
+            <figcaption>Un terminal cobrando sin conexión con una venta en cola esperando señal para sincronizar al panel.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 5: Facturacion por puesto conforme a la DT 09-2007 -->
+    <section class="fpk-section" id="facturacion">
+      <div class="container">
+        <p class="fpk-kicker">05 · Cumplimiento fiscal</p>
+        <h2>Facturación por puesto conforme a la DT 09-2007</h2>
+        <p class="fpk-lead">Cada comprobante que emite cada puesto sigue la misma mecánica de facturación: el sistema protege el orden del correlativo y el rastro de cada anulación, mientras que la autorización fiscal corresponde siempre al contribuyente que emite.</p>
+
+        <div class="fpk-dgi-cards">
+          <div class="fpk-dgi-card">
+            <strong>Mecánica verificada en cada comprobante</strong>
+            <p>Numeración consecutiva inalterable que no permite saltos ni borrados, y anulación únicamente con motivo auditado vinculado al comprobante original.</p>
+          </div>
+          <div class="fpk-dgi-card">
+            <strong>Responsabilidad del contribuyente</strong>
+            <p>La autorización ante la DGI (carta, código y rango de numeración) la posee el contribuyente que factura. Cómo se organiza fiscalmente un park con sus locatarios se define con su contador.</p>
+          </div>
+        </div>
+
+        <a class="fpk-inline-link" href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>
+      </div>
+    </section>
+
+    <!-- H2 6: Cuanto cuesta para todo el park -->
+    <section class="fpk-section is-subtle" id="costo">
+      <div class="container">
+        <p class="fpk-kicker">06 · Estructura de suscripción</p>
+        <h2>¿Cuánto cuesta para todo el park?</h2>
+
+        <div class="fpk-pricing-card">
+          <div>
+            <p>La suscripción es del negocio (el park), no se cobra por cada puesto ni por marca cuando operan bajo la misma administración. Las terminales adicionales se suman como complemento con enrolamiento según la cantidad de cajas que necesites.</p>
+            <p>El alcance de cada plan, la implementación y las condiciones de terminales adicionales están publicados en una sola tabla transparente, sin cifras inventadas aparte. Si operas varias sucursales independientes en distintas direcciones, ese caso se evalúa aparte de un food park.</p>
+            <!-- Ruta pendiente: /software-pos/multisucursal/ (sin enlace hasta publicarse) -->
+          </div>
+          <div class="fpk-pricing-cta">
+            <span>Tarifario público</span>
+            <a class="fpk-inline-link" href="/precios/">ver planes y precios de NHILOS POS</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 7: Preguntas frecuentes (6 preguntas exactas en paridad con JSON-LD) -->
+    <section class="fpk-section" id="preguntas">
+      <div class="container">
+        <p class="fpk-kicker">07 · Preguntas frecuentes</p>
+        <h2>Preguntas frecuentes sobre el POS para food parks</h2>
+        <div class="faq-grid" data-event="faq_foodpark_abre">
+          <div class="faq-cell" data-event="faq_foodpark_abre">
+            <h3>¿Cada puesto necesita su propio sistema?</h3>
+            <p>No: en Nicaragua, NHILOS POS cubre el park bajo una suscripción como negocio cuando los puestos operan bajo la misma administración. El catálogo es uno y se organiza por puesto mediante categorías, con su propia terminal para cobrar cada sección; si cada locatario independiente factura con su propio RUC, contrata su propia suscripción y opera con su autorización.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_foodpark_abre">
+            <h3>¿Puede el administrador ver la operación del park?</h3>
+            <p>En Nicaragua, con NHILOS POS el administrador del park ve su operación desde el panel web, y las ventas de los puestos llegan al panel cuando la conexión está disponible. El acceso al portal del propietario queda habilitado al terminar la puesta en marcha, sin prometer paneles de múltiples cadenas ni reportes entre sucursales.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_foodpark_abre">
+            <h3>¿Un puesto que revende y una cocina pueden usar el mismo sistema?</h3>
+            <p>Sí: en Nicaragua, NHILOS POS permite que puestos de reventa en modo simple y cocinas con recetas e insumos convivan dentro del mismo park. El control de ingredientes se activa por puesto y no obliga a todo el park a llevar recetas; el detalle completo está en <a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_foodpark_abre">
+            <h3>¿Qué pasa con la facturación de cada puesto?</h3>
+            <p>En Nicaragua, NHILOS POS aplica en cada comprobante de cada puesto la mecánica que exige la DT 09-2007: numeración consecutiva inalterable y anulación solo con motivo auditado. La autorización ante la DGI la posee siempre el contribuyente que emite, y la división completa se explica en <a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_foodpark_abre">
+            <h3>¿Funciona sin internet?</h3>
+            <p>Sí: en Nicaragua, cada terminal enrolada de NHILOS POS sigue cobrando cuando se cae la red siempre que quedó configurada con tu catálogo, emitiendo el ticket con su correlativo consecutivo y guardando cada venta para subirla en orden al reconectar. No hay comunicación entre terminales por red local, y los límites completos están en <a href="/software-pos/sin-internet/">cómo sigue la venta sin internet: POS sin conexión</a>.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_foodpark_abre">
+            <h3>¿Cuánto cuesta para el park?</h3>
+            <p>En Nicaragua, la suscripción de NHILOS POS se cotiza por negocio y no por puesto ni por marca, mientras que las terminales adicionales se suman como complemento con enrolamiento. Los planes públicos, el alcance de la implementación y el detalle de terminales están en <a href="/precios/">ver planes y precios de NHILOS POS</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 8: CTA final -->
+    <section class="fpk-close-band" id="demo">
+      <div class="container">
+        <div class="fpk-close-grid">
+          <div>
+            <p class="fpk-kicker">08 · Siguiente paso</p>
+            <h2>Solicita una demo con la operación de tu park</h2>
+            <p>Preparamos el recorrido según la cantidad de puestos, qué puestos cocinan y cuáles revenden, y la estructura fiscal con la que opera tu park. Al finalizar te llevas la cotización y el cronograma real de puesta en marcha.</p>
+            <div class="fpk-hero-actions">
+              <a class="btn btn-on-dark" href="/demo/" data-event="cta_demo_foodpark">Solicitar una demo</a>
+              <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=food-parks" data-event="cta_whatsapp_foodpark">Escribir por WhatsApp</a>
+            </div>
+          </div>
+
+          <ul class="fpk-close-list">
+            <li>Demo guiada con escenario armado según tu tipo de negocio y tu prioridad operativa.</li>
+            <li>Revisión clara de puestos en modo simple, cocinas con recetas y número de terminales.</li>
+            <li>Cotización con cronograma real de puesta en marcha al terminar la sesión.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <a class="wordmark" href="/" aria-label="NHILOS POS, ir al inicio">
+            <img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
+            NHILOS <span class="pos">POS</span>
+          </a>
+          <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
+          <p class="footer-desc">Sistema de punto de venta local-first para food parks, restaurantes, comiderías, cafeterías y comercios de mostrador en Nicaragua.</p>
+          <p class="footer-contact">
+            WhatsApp: <a href="https://wa.me/50581948526?utm_medium=food-parks" data-event="cta_whatsapp_foodpark">+505 8194 8526</a><br>
+            Managua, Nicaragua · área de servicio nacional
+          </p>
+          <div class="footer-social">
+            <a href="https://www.instagram.com/nhilosapp/" aria-label="Instagram de NHILOS" title="Instagram"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37a4 4 0 1 1-7.914 1.173A4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+            <a href="https://www.facebook.com/nhilosapp" aria-label="Facebook de NHILOS" title="Facebook"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+            <a href="https://www.tiktok.com/@nhilosapp" aria-label="TikTok de NHILOS" title="TikTok"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg></a>
+          </div>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Food parks</h3>
+          <ul class="footer-list">
+            <li><a href="#que-es">Catálogo por puesto</a></li>
+            <li><a href="#administrador">Panel y estructuras</a></li>
+            <li><a href="#mixto">Operación mixta</a></li>
+            <li><a href="#sin-internet">Sábado sin señal</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Producto</h3>
+          <ul class="footer-list">
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li><a href="/software-pos/restaurantes/">Restaurantes</a></li>
+            <li><a href="/software-pos/sin-internet/">Sin internet</a></li>
+            <li><a href="/precios/">Planes y precios</a></li>
+            <li><a href="/facturacion-dgi/">Facturación DGI</a></li>
+            <li><a href="/inventario/">Inventario</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Contacto</h3>
+          <ul class="footer-list">
+            <li><a href="https://wa.me/50581948526?utm_medium=food-parks" data-event="cta_whatsapp_foodpark">WhatsApp directo</a></li>
+            <li><a href="/demo/" data-event="cta_demo_foodpark">Solicitar una demo</a></li>
+            <li><a href="#preguntas">Preguntas frecuentes</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 NHILOS. Estructura de facturación conforme a la Disposición Técnica 09-2007; la autorización DGI y la valuación fiscal corresponden a cada contribuyente con su contador.</p>
+        <a class="footer-top-link" href="#inicio">Volver arriba <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+  <script>
+    (function () {
+      var video = document.getElementById("fpkRecetasVideo");
+      var btn = document.getElementById("fpkPlayRecetas");
+      if (!video || !btn) return;
+      function sync() {
+        var playing = !video.paused && !video.ended;
+        btn.setAttribute("aria-pressed", playing ? "true" : "false");
+        btn.textContent = playing ? "Pausar recálculo de costo" : "Reproducir recálculo de costo";
+      }
+      btn.addEventListener("click", function () {
+        if (video.paused || video.ended) {
+          video.play().catch(function () {});
+        } else {
+          video.pause();
+        }
+        sync();
+      });
+      video.addEventListener("play", sync);
+      video.addEventListener("pause", sync);
+    })();
+  </script>
+</body>
+</html>

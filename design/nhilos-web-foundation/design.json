@@ -86,6 +86,13 @@
       "tradeoff": "Página dueña del término restaurante (H1 con segmento, title 54 chars sin comidería/fritanga) con ampliación de escala S5b en el cuerpo: diccionario de seis formatos pequeños y medianos antes del diferenciador, escalera de control modo simple -> recetas, riel mesa y mostrador con Control de Mesas verificado en código y media-slot documentado sin captura falsa, plato que se desarma junto al clip auditado de recálculo de costo enfocado en decisión de menú, antes/después del cambio de precio de insumo, modificadores y FAQ de 7 en paridad JSON-LD.",
       "width": 1440,
       "height": 900
+    },
+    {
+      "file": "13-food-parks.html",
+      "title": "13 — /software-pos/food-parks/ (segmento food park, ruta de 3 niveles)",
+      "tradeoff": "Segunda y última hija de segmento (H1 con software para food park, title 49 chars) en ruta de tres niveles: precisa el alcance real de un catálogo organizado por puesto mediante categorías (S5b), abre la escala a parks de tres o cuatro puestos y patios familiares (S5c), sostiene la fórmula techo exacta del administrador con frontera explícita qué ve / qué no hace, tabla de quién emite con las dos estructuras fiscales soportadas (S7), mapa del park mixto, evidencia auditada con límites declarados y media-slot dos-puestos documentado, y FAQ de 6 preguntas en paridad JSON-LD.",
+      "width": 1440,
+      "height": 900
     }
   ]
 }

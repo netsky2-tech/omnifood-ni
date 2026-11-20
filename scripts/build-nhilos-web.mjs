@@ -53,6 +53,12 @@ const PAGES = [
     url: "/software-pos/restaurantes/",
     title: "Sistema POS para restaurante en Nicaragua | NHILOS POS",
   },
+  {
+    source: "13-food-parks.html",
+    out: "software-pos/food-parks/index.html",
+    url: "/software-pos/food-parks/",
+    title: "Software para food park en Nicaragua | NHILOS POS",
+  },
 ];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
