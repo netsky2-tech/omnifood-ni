@@ -276,7 +276,7 @@ writeFileSync(
     "  Cross-Origin-Opener-Policy: same-origin",
     "  Cross-Origin-Resource-Policy: same-origin",
     "  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()",
-    `  Content-Security-Policy-Report-Only: ${csp}`,
+    `  Content-Security-Policy: ${csp}`,
     "",
     "# El CSS y el JS llevan hash en el nombre: pueden cachearse para siempre.",
     "/assets/*",
