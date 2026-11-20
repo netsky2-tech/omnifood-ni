@@ -172,6 +172,37 @@ test("S9d: mobile menu button and siteNav panel still exist on every page", () =
   }
 });
 
+// S9(e): el menú ya no tiene <details>/<summary> (tercera ronda: grupo
+// hover/focus, sin estado persistido). Y el contrato de hover vive en site.css:
+// el panel está oculto por defecto y se abre por hover y por focus-within, sin
+// JavaScript. Un refactor que quite el hover rompe esta prueba.
+test("S9e: menu has no details/summary and the hover/focus contract lives in site.css", () => {
+  const css = fs.readFileSync(path.join(DESIGN, "assets", "site.css"), "utf8");
+  for (const p of pages) {
+    const nav = siteNavBlock(p.html);
+    assert.ok(nav, `${p.source}: no site-nav block found`);
+    assert.equal(nav.includes("<details"), false, `${p.source}: menu still uses <details>`);
+    assert.equal(nav.includes("<summary"), false, `${p.source}: menu still uses <summary>`);
+    assert.match(nav, /class="nav-group"/, `${p.source}: menu has no .nav-group`);
+    assert.match(nav, /class="nav-group-label"/, `${p.source}: menu has no .nav-group-label`);
+  }
+  assert.match(
+    css,
+    /\.nav-group:hover\s+\.nav-group-panel/,
+    "site.css lost the :hover rule that opens .nav-group-panel",
+  );
+  assert.match(
+    css,
+    /\.nav-group:focus-within\s+\.nav-group-panel/,
+    "site.css lost the :focus-within rule that opens .nav-group-panel",
+  );
+  assert.match(
+    css,
+    /\.nav-group-panel\s*\{[^}]*display:\s*none/,
+    "site.css: .nav-group-panel must be hidden by default",
+  );
+});
+
 // S2: the home segment cards link the two published daughters with the brief anchors.
 test("S2: home segment cards carry the brief anchors to the published daughters", () => {
   const home = byUrl.get(HOME).html;

@@ -329,16 +329,11 @@ test("interaction: FAQ replicates the home's bordered faq-cell grid (static, rea
   assert.equal((src.match(/<div class="faq-cell">/g) || []).length, 6);
   assert.match(src, /class="faq-wrap reveal"/);
   assert.match(src, /class="faq-cells stagger"/);
-  // El menú compartido usa <details>/<summary> nativos (S7, enlazado interno, segunda
-  // ronda); la prohibición de acordeón aplica al cuerpo de la página. Se excluye solo
-  // el bloque exacto del menú (apertura literal, cierre perezoso al primer </nav>),
-  // nunca un recorte genérico del documento.
-  const shellNoNav = src.replace(
-    /<nav class="site-nav" id="siteNav" aria-label="Navegación principal">[\s\S]*?<\/nav>/,
-    "",
-  );
-  assert.equal(shellNoNav.includes("<details"), false, "no accordion: the home's cell grid, not details/summary");
-  assert.equal(shellNoNav.includes("<summary"), false);
+  // El menú ya no usa <details>/<summary>: es un grupo hover/focus (S7-S10,
+  // enlazado interno, tercera ronda). La prohibición de acordeón vuelve a aplicar
+  // a toda la página, sin exclusiones.
+  assert.equal(src.includes("<details"), false, "no accordion: the home's cell grid, not details/summary");
+  assert.equal(src.includes("<summary"), false);
 });
 
 // C3: WhatsApp oficial
