@@ -178,7 +178,9 @@ Las queries vienen del [documento de keywords](./nhilos_web_keyword_opportunitie
 
 Los H2 siguen el orden en que el comprador hace las preguntas: cuánto → qué incluye → qué cobra después → por qué tanto → compromiso → hardware → crecimiento → cierre. Los H3 resuelven sub-ángulos y objeciones.
 
-#### H1: `Precio de sistema POS para restaurante en Nicaragua: planes desde US$49 al mes`
+#### H1: `Precio de un sistema POS en Nicaragua: planes desde US$49 al mes`
+
+> **Sincronizado 2026-11-20.** El brief decía `Precio de sistema POS para restaurante en Nicaragua: planes desde US$49 al mes` y **la página publicada ya usa la versión neutra desde el 2026-11-19** (decisión del fundador al elegir el H1 híbrido). El brief es la fuente de verdad y estaba desactualizado: se alinea con lo publicado y con la regla de segmento neutro de §9.5 (la puerta de entrada no lleva segmento; el segmento se nombra en el cuerpo y en los hijos).
 
 Contenido: keyword exacta + un renglón — precios públicos, sin llamar para saber cuánto cuesta. El cuerpo habla de negocio (no solo restaurante): los precios son por suscripción de negocio, no por puesto ni por terminal. *Por qué: la arquitectura asigna esta primary a `/precios/`; la transparencia total (precio + setup + letra pequeña) es el gap confirmado del SERP — ningún competidor local publica precio y alcance juntos.*
 
@@ -766,7 +768,7 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 ### 5.8 Meta sugerida
 
 - **Title (≤60):** `Sistema POS para restaurante en Nicaragua | NHILOS POS`
-- **Description (≤155):** `POS para restaurante que sigue cobrando sin internet: cada plato vendido descuenta sus ingredientes, con costo por plato. Demo con tu menú real. NHILOS POS.`
+- **Description (≤155):** `POS para restaurante que sigue cobrando sin internet: cada plato vendido descuenta sus ingredientes, con costo por plato. Demo con tu menú. NHILOS POS.`
 
 ## 6. Brief — `/software-pos/food-parks/` (G1)
 
@@ -959,7 +961,13 @@ Las queries vienen de la tabla de keywords y del mapa §5; no se inventan:
 
 Los H2 siguen el orden del peor momento: la escena → qué sigue → qué no es instantáneo → facturación → pérdida → la condición → terminal dañada → FAQ → cierre.
 
-#### H1: `Sistema POS sin internet para restaurante: qué pasa cuando la red se cae, paso a paso`
+#### H1: `Sistema POS sin internet: qué pasa cuando la red se cae, paso a paso`
+
+> **Actualizado 2026-11-20.** El H1 decía `Sistema POS sin internet para restaurante: …` y esta es una página de **capacidad**, no de segmento: la contingencia funciona igual en un restaurante, una cafetería, un food park o un mostrador. Es el mismo defecto que se corrigió en §9: el segmento en la puerta de entrada. La query se conserva en el H2 siguiente, que la contiene literal.
+
+#### H2: `Sistema POS sin internet para restaurante, cafetería, food park o mostrador`
+
+Contenido: una línea por caso sobre qué sigue funcionando sin red —restaurante con recetas (descuento de insumos y correlativo), cafetería o panadería (venta y vitrina), food park (cobro por puesto), mostrador (venta simple)—, cerrando con que la mecánica es la misma y lo que cambia es la operación, no la contingencia. Aquí vive la frase exacta que se busca: `sistema POS sin internet para restaurante`. *Por qué: la query segmento-calificada entra por un encabezado sin encasillar la página, y el lector de otro rubro se reconoce en la misma línea.*
 
 Contenido: keyword exacta + la promesa de explicación honesta. La continuidad se enuncia con sus condiciones en el primer H2, no como título absoluto. *Por qué: el diferenciador del sitio merece su propia URL (P0 por objeción, arquitectura §3); el H1 promete lo que la página entrega — el mecanismo completo — porque ningún competidor local documenta contingencia offline (gap confirmado del SERP).*
 
@@ -1036,7 +1044,7 @@ Lecturas de éxito al checkpoint de 28 días:
 
 ### 7.8 Meta sugerida
 
-- **Title (≤60):** `POS sin internet en Nicaragua · qué pasa cuando la red se cae`
+- **Title (≤60):** `POS sin internet en Nicaragua: qué pasa cuando cae la red` — **57 caracteres**. *(El anterior medía **61** y excedía su propio límite.)*
 - **Description (≤155):** `La venta se completa en la terminal: cobra, emite el ticket con su correlativo y sincroniza al reconectar, en orden. Mira cómo funciona sin internet.`
 
 ## 8. Brief — `/inventario/` (hub de inventario)
@@ -1365,3 +1373,16 @@ NHILOS no está inscrita como recaudador de IVA, así que ni "IVA incluido" ni "
 ### v2.4 — `/demo/` sale del encasillamiento en restaurantes (2026-11-20, fundador)
 
 Observación del fundador, verbatim: *"veo que estamos encasillando en restaurantes de nuevo en este contenido para la demo"*. Con el brief, `/demo/` habría sido la única de las seis páginas con un segmento en el H1. Se corrigieron tres cosas: **H1 neutro** (`Demo de NHILOS POS: qué recibes y cómo se coordina`), **H2 de segmentos** nuevo que conserva la query exacta y nombra restaurante, cafetería, food park y mostrador, y **title neutro de 50 caracteres** (el anterior medía 62 contra un límite de 60). El H3 `Qué se muestra según tu tipo de negocio` mantiene su texto y pasa a colgar del H2 de segmentos. Se detectó además una **contradicción interna** de §9.2 (asignaba `sistema POS para restaurante` a otro dueño mientras lo usaba como primary del H1) y quedó resuelta. Guardias nuevas en la suite de la página: ningún segmento puede entrar al H1 ni al title, y la query debe existir en un H2.
+
+### v2.5 — Auditoría de encasillamiento en todos los briefs (2026-11-20)
+
+Medición pedida tras la corrección de §9: se revisó **cada H1, title y description** del documento buscando el defecto del segmento en la puerta de entrada y los límites de longitud. Cuatro hallazgos, todos corregidos:
+
+| Sección | Hallazgo | Corrección |
+|---|---|---|
+| §2 `/precios/` | El brief seguía con el H1 de restaurante; **la página publicada es neutra desde el 2026-11-19** | Brief alineado con lo publicado |
+| §7 `/sin-internet/` | **Página de capacidad con segmento en el H1** (`…para restaurante…`); sus H2 ya eran neutros | H1 neutro + **H2 de segmentos** que conserva la query literal |
+| §7 `/sin-internet/` | Title de **61** contra límite de 60 | Title de 57, neutro |
+| §5 `/restaurantes/` | Description de **156** contra límite de 155 | 151, mismo sentido |
+
+§5 y §6 conservan el segmento en el H1 **a propósito**: son las páginas dueñas del segmento (`/software-pos/restaurantes/`, `/software-pos/food-parks/`). La regla que queda escrita: **el segmento en la puerta de entrada solo es correcto en la página que lo posee**; en las demás, se nombra en el cuerpo o en un H2 de segmentos.
