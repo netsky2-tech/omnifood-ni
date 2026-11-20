@@ -51,6 +51,13 @@
       "tradeoff": "Página de precios con la guía SEO de 7 pasos: respuesta rápida en los primeros 150 px, tarifario, tabla comparativa, banda oscura de riesgo por categoría, escalera de crecimiento y FAQ con paridad JSON-LD. Patrones propios, tokens compartidos.",
       "width": 1440,
       "height": 900
+    },
+    {
+      "file": "08-facturacion-dgi.html",
+      "title": "08 — /facturacion-dgi/ (hub fiscal DT 09-2007)",
+      "tradeoff": "Segunda página hija (hub fiscal): explica la mecánica DT 09-2007 y sostiene la división mecánica NHILOS vs autorización del contribuyente en lenguaje sobrio de contador. Patrones propios (caja de respuesta rápida fiscal, secuencia numerada de anulación con captura real del diálogo, banda de tres capas normativas, tablero de división 8/6 verificado contra claim audit) y retícula faq-cell con paridad JSON-LD.",
+      "width": 1440,
+      "height": 900
     }
   ]
 }

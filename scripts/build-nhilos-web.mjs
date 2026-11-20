@@ -23,6 +23,12 @@ const PAGES = [
   { source: ENTRY, out: "index.html", url: "/" },
   { source: "06-software-pos.html", out: "software-pos/index.html", url: "/software-pos/" },
   { source: "07-precios.html", out: "precios/index.html", url: "/precios/" },
+  {
+    source: "08-facturacion-dgi.html",
+    out: "facturacion-dgi/index.html",
+    url: "/facturacion-dgi/",
+    title: "Facturación DGI Nicaragua: mecánica DT 09-2007 | NHILOS",
+  },
 ];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
