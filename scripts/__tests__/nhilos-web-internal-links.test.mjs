@@ -229,3 +229,23 @@ test("S3: hub segments block carries the brief anchors to the published daughter
     'hub: missing anchor "software para food park y food court" to /software-pos/food-parks/',
   );
 });
+
+test("S11: the spine keeps its rule, drops backdrop-filter, and its tooltip mounts", async () => {
+  // The spine lost its whole rule once during an edit and no test noticed, because
+  // nothing read the CSS. And backdrop-filter on a container with transformed
+  // children left ghost fragments of the tooltip box after hover. Both are pinned.
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(
+    new URL("../../design/nhilos-web-foundation/assets/site.css", import.meta.url),
+    "utf8",
+  );
+  const spine = css.match(/^ {4}\.spine \{[^}]*\}/m);
+  assert.ok(spine, "the .spine rule is missing from site.css");
+  assert.match(spine[0], /position:\s*fixed/, ".spine must stay fixed positioned");
+  assert.match(spine[0], /z-index:\s*80/, ".spine must keep its stacking level");
+  assert.doesNotMatch(spine[0], /backdrop-filter/, ".spine must not use backdrop-filter");
+  const tip = css.match(/\.spine a::after \{[^}]*\}/);
+  assert.ok(tip, "the spine tooltip rule is missing");
+  assert.match(tip[0], /display:\s*none/, "the tooltip must mount, not fade");
+  assert.doesNotMatch(tip[0], /opacity:\s*0/, "no opacity layer to leave behind");
+});
