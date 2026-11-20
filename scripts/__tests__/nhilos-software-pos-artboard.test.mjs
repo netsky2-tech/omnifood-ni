@@ -6,6 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
 const ART = path.join(ROOT, "design/nhilos-web-foundation/06-software-pos.html");
@@ -217,6 +218,24 @@ test("media slots: every slot carries an HTML comment naming a real, existing cl
     assert.ok(clip, `slot ${slot} comment must name an intended .mp4 clip`);
     assert.ok(fs.existsSync(path.join(MEDIA, "media", clip)), `intended clip ${clip} must exist in media/`);
     assert.ok(comment.includes("datos de demostración"), slot);
+  }
+});
+
+// B1b: todo media referenciado existe Y está commiteado. Un asset que vive solo en
+// esta máquina renderiza en ninguna otra: el artboard y el deploy quedan de acuerdo
+// únicamente porque el archivo está en el disco de quien construyó.
+test("B1b: every referenced media file exists on disk and is tracked by git", () => {
+  const refs = [...src.matchAll(/(?:src|poster)="(media\/[^"]+)"/g)].map((m) => m[1]);
+  assert.ok(refs.length > 0, "the artboard must reference at least one media file");
+  const tracked = new Set(
+    execSync("git ls-files design/nhilos-web-foundation/media", { cwd: ROOT, encoding: "utf8" })
+      .split("\n")
+      .filter(Boolean),
+  );
+  for (const ref of new Set(refs)) {
+    const rel = `design/nhilos-web-foundation/${ref}`;
+    assert.ok(fs.existsSync(path.join(ROOT, rel)), `${ref} is referenced but missing on disk`);
+    assert.ok(tracked.has(rel), `${ref} is referenced but not committed — it would render only on one machine`);
   }
 });
 
