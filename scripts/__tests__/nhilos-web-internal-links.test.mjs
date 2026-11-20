@@ -249,3 +249,75 @@ test("S11: the spine keeps its rule, drops backdrop-filter, and its tooltip moun
   assert.match(tip[0], /display:\s*none/, "the tooltip must mount, not fade");
   assert.doesNotMatch(tip[0], /opacity:\s*0/, "no opacity layer to leave behind");
 });
+
+test("S12: the menu signals a pointer and the hovered item has a background", async () => {
+  // A span that opens a panel must show the hand cursor, and an item under the
+  // pointer must change its background: changing only the text tone leaves the row
+  // looking the same and the user cannot tell which one is about to be clicked.
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(
+    new URL("../../design/nhilos-web-foundation/assets/site.css", import.meta.url),
+    "utf8",
+  );
+  const label = css.match(/\.nav-group-label \{[^}]*\}/);
+  assert.ok(label, "the .nav-group-label rule is missing");
+  assert.match(label[0], /cursor:\s*pointer/, "the group label must use the pointer cursor");
+  const hover = css.match(/\.nav-group-panel a:hover[^{]*\{[^}]*\}/);
+  assert.ok(hover, "the panel item hover rule is missing");
+  assert.match(hover[0], /background:/, "the hovered item must change its background");
+  assert.match(hover[0], /var\(--web-emerald-50\)/, "the hover background must use the brand tint, not a near-invisible grey");
+});
+
+test("S13: navigable text and focus rings meet WCAG AA contrast", async () => {
+  // Measured, not assumed. The brand green is fine on white and fails on navy, so the
+  // focus ring has two colours depending on the surface. If a token moves, this fails.
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(
+    new URL("../../design/nhilos-web-foundation/assets/site.css", import.meta.url),
+    "utf8",
+  );
+  const root = css.match(/:root\s*\{([\s\S]*?)\}/)[1];
+  const token = (name) => {
+    const m = root.match(new RegExp(`--${name}:\\s*([^;]+);`));
+    assert.ok(m, `token --${name} is missing`);
+    return m[1].trim();
+  };
+  const rgb = (value) => {
+    let v = value.trim().replace("#", "");
+    if (v.length === 3) v = [...v].map((c) => c + c).join("");
+    return [0, 2, 4].map((i) => parseInt(v.slice(i, i + 2), 16));
+  };
+  const lum = (rgb3) => {
+    const [r, g, b] = rgb3.map((c) => {
+      const s = c / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a, b) => {
+    const [x, y] = [lum(rgb(a)), lum(rgb(b))];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+  const white = "#FFFFFF";
+  const checks = [
+    ["menu label and panel item", token("web-text-secondary"), white, 4.5],
+    ["menu item on hover background", token("web-text-primary"), token("web-emerald-50"), 4.5],
+    ["spine numbers", token("web-text-on-dark-muted"), token("web-navy-950"), 4.5],
+    ["tooltip text", white, token("web-navy-950"), 4.5],
+    ["focus ring on light", token("web-emerald-700"), white, 3],
+    ["focus ring on dark", token("web-emerald-500"), token("web-navy-900"), 3],
+  ];
+  // The numeric checks above only prove the tokens are usable; they cannot notice a
+  // rule that picks the wrong one. So the dark-surface focus rule is pinned too.
+  const darkFocus = css.match(/\.spine a:focus-visible[^{]*\{[^}]*\}/);
+  assert.ok(darkFocus, "the dark-surface focus rule is missing");
+  assert.match(
+    darkFocus[0],
+    /outline-color:\s*var\(--web-emerald-500\)/,
+    "on dark surfaces the focus ring must use emerald-500, not emerald-700",
+  );
+  for (const [name, fg, bg, need] of checks) {
+    const r = ratio(fg, bg);
+    assert.ok(r >= need, `${name}: ${r.toFixed(2)}:1 is below the required ${need}:1`);
+  }
+});

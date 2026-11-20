@@ -84,6 +84,9 @@
     img, video { max-width: 100%; display: block; }
     a { color: inherit; }
     :focus-visible { outline: 2px solid var(--web-emerald-700); outline-offset: 2px; border-radius: var(--radius-xs); transition: outline-offset var(--motion-tap) var(--ease-out); }
+    /* Anillo de foco sobre superficie oscura: emerald-700 mide 2.94:1 contra navy-900,
+       por debajo del 3:1 que exige AA para elementos no textuales. emerald-500 mide 6.60:1. */
+    .spine a:focus-visible, .btn-primary:focus-visible, .back-top:focus-visible { outline-color: var(--web-emerald-500); }
     h1, h2, h3, h4, p { margin: 0; }
     h1, h2 { font-family: var(--font-display); }
     [id] { scroll-margin-top: 88px; }
@@ -143,7 +146,7 @@
        a la vez: abrir uno cierra el otro por construcción. Los enlaces del panel
        están siempre en el DOM y son enfocables, así que :focus-within cubre teclado. */
     .nav-group { position: relative; }
-    .nav-group-label { color: var(--web-text-secondary); font-size: 0.9375rem; font-weight: 500; min-height: 44px; display: inline-flex; align-items: center; }
+    .nav-group-label { color: var(--web-text-secondary); font-size: 0.9375rem; font-weight: 500; min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; }
     .nav-group:hover .nav-group-label, .nav-group:focus-within .nav-group-label { color: var(--web-text-primary); }
     /* Chevron: sin el, el rotulo se lee como texto plano y el hover no se descubre.
        Solo en escritorio; en movil los grupos son encabezados, no desplegables. */
@@ -152,7 +155,10 @@
     @media (max-width: 900px) { .nav-group-label::after { display: none; } }
     .nav-group-panel { position: absolute; top: 100%; left: 0; min-width: 208px; display: none; flex-direction: column; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: 0 18px 40px rgba(0, 24, 41, 0.12); padding: var(--space-2) 0; z-index: 70; }
     .nav-group:hover .nav-group-panel, .nav-group:focus-within .nav-group-panel { display: flex; }
-    .nav-group-panel a { padding: 0 var(--space-4); white-space: nowrap; }
+    .nav-group-panel a { padding: 0 var(--space-4); white-space: nowrap; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
+    /* El item bajo el cursor tiene que distinguirse: cambiar solo el color del texto
+       deja el fondo igual y no se lee sobre cual esta el puntero. */
+    .nav-group-panel a:hover, .nav-group-panel a:focus-visible { background: var(--web-emerald-50); color: var(--web-text-primary); }
     /* Mobile menu (hamburguesa, accesible) */
     .mobile-menu-btn { display: none; min-width: 44px; min-height: 44px; background: transparent; border: 1px solid var(--web-border-manual); border-radius: var(--radius-sm); color: var(--web-text-primary); cursor: pointer; align-items: center; justify-content: center; transition: background-color var(--motion-fast) var(--ease-out); }
     .mobile-menu-btn:hover { background: var(--web-bg-elevated); }
@@ -165,7 +171,7 @@
       /* Móvil: los grupos se ven planos dentro del panel hamburguesa. La etiqueta es
          una fila de encabezado de sección y sus enlaces son filas normales siempre
          visibles: sin toggle anidado, nada que se desincronice. */
-      .site-nav .nav-group-label { display: flex; align-items: center; min-height: 44px; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-text-muted); }
+      .site-nav .nav-group-label { display: flex; align-items: center; min-height: 44px; font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.08em; cursor: default; text-transform: uppercase; color: var(--web-text-muted); }
       .site-nav .nav-group-panel { display: flex; position: static; min-width: 0; background: transparent; border: none; border-radius: 0; box-shadow: none; padding: 0 0 var(--space-2) var(--space-4); }
       .site-nav .nav-group-panel a { min-height: 48px; font-size: 0.9375rem; }
     }
