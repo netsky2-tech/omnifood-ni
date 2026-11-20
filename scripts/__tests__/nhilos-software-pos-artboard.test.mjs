@@ -136,8 +136,8 @@ test("S5: BreadcrumbList names match the visible breadcrumb", () => {
   const nav = vis.split('aria-label="Ruta de navegación"')[1].split("</nav>")[0];
   const visibleNames = bc.itemListElement.map((i) => i.name);
   for (const name of visibleNames) assert.match(txt(nav), new RegExp(name), name);
-  assert.equal(bc.itemListElement[0].item, "https://www.nhilospos.com/");
-  assert.equal(bc.itemListElement[1].item, "https://www.nhilospos.com/software-pos/");
+  assert.equal(bc.itemListElement[0].item, "https://nhilospos.com/");
+  assert.equal(bc.itemListElement[1].item, "https://nhilospos.com/software-pos/");
 });
 
 // S5 / B3: integridad del schema — Organization visible en el footer, sin offers/ratings
@@ -278,7 +278,7 @@ test("B2: title/description match brief §3.8 and canonical is the hub URL", () 
   assert.equal(src.match(/<meta name="description" content="([^"]+)">/)[1], "Qué hace un sistema POS en Nicaragua y cómo elegir tu nivel de control: venta sin internet, mecánica DT 09-2007 y modo simple o recetas. NHILOS POS.");
   assert.ok(src.match(/<title>([^<]+)<\/title>/)[1].length <= 60);
   assert.ok(src.match(/<meta name="description" content="([^"]+)">/)[1].length <= 155);
-  assert.equal(src.match(/<link rel="canonical" href="([^"]+)">/)[1], "https://www.nhilospos.com/software-pos/");
+  assert.equal(src.match(/<link rel="canonical" href="([^"]+)">/)[1], "https://nhilospos.com/software-pos/");
 });
 
 // B7: cero em-dashes

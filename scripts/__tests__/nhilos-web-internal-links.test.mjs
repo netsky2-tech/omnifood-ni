@@ -321,3 +321,20 @@ test("S13: navigable text and focus rings meet WCAG AA contrast", async () => {
     assert.ok(r >= need, `${name}: ${r.toFixed(2)}:1 is below the required ${need}:1`);
   }
 });
+
+test("S14-canonical: una sola forma de la URL, en las nueve páginas", () => {
+  // Tres páginas decían www y seis apex: el mismo sitio declarando dos hogares.
+  // La regla no es "cada página su URL" sino "el sitio es uno", así que se fija
+  // la forma completa, no solo la ausencia de www.
+  assert.equal(pages.length, 9, "el registro debe traer las nueve rutas");
+  for (const page of pages) {
+    const m = page.html.match(/rel="canonical" href="([^"]+)"/);
+    assert.ok(m, `${page.url} sin canonical`);
+    assert.ok(
+      !m[1].includes("www."),
+      `${page.url} declara canonical con www: ${m[1]}`,
+    );
+    const expected = `https://nhilospos.com${page.url}`;
+    assert.equal(m[1], expected, `${page.url} canonical distinto del esperado`);
+  }
+});

@@ -198,8 +198,8 @@ test("S7: BreadcrumbList names match the visible breadcrumb", () => {
   const nav = vis.split('aria-label="Ruta de navegación"')[1].split("</nav>")[0];
   const visibleNames = bc.itemListElement.map((i) => i.name);
   for (const name of visibleNames) assert.match(txt(nav), new RegExp(name), name);
-  assert.equal(bc.itemListElement[0].item, "https://www.nhilospos.com/");
-  assert.equal(bc.itemListElement[1].item, "https://www.nhilospos.com/precios/");
+  assert.equal(bc.itemListElement[0].item, "https://nhilospos.com/");
+  assert.equal(bc.itemListElement[1].item, "https://nhilospos.com/precios/");
 });
 
 // S7: integridad del schema — Organization visible en el footer, sin offers/ratings
@@ -305,7 +305,7 @@ test("B2: title/description match brief §2.8 and canonical is /precios/", () =>
   assert.equal(desc, "Esencial US$49, Operación US$89 y Pro US$149 al mes. Setups desde US$149. Suscripción por negocio, hardware aparte. Cotiza tu NHILOS POS.");
   assert.ok(title.length <= 60);
   assert.ok(desc.length <= 155);
-  assert.equal(src.match(/<link rel="canonical" href="([^"]+)">/)[1], "https://www.nhilospos.com/precios/");
+  assert.equal(src.match(/<link rel="canonical" href="([^"]+)">/)[1], "https://nhilospos.com/precios/");
 });
 
 // Datos personales
@@ -460,4 +460,25 @@ test("G3: no real-time terminal coordination promise in visible copy or JSON-LD"
     `(sincroniz\\w*|juntas?|juntos?)[^.]{0,80}?red\\s+local|red\\s+local[^.]{0,80}?(sincroniz\\w*|juntas?|juntos?)`,
   );
   assert.equal(redLocalCoordination.test(jsonLd), false, "JSON-LD carries a red-local coordination claim");
+});
+
+test("G4: el importe de un cargo puede envolver y la pista no se infla", () => {
+  // Este defecto se midió, no se supuso: /precios/ medía 521px en todo móvil
+  // porque .c-amount llevaba white-space: nowrap sobre una frase de 501px dentro
+  // de una pista `1fr`. `1fr` es `minmax(auto, 1fr)`: el mínimo automático es el
+  // min-content del hijo, así que el texto sin envolver estiraba la página entera
+  // y la tira de planes no envolvía nunca. Dos correcciones, ambas fijadas aquí.
+  const css = src;
+  const amount = css.match(/\.charge-row \.c-amount \{([^}]*)\}/);
+  assert.ok(amount, "falta la regla .charge-row .c-amount");
+  assert.ok(
+    !/white-space:\s*nowrap/.test(amount[1]),
+    "el importe de un cargo no puede ser nowrap: es una frase, no una cifra",
+  );
+  const mobile = css.match(/@media \(max-width: 700px\) \{ \.charge-row \{([^}]*)\}/);
+  assert.ok(mobile, "falta el apilado móvil de .charge-row");
+  assert.ok(
+    /grid-template-columns:\s*minmax\(0,\s*1fr\)/.test(mobile[1]),
+    "en móvil la pista debe ser minmax(0, 1fr): con `1fr` el min-content del hijo la infla",
+  );
 });

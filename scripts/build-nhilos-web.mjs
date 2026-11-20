@@ -235,6 +235,59 @@ writeFileSync(
   path.join(OUTPUT, "_redirects"),
   "/04-sintesis-hibrida.html / 301\n",
 );
+// Headers de seguridad: no se pueden poner a mano en cada HTML, así que viven
+// aquí, junto al build, y se reescriben en cada publicación. El CSP no usa
+// 'unsafe-inline' para scripts: cada bloque inline que queda en una página se
+// hashea tal cual sale emitido, de modo que agregar JS inline no obliga a
+// debilitar la política, solo a volver a construir.
+const inlineHashes = new Set();
+for (const page of PAGES) {
+  const rel = page.out.replace(/^\.\//, "");
+  const html = readFileSync(path.join(OUTPUT, rel), "utf8");
+  for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)) {
+    if (!m[1].trim()) continue;
+    inlineHashes.add(`'sha256-${createHash("sha256").update(m[1], "utf8").digest("base64")}'`);
+  }
+}
+const csp = [
+  "default-src 'self'",
+  `script-src ${["'self'", ...inlineHashes].join(" ")}`,
+  // Cada página lleva su <style> propio; hashear esos bloques sería frágil delante
+  // de cualquier ajuste tipográfico, así que los estilos quedan inline.
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "media-src 'self'",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "frame-ancestors 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+writeFileSync(
+  path.join(OUTPUT, "_headers"),
+  [
+    "/*",
+    "  Strict-Transport-Security: max-age=31536000; includeSubDomains",
+    "  X-Content-Type-Options: nosniff",
+    "  X-Frame-Options: SAMEORIGIN",
+    "  Referrer-Policy: strict-origin-when-cross-origin",
+    "  Cross-Origin-Opener-Policy: same-origin",
+    "  Cross-Origin-Resource-Policy: same-origin",
+    "  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()",
+    `  Content-Security-Policy-Report-Only: ${csp}`,
+    "",
+    "# El CSS y el JS llevan hash en el nombre: pueden cachearse para siempre.",
+    "/assets/*",
+    "  Cache-Control: public, max-age=31536000, immutable",
+    "",
+    "/media/*",
+    "  Cache-Control: public, max-age=604800",
+    "",
+  ].join("\n"),
+);
+
 writeFileSync(
   path.join(OUTPUT, "robots.txt"),
   "User-agent: *\nAllow: /\n\nSitemap: https://nhilospos.com/sitemap.xml\n",
