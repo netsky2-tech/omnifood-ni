@@ -29,6 +29,12 @@ const PAGES = [
     url: "/facturacion-dgi/",
     title: "Facturación DGI Nicaragua: mecánica DT 09-2007 | NHILOS",
   },
+  {
+    source: "09-inventario.html",
+    out: "inventario/index.html",
+    url: "/inventario/",
+    title: "Sistema de inventario en Nicaragua · Kardex y merma | NHILOS",
+  },
 ];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");

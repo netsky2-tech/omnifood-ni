@@ -58,6 +58,13 @@
       "tradeoff": "Segunda página hija (hub fiscal): explica la mecánica DT 09-2007 y sostiene la división mecánica NHILOS vs autorización del contribuyente en lenguaje sobrio de contador. Patrones propios (caja de respuesta rápida fiscal, secuencia numerada de anulación con captura real del diálogo, banda de tres capas normativas, tablero de división 8/6 verificado contra claim audit) y retícula faq-cell con paridad JSON-LD.",
       "width": 1440,
       "height": 900
+    },
+    {
+      "file": "09-inventario.html",
+      "title": "09 — /inventario/ (hub de inventario, kardex y merma)",
+      "tradeoff": "Hub de inventario con la disciplina de tres capas del marco normativo (NORMA Ley 822 art. 44 / Reglamento art. 33 / NIC 2 §23-25, PRÁCTICA de rubro y estado actual del sistema). Patrones propios (fórmula del costo, filas normativas, división operativa/fiscal, par merma teórica vs física, tabla de packs por capacidad), prueba real en video del recálculo de costo y dos capturas auditadas de valoración y kardex, sin captura inventada de conteo.",
+      "width": 1440,
+      "height": 900
     }
   ]
 }

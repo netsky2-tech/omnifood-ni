@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de inventario en Nicaragua · Kardex y merma | NHILOS</title>
+  <meta name="description" content="Cada venta descuenta lo que consumió: kardex con costo promedio ponderado, conteos y merma teórica vs física. El marco legal, explicado. Pide una demo.">
+  <link rel="canonical" href="https://nhilospos.com/inventario/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_NI">
+  <meta property="og:site_name" content="NHILOS POS">
+  <meta property="og:title" content="Sistema de inventario en Nicaragua · Kardex y merma | NHILOS">
+  <meta property="og:description" content="Cada venta descuenta lo que consumió: kardex con costo promedio ponderado, conteos y merma teórica vs física. El marco legal, explicado. Pide una demo.">
+  <meta property="og:url" content="https://nhilospos.com/inventario/">
+  <meta name="robots" content="index, follow">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="media/favicon-192.png">
+  <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+  <meta name="theme-color" content="#001829">
+
+  <!-- Social sharing -->
+  <meta property="og:image" content="https://nhilospos.com/media/og-home.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Terminal NHILOS POS en mano con la interfaz real del sistema de punto de venta">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Sistema de inventario en Nicaragua · Kardex y merma | NHILOS">
+  <meta name="twitter:description" content="Cada venta descuenta lo que consumió: kardex con costo promedio ponderado, conteos y merma teórica vs física. El marco legal, explicado. Pide una demo.">
+  <meta name="twitter:image" content="https://nhilospos.com/media/og-home.jpg">
+
+  <!-- CLAIM GUARD (brief /inventario/ §8.5 + docs/inventario_marco_normativo.md):
+       1. Nunca afirmar cumplimiento automático de la Ley 822 art. 44: se describe el mecanismo real (menor entre costo promedio ponderado y precio de mercado declarado por insumo con fecha de vigencia, con castigo registrado; sin precio declarado usa último costo de compra) y la conformidad del caso concreto la firma el contador.
+       2. Nunca prometer registro de autorización DGI de cambio de método (brecha abierta).
+       3. Nunca prometer listas de conteo firmadas y fechadas por hoja (brecha parcial).
+       4. Nunca prometer exportación dedicada para la Administración Tributaria (brecha abierta).
+       5. "Kardex valorizado" solo en contexto plan Pro; en pack Retail es "kardex, costo promedio ponderado".
+       6. UEPS: Ley 822 admite costo promedio, FIFO y UEPS; NIC 2 no admite UEPS; NHILOS opera costo promedio ponderado.
+       7. FEFO/rotación por lote se declara siempre como práctica de rubro, nunca norma.
+       8. Nunca prometer merma cero ni inventario exacto siempre; la comparación depende de recetas bien definidas.
+       9. Nunca prometer inventario en tiempo real entre sucursales ni consolidación multi-local.
+       10. Verificación en código: InventoryValuationService (setMarketPrice, applyLowerOfCostWritedown) y inventory-reports.controller.ts (POST valuation/market-price, POST valuation/writedown). Ninguna captura ilustra ese flujo.
+       Analítica (S15): atributos data-event colocados en el marcado; el cargador se conecta aparte, sin scripts de terceros. -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://nhilospos.com/#organization",
+      "name": "NHILOS POS",
+      "url": "https://nhilospos.com/",
+      "description": "Sistema de punto de venta local-first para gastronomía y comercios de mostrador en Nicaragua. Funciona sin internet, con mecánica de facturación conforme a la DT 09-2007 y control de inventario a la medida.",
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Managua"
+        },
+        {
+          "@type": "Country",
+          "name": "Nicaragua"
+        }
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "sales",
+        "telephone": "+505 8194 8526",
+        "availableLanguage": "Spanish",
+        "hoursAvailable": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "00:00",
+          "closes": "23:59"
+        }
+      },
+      "sameAs": [
+        "https://www.instagram.com/nhilosapp/",
+        "https://www.facebook.com/nhilosapp",
+        "https://www.tiktok.com/@nhilosapp"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://nhilospos.com/inventario/#breadcrumb",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Inicio",
+          "item": "https://nhilospos.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Inventario",
+          "item": "https://nhilospos.com/inventario/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://nhilospos.com/inventario/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "¿Cómo descuenta el inventario al vender?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS descuenta el inventario en el momento de cada venta según el tipo de producto: los platos preparados descuentan insumos según su receta y los productos de reventa descuentan existencias en modo simple, sin hojas de cálculo al cierre del turno."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿De dónde sale el costo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, el costo en NHILOS POS sale del kardex operativo: cada entrada de compra queda registrada con su costo y cada salida se costea al costo promedio ponderado del momento, con saldo anterior y saldo posterior en cada movimiento."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿El sistema cumple la Ley 822 para la valuación?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS valúa al menor entre el costo promedio ponderado y el precio de mercado que tu negocio declare por insumo con su fecha de vigencia, registrando el castigo cuando corresponde. Si no hay precio de mercado declarado, la referencia es el último costo de compra; la conformidad fiscal del caso concreto siempre la firma tu contador."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Puedo cambiar de método de valuación en el sistema?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, la Ley 822 exige autorización por escrito de la Administración Tributaria para cambiar de método de valuación, y NHILOS POS opera hoy con costo promedio ponderado sin prometer el registro de esa autorización dentro del sistema. Ese cambio y su respaldo corresponden a tu negocio junto con tu contador."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué es la merma teórica vs física?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS compara la merma teórica contra la física cruzando el consumo que tus recetas indican por cada venta frente a las existencias reales levantadas en sesiones de conteo. La precisión de esa comparación depende de mantener las recetas bien definidas y registrar compras y mermas al día."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Sirve si no tengo recetas?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí: en Nicaragua, NHILOS POS funciona en modo simple para productos que se revenden sin receta, dando de alta cada artículo con su costo, precio de venta, existencias y alertas de reposición. Puedes operar en modo simple hoy y activar recetas después si tu negocio incorpora cocina."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cuánto cuesta?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, el control avanzado de inventario en NHILOS POS vive en dos packs de capacidad, Retail y Cocina, a US$39 al mes cada uno según el plan elegido, mientras que el kardex valorizado y los reportes de margen corresponden al plan Pro. Puedes ver planes y precios de NHILOS POS para revisar la tabla completa."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="preload" href="fonts/plus-jakarta-sans-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/inter-600.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/jetbrains-mono-500.woff2" as="font" type="font/woff2" crossorigin>
+
+  <link rel="stylesheet" href="assets/site.css">
+  <!-- Reglas exclusivas del artboard /inventario/:
+       Patrones nuevos nombrados (prefijo inv-):
+       - inv-hero + inv-quick-rule (respuesta rápida con regla superior esmeralda)
+       - inv-mode-stack + inv-mode-panel (dos modos: receta con clip real de recálculo vs stock simple)
+       - inv-cost-formula + inv-formula-step (fórmula del costo: entrada -> promedio ponderado -> salida -> valoración)
+       - inv-figure (marcos de evidencia a ancho completo legibles a 1440, 800 y 390 px)
+       - inv-norm-stack + inv-norm-item (tres capas normativas en filas tipográficas con etiqueta izquierda)
+       - inv-resp-board (división operativa vs obligaciones fiscales en una sola superficie partida)
+       - inv-shrink-grid + inv-shrink-delta (par merma teórica vs física con banda de comparación)
+       - inv-bridge-bar (unión en una línea con /facturacion-dgi/)
+       - inv-pack-matrix (tabla de packs por capacidad Retail vs Cocina + nota Pro)
+       Todos consumen únicamente tokens var(--*) de assets/site.css. Reutiliza faq-cell del sistema. -->
+  <style>
+    /* Breadcrumb compartido */
+    .breadcrumb { padding-block: var(--space-4) 0; font-size: var(--text-body-sm); color: var(--web-text-muted); }
+    .breadcrumb ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+    .breadcrumb a { color: var(--web-text-muted); text-decoration: none; font-weight: 500; }
+    .breadcrumb a:hover { color: var(--web-text-primary); text-decoration: underline; }
+    .breadcrumb [aria-current="page"] { color: var(--web-text-secondary); font-weight: 600; }
+    .breadcrumb .sep { color: var(--web-text-muted); }
+
+    /* Hero de inventario: H1 + respuesta rápida con regla superior esmeralda */
+    .inv-hero { padding-block: var(--space-8) var(--space-8); }
+    .inv-hero h1 { font-size: var(--text-display-xl); line-height: 1.08; font-weight: 800; letter-spacing: -0.03em; max-width: 26ch; margin-bottom: var(--space-5); }
+    .inv-quick-rule { max-width: 76ch; border-top: 2px solid var(--web-emerald-500); border-bottom: 1px solid var(--web-border-hairline); padding-block: var(--space-5); }
+    .inv-quick-rule p { font-size: var(--text-body-lg); line-height: 1.6; color: var(--web-text-primary); }
+    .inv-hero-cta { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3); }
+    @media (max-width: 640px) {
+      .inv-hero { padding-block: var(--space-5) var(--space-6); }
+      .inv-hero h1 { font-size: clamp(1.85rem, 7.2vw, 2.35rem); }
+      .inv-quick-rule { padding-block: var(--space-4); }
+      .inv-quick-rule p { font-size: var(--text-body-md); }
+    }
+
+    /* H2 1: Dos modos de descuento (receta + video real de recálculo / stock simple) */
+    .inv-mode-stack { margin-top: var(--space-6); display: grid; gap: var(--space-6); }
+    .inv-mode-panel { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-card); }
+    .inv-mode-panel--recipe { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: var(--space-6); align-items: center; }
+    .inv-mode-tag { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-emerald-700); margin-bottom: var(--space-2); }
+    .inv-mode-panel h3 { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 700; color: var(--web-text-primary); margin-bottom: var(--space-3); }
+    .inv-mode-panel p { font-size: var(--text-body-md); color: var(--web-text-secondary); max-width: 62ch; }
+    .inv-mode-points { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+    .inv-mode-points li { font-size: var(--text-body-sm); color: var(--web-text-secondary); padding-left: 16px; position: relative; }
+    .inv-mode-points li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    @media (max-width: 960px) { .inv-mode-panel--recipe { grid-template-columns: 1fr; } }
+
+    /* Marcos de evidencia (video y capturas a ancho legible sin recorte) */
+    .inv-figure { margin: 0; background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-3); }
+    .inv-figure video, .inv-figure img { width: 100%; height: auto; object-fit: contain; border-radius: var(--radius-xs); border: 1px solid var(--web-border-hairline); background: var(--web-bg-canvas); }
+    .inv-figure figcaption { margin-top: var(--space-3); display: grid; gap: var(--space-1); }
+    .inv-fig-cap { font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .inv-evidence-stack { margin-top: var(--space-6); display: grid; gap: var(--space-6); }
+
+    /* H2 2: Fórmula del costo (mecánica paso a paso) */
+    .inv-cost-formula { margin-top: var(--space-6); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+    .inv-formula-step { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-5); }
+    .inv-formula-idx { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; color: var(--web-emerald-700); display: block; margin-bottom: var(--space-2); }
+    .inv-formula-title { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); margin-bottom: var(--space-2); }
+    .inv-formula-step p { font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .inv-plan-note { margin-top: var(--space-5); font-size: var(--text-body-sm); color: var(--web-text-muted); max-width: 72ch; }
+    @media (max-width: 960px) { .inv-cost-formula { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .inv-cost-formula { grid-template-columns: 1fr; } }
+
+    /* H2 3: Tres capas normativas en filas tipográficas */
+    .inv-norm-stack { margin-top: var(--space-6); border-top: 1px solid var(--web-border-hairline); }
+    .inv-norm-item { display: grid; grid-template-columns: minmax(0, 210px) minmax(0, 1fr); gap: var(--space-6); padding-block: var(--space-5); border-bottom: 1px solid var(--web-border-hairline); align-items: start; }
+    .inv-norm-badge { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; padding: 5px 10px; border-radius: var(--radius-xs); background: var(--web-navy-50); color: var(--web-navy-800); }
+    .inv-norm-badge--practice { background: var(--web-bg-elevated); color: var(--web-text-secondary); }
+    .inv-norm-badge--system { background: var(--web-emerald-50); color: var(--web-emerald-700); }
+    .inv-norm-item p { font-size: var(--text-body-md); color: var(--web-text-secondary); max-width: 70ch; }
+    .inv-norm-item strong { color: var(--web-text-primary); }
+    @media (max-width: 760px) { .inv-norm-item { grid-template-columns: 1fr; gap: var(--space-2); } }
+
+    /* H3 3: División operativa vs obligaciones fiscales en tablero unificado */
+    .inv-resp-heading { margin-top: var(--space-8); font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 700; color: var(--web-text-primary); }
+    .inv-resp-board { margin-top: var(--space-5); display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; background: var(--web-bg-canvas); box-shadow: var(--shadow-card); }
+    .inv-resp-col { padding: var(--space-6); }
+    .inv-resp-col--negocio { background: var(--web-bg-subtle); border-left: 1px solid var(--web-border-hairline); }
+    .inv-resp-col-title { font-family: var(--font-subheading); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--web-emerald-700); margin-bottom: var(--space-4); display: block; }
+    .inv-resp-col--negocio .inv-resp-col-title { color: var(--web-navy-800); }
+    .inv-resp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .inv-resp-list li { font-size: var(--text-body-md); color: var(--web-text-secondary); padding-left: 18px; position: relative; }
+    .inv-resp-list li::before { content: ""; position: absolute; left: 0; top: 0.6em; width: 7px; height: 2px; background: var(--web-emerald-500); }
+    .inv-resp-col--negocio .inv-resp-list li::before { background: var(--web-navy-800); }
+    @media (max-width: 860px) { .inv-resp-board { grid-template-columns: 1fr; } .inv-resp-col--negocio { border-left: 0; border-top: 1px solid var(--web-border-hairline); } }
+
+    /* H2 4: Par merma teórica vs física */
+    .inv-shrink-grid { margin-top: var(--space-6); display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
+    .inv-shrink-side { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-6); }
+    .inv-shrink-kicker { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--web-navy-800); display: block; margin-bottom: var(--space-2); }
+    .inv-shrink-side--phys .inv-shrink-kicker { color: var(--web-emerald-700); }
+    .inv-shrink-side h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); margin-bottom: var(--space-2); }
+    .inv-shrink-side p { font-size: var(--text-body-md); color: var(--web-text-secondary); }
+    .inv-shrink-delta { margin-top: var(--space-4); padding: var(--space-4) var(--space-5); background: var(--web-navy-50); border: 1px solid var(--web-navy-100); border-radius: var(--radius-md); font-size: var(--text-body-md); color: var(--web-text-primary); }
+    .inv-shrink-delta strong { color: var(--web-navy-900); }
+    @media (max-width: 760px) { .inv-shrink-grid { grid-template-columns: 1fr; } }
+
+    /* H2 5: Puente hacia /facturacion-dgi/ */
+    .inv-bridge-bar { margin-top: var(--space-5); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-5); padding-top: var(--space-5); border-top: 1px solid var(--web-border-dark); }
+    .inv-bridge-bar p { max-width: 60ch; color: var(--web-text-on-dark-muted); font-size: var(--text-body-md); }
+
+    /* H2 6: Tabla de packs por capacidad */
+    .inv-pack-matrix { margin-top: var(--space-6); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; background: var(--web-bg-canvas); }
+    .inv-pack-row { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 140px) minmax(0, 1fr); gap: var(--space-5); padding: var(--space-5) var(--space-6); border-top: 1px solid var(--web-border-hairline); align-items: baseline; }
+    .inv-pack-row:first-child { border-top: 0; }
+    .inv-pack-name { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); }
+    .inv-pack-rate { font-family: var(--font-mono); font-size: var(--text-body-md); font-weight: 700; color: var(--web-emerald-700); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .inv-pack-scope { font-size: var(--text-body-md); color: var(--web-text-secondary); }
+    .inv-pack-foot { margin-top: var(--space-5); font-size: var(--text-body-md); color: var(--web-text-secondary); max-width: 72ch; }
+    .inv-pack-foot a { color: var(--web-emerald-700); font-weight: 600; text-decoration: underline; }
+    @media (max-width: 760px) { .inv-pack-row { grid-template-columns: 1fr; gap: var(--space-2); padding: var(--space-4); } }
+
+    /* H2 8: Cierre */
+    .inv-close-actions { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3); }
+    .inv-close-links { margin-top: var(--space-5); display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-on-dark-muted); }
+    .inv-close-links a { color: var(--web-emerald-400); font-weight: 600; text-decoration: none; }
+    .inv-close-links a:hover { text-decoration: underline; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .breadcrumb a { transition: none !important; }
+    }
+  </style>
+  <noscript>
+    <style>
+      .reveal, .stagger > *, .hero .hero-in { opacity: 1 !important; transform: none !important; }
+      .hilo-progress { display: none; }
+    </style>
+  </noscript>
+</head>
+<body>
+
+  <div class="hilo-progress" aria-hidden="true"><span id="hiloProgress"></span></div>
+
+  <nav class="spine" id="spineNav" aria-label="Índice de secciones">
+    <span class="spine-track" aria-hidden="true"><span class="spine-progress" id="spineProgress"></span></span>
+    <a href="#inicio" data-target="inicio" data-label="Inicio" aria-label="Inicio"><span class="num">01</span></a>
+    <a href="#modos" data-target="modos" data-label="Dos modos" aria-label="Dos modos"><span class="num">02</span></a>
+    <a href="#kardex" data-target="kardex" data-label="Kardex y costo" aria-label="Kardex y costo"><span class="num">03</span></a>
+    <a href="#marco" data-target="marco" data-label="Marco legal" aria-label="Marco legal"><span class="num">04</span></a>
+    <a href="#merma" data-target="merma" data-label="Merma" aria-label="Merma"><span class="num">05</span></a>
+    <a href="#facturacion" data-target="facturacion" data-label="Facturación" aria-label="Facturación"><span class="num">06</span></a>
+    <a href="#costo" data-target="costo" data-label="Packs" aria-label="Packs"><span class="num">07</span></a>
+    <a href="#faq" data-target="faq" data-label="Preguntas" aria-label="Preguntas"><span class="num">08</span></a>
+    <a href="#demo" data-target="demo" data-label="Demo" aria-label="Demo"><span class="num">09</span></a>
+    <a href="#inicio" class="spine-top" data-label="Volver arriba" aria-label="Volver arriba"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+  </nav>
+
+  <button type="button" class="back-top" id="backTop" aria-label="Volver arriba">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <header class="site-header">
+    <div class="container site-header-inner">
+      <a class="wordmark" href="/"><img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+      <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
+        <a href="#kardex">Kardex y costo</a>
+        <a href="#marco">Marco legal</a>
+        <a href="#faq">Preguntas frecuentes</a>
+        <!-- enlace interno /demo/ pendiente de publicación: la demo se solicita por WhatsApp mientras tanto -->
+        <a class="btn btn-primary" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_demo_inventario">Solicitar una demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <nav class="breadcrumb" aria-label="Ruta de navegación">
+      <div class="container">
+        <ol>
+          <li><a href="/">Inicio</a></li>
+          <li class="sep" aria-hidden="true">/</li>
+          <li aria-current="page">Inventario</li>
+        </ol>
+      </div>
+    </nav>
+
+    <!-- HERO: H1 + respuesta rápida en primeros 150 px -->
+    <section class="hero inv-hero" id="inicio" aria-labelledby="inv-title">
+      <div class="container">
+        <p class="eyebrow hero-in" style="--hero-delay: 0ms;">Inventario · Kardex · Merma · Nicaragua</p>
+        <h1 id="inv-title" class="hero-in" style="--hero-delay: 90ms;">Sistema de inventario en Nicaragua: cada venta descuenta lo que consumió</h1>
+        <div class="inv-quick-rule hero-in" style="--hero-delay: 180ms;">
+          <p>Cada venta descuenta lo que consumió, el plato por su receta, el producto de reventa por su stock, con kardex y costo promedio ponderado, conteos y merma teórica vs física. El marco que exige la ley (Ley 822 art. 44, Reglamento art. 33, NIC 2) explicado; la valuación fiscal la cierra tu contador.</p>
+        </div>
+        <div class="inv-hero-cta hero-in" style="--hero-delay: 270ms;">
+          <a class="btn btn-primary" href="#kardex">Ver cómo sale el costo</a>
+          <a class="btn btn-secondary" href="#marco">Ver el marco legal</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 1: Definición + 2 H3 (recetas con clip de recálculo vs stock simple) -->
+    <section class="section section-subtle" id="modos" aria-labelledby="modos-title">
+      <div class="container">
+        <div class="reveal">
+          <p class="eyebrow">El método desde la caja</p>
+          <h2 class="h-lg" id="modos-title">¿Qué es NHILOS POS para tu inventario?</h2>
+          <p class="lead" style="margin-top: var(--space-4);">El inventario vive dentro del punto de venta: no es una hoja de cálculo aparte que alguien actualiza al final de la noche. Cada vez que se cierra una venta en mostrador, el sistema descuenta automáticamente lo que ese producto consumió, ya sea los ingredientes de un plato preparado o las unidades de un artículo de reventa. Así el stock refleja la operación real durante el turno y cada movimiento queda listo para cuadrar con tus compras y tus conteos físicos.</p>
+        </div>
+        <div class="inv-mode-stack">
+          <div class="inv-mode-panel inv-mode-panel--recipe reveal">
+            <div>
+              <span class="inv-mode-tag">Modo cocina y preparación</span>
+              <h3>Productos que se preparan: recetas e insumos</h3>
+              <p>Cada plato o bebida se vincula con sus ingredientes y rendimientos exactos, incluyendo subrecetas y órdenes de producción. Al vender una taza o un plato, el sistema descuenta cada insumo del kardex y actualiza el costo de la receta cuando entra una compra con un precio nuevo.</p>
+              <ul class="inv-mode-points">
+                <li>Descuento automático de insumos por venta sin captura manual posterior.</li>
+                <li>Subrecetas y pre-elaboraciones que pasan del almacén a cocina con su costo.</li>
+                <li>Recálculo del costo de receta cuando ingresa un lote a costo distinto.</li>
+              </ul>
+            </div>
+            <figure class="inv-figure">
+              <video src="media/dsh_bom_recetas.13330051.mp4" poster="media/dsh_bom_recetas_poster.7fa0d248.webp" width="1440" height="900" muted loop playsinline preload="metadata" disablepictureinpicture title="Pantalla Recetas y BOM de NHILOS POS mostrando el recálculo de costo de Capuchino Vainilla 12oz de C$24.50 a C$20 con aviso de costo recalculado en Kardex (NIC 2)"></video>
+              <figcaption>
+                <span class="inv-fig-cap">Recálculo automático del costo de receta en el panel web: al recibir un lote a costo distinto, el costo del Capuchino Vainilla 12oz se actualiza de C$24.50 a C$20 en el kardex.</span>
+                <span class="demo-tag">Grabación real del panel web · datos de demostración</span>
+              </figcaption>
+            </figure>
+          </div>
+
+          <div class="inv-mode-panel reveal">
+            <span class="inv-mode-tag">Modo reventa y mostrador</span>
+            <h3>Productos que se revenden: stock simple</h3>
+            <p>Para bebidas embotelladas, abarrotes o artículos que se compran y se venden tal cual, no necesitas armar recetas. Das de alta cada producto con su costo de compra, precio de venta, existencias y alertas de reposición; cada venta descuenta la unidad exacta al instante y alimenta el mismo kardex operativo.</p>
+          </div>
+        </div>
+        <!-- enlace interno /inventario/restaurantes/ pendiente de publicación: anchor "sistema de inventario para restaurante" -->
+        <!-- enlace interno /inventario/food-parks/ pendiente de publicación: anchor "software de inventario para food park" -->
+      </div>
+    </section>
+
+    <!-- H2 2: Kardex y costo promedio ponderado + 2 capturas reales auditadas -->
+    <section class="section" id="kardex" aria-labelledby="kardex-title" data-event="inventario_llega_kardex">
+      <div class="container">
+        <div class="reveal">
+          <p class="eyebrow">De dónde sale el número</p>
+          <h2 class="h-lg" id="kardex-title">¿De dónde sale el costo? El kardex y el costo promedio ponderado</h2>
+          <p class="lead" style="margin-top: var(--space-4);">El costo que muestra el sistema no sale de una cifra estimada a mano: sale del kardex operativo. Cada compra registra la entrada con su costo real y cada salida se costea al costo promedio ponderado vigente en ese instante.</p>
+        </div>
+
+        <div class="inv-cost-formula stagger">
+          <div class="inv-formula-step">
+            <span class="inv-formula-idx">01 · ENTRADA</span>
+            <p class="inv-formula-title">Compra registrada con costo</p>
+            <p>Al asentar una factura de proveedor, el insumo entra al kardex con cantidad recibida y costo unitario real.</p>
+          </div>
+          <div class="inv-formula-step">
+            <span class="inv-formula-idx">02 · CÁLCULO</span>
+            <p class="inv-formula-title">Costo promedio ponderado</p>
+            <p>El sistema recalcula el costo unitario promedio combinando el saldo previo con el nuevo lote ingresado.</p>
+          </div>
+          <div class="inv-formula-step">
+            <span class="inv-formula-idx">03 · SALIDA</span>
+            <p class="inv-formula-title">Venta, merma o producción</p>
+            <p>Cada salida descuenta stock dejando constancia del saldo anterior, el saldo posterior y el costo unitario vigente.</p>
+          </div>
+          <div class="inv-formula-step">
+            <span class="inv-formula-idx">04 · REPORTE</span>
+            <p class="inv-formula-title">Valoración auditable</p>
+            <p>Los reportes de existencias y costos salen directamente de esos movimientos, sin ediciones silenciosas.</p>
+          </div>
+        </div>
+
+        <p class="inv-plan-note reveal">En el pack Retail el alcance publicado es kardex y costo promedio ponderado; el kardex valorizado y los reportes de margen corresponden al plan Pro.</p>
+
+        <div class="inv-evidence-stack reveal">
+          <figure class="inv-figure">
+            <img src="media/dsh_15_inventario.webp" width="1440" height="900" loading="lazy" alt="Pestaña Valoración del módulo Inventario de NHILOS POS mostrando Valoración Total C$29,175.00, Total Ítems 6, Con Stock 6, Stock Bajo 0 y tabla con columnas Ítem, UOM, Stock, Costo Prom. y Valoración para seis insumos de demostración">
+            <figcaption>
+              <span class="inv-fig-cap">Pestaña Valoración: existencias por unidad de medida, costo promedio ponderado vigente y valoración por insumo.</span>
+              <span class="demo-tag">Captura real del panel web · datos de demostración</span>
+            </figcaption>
+          </figure>
+
+          <figure class="inv-figure">
+            <img src="media/dsh_23_kardex_movimientos.webp" width="1440" height="900" loading="lazy" alt="Pestaña Kardex del módulo Inventario de NHILOS POS mostrando filtros de tipo de movimiento, Mostrando 1-7 de 7 movimientos y columnas Fecha, Ítem, UOM, Tipo, Cant., Costo Unit., Antes y Después con dos filas de Mermas (-50 y -500) y cinco filas de Venta reduciendo el saldo de 45,000 a 44,860">
+            <figcaption>
+              <span class="inv-fig-cap">Pestaña Kardex: rastro cronológico de salidas por venta y mermas con costo unitario promedio, saldo anterior y saldo posterior en cada fila.</span>
+              <span class="demo-tag">Captura real del panel web · datos de demostración</span>
+            </figcaption>
+          </figure>
+        </div>
+        <!-- enlace interno /recursos/costeo-recetas/ pendiente de publicación -->
+      </div>
+    </section>
+
+    <!-- H2 3: Marco normativo en 3 capas + H3 tabla de división -->
+    <section class="section section-subtle" id="marco" aria-labelledby="marco-title" data-event="inventario_marco_lee">
+      <div class="container">
+        <div class="reveal">
+          <p class="eyebrow">Disciplina en tres capas</p>
+          <h2 class="h-lg" id="marco-title">Lo que la ley exige a tu inventario (y cómo se cumple)</h2>
+          <p class="lead" style="margin-top: var(--space-4);">Para trabajar en orden con tu contador hay que separar qué ordena la norma, qué acostumbra hacer el rubro y qué ejecuta hoy el sistema sin disfrazar una cosa de la otra.</p>
+        </div>
+
+        <div class="inv-norm-stack reveal">
+          <div class="inv-norm-item">
+            <div><span class="inv-norm-badge">Norma (obligación del negocio)</span></div>
+            <p>La <strong>Ley 822 (art. 44)</strong> exige valuar los inventarios al menor entre el costo y el precio de mercado, admite costo promedio, FIFO y UEPS, y requiere autorización por escrito de la Administración Tributaria para cambiar de método. El <strong>Reglamento de la Ley 822 (art. 33)</strong> exige inventario físico al cierre del año con listas firmadas y fechadas por hoja por quienes realizaron el conteo, además de registros disponibles ante la Administración. La <strong>NIC 2 (§23-25)</strong> exige identificación específica para bienes no intercambiables, una misma fórmula para inventarios similares y no admite UEPS.</p>
+          </div>
+          <div class="inv-norm-item">
+            <div><span class="inv-norm-badge inv-norm-badge--practice">Práctica de rubro</span></div>
+            <p>La rotación por vencimiento (FEFO o FIFO por lote), los conteos cíclicos semanales de insumos críticos y las revisiones de porcionado son <strong>prácticas operativas del rubro</strong> recomendadas para reducir pérdidas, no obligaciones establecidas como ley por sí mismas.</p>
+          </div>
+          <div class="inv-norm-item">
+            <div><span class="inv-norm-badge inv-norm-badge--system">Estado actual del sistema</span></div>
+            <p>NHILOS POS opera con <strong>costo promedio ponderado</strong> (sin método UEPS) y lleva el registro operativo de kardex, descuento por venta, sesiones de conteo y merma teórica vs física. Además, el sistema permite declarar un <strong>precio de mercado por insumo con fecha de vigencia</strong>, valuar al menor entre el costo promedio ponderado y ese precio declarado, y registrar el castigo contable correspondiente; si un insumo no tiene precio de mercado cargado, toma el último costo de compra como referencia. Hoy el sistema <strong>no</strong> registra autorizaciones escritas de cambio de método ni genera las hojas firmadas del inventario físico anual; la conformidad fiscal del caso concreto siempre la valida y firma tu contador.</p>
+          </div>
+        </div>
+
+        <h3 class="inv-resp-heading reveal">Qué hace el sistema y qué le corresponde a tu negocio y a tu contador</h3>
+        <div class="inv-resp-board reveal">
+          <div class="inv-resp-col" data-col="sistema">
+            <span class="inv-resp-col-title">Registro operativo verificado en NHILOS POS</span>
+            <ul class="inv-resp-list">
+              <li>Kardex cronológico con costo promedio ponderado y saldos anterior y posterior por movimiento.</li>
+              <li>Descuento automático por venta según receta de insumos o stock simple de reventa.</li>
+              <li>Sesiones de conteo físico en operación y cálculo de merma teórica vs física.</li>
+              <li>Control de lotes y fechas de vencimiento dentro del pack Retail.</li>
+              <li>Valuación al menor entre costo y precio de mercado declarado por insumo con fecha de vigencia, con asiento de castigo registrado cuando aplica.</li>
+            </ul>
+          </div>
+          <div class="inv-resp-col inv-resp-col--negocio" data-col="negocio">
+            <span class="inv-resp-col-title">Responsabilidad de tu negocio y tu contador</span>
+            <ul class="inv-resp-list">
+              <li>Validar y firmar la conformidad fiscal de la valuación del periodo según el régimen del negocio.</li>
+              <li>Mantener actualizados los precios de mercado declarados con su vigencia cuando corresponda.</li>
+              <li>Tramitar y conservar la autorización escrita de la Administración Tributaria antes de cambiar de método de valuación.</li>
+              <li>Ejecutar el inventario físico de fin de año con sus listas firmadas y fechadas por hoja por quienes contaron.</li>
+              <li>Responder y presentar respaldos ante cualquier requerimiento de la Administración Tributaria.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 4: Merma teórica vs física (sin captura inventada de conteo; media-slot documentado) -->
+    <section class="section" id="merma" aria-labelledby="merma-title">
+      <div class="container reveal">
+        <p class="eyebrow">Control sin frenar el mostrador</p>
+        <h2 class="h-lg" id="merma-title">Merma teórica vs física, sin detener la operación</h2>
+        <p class="lead" style="margin-top: var(--space-4);">Saber cuánto falta en bodega no sirve de mucho si no puedes compararlo contra lo que realmente debiste haber gastado en ventas. NHILOS POS contrasta automáticamente ambos lados sin cerrar tu caja:</p>
+        <div class="inv-shrink-grid stagger">
+          <div class="inv-shrink-side">
+            <span class="inv-shrink-kicker">Consumo teórico</span>
+            <h3>Lo que la receta indica que debió usarse</h3>
+            <p>Sale de multiplicar las ventas registradas en caja por los ingredientes definidos en cada receta, más las mermas declaradas en turno por derrame, rotura o vencimiento.</p>
+          </div>
+          <div class="inv-shrink-side inv-shrink-side--phys">
+            <span class="inv-shrink-kicker">Existencia física</span>
+            <h3>Lo que el conteo real encuentra</h3>
+            <p>Sale de las sesiones de conteo levantadas en cocina o almacén, registrando lo que realmente quedó disponible al cierre del periodo o de la semana.</p>
+          </div>
+        </div>
+        <div class="inv-shrink-delta">
+          <strong>La diferencia muestra dónde revisar, no promete cero pérdidas:</strong> la comparación entre consumo teórico y existencia física señala desviaciones de porcionado, compras sin registrar o salidas no declaradas. Su precisión depende directamente de que las recetas estén bien definidas y actualizadas.
+        </div>
+        <!-- media-slot: conteo-sesion - falta captura de una sesión de conteo con cantidades -->
+        <!-- enlace interno /recursos/merma/ pendiente de publicación -->
+      </div>
+    </section>
+
+    <!-- H2 5: Unión con facturación DGI -->
+    <section class="section section-dark" id="facturacion" aria-labelledby="facturacion-title">
+      <div class="container reveal">
+        <p class="eyebrow">Una sola operación en caja</p>
+        <h2 class="h-lg" id="facturacion-title">¿Y la facturación? Cada venta descuenta y emite su comprobante</h2>
+        <div class="inv-bridge-bar">
+          <p>La misma venta que descuenta insumos del kardex emite el comprobante con la mecánica de numeración consecutiva inalterable y anulación auditada que exige la DT 09-2007. Si se anula una factura, el movimiento inverso queda trazado en el inventario sin borrar el historial.</p>
+          <a class="btn btn-on-dark" href="/facturacion-dgi/">Ver mecánica de facturación DGI</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 6: Packs y paridad de precios con /precios/ -->
+    <section class="section section-subtle" id="costo" aria-labelledby="costo-title">
+      <div class="container reveal">
+        <p class="eyebrow">Packs por capacidad</p>
+        <h2 class="h-lg" id="costo-title">¿Cuánto cuesta el control de inventario?</h2>
+        <p class="lead" style="margin-top: var(--space-4);">El inventario simple viene desde el inicio. Cuando necesitas kardex, recetas, conteos o lotes, activas el pack que responde a tu operación:</p>
+        <div class="inv-pack-matrix">
+          <div class="inv-pack-row">
+            <span class="inv-pack-name">Pack Retail</span>
+            <span class="inv-pack-rate">US$39/mes</span>
+            <span class="inv-pack-scope">Kardex, costo promedio ponderado, proveedores, compras, conteos, mermas, alertas de stock, código de barras, lotes y vencimiento.</span>
+          </div>
+          <div class="inv-pack-row">
+            <span class="inv-pack-name">Pack Cocina</span>
+            <span class="inv-pack-rate">US$39/mes</span>
+            <span class="inv-pack-scope">Recetas con sus insumos, subrecetas, modificadores, órdenes de producción, combos, márgenes por plato y menú QR.</span>
+          </div>
+        </div>
+        <p class="inv-pack-foot">El kardex valorizado y los reportes de margen corresponden al plan Pro. Para revisar qué pack incluye cada plan mensual y todos los cargos publicados, puedes <a href="/precios/">ver planes y precios de NHILOS POS</a> o conocer primero <a href="/software-pos/">qué es NHILOS POS: venta local-first</a>.</p>
+      </div>
+    </section>
+
+    <!-- H2 7: FAQ (retícula faq-cell reutilizada, paridad 100% con JSON-LD) -->
+    <section class="section" id="faq" aria-labelledby="faq-title" data-event="faq_inventario_abre">
+      <div class="container">
+        <div class="reveal">
+          <p class="eyebrow">Preguntas clave</p>
+          <h2 class="h-lg" id="faq-title">Preguntas frecuentes sobre el sistema de inventario</h2>
+        </div>
+        <div class="faq-wrap reveal" id="faq-inventario">
+          <div class="faq-cells stagger">
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿Cómo descuenta el inventario al vender?</h3>
+              <p>En Nicaragua, NHILOS POS descuenta el inventario en el momento de cada venta según el tipo de producto: los platos preparados descuentan insumos según su receta y los productos de reventa descuentan existencias en modo simple, sin hojas de cálculo al cierre del turno.</p>
+            </div>
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿De dónde sale el costo?</h3>
+              <p>En Nicaragua, el costo en NHILOS POS sale del kardex operativo: cada entrada de compra queda registrada con su costo y cada salida se costea al costo promedio ponderado del momento, con saldo anterior y saldo posterior en cada movimiento.</p>
+            </div>
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿El sistema cumple la Ley 822 para la valuación?</h3>
+              <p>En Nicaragua, NHILOS POS valúa al menor entre el costo promedio ponderado y el precio de mercado que tu negocio declare por insumo con su fecha de vigencia, registrando el castigo cuando corresponde. Si no hay precio de mercado declarado, la referencia es el último costo de compra; la conformidad fiscal del caso concreto siempre la firma tu contador.</p>
+            </div>
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿Puedo cambiar de método de valuación en el sistema?</h3>
+              <p>En Nicaragua, la Ley 822 exige autorización por escrito de la Administración Tributaria para cambiar de método de valuación, y NHILOS POS opera hoy con costo promedio ponderado sin prometer el registro de esa autorización dentro del sistema. Ese cambio y su respaldo corresponden a tu negocio junto con tu contador.</p>
+            </div>
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿Qué es la merma teórica vs física?</h3>
+              <p>En Nicaragua, NHILOS POS compara la merma teórica contra la física cruzando el consumo que tus recetas indican por cada venta frente a las existencias reales levantadas en sesiones de conteo. La precisión de esa comparación depende de mantener las recetas bien definidas y registrar compras y mermas al día.</p>
+            </div>
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿Sirve si no tengo recetas?</h3>
+              <p>Sí: en Nicaragua, NHILOS POS funciona en modo simple para productos que se revenden sin receta, dando de alta cada artículo con su costo, precio de venta, existencias y alertas de reposición. Puedes operar en modo simple hoy y activar recetas después si tu negocio incorpora cocina.</p>
+            </div>
+            <div class="faq-cell" data-event="faq_inventario_abre">
+              <h3>¿Cuánto cuesta?</h3>
+              <p>En Nicaragua, el control avanzado de inventario en NHILOS POS vive en dos packs de capacidad, Retail y Cocina, a US$39 al mes cada uno según el plan elegido, mientras que el kardex valorizado y los reportes de margen corresponden al plan Pro. Puedes <a href="/precios/">ver planes y precios de NHILOS POS</a> para revisar la tabla completa.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 8: Cierre suave -->
+    <!-- enlace interno /demo/ pendiente de publicación: la CTA de demo apunta a WhatsApp mientras tanto -->
+    <section class="section section-dark" id="demo" aria-labelledby="demo-title">
+      <div class="container reveal">
+        <p class="eyebrow">El número visto en vivo</p>
+        <h2 class="h-lg" id="demo-title">Solicita una demo con tu inventario real</h2>
+        <p class="lead" style="margin-top: var(--space-4); max-width: 62ch;">Te mostramos el kardex, el descuento automático por receta y el flujo de conteo usando datos de demostración etiquetados. Al terminar la sesión recibes una cotización con alcance y cronograma real según tu operación.</p>
+        <div class="inv-close-actions">
+          <a class="btn btn-on-dark" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_demo_inventario">Solicitar una demo</a>
+          <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_whatsapp_inventario">Escribir por WhatsApp</a>
+        </div>
+        <div class="inv-close-links">
+          <a href="/precios/">ver planes y precios de NHILOS POS</a>
+          <a href="/facturacion-dgi/">mecánica de facturación DGI</a>
+          <a href="/software-pos/">qué es NHILOS POS: venta local-first</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="wordmark" href="/"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
+          <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
+          <p class="footer-contact">
+            WhatsApp: <a href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_whatsapp_inventario">+505 8194 8526</a><br>
+            Managua, Nicaragua · área de servicio nacional
+          </p>
+          <div class="footer-social">
+            <a href="https://www.instagram.com/nhilosapp/" aria-label="Instagram de NHILOS" title="Instagram"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37a4 4 0 1 1-7.914 1.173A4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+            <a href="https://www.facebook.com/nhilosapp" aria-label="Facebook de NHILOS" title="Facebook"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+            <a href="https://www.tiktok.com/@nhilosapp" aria-label="TikTok de NHILOS" title="TikTok"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg></a>
+          </div>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Inventario</h3>
+          <ul class="footer-list">
+            <li><a href="#modos">Recetas y stock simple</a></li>
+            <li><a href="#kardex">Kardex y costo promedio</a></li>
+            <li><a href="#marco">Marco normativo</a></li>
+            <li><a href="#merma">Merma teórica vs física</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Producto</h3>
+          <ul class="footer-list">
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li><a href="/precios/">Planes y precios</a></li>
+            <li><a href="/facturacion-dgi/">Facturación DGI</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Contacto</h3>
+          <ul class="footer-list">
+            <li><a href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_whatsapp_inventario">WhatsApp directo</a></li>
+            <li><a href="#demo">Solicitar una demo</a></li>
+            <li><a href="#faq">Preguntas frecuentes</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 NHILOS. Estructura de facturación conforme a la Disposición Técnica 09-2007; la autorización DGI y la valuación fiscal corresponden a cada contribuyente con su contador.</p>
+        <a class="footer-top-link" href="#inicio">Volver arriba <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>
