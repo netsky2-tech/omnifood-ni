@@ -141,3 +141,15 @@ Para que nadie lo cite como obligación:
 2. **El PRD de inventario y el plan de remediación** lo referencian como base.
 3. **En cada cambio del área**, la descripción del cambio (PR, tarea o commit) declara **qué requisito `R-nn` toca y cómo lo cumple**. Si no lo cumple, **abre una tarea**; no se silencia.
 4. **Este documento se versiona con la ley.** Si cambia la norma o aparece una fuente autoritativa mejor, se actualiza con la cita nueva y la fecha de verificación.
+
+---
+
+## Corrección de premisa sobre la foliación (2026-11-19)
+
+`docs/DGI/Topología_Multi-Terminal_ante_DGI.md` corrige un error de nuestras notas anteriores: **Nicaragua no usa el identificador tripartito establecimiento + punto de emisión + secuencial** (esa nomenclatura es de Panamá y de fichas de anexos de otras jurisdicciones). El esquema real de la DGI es **sucursal, serie y rango numérico correlativo**, con el número de autorización DGI al pie de cada factura; la DGI autoriza **el sistema, no los rangos**, y la continuidad numérica inalterable (DT 09-2007 num. 1.7) hace **inviable reservar bloques de folios** por caja: un hueco intermedio no tiene casilla en el DMI-V2.1 y expone al contribuyente a sanción (art. 127 num. 2 del Código Tributario).
+
+Las dos respuestas que bloqueaban #994, ya resueltas en ese documento:
+1. **¿Varios puntos de emisión por establecimiento?** Las normas no regulan "puntos de emisión" ni "cajas". Cada caja con secuencial propio exige **serie diferenciada**, y eso conlleva notificación previa (DT num. 1.6) — o nueva autorización en SACFI si imprime en formularios preimpresos (num. 1.7). El secuencial único por sucursal/serie no requiere trámite alguno.
+2. **¿Se toleran números reservados sin usar?** **No.** La DMI-V2.1 solo admite rangos utilizados y anulaciones individuales con respaldo físico. Se descarta la reserva de bloques.
+
+Consecuencia de diseño para #994: solo dos opciones conformes. **A** secuenciador centralizado por sucursal y serie (folio atómico del servidor al confirmar la venta, riesgo nulo, sin trámite) o **B** serie propia por caja sin reserva (+1 local al confirmar, requiere gestión DGI y es inviable con preimpresos compartidos). Queda prohibida la opción C (reserva de bloques).
