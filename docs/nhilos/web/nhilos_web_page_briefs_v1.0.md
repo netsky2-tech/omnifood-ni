@@ -902,7 +902,9 @@ Lecturas de éxito al checkpoint de 28 días:
 - **Title (≤60):** `Software para food park en Nicaragua | NHILOS POS`
 - **Description (≤155):** `Un sistema para todo el food park: cada puesto con su catálogo y su cobro, y la operación visible en el panel web. Pide una demo. NHILOS POS.`
 
-### 6.6 Quién factura en un food park: no es una decisión de producto
+### 6.9 Quién factura en un food park: no es una decisión de producto
+
+> **Renumerado 2026-11-20.** Era el segundo `6.6` del apartado (el primero es *Enlazado interno*), el mismo defecto de numeración que el §8 arrastra con dos `8.6`. El contenido no cambió: solo el número.
 
 **Resuelto 2026-11-18 por análisis, no por preferencia.** Rige el principio de que **quien vende es quien factura**: el sistema no elige al emisor, lo registra. De ahí salen tres estructuras y sólo dos son soportables hoy:
 
@@ -1395,3 +1397,11 @@ Medición pedida tras la corrección de §9: se revisó **cada H1, title y descr
 ### v2.6 — "Restaurante" no significa restaurante grande (2026-11-20, fundador)
 
 Verbatim: *"a como puede ser restaurante, puede ser comiderías, foodparks con comida y negocios pequeños incluso, no necesariamente un restaurante grande."* §5 gana un **bloque de reconocimiento** (H3 nuevo en §5.4) que nombra comidería, fritanga, comedor, puesto de comida, cafetería con cocina, food park con cocina y negocio que cocina en casa o en ventana, **antes** del diferenciador; y una guardia de escala: prohibido "sucursales", "franquicia", "varios salones", "salón VIP", "múltiples áreas" y cualquier cifra de mesas grandes. Los ejemplos usan una o dos cajas y diez o veinte platos. El sitio ya usaba "pulpería" en el home y en `/precios/`, así que el registro es el mismo. La sesión de capturas que viene tiene su primer objetivo aquí: **falta material de un mostrador pequeño real**, porque todo el actual muestra una cafetería de marca propia.
+
+### v2.7 — el park también es pequeño, y "catálogo por puesto" se precisa (2026-11-20)
+
+**Amplitud, del fundador:** *"a como puede ser restaurante, puede ser comiderias, foodparks con comida y negocios pequeños incluso, no necesariamente un restaurante grande."* El §6 gana un bloque de reconocimiento (H3 nuevo en §6.4) que nombra park de tres o cuatro puestos, patio de comidas familiar, plaza de comidas, food court de centro comercial, park con locatarios independientes y park con un puesto que cocina y otro que revende; y una guardia de escala que prohíbe "cadena de parks", "varios parks", "gerente de operaciones", "departamento de sistemas", "gestión de contratos de locación", "administración de arrendamientos", "control de acceso del centro comercial", "flujo de visitantes" y cualquier cifra de veinte puestos. La simetría que sirve al park pequeño ya estaba en el documento: un park del mismo dueño no necesita la historia de locatarios, porque es una suscripción con sus puestos y sus categorías.
+
+**Precisión contra el código:** `CatalogValue` es un catálogo maestro de valores (unidad de medida, categoría, tipo de producto) y `Product` solo lleva `category_code`; no existe puesto, marca ni catálogo propio por puesto, ni una terminal limitada a una parte del catálogo. Por eso "cada puesto con su catálogo" —que el H1 y el home ya publicado usan— significa **un catálogo por negocio, organizado por puesto mediante categorías**, y así se explica en el primer H2. Queda prohibido el sentido fuerte: "catálogo independiente", "catálogo aparte", "inventario por puesto", "stock por puesto", "almacén por puesto", la misma familia que la guardia G28 de `/restaurantes/`.
+
+**Numeración:** el segundo `6.6` pasa a `6.9`.
