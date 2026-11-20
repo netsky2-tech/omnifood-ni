@@ -21,10 +21,10 @@ const faq = ld["@graph"].find((n) => n["@type"] === "FAQPage").mainEntity;
 const cells = [...vis.matchAll(/<div class="faq-cell">\s*<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map((m) => [txt(m[1]), txt(m[2])]);
 
 // S3 / v1.4 H1 decision
-test("S3: single h1 with v1.4 text", () => {
+test("S3: single h1 with v2.0 re-head text (promise angle, head term ceded to the hub)", () => {
   const h1 = [...src.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)];
   assert.equal(h1.length, 1);
-  assert.equal(txt(h1[0][1]), "Sistema POS en Nicaragua que sigue vendiendo sin internet");
+  assert.equal(txt(h1[0][1]), "El POS que sigue vendiendo cuando el internet se cae");
 });
 
 // S6 banned claims

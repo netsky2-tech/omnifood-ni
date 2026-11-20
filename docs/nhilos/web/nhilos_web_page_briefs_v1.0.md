@@ -63,9 +63,11 @@ El eje del producto **no es el restaurante**: es la **venta local-first con nive
 
 > Nota de migración: al separar las páginas P0, esta jerarquía migra a `/software-pos/restaurantes/` y la home se re-encabeza con `sistema POS Nicaragua`. Los H2 usan keywords reales de búsqueda (validadas contra Keyword Planner parts 1–14 y el FAQ schema que rankea de Sabor Suite); los H3 resuelven objeciones y sub-ángulos.
 
-#### H1: `Sistema POS en Nicaragua que sigue vendiendo sin internet`
+#### H1: `El POS que sigue vendiendo cuando el internet se cae`
 
 > **Actualizado v1.4 (2026-11-16):** H1 generalizado por decisión del founder (coherencia con posicionamiento v2; `sistema POS Nicaragua` es keyword validada). La keyword exacta `sistema POS para restaurante en Nicaragua` queda como primary de la página interna futura `/software-pos/restaurantes/`.
+>
+> **Actualizado v2.2 (2026-11-19):** re-encabezado ejecutado tras publicarse el hub. El término cabeza `sistema POS Nicaragua` queda en dueño del hub (§3) y la home cede su `<title>` (era `NHILOS POS · Sistema POS en Nicaragua`) al ángulo propio: `NHILOS POS · POS sin internet en Nicaragua`. El H1 deja de nombrar la categoría y vende la promesa: `El POS que sigue vendiendo cuando el internet se cae`. El cluster offline (`POS sin internet`, `punto de venta sin internet`) pertenece a la home mientras `/software-pos/sin-internet/` no existe; el long tail migra a esa hija cuando nazca. La meta description no cambió (ya respondía sin duplicar el title).
 
 Contenido: keyword exacta + diferenciador en un renglón. La narrativa de marca ("no para cuando falla el internet") vive en el subhead, no en el H1 — el H1 debe contener lo que la gente teclea. *Por qué: respuesta de categoría en 2 segundos; ninguna competencia tiene keyword + diferenciador juntos en el H1.*
 
