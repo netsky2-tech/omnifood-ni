@@ -65,6 +65,20 @@
       "tradeoff": "Hub de inventario con la disciplina de tres capas del marco normativo (NORMA Ley 822 art. 44 / Reglamento art. 33 / NIC 2 §23-25, PRÁCTICA de rubro y estado actual del sistema). Patrones propios (fórmula del costo, filas normativas, división operativa/fiscal, par merma teórica vs física, tabla de packs por capacidad), prueba real en video del recálculo de costo y dos capturas auditadas de valoración y kardex, sin captura inventada de conteo.",
       "width": 1440,
       "height": 900
+    },
+    {
+      "file": "10-demo.html",
+      "title": "10 — /demo/ (conversión de proceso y formulario contextual)",
+      "tradeoff": "Página de conversión con H1 y title de segmento neutro (50 chars), H2 dedicado a los cuatro segmentos con la query exacta, patrones propios (bloque de expectativas, filas de escenarios por operación, proceso en tres pasos horizontales, checklist mínimo de preparación, caja de provenance textual sin capturas y formulario central agrupado con contexto operativo), extensión genérica de site.js verificada diferencialmente contra el home y fallback WhatsApp sin JS.",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "file": "11-sin-internet.html",
+      "title": "11 — /software-pos/sin-internet/ (capacidad offline, ruta de 3 niveles)",
+      "tradeoff": "Primera página hija de tres niveles (/software-pos/sin-internet/) con H1 y title neutros (57 chars), condición honesta en primera pantalla y en panel oscuro con casillas, línea de tiempo del peor momento (sábado 12:30) junto a grabación real auditada en marco de terminal (badge de cola 2 + barra verde de éxito), par de honestidad (qué sigue vs qué no es instantáneo con poster editado auditado de cola) y separación explícita de apagón de red vs apagón eléctrico.",
+      "width": 1440,
+      "height": 900
     }
   ]
 }

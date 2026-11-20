@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POS sin internet en Nicaragua: qué pasa cuando cae la red</title>
+  <meta name="description" content="La venta se completa en la terminal: cobra, emite el ticket con su correlativo y sincroniza al reconectar, en orden. Mira cómo funciona sin internet.">
+  <link rel="canonical" href="https://nhilospos.com/software-pos/sin-internet/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_NI">
+  <meta property="og:site_name" content="NHILOS POS">
+  <meta property="og:title" content="POS sin internet en Nicaragua: qué pasa cuando cae la red">
+  <meta property="og:description" content="La venta se completa en la terminal: cobra, emite el ticket con su correlativo y sincroniza al reconectar, en orden. Mira cómo funciona sin internet.">
+  <meta property="og:url" content="https://nhilospos.com/software-pos/sin-internet/">
+  <meta name="robots" content="index, follow">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="media/favicon-192.png">
+  <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+  <meta name="theme-color" content="#001829">
+
+  <!-- Social sharing -->
+  <meta property="og:image" content="https://nhilospos.com/media/og-home.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Terminal NHILOS POS en mano con la interfaz real del sistema de punto de venta">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="POS sin internet en Nicaragua: qué pasa cuando cae la red">
+  <meta name="twitter:description" content="La venta se completa en la terminal: cobra, emite el ticket con su correlativo y sincroniza al reconectar, en orden. Mira cómo funciona sin internet.">
+  <meta name="twitter:image" content="https://nhilospos.com/media/og-home.jpg">
+
+  <!-- CLAIM GUARD (brief /software-pos/sin-internet/ §7.5 + odd/tasks/nhilos-web-sin-internet.md S1-S25):
+       1. Sincronización eventual: nunca "100%", "todo se sincroniza", "tiempo real" ni "instantáneo" afirmativo.
+       2. Continuidad condicionada: terminal configurada a tu negocio y con tu catálogo cargado; nunca "nunca pierdes una venta".
+       3. Multi-terminal sin internet: "no, hoy" explícito; cada terminal opera por su lado.
+       4. Apagón eléctrico separado de apagón de red: la terminal necesita energía; sin promesas de batería.
+       5. Impresión: solo impresora integrada de la terminal física; nunca "facturación impresa" ni "cualquier ticketera".
+       6. Evidencia auditada: pos_offline_venta_exitosa.30ccc3cc.mp4 (badge naranja de cola "2" + barra verde "Venta procesada con éxito", sin afirmar "sin señal" desde barra de estado) y poster editado pos_offline_cola_sync_poster.cf458b78.webp (720x1544, rótulo "05 · EN COLA").
+       7. Vocabulario de negocio: "la cola de salida del dispositivo" (nunca vocabulario interno).
+       Analítica (S15): atributos data-event en marcado; sin scripts de terceros. -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://nhilospos.com/#organization",
+      "name": "NHILOS POS",
+      "url": "https://nhilospos.com/",
+      "description": "Sistema de punto de venta local-first para gastronomía y comercios de mostrador en Nicaragua. Funciona sin internet, con mecánica de facturación conforme a la DT 09-2007 y control de inventario a la medida.",
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Managua"
+        },
+        {
+          "@type": "Country",
+          "name": "Nicaragua"
+        }
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "sales",
+        "telephone": "+505 8194 8526",
+        "availableLanguage": "Spanish",
+        "hoursAvailable": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "00:00",
+          "closes": "23:59"
+        }
+      },
+      "sameAs": [
+        "https://www.instagram.com/nhilosapp/",
+        "https://www.facebook.com/nhilosapp",
+        "https://www.tiktok.com/@nhilosapp"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://nhilospos.com/software-pos/sin-internet/#breadcrumb",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Inicio",
+          "item": "https://nhilospos.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Software POS",
+          "item": "https://nhilospos.com/software-pos/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Sin internet",
+          "item": "https://nhilospos.com/software-pos/sin-internet/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://nhilospos.com/software-pos/sin-internet/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "¿Cómo funciona un POS offline?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS opera primero en la terminal: cuando cae la red, el equipo cobra con el catálogo cargado, asigna el correlativo consecutivo y guarda cada operación en la cola de salida del dispositivo. Al volver el internet, la cola sube al panel web en orden y sin duplicar; mientras no hay conexión, el panel permanece en pausa."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Se pierden las ventas sin internet?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, cada venta completada en una terminal de NHILOS POS queda registrada en la cola de salida del dispositivo y sube al panel web al reconectar, en orden y sin duplicar. Esta continuidad aplica cuando la terminal quedó configurada a tu negocio y con tu catálogo cargado."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Puedo facturar sin conexión?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí: en Nicaragua, NHILOS POS mantiene el correlativo consecutivo en la terminal sin saltos ni repeticiones y emite el ticket desde la impresora integrada de la terminal física. La autorización DGI y la mecánica completa de la DT 09-2007 corresponden al contribuyente y se detallan en /facturacion-dgi/."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cuándo veo las ventas en mi panel?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, la sincronización de NHILOS POS hacia el panel web es eventual: las ventas llegan cuando la terminal recupera conexión, en orden y sin duplicar. Mientras el equipo sigue sin internet, el panel web no se actualiza y la gestión remota queda en pausa."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Funciona con varias terminales al mismo tiempo sin internet?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No, hoy en Nicaragua cada terminal de NHILOS POS opera por su lado cuando se cae la red y sincroniza su propia cola al reconectar. La coordinación entre varias cajas sin conexión no forma parte del sistema actual."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Y si se va la luz?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS resuelve el apagón de red, no el apagón eléctrico: la terminal necesita energía para operar y emitir comprobantes. La continuidad eléctrica depende del equipo físico y del respaldo de energía de tu local, sin autonomía prometida por el software."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué necesito para que funcione sin internet?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Para operar sin conexión en Nicaragua con NHILOS POS, la terminal debe haber quedado configurada a tu negocio y con tu catálogo cargado antes de entrar en servicio. Ambos requisitos se validan durante la implementación antes de empezar a vender."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    /* ==========================================================================
+       /software-pos/sin-internet/ · patrones propios de contingencia y honestidad
+       Nuevos patrones (off-*): off-hero, off-segment-grid, off-scene-stage,
+       off-timeline, off-device-frame, off-honesty-pair, off-correlativo-strip,
+       off-condition-panel, off-recovery-split, off-close-cta.
+       Reutilizados del sistema: faq-cell, demo-tag, spine, breadcrumb.
+       ========================================================================== */
+
+    .off-breadcrumb { padding-top: var(--space-5); padding-bottom: var(--space-2); }
+    .off-breadcrumb ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--text-body-sm); color: var(--web-text-muted); }
+    .off-breadcrumb li + li::before { content: "/"; margin-right: 8px; color: var(--web-text-muted); }
+    .off-breadcrumb a { color: var(--web-text-secondary); text-decoration: none; }
+    .off-breadcrumb a:hover { color: var(--web-emerald-700); text-decoration: underline; }
+    .off-breadcrumb [aria-current="page"] { color: var(--web-text-primary); font-weight: 600; }
+
+    /* Hero editorial con respuesta rápida + condición explícita en primera pantalla */
+    .off-hero { padding-block: var(--space-6) var(--space-8); }
+    .off-hero h1 { font-size: var(--text-display-xl); line-height: 1.08; font-weight: 800; letter-spacing: -0.03em; max-width: 24ch; margin-bottom: var(--space-5); }
+    .off-quick-card { max-width: 78ch; background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-top: 3px solid var(--web-emerald-500); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); box-shadow: var(--shadow-card); }
+    .off-quick-card p { font-size: var(--text-body-lg); line-height: 1.62; color: var(--web-text-primary); margin: 0; }
+    .off-hero-cta { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3); }
+    @media (max-width: 640px) {
+      .off-hero { padding-block: var(--space-5) var(--space-6); }
+      .off-hero h1 { font-size: clamp(1.8rem, 7vw, 2.3rem); }
+      .off-quick-card { padding: var(--space-4); }
+      .off-quick-card p { font-size: var(--text-body-md); }
+    }
+
+    /* H2 1: Retícula 2x2 de segmentos (misma contingencia, operación a la medida) */
+    .off-segment-grid { margin-top: var(--space-6); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+    .off-segment-card { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-5) var(--space-6); transition: border-color 180ms ease, transform 180ms ease; }
+    .off-segment-card:hover { border-color: var(--web-emerald-500); transform: translateY(-2px); }
+    .off-segment-kicker { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-emerald-700); margin-bottom: var(--space-2); }
+    .off-segment-card p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0; }
+    .off-segment-foot { margin-top: var(--space-5); font-size: var(--text-body-md); font-weight: 600; color: var(--web-text-primary); max-width: 72ch; }
+    .off-pending-note { margin-top: var(--space-2); font-size: var(--text-body-sm); color: var(--web-text-muted); }
+    @media (max-width: 720px) { .off-segment-grid { grid-template-columns: 1fr; } }
+
+    /* H2 2: Línea de tiempo del peor momento + dispositivo con grabación auditada */
+    .off-scene-stage { margin-top: var(--space-6); display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: var(--space-8); align-items: start; }
+    .off-timeline { list-style: none; margin: 0; padding: 0 0 0 var(--space-5); border-left: 2px solid var(--web-border-hairline); display: grid; gap: var(--space-5); }
+    .off-timeline-step { position: relative; padding-left: var(--space-3); }
+    .off-timeline-step::before { content: ""; position: absolute; left: calc(-1 * var(--space-5) - 7px); top: 6px; width: 12px; height: 12px; border-radius: var(--radius-full); background: var(--web-bg-canvas); border: 2px solid var(--web-emerald-500); }
+    .off-timeline-time { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--web-emerald-700); margin-bottom: var(--space-1); }
+    .off-timeline-title { display: block; font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); margin-bottom: var(--space-1); }
+    .off-timeline-step p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0; max-width: 54ch; }
+
+    .off-device-frame { margin: 0; background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-4); display: flex; flex-direction: column; align-items: center; }
+    .off-device-bezel { width: 100%; max-width: 280px; background: var(--web-navy-900); border-radius: 26px; padding: 10px; box-shadow: 0 22px 44px -18px rgba(0, 24, 41, 0.42); }
+    .off-device-bezel video, .off-device-bezel img { display: block; width: 100%; height: auto; border-radius: 18px; background: var(--web-navy-900); }
+    .off-device-frame figcaption { margin-top: var(--space-4); width: 100%; display: grid; gap: var(--space-2); }
+    .off-fig-cap { font-size: var(--text-body-sm); color: var(--web-text-secondary); line-height: 1.5; margin: 0; }
+    @media (max-width: 900px) { .off-scene-stage { grid-template-columns: 1fr; gap: var(--space-6); } }
+
+    /* H3 1 & H3 2: Par de honestidad (Qué sigue / Qué no es instantáneo) */
+    .off-honesty-pair { margin-top: var(--space-8); display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: stretch; }
+    .off-honesty-col { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-card); display: flex; flex-direction: column; }
+    .off-honesty-col--limit { background: var(--web-bg-subtle); box-shadow: none; border-top: 3px solid var(--web-navy-800); }
+    .off-honesty-col--keep { border-top: 3px solid var(--web-emerald-500); }
+    .off-honesty-badge { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-emerald-700); margin-bottom: var(--space-2); }
+    .off-honesty-col--limit .off-honesty-badge { color: var(--web-navy-800); }
+    .off-honesty-col h3 { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 700; color: var(--web-text-primary); margin: 0 0 var(--space-4); }
+    .off-honesty-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .off-honesty-list li { font-size: var(--text-body-md); color: var(--web-text-secondary); padding-left: 20px; position: relative; }
+    .off-honesty-list li strong { color: var(--web-text-primary); }
+    .off-honesty-col--keep .off-honesty-list li::before { content: ""; position: absolute; left: 0; top: 0.56em; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    .off-honesty-col--limit .off-honesty-list li::before { content: ""; position: absolute; left: 0; top: 0.68em; width: 9px; height: 2px; background: var(--web-navy-800); }
+
+    .off-sync-inset { margin: var(--space-5) 0 0; padding: var(--space-4); background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--space-4); align-items: center; }
+    .off-sync-inset img { display: block; width: 112px; height: auto; border-radius: var(--radius-sm); border: 1px solid var(--web-border-hairline); }
+    .off-sync-inset figcaption { display: grid; gap: var(--space-2); }
+    @media (max-width: 900px) { .off-honesty-pair { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { .off-sync-inset { grid-template-columns: 1fr; justify-items: start; } .off-sync-inset img { width: 150px; } }
+
+    /* H2 3: Banda de correlativo continuo */
+    .off-correlativo-strip { margin-top: var(--space-6); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
+    .off-corr-cell { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-5); }
+    .off-corr-code { display: inline-block; font-family: var(--font-mono); font-size: var(--text-body-sm); font-weight: 700; color: var(--web-emerald-700); background: var(--web-emerald-50); padding: 4px 10px; border-radius: var(--radius-xs); margin-bottom: var(--space-3); }
+    .off-corr-cell h3, .off-corr-title { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); margin: 0 0 var(--space-2); display: block; }
+    .off-corr-cell p { font-size: var(--text-body-sm); color: var(--web-text-secondary); margin: 0; }
+    .off-inline-link { display: inline-block; margin-top: var(--space-5); font-size: var(--text-body-md); font-weight: 600; color: var(--web-emerald-700); text-decoration: none; }
+    .off-inline-link:hover { text-decoration: underline; }
+    @media (max-width: 820px) { .off-correlativo-strip { grid-template-columns: 1fr; } }
+
+    /* H2 4: Seguridad de ventas registradas */
+    .off-safety-callout { margin-top: var(--space-5); max-width: 74ch; background: var(--web-bg-subtle); border-left: 3px solid var(--web-navy-800); border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: var(--space-5) var(--space-6); }
+    .off-safety-callout p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0 0 var(--space-3); }
+    .off-safety-callout p:last-child { margin-bottom: 0; color: var(--web-text-primary); font-weight: 600; }
+
+    /* H2 5: Condición con casilla (panel oscuro de autoridad) */
+    .off-condition-panel { margin-top: var(--space-6); background: var(--web-navy-900); color: var(--web-bg-canvas); border-radius: var(--radius-lg); padding: var(--space-6) var(--space-8); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-6); align-items: center; }
+    .off-condition-panel p { color: var(--web-navy-50); font-size: var(--text-body-md); margin: 0; max-width: 52ch; }
+    .off-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .off-checklist li { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--radius-md); padding: var(--space-4); display: flex; gap: var(--space-3); align-items: flex-start; }
+    .off-check-box { width: 22px; height: 22px; border-radius: var(--radius-xs); background: var(--web-emerald-500); color: var(--web-navy-900); display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 0.85rem; flex-shrink: 0; margin-top: 2px; }
+    .off-checklist strong { display: block; color: var(--web-bg-canvas); font-size: var(--text-body-md); margin-bottom: 2px; }
+    .off-checklist span { display: block; color: var(--web-navy-50); font-size: var(--text-body-sm); }
+    @media (max-width: 860px) { .off-condition-panel { grid-template-columns: 1fr; padding: var(--space-5); } }
+
+    /* H2 6: Recuperación de terminal + separación apagón de red vs apagón eléctrico */
+    .off-recovery-split { margin-top: var(--space-6); display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); }
+    .off-recovery-card { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); }
+    .off-recovery-card--power { background: var(--web-bg-subtle); }
+    .off-recovery-kicker { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-navy-800); margin-bottom: var(--space-3); }
+    .off-recovery-card p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0 0 var(--space-3); }
+    .off-recovery-card p:last-child { margin-bottom: 0; }
+    @media (max-width: 820px) { .off-recovery-split { grid-template-columns: 1fr; } }
+
+    /* H2 8: Cierre oscuro */
+    .off-close-cta { background: var(--web-navy-900); color: var(--web-bg-canvas); }
+    .off-close-cta .eyebrow { color: var(--web-emerald-400); }
+    .off-close-cta h2 { color: var(--web-bg-canvas); }
+    .off-close-cta .lead { color: var(--web-navy-50); }
+    .off-close-actions { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3); }
+    .off-close-links { margin-top: var(--space-5); display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-on-dark-muted); }
+    .off-close-links a { color: var(--web-emerald-400); font-weight: 600; text-decoration: none; }
+    .off-close-links a:hover { text-decoration: underline; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .off-segment-card { transition: none !important; }
+      .off-segment-card:hover { transform: none !important; }
+    }
+  </style>
+  <noscript>
+    <style>
+      .reveal, .stagger > *, .hilo-step { opacity: 1 !important; transform: none !important; }
+      .hilo-progress { display: none; }
+    </style>
+  </noscript>
+</head>
+<body>
+
+  <div class="hilo-progress" aria-hidden="true"><span id="hiloProgress"></span></div>
+
+  <!-- Spine de lectura compartido -->
+  <nav class="spine" id="spineNav" aria-label="Índice de secciones">
+    <span class="spine-track" aria-hidden="true"><span class="spine-progress" id="spineProgress"></span></span>
+    <a href="#inicio" data-target="inicio" data-label="Inicio" aria-label="Inicio"><span class="num">01</span></a>
+    <a href="#segmentos" data-target="segmentos" data-label="Operaciones" aria-label="Operaciones"><span class="num">02</span></a>
+    <a href="#escena" data-target="escena" data-label="A media venta" aria-label="A media venta"><span class="num">03</span></a>
+    <a href="#correlativo" data-target="correlativo" data-label="Correlativo" aria-label="Correlativo"><span class="num">04</span></a>
+    <a href="#perdidas" data-target="perdidas" data-label="Ventas" aria-label="Ventas"><span class="num">05</span></a>
+    <a href="#condicion" data-target="condicion" data-label="Condición" aria-label="Condición"><span class="num">06</span></a>
+    <a href="#recuperacion" data-target="recuperacion" data-label="Equipo y luz" aria-label="Equipo y luz"><span class="num">07</span></a>
+    <a href="#faq" data-target="faq" data-label="Preguntas" aria-label="Preguntas"><span class="num">08</span></a>
+    <a href="#demo" data-target="demo" data-label="Demo" aria-label="Demo"><span class="num">09</span></a>
+    <a href="#inicio" class="spine-top" data-label="Volver arriba" aria-label="Volver arriba"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+  </nav>
+
+  <button type="button" class="back-top" id="backTop" aria-label="Volver arriba">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <header class="site-header" id="inicio">
+    <div class="container site-header-inner">
+      <a class="wordmark" href="/" aria-label="NHILOS POS, ir al inicio">
+        <img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
+        NHILOS <span class="pos">POS</span>
+      </a>
+      <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
+        <a href="/software-pos/">Software POS</a>
+        <a href="/precios/">Precios</a>
+        <a href="/facturacion-dgi/">Facturación DGI</a>
+        <a href="/inventario/">Inventario</a>
+        <a href="/demo/" class="btn btn-primary" data-event="cta_demo_offline">Solicitar una demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Breadcrumb de 3 niveles en paridad con BreadcrumbList -->
+    <nav class="container off-breadcrumb" aria-label="Ruta de navegación">
+      <ol>
+        <li><a href="/">Inicio</a></li>
+        <li><a href="/software-pos/">Software POS</a></li>
+        <li aria-current="page">Sin internet</li>
+      </ol>
+    </nav>
+
+    <!-- Hero neutro con respuesta rápida y condición en los primeros 150 px -->
+    <section class="off-hero">
+      <div class="container">
+        <p class="eyebrow">Continuidad operativa · Nicaragua</p>
+        <h1>Sistema POS sin internet: qué pasa cuando la red se cae, paso a paso</h1>
+        <div class="off-quick-card">
+          <p>Cuando la red se cae, la venta se completa en la terminal: cobra en córdobas o dólares, emite el ticket con su correlativo consecutivo y queda registrada. Al volver el internet, todo llega al panel web en orden, sin duplicar. La condición: la terminal quedó configurada con tu catálogo.</p>
+        </div>
+        <div class="off-hero-cta">
+          <a class="btn btn-primary" href="/demo/" data-event="cta_demo_offline">Solicitar una demo</a>
+          <a class="btn btn-secondary" href="https://wa.me/50581948526?utm_medium=sin-internet" data-event="cta_whatsapp_offline">Escribir por WhatsApp</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 1: Segmentos (misma contingencia, operación a la medida) -->
+    <section class="section section--tinted" id="segmentos" aria-labelledby="segmentos-title">
+      <div class="container">
+        <p class="eyebrow">Misma mecánica en cuatro operaciones</p>
+        <h2 class="h-lg" id="segmentos-title">Sistema POS sin internet para restaurante, cafetería, food park o mostrador</h2>
+
+        <div class="off-segment-grid stagger">
+          <div class="off-segment-card">
+            <span class="off-segment-kicker">Restaurante</span>
+            <p>Cobra mesas y pedidos en mostrador con descuento de insumos por receta y correlativo consecutivo aun con la red caída.</p>
+          </div>
+          <div class="off-segment-card">
+            <span class="off-segment-kicker">Cafetería o panadería</span>
+            <p>Sigue vendiendo bebidas preparadas y productos de vitrina sin detener la fila de la mañana ni perder el arqueo del turno.</p>
+          </div>
+          <div class="off-segment-card">
+            <span class="off-segment-kicker">Food park</span>
+            <p>Cada puesto sigue cobrando en su propia terminal con su catálogo cargado y sube su cola al panel del administrador cuando regresa la red.</p>
+          </div>
+          <div class="off-segment-card">
+            <span class="off-segment-kicker">Mostrador</span>
+            <p>Venta simple en córdobas o dólares, vuelto calculado y registro local del turno sin depender de conexión permanente.</p>
+          </div>
+        </div>
+
+        <p class="off-segment-foot">La mecánica de contingencia es la misma en los cuatro casos: lo que cambia es tu operación diaria, no cómo responde el equipo cuando se cae la red.</p>
+        <!-- pending-link: /software-pos/restaurantes/ - se enlaza al publicarse -->
+        <!-- pending-link: /software-pos/food-parks/ - se enlaza al publicarse -->
+        <p class="off-pending-note">Guías dedicadas por segmento en preparación: restaurante (/software-pos/restaurantes/) y food park (/software-pos/food-parks/).</p>
+      </div>
+    </section>
+
+    <!-- H2 2: La escena a media venta + clip auditado + Par de honestidad (H3 1 y H3 2) -->
+    <section class="section" id="escena" data-event="offline_llega_escena" aria-labelledby="escena-title">
+      <div class="container">
+        <p class="eyebrow">Sábado 12:30 p. m., fila en caja</p>
+        <h2 class="h-lg" id="escena-title">¿Qué pasa cuando se cae el internet a media venta?</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 68ch;">En plena hora pico no hace falta cambiar de modo ni reiniciar la caja. La terminal trabaja sobre su copia local del catálogo, cobra en córdobas o dólares, emite el ticket con su correlativo consecutivo desde su impresora integrada y deja la venta guardada en el equipo.</p>
+
+        <div class="off-scene-stage reveal">
+          <ol class="off-timeline">
+            <li class="off-timeline-step">
+              <span class="off-timeline-time">Momento 01 · Red caída</span>
+              <span class="off-timeline-title">La caja no se bloquea ni pide recargar</span>
+              <p>El catálogo cargado en la terminal sigue disponible para elegir productos, aplicar modificadores y calcular totales en córdobas o dólares.</p>
+            </li>
+            <li class="off-timeline-step">
+              <span class="off-timeline-time">Momento 02 · Cobro completado</span>
+              <span class="off-timeline-title">Sale el ticket con correlativo consecutivo</span>
+              <p>Al confirmar el pago, la terminal física emite el comprobante en su impresora integrada y confirma en pantalla que la venta quedó procesada con éxito.</p>
+            </li>
+            <li class="off-timeline-step">
+              <span class="off-timeline-time">Momento 03 · En cola local</span>
+              <span class="off-timeline-title">Queda en la cola de salida del dispositivo</span>
+              <p>El indicador naranja de cola suma las operaciones pendientes de envío mientras la terminal sigue atendiendo al siguiente cliente.</p>
+            </li>
+            <li class="off-timeline-step">
+              <span class="off-timeline-time">Momento 04 · Al reconectar</span>
+              <span class="off-timeline-title">Sube al panel web en orden y sin duplicar</span>
+              <p>Cuando regresa el internet, la cola de salida del dispositivo entrega cada venta al panel respetando el orden original y los correlativos emitidos.</p>
+            </li>
+          </ol>
+
+          <figure class="off-device-frame" data-proof="venta-offline">
+            <div class="off-device-bezel">
+              <video
+                src="media/pos_offline_venta_exitosa.30ccc3cc.mp4"
+                poster="media/pos_offline_venta_exitosa_poster.ea6487ab.webp"
+                width="540"
+                height="1158"
+                muted
+                playsinline
+                loop
+                preload="metadata"
+                aria-label="Grabación real de la terminal NHILOS POS mostrando el catálogo, el badge naranja de cola con 2 pendientes y la barra verde Venta procesada con éxito"
+              ></video>
+            </div>
+            <figcaption>
+              <p class="off-fig-cap">Catálogo en caja con el badge naranja de cola marcando 2 operaciones pendientes y la barra verde de confirmación "Venta procesada con éxito" al cerrar el cobro.</p>
+              <span class="demo-tag">Grabación real de la terminal · datos de demostración</span>
+            </figcaption>
+          </figure>
+        </div>
+
+        <!-- Par de honestidad: H3 1 + H3 2 -->
+        <div class="off-honesty-pair reveal" id="listas-honestidad" data-event="offline_listas_lee">
+          <div class="off-honesty-col off-honesty-col--keep">
+            <span class="off-honesty-badge">En la terminal</span>
+            <h3>Qué sigue funcionando sin conexión</h3>
+            <ul class="off-honesty-list">
+              <li><strong>Cobro bimoneda:</strong> pagos en córdobas, dólares o combinados con cálculo de vuelto en la misma caja.</li>
+              <li><strong>Ticket con correlativo:</strong> emisión de comprobante consecutivo desde la impresora integrada de la terminal física.</li>
+              <li><strong>Catálogo cargado:</strong> productos, precios y modificadores configurados antes de la caída siguen operando sin pausas.</li>
+              <li><strong>Registro local de venta y turno:</strong> cada cobro y el movimiento del turno quedan guardados en la cola de salida del dispositivo.</li>
+            </ul>
+          </div>
+
+          <div class="off-honesty-col off-honesty-col--limit">
+            <span class="off-honesty-badge">Límites honestos</span>
+            <h3>Qué no es instantáneo (y cuándo llega)</h3>
+            <ul class="off-honesty-list">
+              <li><strong>Sincronización eventual:</strong> las ventas quedan en la cola de salida del dispositivo y llegan al panel web al reconectar, en orden y sin duplicar.</li>
+              <li><strong>Panel web en pausa:</strong> mientras la terminal sigue desconectada, el panel no se actualiza y la gestión remota desde el navegador queda en pausa.</li>
+              <li><strong>Cada terminal opera por su lado:</strong> no, hoy la coordinación entre varias terminales sin conexión no forma parte del sistema actual.</li>
+            </ul>
+
+            <figure class="off-sync-inset" data-proof="cola-sync">
+              <img
+                src="media/pos_offline_cola_sync_poster.cf458b78.webp"
+                width="720"
+                height="1544"
+                loading="lazy"
+                decoding="async"
+                alt="Captura editada de la terminal NHILOS POS mostrando el indicador naranja de cola con 1 venta esperando antes de reconectar y el rótulo 05 · EN COLA"
+              >
+              <figcaption>
+                <p class="off-fig-cap">Vista de la cola de salida del dispositivo con 1 venta esperando envío ("05 · EN COLA: Una venta esperando") hasta recuperar la conexión.</p>
+                <span class="demo-tag">Grabación real editada · datos de demostración</span>
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 3: Correlativo fiscal sin internet -->
+    <section class="section section--tinted" id="correlativo" aria-labelledby="correlativo-title">
+      <div class="container">
+        <p class="eyebrow">Continuidad fiscal en caja</p>
+        <h2 class="h-lg" id="correlativo-title">¿Y la facturación sin internet? El correlativo no se rompe</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 68ch;">Cuando el internet cae, la terminal sigue asignando el número consecutivo sin saltos ni repeticiones. Al volver la señal, los comprobantes emitidos en contingencia suben al servidor respetando el orden exacto en que se cobraron, sin duplicar registros.</p>
+
+        <div class="off-correlativo-strip stagger">
+          <div class="off-corr-cell">
+            <span class="off-corr-code">Sin saltos</span>
+            <span class="off-corr-title">Secuencia local intacta</span>
+            <p>Cada cobro cerrado en la terminal toma el siguiente número correlativo asignado al equipo, sin esperar respuesta de la nube.</p>
+          </div>
+          <div class="off-corr-cell">
+            <span class="off-corr-code">Sin duplicados</span>
+            <span class="off-corr-title">Subida ordenada al reconectar</span>
+            <p>La cola de salida del dispositivo entrega los comprobantes en secuencia y evita que un reintento de red duplique una factura.</p>
+          </div>
+          <div class="off-corr-cell">
+            <span class="off-corr-code">DT 09-2007</span>
+            <span class="off-corr-title">División clara con tu contador</span>
+            <p>El sistema resguarda la mecánica del correlativo; la autorización, el código y la numeración ante la DGI corresponden a tu negocio como contribuyente.</p>
+          </div>
+        </div>
+
+        <a class="off-inline-link" href="/facturacion-dgi/">Ver mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti →</a>
+      </div>
+    </section>
+
+    <!-- H2 4: Pérdida de ventas -->
+    <section class="section" id="perdidas" aria-labelledby="perdidas-title">
+      <div class="container">
+        <p class="eyebrow">Resguardo en el equipo</p>
+        <h2 class="h-lg" id="perdidas-title">¿Se pierden las ventas mientras no hay internet?</h2>
+
+        <div class="off-safety-callout reveal">
+          <p>Cada venta completada en la terminal queda registrada primero en la base local y entra a la cola de salida del dispositivo. Cuando la conexión vuelve, esas operaciones suben al panel web en orden y sin duplicar.</p>
+          <p>No hacemos promesas absolutas: la protección aplica a cada venta completada en una terminal configurada a tu negocio y con tu catálogo cargado.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 5: La condición honesta -->
+    <section class="section section--tinted" id="condicion" aria-labelledby="condicion-title">
+      <div class="container">
+        <p class="eyebrow">Requisito previo de puesta en marcha</p>
+        <h2 class="h-lg" id="condicion-title">La condición honesta: la terminal quedó configurada con tu catálogo</h2>
+
+        <div class="off-condition-panel reveal">
+          <div>
+            <p>La continuidad sin internet no es un truco de emergencia: funciona porque tu equipo quedó preparado antes de abrir caja. La implementación valida los dos requisitos antes de que la terminal entre a vender en tu local.</p>
+          </div>
+          <ul class="off-checklist">
+            <li>
+              <span class="off-check-box" aria-hidden="true">✓</span>
+              <div>
+                <strong>Terminal configurada a tu negocio</strong>
+                <span>Equipo vinculado a tu sucursal, con tus usuarios, turnos y serie de correlativo asignada.</span>
+              </div>
+            </li>
+            <li>
+              <span class="off-check-box" aria-hidden="true">✓</span>
+              <div>
+                <strong>Catálogo cargado en el dispositivo</strong>
+                <span>Productos, precios, modificadores y recetas sincronizados en la memoria local antes de operar.</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 6: Terminal dañada + Apagón eléctrico vs apagón de red -->
+    <section class="section" id="recuperacion" aria-labelledby="recuperacion-title">
+      <div class="container">
+        <p class="eyebrow">Recuperación y límites físicos</p>
+        <h2 class="h-lg" id="recuperacion-title">¿Y si se daña la terminal?</h2>
+
+        <div class="off-recovery-split reveal">
+          <div class="off-recovery-card">
+            <span class="off-recovery-kicker">Recuperación de datos</span>
+            <p>Si una terminal se daña o necesita reemplazo, el equipo sustituto se configura de nuevo a tu negocio y descarga tu catálogo desde el panel para retomar la operación.</p>
+            <p>Las ventas que ya sincronizaron están resguardadas en el panel; las que todavía no habían salido permanecen en la cola de salida del dispositivo que las registró.</p>
+          </div>
+
+          <div class="off-recovery-card off-recovery-card--power">
+            <span class="off-recovery-kicker">Apagón de red vs apagón eléctrico</span>
+            <p>Conviene separar los dos escenarios: el apagón de red es lo que resuelve el modo local-first. En cambio, un apagón eléctrico deja sin corriente al local y la terminal necesita energía para cobrar e imprimir en su impresora integrada.</p>
+            <!-- pending-link: /software-pos/hardware/ - se enlaza al publicarse -->
+            <p>Los detalles de terminal física y respaldo eléctrico corresponden al equipo de hardware (/software-pos/hardware/, en preparación); el software no promete horas de autonomía.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 7: Preguntas frecuentes (paridad carácter por carácter con FAQPage JSON-LD) -->
+    <section class="section section--tinted" id="faq" aria-labelledby="faq-title">
+      <div class="container">
+        <p class="eyebrow">Respuestas con sus límites</p>
+        <h2 class="h-lg" id="faq-title">Preguntas frecuentes sobre el POS sin internet</h2>
+
+        <div class="faq-grid reveal">
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Cómo funciona un POS offline?</h3>
+            <p>En Nicaragua, NHILOS POS opera primero en la terminal: cuando cae la red, el equipo cobra con el catálogo cargado, asigna el correlativo consecutivo y guarda cada operación en la cola de salida del dispositivo. Al volver el internet, la cola sube al panel web en orden y sin duplicar; mientras no hay conexión, el panel permanece en pausa.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Se pierden las ventas sin internet?</h3>
+            <p>En Nicaragua, cada venta completada en una terminal de NHILOS POS queda registrada en la cola de salida del dispositivo y sube al panel web al reconectar, en orden y sin duplicar. Esta continuidad aplica cuando la terminal quedó configurada a tu negocio y con tu catálogo cargado.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Puedo facturar sin conexión?</h3>
+            <p>Sí: en Nicaragua, NHILOS POS mantiene el correlativo consecutivo en la terminal sin saltos ni repeticiones y emite el ticket desde la impresora integrada de la terminal física. La autorización DGI y la mecánica completa de la DT 09-2007 corresponden al contribuyente y se detallan en /facturacion-dgi/.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Cuándo veo las ventas en mi panel?</h3>
+            <p>En Nicaragua, la sincronización de NHILOS POS hacia el panel web es eventual: las ventas llegan cuando la terminal recupera conexión, en orden y sin duplicar. Mientras el equipo sigue sin internet, el panel web no se actualiza y la gestión remota queda en pausa.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Funciona con varias terminales al mismo tiempo sin internet?</h3>
+            <p>No, hoy en Nicaragua cada terminal de NHILOS POS opera por su lado cuando se cae la red y sincroniza su propia cola al reconectar. La coordinación entre varias cajas sin conexión no forma parte del sistema actual.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Y si se va la luz?</h3>
+            <p>En Nicaragua, NHILOS POS resuelve el apagón de red, no el apagón eléctrico: la terminal necesita energía para operar y emitir comprobantes. La continuidad eléctrica depende del equipo físico y del respaldo de energía de tu local, sin autonomía prometida por el software.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_offline_abre">
+            <h3>¿Qué necesito para que funcione sin internet?</h3>
+            <p>Para operar sin conexión en Nicaragua con NHILOS POS, la terminal debe haber quedado configurada a tu negocio y con tu catálogo cargado antes de entrar en servicio. Ambos requisitos se validan durante la implementación antes de empezar a vender.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 8: CTA final -->
+    <section class="section off-close-cta" id="demo" aria-labelledby="demo-title">
+      <div class="container reveal">
+        <p class="eyebrow">Verificación en escenario real</p>
+        <h2 class="h-lg" id="demo-title">Solicita una demo y mira la contingencia con tu operación</h2>
+        <p class="lead" style="margin-top: var(--space-4); max-width: 64ch;">Armamos el escenario según tu tipo de negocio y tu prioridad para que veas el cobro, la cola de salida del dispositivo y el orden al reconectar. Al finalizar recibes una cotización con cronograma real.</p>
+        <div class="off-close-actions">
+          <a class="btn btn-on-dark" href="/demo/" data-event="cta_demo_offline">Solicitar una demo</a>
+          <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=sin-internet" data-event="cta_whatsapp_offline">Escribir por WhatsApp</a>
+        </div>
+        <div class="off-close-links">
+          <a href="/software-pos/">qué es NHILOS POS: venta local-first</a>
+          <a href="/facturacion-dgi/">mecánica de facturación DT 09-2007</a>
+          <a href="/precios/">ver planes y precios de NHILOS POS</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="wordmark" href="/"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
+          <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
+          <p class="footer-contact">
+            WhatsApp: <a href="https://wa.me/50581948526?utm_medium=sin-internet" data-event="cta_whatsapp_offline">+505 8194 8526</a><br>
+            Managua, Nicaragua · área de servicio nacional
+          </p>
+          <div class="footer-social">
+            <a href="https://www.instagram.com/nhilosapp/" aria-label="Instagram de NHILOS" title="Instagram"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37a4 4 0 1 1-7.914 1.173A4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+            <a href="https://www.facebook.com/nhilosapp" aria-label="Facebook de NHILOS" title="Facebook"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+            <a href="https://www.tiktok.com/@nhilosapp" aria-label="TikTok de NHILOS" title="TikTok"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg></a>
+          </div>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Sin internet</h3>
+          <ul class="footer-list">
+            <li><a href="#escena">A media venta</a></li>
+            <li><a href="#listas-honestidad">Qué sigue y qué espera</a></li>
+            <li><a href="#correlativo">Correlativo DT 09-2007</a></li>
+            <li><a href="#condicion">La condición honesta</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Producto</h3>
+          <ul class="footer-list">
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li><a href="/precios/">Planes y precios</a></li>
+            <li><a href="/facturacion-dgi/">Facturación DGI</a></li>
+            <li><a href="/inventario/">Inventario</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Contacto</h3>
+          <ul class="footer-list">
+            <li><a href="https://wa.me/50581948526?utm_medium=sin-internet" data-event="cta_whatsapp_offline">WhatsApp directo</a></li>
+            <li><a href="/demo/" data-event="cta_demo_offline">Solicitar una demo</a></li>
+            <li><a href="#faq">Preguntas frecuentes</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 NHILOS. Estructura de facturación conforme a la Disposición Técnica 09-2007; la autorización DGI y la valuación fiscal corresponden a cada contribuyente con su contador.</p>
+        <a class="footer-top-link" href="#inicio">Volver arriba <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>

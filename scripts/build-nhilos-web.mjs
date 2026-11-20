@@ -35,6 +35,18 @@ const PAGES = [
     url: "/inventario/",
     title: "Sistema de inventario en Nicaragua · Kardex y merma | NHILOS",
   },
+  {
+    source: "10-demo.html",
+    out: "demo/index.html",
+    url: "/demo/",
+    title: "Demo de NHILOS POS: qué recibes y cómo se coordina",
+  },
+  {
+    source: "11-sin-internet.html",
+    out: "software-pos/sin-internet/index.html",
+    url: "/software-pos/sin-internet/",
+    title: "POS sin internet en Nicaragua: qué pasa cuando cae la red",
+  },
 ];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");

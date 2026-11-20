@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo de NHILOS POS: qué recibes y cómo se coordina</title>
+  <meta name="description" content="Pide tu demo de NHILOS POS: escenario según tu tipo de negocio, datos de demostración y cotización con cronograma real al finalizar. Sin compromiso.">
+  <link rel="canonical" href="https://nhilospos.com/demo/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_NI">
+  <meta property="og:site_name" content="NHILOS POS">
+  <meta property="og:title" content="Demo de NHILOS POS: qué recibes y cómo se coordina">
+  <meta property="og:description" content="Pide tu demo de NHILOS POS: escenario según tu tipo de negocio, datos de demostración y cotización con cronograma real al finalizar. Sin compromiso.">
+  <meta property="og:url" content="https://nhilospos.com/demo/">
+  <meta name="robots" content="index, follow">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="media/favicon-192.png">
+  <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+  <meta name="theme-color" content="#001829">
+
+  <!-- Social sharing -->
+  <meta property="og:image" content="https://nhilospos.com/media/og-home.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Terminal NHILOS POS en mano con la interfaz real del sistema de punto de venta">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Demo de NHILOS POS: qué recibes y cómo se coordina">
+  <meta name="twitter:description" content="Pide tu demo de NHILOS POS: escenario según tu tipo de negocio, datos de demostración y cotización con cronograma real al finalizar. Sin compromiso.">
+  <meta name="twitter:image" content="https://nhilospos.com/media/og-home.jpg">
+
+  <!-- CLAIM GUARD (brief /demo/ §9.5 + odd/tasks/nhilos-web-demo.md S1-S24):
+       1. Tono sobrio: sin urgencia artificial, sin escasez inventada ni contadores.
+       2. Duración no publicada en minutos ni horas: la demo se arma según la operación.
+       3. Costo de la demo: solo la frase aprobada "se coordina sin compromiso" (nunca gratis).
+       4. Plazo único aprobado: "menos de 24 horas hábiles", sin variantes más rápidas.
+       5. Canal único: el formulario compone el mensaje y abre WhatsApp para que el usuario lo envíe; no hay backend.
+       6. Sin capturas de producto por defecto (S12); provenance textual en .demo-tag.
+       7. Campos exactos: 4 base + contexto (rubro, prioridad, terminalCount, nota opcional). Sin RUC, correo ni presupuesto.
+       Analítica (S14): atributos data-event colocados en el marcado; sin scripts de terceros. -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://nhilospos.com/#organization",
+      "name": "NHILOS POS",
+      "url": "https://nhilospos.com/",
+      "description": "Sistema de punto de venta local-first para gastronomía y comercios de mostrador en Nicaragua. Funciona sin internet, con mecánica de facturación conforme a la DT 09-2007 y control de inventario a la medida.",
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Managua"
+        },
+        {
+          "@type": "Country",
+          "name": "Nicaragua"
+        }
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "sales",
+        "telephone": "+505 8194 8526",
+        "availableLanguage": "Spanish",
+        "hoursAvailable": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "00:00",
+          "closes": "23:59"
+        }
+      },
+      "sameAs": [
+        "https://www.instagram.com/nhilosapp/",
+        "https://www.facebook.com/nhilosapp",
+        "https://www.tiktok.com/@nhilosapp"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://nhilospos.com/demo/#breadcrumb",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Inicio",
+          "item": "https://nhilospos.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Demo",
+          "item": "https://nhilospos.com/demo/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://nhilospos.com/demo/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "¿La demo tiene costo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, la demo de NHILOS POS se coordina sin compromiso. Al finalizar recibes una cotización con cronograma real según el alcance de tu operación."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cuándo me contactan?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, el equipo de NHILOS POS te escribe por WhatsApp en menos de 24 horas hábiles para confirmar tu escenario y coordinar el horario contigo."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cuánto dura?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "La demo de NHILOS POS en Nicaragua no tiene una duración fija publicada porque se arma con los datos de tu operación. El rubro, lo que te cuesta controlar y cuántas cajas operas definen qué se muestra y cuánto se profundiza."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Necesito preparar algo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Para pedir la demo de NHILOS POS en Nicaragua solo necesitas saber qué vendes, cuántas cajas operas y si trabajas con cocina o solo mostrador. No hace falta enviar tu menú, hojas de Excel ni archivos previos, porque la carga del catálogo real corresponde a la implementación."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Veo el sistema con mi tipo de negocio?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí: en Nicaragua, NHILOS POS arma el escenario según tu tipo de negocio y tu prioridad, ya sea restaurante, cafetería, food park o comercio de mostrador. Si tu prioridad es la contingencia sin internet o el control de recetas, se muestra en ese escenario."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Los datos de la demo son reales?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No: en Nicaragua, NHILOS POS muestra el sistema con datos de demostración etiquetados bajo la referencia Operación real capturada de NHILOS Market & Café · datos de demostración. Ningún dato real de tu negocio entra en la demostración."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué pasa después?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Al finalizar la demo de NHILOS POS en Nicaragua recibes una cotización con cronograma real que detalla setup, terminales y packs según tu operación. Puedes revisar antes los planes públicos en /precios/ y, si decides avanzar, la etapa siguiente es la implementación."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="stylesheet" href="assets/site.css">
+  <style>
+    /* ==========================================================================
+       /demo/ · patrones propios de conversión y proceso (tokens solo de site.css)
+       Nuevos patrones: dm-hero, dm-expect-split, dm-segment-rows, dm-steps-horiz,
+       dm-prep-check, dm-provenance-box, dm-after-flow, dm-form-stage.
+       Reutilizados del sistema: faq-cell, demo-tag, demo-form, form-field, pill-row.
+       ========================================================================== */
+
+    .dm-breadcrumb { padding-top: var(--space-5); padding-bottom: var(--space-2); }
+    .dm-breadcrumb ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--text-body-sm); color: var(--web-text-muted); }
+    .dm-breadcrumb li + li::before { content: "/"; margin-right: 8px; color: var(--web-text-muted); }
+    .dm-breadcrumb a { color: var(--web-text-secondary); text-decoration: none; }
+    .dm-breadcrumb a:hover { color: var(--web-emerald-700); text-decoration: underline; }
+    .dm-breadcrumb [aria-current="page"] { color: var(--web-text-primary); font-weight: 600; }
+
+    /* Hero de conversión: H1 neutro + respuesta rápida en primeros 150 px */
+    .dm-hero { padding-block: var(--space-8) var(--space-8); }
+    .dm-hero h1 { font-size: var(--text-display-xl); line-height: 1.08; font-weight: 800; letter-spacing: -0.03em; max-width: 24ch; margin-bottom: var(--space-5); }
+    .dm-quick-box { max-width: 74ch; background: var(--web-bg-subtle); border-left: 3px solid var(--web-emerald-500); border-radius: 0 var(--radius-md) var(--radius-md) 0; padding: var(--space-5) var(--space-6); }
+    .dm-quick-box p { font-size: var(--text-body-lg); line-height: 1.6; color: var(--web-text-primary); margin: 0; }
+    .dm-hero-cta { margin-top: var(--space-6); display: flex; flex-wrap: wrap; gap: var(--space-3); }
+    .dm-signal-bar { margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--web-border-hairline); display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); list-style: none; padding-left: 0; }
+    .dm-signal-bar li { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 600; letter-spacing: 0.04em; color: var(--web-text-secondary); display: flex; align-items: center; gap: 8px; }
+    .dm-signal-bar li::before { content: ""; width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--web-emerald-500); flex-shrink: 0; }
+    @media (max-width: 640px) {
+      .dm-hero { padding-block: var(--space-5) var(--space-6); }
+      .dm-hero h1 { font-size: clamp(1.85rem, 7.2vw, 2.35rem); }
+      .dm-quick-box { padding: var(--space-4); }
+      .dm-quick-box p { font-size: var(--text-body-md); }
+    }
+
+    /* H2 1: Bloque de expectativas (lo que recibes / lo que no recibes) */
+    .dm-expect-split { margin-top: var(--space-6); display: grid; grid-template-columns: 1.15fr 0.85fr; gap: var(--space-5); }
+    .dm-expect-card { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--shadow-card); }
+    .dm-expect-card--no { background: var(--web-bg-subtle); box-shadow: none; }
+    .dm-expect-kicker { display: inline-block; font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-emerald-700); margin-bottom: var(--space-3); }
+    .dm-expect-card--no .dm-expect-kicker { color: var(--web-navy-800); }
+    .dm-approved-bullet { font-family: var(--font-subheading); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); margin: 0 0 var(--space-4); line-height: 1.35; }
+    .dm-expect-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .dm-expect-list li { font-size: var(--text-body-md); color: var(--web-text-secondary); padding-left: 18px; position: relative; }
+    .dm-expect-list li::before { content: ""; position: absolute; left: 0; top: 0.58em; width: 7px; height: 7px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    .dm-expect-card--no .dm-expect-list li::before { width: 8px; height: 2px; border-radius: 0; top: 0.68em; background: var(--web-navy-800); }
+    @media (max-width: 820px) { .dm-expect-split { grid-template-columns: 1fr; } }
+
+    /* H2 2: Segmentos en filas editoriales + H3 escenarios */
+    .dm-segment-rows { margin-top: var(--space-6); border-top: 1px solid var(--web-border-hairline); }
+    .dm-segment-row { display: grid; grid-template-columns: minmax(0, 240px) minmax(0, 1fr); gap: var(--space-5); padding-block: var(--space-4); border-bottom: 1px solid var(--web-border-hairline); align-items: baseline; }
+    .dm-segment-name { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); }
+    .dm-segment-desc { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0; max-width: 64ch; }
+    .dm-segment-close { margin-top: var(--space-5); font-size: var(--text-body-md); font-weight: 600; color: var(--web-text-primary); max-width: 68ch; }
+    .dm-scenarios-box { margin-top: var(--space-6); background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); }
+    .dm-scenarios-box h3 { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 700; color: var(--web-text-primary); margin: 0 0 var(--space-4); }
+    .dm-scenarios-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .dm-scenarios-list li { font-size: var(--text-body-md); color: var(--web-text-secondary); padding-left: 18px; position: relative; }
+    .dm-scenarios-list li::before { content: ""; position: absolute; left: 0; top: 0.58em; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    .dm-scenarios-list strong { color: var(--web-text-primary); }
+    @media (max-width: 720px) { .dm-segment-row { grid-template-columns: 1fr; gap: var(--space-2); } }
+
+    /* H2 3: Proceso en tres pasos horizontales + H3 duración */
+    .dm-steps-horiz { margin-top: var(--space-6); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); list-style: none; padding: 0; }
+    .dm-step-tile { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-2); }
+    .dm-step-num { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; color: var(--web-emerald-700); letter-spacing: 0.08em; }
+    .dm-step-title { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 700; color: var(--web-text-primary); }
+    .dm-step-tile p { font-size: var(--text-body-sm); color: var(--web-text-secondary); margin: 0; }
+    .dm-duration-card { margin-top: var(--space-6); background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-left: 3px solid var(--web-navy-800); border-radius: var(--radius-md); padding: var(--space-5) var(--space-6); max-width: 74ch; }
+    .dm-duration-card h3 { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 700; color: var(--web-text-primary); margin: 0 0 var(--space-3); }
+    .dm-duration-card p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0 0 var(--space-3); }
+    .dm-duration-card p:last-child { margin-bottom: 0; color: var(--web-text-primary); font-weight: 600; }
+    @media (max-width: 860px) { .dm-steps-horiz { grid-template-columns: 1fr; } }
+
+    /* H2 4: Qué preparar (checklist mínimo + no necesitas enviar) */
+    .dm-prep-check { margin-top: var(--space-6); display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-5); align-items: start; }
+    .dm-prep-items { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .dm-prep-items li { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); display: flex; gap: var(--space-3); align-items: baseline; }
+    .dm-prep-idx { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; color: var(--web-emerald-700); flex-shrink: 0; }
+    .dm-prep-items strong { color: var(--web-text-primary); display: block; font-size: var(--text-body-md); }
+    .dm-prep-items span { font-size: var(--text-body-sm); color: var(--web-text-secondary); }
+    .dm-prep-not-needed { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-5) var(--space-6); }
+    .dm-prep-not-needed strong { display: block; font-family: var(--font-subheading); font-size: var(--text-heading-sm); color: var(--web-text-primary); margin-bottom: var(--space-2); }
+    .dm-prep-not-needed p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0; }
+    @media (max-width: 820px) { .dm-prep-check { grid-template-columns: 1fr; } }
+
+    /* H2 5: Provenance textual sin capturas (S12) */
+    .dm-provenance-box { margin-top: var(--space-6); background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-6); max-width: 74ch; }
+    .dm-provenance-box p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0 0 var(--space-3); }
+    .dm-provenance-box .demo-tag { margin-top: var(--space-2); display: inline-block; padding: 6px 12px; background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-xs); color: var(--web-text-primary); }
+
+    /* H2 6: Qué pasa después + enlaces salientes */
+    .dm-after-flow { margin-top: var(--space-6); display: grid; grid-template-columns: 1.1fr 0.9fr; gap: var(--space-6); align-items: start; }
+    .dm-after-copy p { font-size: var(--text-body-md); color: var(--web-text-secondary); margin: 0 0 var(--space-4); max-width: 62ch; }
+    .dm-after-copy .dm-approved-bullet { margin-bottom: var(--space-3); }
+    .dm-after-links { background: var(--web-bg-canvas); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); }
+    .dm-after-links-title { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-navy-800); display: block; margin-bottom: var(--space-3); }
+    .dm-after-links ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+    .dm-after-links a { font-size: var(--text-body-md); font-weight: 600; color: var(--web-emerald-700); text-decoration: none; }
+    .dm-after-links a:hover { text-decoration: underline; }
+    .dm-after-links .dm-pending-step { font-size: var(--text-body-sm); color: var(--web-text-muted); }
+    @media (max-width: 820px) { .dm-after-flow { grid-template-columns: 1fr; } }
+
+    /* H2 8: Formulario como pieza central (S10, S11, S18, S19) */
+    .dm-form-stage { background: var(--web-navy-900); color: var(--web-bg-canvas); }
+    .dm-form-stage .eyebrow { color: var(--web-emerald-500); }
+    .dm-form-stage h2 { color: var(--web-bg-canvas); }
+    .dm-form-shell { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: var(--space-8); align-items: start; }
+    .dm-form-aside p { color: var(--web-navy-50); font-size: var(--text-body-md); margin: var(--space-4) 0; max-width: 44ch; }
+    .dm-form-honest { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: var(--radius-md); padding: var(--space-4) var(--space-5); margin-top: var(--space-5); }
+    .dm-form-honest strong { display: block; font-size: var(--text-body-sm); color: var(--web-bg-canvas); margin-bottom: var(--space-1); }
+    .dm-form-honest p { margin: 0; font-size: var(--text-body-sm); color: var(--web-navy-50); }
+    .dm-wa-direct { margin-top: var(--space-5); }
+    .dm-wa-direct p { margin: 0 0 var(--space-3); font-size: var(--text-body-sm); color: var(--web-navy-50); }
+
+    .dm-form-group-title { font-family: var(--font-mono); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--web-emerald-700); margin: 0 0 var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--web-border-hairline); }
+    .dm-form-group + .dm-form-group { margin-top: var(--space-6); }
+    .dm-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+    .dm-textarea { width: 100%; min-height: 84px; padding: 12px 14px; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-sm); font: inherit; font-size: var(--text-body-md); color: var(--web-text-primary); background: var(--web-bg-canvas); resize: vertical; }
+    .dm-textarea::placeholder, .demo-form .form-input::placeholder { color: #475569; opacity: 1; }
+    .dm-textarea:focus { outline: 2px solid var(--web-emerald-500); outline-offset: 1px; border-color: var(--web-emerald-500); }
+    .demo-form .pill-check span { min-height: 44px; display: inline-flex; align-items: center; }
+    .demo-form .form-input, .demo-form .form-select, .demo-form .form-submit { min-height: 44px; }
+    .dm-noscript-box { margin-top: var(--space-4); padding: var(--space-4); background: var(--web-emerald-50); border: 1px solid var(--web-emerald-500); border-radius: var(--radius-sm); color: var(--web-text-primary); font-size: var(--text-body-sm); }
+    .dm-noscript-box a { color: var(--web-emerald-700); font-weight: 700; text-decoration: underline; }
+    @media (max-width: 960px) { .dm-form-shell { grid-template-columns: 1fr; gap: var(--space-6); } }
+    @media (max-width: 640px) { .dm-form-row { grid-template-columns: 1fr; gap: 0; } }
+  </style>
+  <noscript><style>.reveal, .stagger > *, .hilo-step { opacity: 1 !important; transform: none !important; }</style></noscript>
+</head>
+<body>
+  <div class="hilo-progress" aria-hidden="true"><span id="hiloProgress"></span></div>
+
+  <!-- Spine de lectura compartido -->
+  <nav class="spine" id="spineNav" aria-label="Índice de secciones">
+    <span class="spine-track" aria-hidden="true"><span class="spine-progress" id="spineProgress"></span></span>
+    <a href="#inicio" data-target="inicio" data-label="Inicio" aria-label="Inicio"><span class="num">01</span></a>
+    <a href="#que-es" data-target="que-es" data-label="Qué recibes" aria-label="Qué recibes"><span class="num">02</span></a>
+    <a href="#segmentos" data-target="segmentos" data-label="Tu operación" aria-label="Tu operación"><span class="num">03</span></a>
+    <a href="#coordinacion" data-target="coordinacion" data-label="Coordinación" aria-label="Coordinación"><span class="num">04</span></a>
+    <a href="#preparar" data-target="preparar" data-label="Qué preparar" aria-label="Qué preparar"><span class="num">05</span></a>
+    <a href="#datos" data-target="datos" data-label="Datos" aria-label="Datos"><span class="num">06</span></a>
+    <a href="#despues" data-target="despues" data-label="Después" aria-label="Después"><span class="num">07</span></a>
+    <a href="#faq" data-target="faq" data-label="Preguntas" aria-label="Preguntas"><span class="num">08</span></a>
+    <a href="#formulario" data-target="formulario" data-label="Pedir demo" aria-label="Pedir demo"><span class="num">09</span></a>
+    <a href="#inicio" class="spine-top" data-label="Volver arriba" aria-label="Volver arriba"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+  </nav>
+
+  <!-- Back to top flotante -->
+  <button type="button" class="back-top" id="backTop" aria-label="Volver arriba">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <!-- Header compartido -->
+  <header class="site-header" id="inicio">
+    <div class="container site-header-inner">
+      <a class="wordmark" href="/" aria-label="NHILOS POS, ir al inicio">
+        <img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
+        NHILOS <span class="pos">POS</span>
+      </a>
+      <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
+        <a href="/software-pos/">Software POS</a>
+        <a href="/precios/">Precios</a>
+        <a href="/facturacion-dgi/">Facturación DGI</a>
+        <a href="/inventario/">Inventario</a>
+        <a href="#formulario" class="btn btn-primary">Pedir demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Breadcrumb visible en paridad con BreadcrumbList -->
+    <nav class="container dm-breadcrumb" aria-label="Ruta de navegación">
+      <ol>
+        <li><a href="/">Inicio</a></li>
+        <li aria-current="page">Demo</li>
+      </ol>
+    </nav>
+
+    <!-- Hero de conversión: H1 neutro + respuesta rápida en primeros 150 px -->
+    <section class="dm-hero">
+      <div class="container">
+        <p class="eyebrow">Demostración guiada · Nicaragua</p>
+        <h1>Demo de NHILOS POS: qué recibes y cómo se coordina</h1>
+        <div class="dm-quick-box">
+          <p>Pides la demo y te escribimos por WhatsApp. Ves NHILOS POS en un escenario armado según tu tipo de negocio y tu prioridad, con datos de demostración etiquetados. La cotización con cronograma real sale al finalizar. Te confirmamos en menos de 24 horas hábiles.</p>
+        </div>
+        <div class="dm-hero-cta">
+          <a class="btn btn-primary" href="#formulario">Completar datos para la demo</a>
+          <a class="btn btn-secondary" href="https://wa.me/50581948526?utm_medium=demo" data-event="demo_whatsapp_clic">Escribir directo por WhatsApp</a>
+        </div>
+        <ul class="dm-signal-bar">
+          <li>Confirmación por WhatsApp en menos de 24 horas hábiles</li>
+          <li>Se coordina sin compromiso</li>
+          <li>Escenario armado con datos de demostración</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- H2 1: Qué es la demo -->
+    <section class="section section--tinted" id="que-es" aria-labelledby="que-es-title">
+      <div class="container">
+        <p class="eyebrow">Alcance real de la sesión</p>
+        <h2 class="h-lg" id="que-es-title">¿Qué es la demo de NHILOS POS?</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 68ch;">Es una demostración en vivo del sistema funcionando sobre un escenario parecido al de tu negocio, enfocada en lo que necesitas validar antes de tomar una decisión.</p>
+
+        <div class="dm-expect-split reveal">
+          <div class="dm-expect-card">
+            <span class="dm-expect-kicker">Lo que recibes</span>
+            <p class="dm-approved-bullet">Escenario armado según tu tipo de negocio y tu prioridad.</p>
+            <ul class="dm-expect-list">
+              <li>Venta en mostrador con cobro bimoneda en córdobas y dólares, según tu flujo diario.</li>
+              <li>Contingencia sin internet: cómo sigue facturando la terminal y cómo sincroniza al volver la conexión.</li>
+              <li>Recetas con descuento de insumos y costo por plato cuando preparas alimentos, o stock simple si revendes.</li>
+              <li>Respuestas directas sobre numeración DT 09-2007, turnos, arqueos y operación del panel web.</li>
+            </ul>
+          </div>
+          <div class="dm-expect-card dm-expect-card--no">
+            <span class="dm-expect-kicker">Lo que no recibes</span>
+            <ul class="dm-expect-list">
+              <li>No es una presentación de slides ni un guion comercial idéntico para todos.</li>
+              <li>No es una grabación genérica enviada por correo sin espacio para tus preguntas.</li>
+              <li>No hay presión de venta ni plazos artificiales para que decidas al terminar la llamada.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 2: Segmentos + H3 escenarios -->
+    <section class="section" id="segmentos" aria-labelledby="segmentos-title">
+      <div class="container">
+        <p class="eyebrow">Un mismo sistema, control a la medida</p>
+        <h2 class="h-lg" id="segmentos-title">Demo de sistema POS para restaurante, cafetería, food park o mostrador</h2>
+
+        <h3>Qué se muestra según tu tipo de negocio</h3>
+
+        <div class="dm-segment-rows reveal">
+          <div class="dm-segment-row">
+            <span class="dm-segment-name">Restaurante</span>
+            <p class="dm-segment-desc">Recetas con descuento automático de insumos por plato vendido, modificadores y recálculo de costo cuando cambia el precio de compra.</p>
+          </div>
+          <div class="dm-segment-row">
+            <span class="dm-segment-name">Cafetería o panadería</span>
+            <p class="dm-segment-desc">Convivencia de bebidas y cocina con recetas junto a productos de vitrina y reventa en modo simple dentro del mismo catálogo.</p>
+          </div>
+          <div class="dm-segment-row">
+            <span class="dm-segment-name">Food park</span>
+            <p class="dm-segment-desc">Catálogo propio por puesto, cobro independiente por terminal y visibilidad de la operación desde el panel web para la administración del park.</p>
+          </div>
+          <div class="dm-segment-row">
+            <span class="dm-segment-name">Tienda o mostrador</span>
+            <p class="dm-segment-desc">Cobro rápido en modo simple, bimoneda en córdobas y dólares, arqueo de turno por usuario y control de existencias sin configurar recetas.</p>
+          </div>
+        </div>
+        <p class="dm-segment-close">Es el mismo sistema con el control ajustado a tu negocio: un mostrador simple opera sin recetas y solo activa el nivel de inventario que realmente usa. La contingencia sin internet se muestra en el mismo escenario cuando la continuidad ante caídas de red es tu prioridad.</p>
+</div>
+    </section>
+
+    <!-- H2 3: Coordinación + H3 duración -->
+    <section class="section section--tinted" id="coordinacion" aria-labelledby="coordinacion-title">
+      <div class="container">
+        <p class="eyebrow">Proceso sin fricción</p>
+        <h2 class="h-lg" id="coordinacion-title">¿Cómo se coordina y cuánto hay que esperar?</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 66ch;">La demo se coordina sin compromiso por WhatsApp. Te confirmamos en menos de 24 horas hábiles para acordar el día y la hora que mejor te convengan, sin urgencia artificial ni presión comercial.</p>
+
+        <ol class="dm-steps-horiz stagger">
+          <li class="dm-step-tile">
+            <span class="dm-step-num">Paso 01</span>
+            <span class="dm-step-title">Pides por formulario o WhatsApp</span>
+            <p>Dejas tu nombre, negocio, WhatsApp y tres datos de tu operación, o nos escribes directo al +505 8194 8526.</p>
+          </li>
+          <li class="dm-step-tile">
+            <span class="dm-step-num">Paso 02</span>
+            <span class="dm-step-title">Te escribimos en menos de 24 horas hábiles</span>
+            <p>Confirmamos qué escenario vamos a revisar contigo y proponemos horarios en función de tu disponibilidad.</p>
+          </li>
+          <li class="dm-step-tile">
+            <span class="dm-step-num">Paso 03</span>
+            <span class="dm-step-title">Se agenda y se muestra el sistema</span>
+            <p>Recorremos el flujo que elegiste con tus preguntas abiertas y cerramos con el alcance real para tu negocio.</p>
+          </li>
+        </ol>
+
+        <div class="dm-duration-card reveal">
+          <h3>¿Cuánto dura la demo?</h3>
+          <p>No publicamos una duración fija porque la sesión se arma con tu operación: el rubro, lo que te cuesta hoy controlar y cuántas cajas operas definen qué se muestra y cuánto se profundiza en cada punto.</p>
+          <p>Cotización con cronograma real al finalizar la demo.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 4: Qué necesito preparar -->
+    <section class="section" id="preparar" data-event="demo_prepara_lee" aria-labelledby="preparar-title">
+      <div class="container">
+        <p class="eyebrow">Sin trámites previos</p>
+        <h2 class="h-lg" id="preparar-title">¿Qué necesito preparar?</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 64ch;">Solo tres respuestas sobre tu operación actual para armar el escenario correcto antes de conectarnos.</p>
+
+        <div class="dm-prep-check reveal">
+          <ol class="dm-prep-items">
+            <li>
+              <span class="dm-prep-idx">01</span>
+              <div>
+                <strong>Qué vendes</strong>
+                <span>Tu rubro y si manejas platos preparados, bebidas o productos de reventa.</span>
+              </div>
+            </li>
+            <li>
+              <span class="dm-prep-idx">02</span>
+              <div>
+                <strong>Cuántas cajas operas</strong>
+                <span>Si cobras en una sola terminal o en varias cajas al mismo tiempo.</span>
+              </div>
+            </li>
+            <li>
+              <span class="dm-prep-idx">03</span>
+              <div>
+                <strong>Cocina o solo mostrador</strong>
+                <span>Si necesitas descontar insumos por receta o trabajar en modo simple.</span>
+              </div>
+            </li>
+          </ol>
+
+          <div class="dm-prep-not-needed">
+            <strong>No necesitas enviar archivos antes</strong>
+            <p>No hace falta mandar tu menú, hojas de Excel, listas de precios ni bases de datos para pedir la demo. La carga de tu catálogo real y la configuración de tu operación forman parte de la implementación, no de la demostración.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 5: Con qué datos se muestra el sistema (sin capturas por defecto, S12) -->
+    <section class="section section--tinted" id="datos" aria-labelledby="datos-title">
+      <div class="container">
+        <p class="eyebrow">Transparencia de evidencia</p>
+        <h2 class="h-lg" id="datos-title">¿Con qué datos se muestra el sistema?</h2>
+
+        <div class="dm-provenance-box reveal">
+          <p>La demostración corre sobre datos de demostración etiquetados, nunca sobre información real de otros clientes ni sobre capturas maquilladas. Ningún dato real de tu negocio entra en la demo.</p>
+          <p>Todo el entorno de demostración utiliza la referencia aprobada:</p>
+          <span class="demo-tag">Operación real capturada de NHILOS Market &amp; Café · datos de demostración</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 6: Qué pasa después de la demo -->
+    <section class="section" id="despues" aria-labelledby="despues-title">
+      <div class="container">
+        <p class="eyebrow">Cierre claro</p>
+        <h2 class="h-lg" id="despues-title">¿Qué pasa después de la demo?</h2>
+
+        <div class="dm-after-flow reveal">
+          <div class="dm-after-copy">
+            <p class="dm-approved-bullet">Cotización con cronograma real al finalizar la demo.</p>
+            <p>Esa cotización detalla el alcance exacto de setup, terminales y packs que necesita tu operación, para que puedas revisarla con tu equipo o tu contador a tu ritmo.</p>
+            <p>Si decides avanzar, la etapa siguiente es la implementación (alta de catálogo, enrolamiento de terminales y capacitación). Los precios públicos de planes y packs se consultan en cualquier momento en <a href="/precios/">ver planes y precios de NHILOS POS</a>.</p>
+          </div>
+
+          <aside class="dm-after-links" aria-label="Información relacionada">
+            <span class="dm-after-links-title">Antes o después de la demo</span>
+            <ul>
+              <li><a href="/precios/">ver planes y precios de NHILOS POS</a></li>
+              <li><a href="/software-pos/">qué es NHILOS POS: venta local-first</a></li>
+              <li><a href="/facturacion-dgi/">mecánica de facturación DGI conforme a la DT 09-2007</a></li>
+              <li><a href="/inventario/">control de inventario, kardex y merma</a></li>
+              <!-- pending-link: /implementacion/ - se enlaza al publicarse (regla 7: preventa y postventa separadas) -->
+              <li class="dm-pending-step">Etapa siguiente: implementación y puesta en marcha (/implementacion/, en preparación).</li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 7: Preguntas frecuentes (paridad exacta con FAQPage JSON-LD) -->
+    <section class="section section--tinted" id="faq" aria-labelledby="faq-title">
+      <div class="container">
+        <p class="eyebrow">Dudas frecuentes</p>
+        <h2 class="h-lg" id="faq-title">Preguntas frecuentes sobre la demo</h2>
+
+        <div class="faq-grid reveal">
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿La demo tiene costo?</h3>
+            <p>En Nicaragua, la demo de NHILOS POS se coordina sin compromiso. Al finalizar recibes una cotización con cronograma real según el alcance de tu operación.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿Cuándo me contactan?</h3>
+            <p>En Nicaragua, el equipo de NHILOS POS te escribe por WhatsApp en menos de 24 horas hábiles para confirmar tu escenario y coordinar el horario contigo.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿Cuánto dura?</h3>
+            <p>La demo de NHILOS POS en Nicaragua no tiene una duración fija publicada porque se arma con los datos de tu operación. El rubro, lo que te cuesta controlar y cuántas cajas operas definen qué se muestra y cuánto se profundiza.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿Necesito preparar algo?</h3>
+            <p>Para pedir la demo de NHILOS POS en Nicaragua solo necesitas saber qué vendes, cuántas cajas operas y si trabajas con cocina o solo mostrador. No hace falta enviar tu menú, hojas de Excel ni archivos previos, porque la carga del catálogo real corresponde a la implementación.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿Veo el sistema con mi tipo de negocio?</h3>
+            <p>Sí: en Nicaragua, NHILOS POS arma el escenario según tu tipo de negocio y tu prioridad, ya sea restaurante, cafetería, food park o comercio de mostrador. Si tu prioridad es la contingencia sin internet o el control de recetas, se muestra en ese escenario.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿Los datos de la demo son reales?</h3>
+            <p>No: en Nicaragua, NHILOS POS muestra el sistema con datos de demostración etiquetados bajo la referencia Operación real capturada de NHILOS Market &amp; Café · datos de demostración. Ningún dato real de tu negocio entra en la demostración.</p>
+          </div>
+          <div class="faq-cell" data-event="faq_demo_abre">
+            <h3>¿Qué pasa después?</h3>
+            <p>Al finalizar la demo de NHILOS POS en Nicaragua recibes una cotización con cronograma real que detalla setup, terminales y packs según tu operación. Puedes revisar antes los planes públicos en /precios/ y, si decides avanzar, la etapa siguiente es la implementación.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 8: Formulario como pieza central -->
+    <section class="section dm-form-stage" id="formulario" aria-labelledby="form-title">
+      <div class="container">
+        <div class="dm-form-shell">
+          <div class="dm-form-aside reveal">
+            <p class="eyebrow">Coordinación por WhatsApp</p>
+            <h2 class="h-lg" id="form-title">Pide tu demo</h2>
+            <p>Cuéntanos qué operas y qué te cuesta hoy controlar. Con eso armamos el escenario antes de reunirnos y te escribimos por WhatsApp en menos de 24 horas hábiles.</p>
+
+            <div class="dm-form-honest">
+              <strong>Cómo se entrega tu mensaje</strong>
+              <p>Al pulsar el botón, se abre WhatsApp con el mensaje listo para que lo envíes al +505 8194 8526. Ningún dato se almacena en un servidor.</p>
+            </div>
+
+            <div class="dm-wa-direct">
+              <p>¿Prefieres escribir sin llenar campos?</p>
+              <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=demo" data-event="demo_whatsapp_clic">Abrir WhatsApp +505 8194 8526</a>
+            </div>
+          </div>
+
+          <form id="nhilosDemoForm" class="demo-form reveal" data-event="demo_form_inicia" novalidate>
+            <div class="dm-form-group">
+              <p class="dm-form-group-title">1. Tus datos para escribirte por WhatsApp</p>
+
+              <div class="dm-form-row">
+                <div class="form-field">
+                  <label class="form-label" for="contactName">Tu nombre <span class="req">*</span></label>
+                  <input type="text" id="contactName" name="contactName" class="form-input" placeholder="Ej. Propietario o gerente" autocomplete="name" required aria-describedby="err-contactName">
+                  <p class="form-error" id="err-contactName" data-error-for="contactName" role="alert" hidden>Ingresa tu nombre.</p>
+                </div>
+
+                <div class="form-field">
+                  <label class="form-label" for="businessName">Nombre de tu negocio <span class="req">*</span></label>
+                  <input type="text" id="businessName" name="businessName" class="form-input" placeholder="Ej. Café Central Managua" autocomplete="organization" required aria-describedby="err-businessName">
+                  <p class="form-error" id="err-businessName" data-error-for="businessName" role="alert" hidden>Ingresa el nombre de tu negocio.</p>
+                </div>
+              </div>
+
+              <div class="form-field">
+                <label class="form-label" for="contactPhone">WhatsApp <span class="req">*</span></label>
+                <input type="tel" id="contactPhone" name="contactPhone" class="form-input" placeholder="8888-8888" autocomplete="tel" inputmode="tel" required aria-describedby="err-contactPhone">
+                <p class="form-error" id="err-contactPhone" data-error-for="contactPhone" role="alert" hidden>Ingresa un número de WhatsApp válido (al menos 8 dígitos).</p>
+              </div>
+
+              <fieldset class="form-field">
+                <legend class="form-label">Tipo de negocio <span class="req">*</span></legend>
+                <div class="pill-row">
+                  <label class="pill-check"><input type="radio" name="businessType" value="Restaurante / Bar"><span>Restaurante / Bar</span></label>
+                  <label class="pill-check"><input type="radio" name="businessType" value="Cafetería / Panadería"><span>Cafetería / Panadería</span></label>
+                  <label class="pill-check"><input type="radio" name="businessType" value="Food Park / Comida Rápida"><span>Food Park / Comida Rápida</span></label>
+                  <label class="pill-check"><input type="radio" name="businessType" value="Comercio / Mostrador"><span>Comercio / Mostrador</span></label>
+                </div>
+                <p class="form-error" id="err-businessType" data-error-for="businessType" role="alert" hidden>Selecciona el tipo de negocio.</p>
+              </fieldset>
+            </div>
+
+            <div class="dm-form-group">
+              <p class="dm-form-group-title">2. Contexto para armar tu escenario</p>
+
+              <div class="dm-form-row">
+                <div class="form-field">
+                  <label class="form-label" for="businessSector">Rubro o qué vendes <span class="req">*</span></label>
+                  <input type="text" id="businessSector" name="businessSector" data-msg-label="Rubro" class="form-input" placeholder="Ej. Comida típica, café y repostería, bebidas" required aria-describedby="err-businessSector">
+                  <p class="form-error" id="err-businessSector" data-error-for="businessSector" role="alert" hidden>Cuéntanos brevemente tu rubro o qué vendes.</p>
+                </div>
+
+                <div class="form-field">
+                  <label class="form-label" for="terminalCount">¿Cuántas cajas operas?</label>
+                  <select id="terminalCount" class="form-select" name="terminalCount">
+                    <option value="1 terminal">1 caja de cobro</option>
+                    <option value="2-3 terminales">2 a 3 cajas</option>
+                    <option value="4+ terminales">4 o más cajas</option>
+                  </select>
+                </div>
+              </div>
+
+              <fieldset class="form-field">
+                <legend class="form-label">¿Qué te cuesta hoy la operación? <span class="req">*</span></legend>
+                <div class="pill-row">
+                  <label class="pill-check"><input type="radio" name="demoPriority" value="Continuidad sin internet"><span>Seguir vendiendo sin internet</span></label>
+                  <label class="pill-check"><input type="radio" name="demoPriority" value="Cuadre de caja y arqueos ciegos"><span>Cuadre de caja y arqueos</span></label>
+                  <label class="pill-check"><input type="radio" name="demoPriority" value="Inventario, recetas y merma"><span>Inventario, recetas y merma</span></label>
+                  <label class="pill-check"><input type="radio" name="demoPriority" value="Rapidez y vuelto bimoneda"><span>Rapidez y vuelto bimoneda</span></label>
+                  <label class="pill-check"><input type="radio" name="demoPriority" value="Control remoto de dueño"><span>Control desde el panel</span></label>
+                </div>
+                <p class="form-error" id="err-demoPriority" data-error-for="demoPriority" role="alert" hidden>Selecciona qué te cuesta hoy controlar en tu operación.</p>
+              </fieldset>
+
+              <div class="form-field">
+                <label class="form-label" for="demoContextNote">Detalle adicional de tu operación <span class="opt">(opcional)</span></label>
+                <textarea id="demoContextNote" name="demoContextNote" data-msg-label="Detalle" class="dm-textarea" rows="2" maxlength="240" placeholder="Ej. Tenemos cocina y vitrina, o abrimos dos turnos por día"></textarea>
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-on-dark form-submit" data-event="demo_form_envia">Abrir WhatsApp con mi solicitud</button>
+            <p class="form-note">Se abre WhatsApp con el mensaje listo para que lo envíes. Se coordina sin compromiso y confirmamos en menos de 24 horas hábiles.</p>
+
+            <noscript>
+              <div class="dm-noscript-box">
+                Tu navegador tiene JavaScript desactivado. Puedes pedir la demo directo por WhatsApp aquí:
+                <a href="https://wa.me/50581948526?utm_medium=demo&amp;text=Hola%20NHILOS%2C%20quiero%20coordinar%20una%20demo%20para%20mi%20negocio.">Escribir por WhatsApp al +505 8194 8526</a>.
+              </div>
+            </noscript>
+          </form>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="wordmark" href="/"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
+          <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
+          <p class="footer-contact">
+            WhatsApp: <a href="https://wa.me/50581948526?utm_medium=demo" data-event="demo_whatsapp_clic">+505 8194 8526</a><br>
+            Managua, Nicaragua · área de servicio nacional
+          </p>
+          <div class="footer-social">
+            <a href="https://www.instagram.com/nhilosapp/" aria-label="Instagram de NHILOS" title="Instagram"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37a4 4 0 1 1-7.914 1.173A4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+            <a href="https://www.facebook.com/nhilosapp" aria-label="Facebook de NHILOS" title="Facebook"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+            <a href="https://www.tiktok.com/@nhilosapp" aria-label="TikTok de NHILOS" title="TikTok"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg></a>
+          </div>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Demo</h3>
+          <ul class="footer-list">
+            <li><a href="#que-es">Qué recibes</a></li>
+            <li><a href="#segmentos">Escenarios por negocio</a></li>
+            <li><a href="#coordinacion">Cómo se coordina</a></li>
+            <li><a href="#formulario">Pide tu demo</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Producto</h3>
+          <ul class="footer-list">
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li><a href="/precios/">Planes y precios</a></li>
+            <li><a href="/facturacion-dgi/">Facturación DGI</a></li>
+            <li><a href="/inventario/">Inventario</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Contacto</h3>
+          <ul class="footer-list">
+            <li><a href="https://wa.me/50581948526?utm_medium=demo" data-event="demo_whatsapp_clic">WhatsApp directo</a></li>
+            <li><a href="#formulario">Formulario de demo</a></li>
+            <li><a href="#faq">Preguntas frecuentes</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 NHILOS. Estructura de facturación conforme a la Disposición Técnica 09-2007; la autorización DGI y la valuación fiscal corresponden a cada contribuyente con su contador.</p>
+        <a class="footer-top-link" href="#inicio">Volver arriba <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+</body>
+</html>

@@ -219,9 +219,9 @@
     (function () {
       var form = document.getElementById('nhilosDemoForm');
       if (!form) return;
-      var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       function showError(input, show) {
+        if (!input) return;
         var err = form.querySelector('[data-error-for="' + input.id + '"]');
         if (err) err.hidden = !show;
         input.classList.toggle('is-invalid', show);
@@ -229,30 +229,70 @@
       }
 
       function groupOk(name, errKey) {
+        var any = form.querySelector('input[name="' + name + '"]');
+        if (!any) return true;
         var chosen = form.querySelector('input[name="' + name + '"]:checked');
         var err = form.querySelector('[data-error-for="' + errKey + '"]');
         if (err) err.hidden = !!chosen;
         return !!chosen;
       }
+
+      var BASE_VALIDATED = { contactName: true, businessName: true, contactPhone: true, contactEmail: true };
+      var BASE_MSG_KEYS = {
+        businessName: true,
+        businessType: true,
+        terminalCount: true,
+        demoPriority: true,
+        contactName: true,
+        contactPhone: true,
+        contactEmail: true
+      };
+
+      function getExtraRequiredInputs() {
+        var reqs = Array.prototype.slice.call(form.querySelectorAll('[required]'));
+        return reqs.filter(function (el) {
+          return el.type !== 'radio' && !BASE_VALIDATED[el.name];
+        });
+      }
+
       function validate() {
         var ok = true;
         var btOk = groupOk('businessType', 'businessType'); ok = ok && btOk;
         var prOk = groupOk('demoPriority', 'demoPriority'); ok = ok && prOk;
         var name = form.contactName, biz = form.businessName, phone = form.contactPhone, email = form.contactEmail;
-        var nameOk = name.value.trim().length >= 2;
-        showError(name, !nameOk); ok = ok && nameOk;
-        var bizOk = biz.value.trim().length >= 2;
-        showError(biz, !bizOk); ok = ok && bizOk;
-        var digits = phone.value.replace(/\D/g, '');
-        var phoneOk = digits.length >= 8;
-        showError(phone, !phoneOk); ok = ok && phoneOk;
-        var emailOk = !email.value.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim());
-        showError(email, !emailOk); ok = ok && emailOk;
+        if (name) {
+          var nameOk = name.value.trim().length >= 2;
+          showError(name, !nameOk); ok = ok && nameOk;
+        }
+        if (biz) {
+          var bizOk = biz.value.trim().length >= 2;
+          showError(biz, !bizOk); ok = ok && bizOk;
+        }
+        if (phone) {
+          var digits = phone.value.replace(/\D/g, '');
+          var phoneOk = digits.length >= 8;
+          showError(phone, !phoneOk); ok = ok && phoneOk;
+        }
+        if (email) {
+          var emailOk = !email.value.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim());
+          showError(email, !emailOk); ok = ok && emailOk;
+        }
+        getExtraRequiredInputs().forEach(function (input) {
+          var valid = input.value.trim().length >= 2;
+          showError(input, !valid);
+          ok = ok && valid;
+        });
         return ok;
       }
 
       ['contactName', 'businessName', 'contactPhone', 'contactEmail'].forEach(function (id) {
         var input = form[id];
+        if (!input) return;
+        input.addEventListener('input', function () {
+          if (input.classList.contains('is-invalid')) validate();
+        });
+      });
+      getExtraRequiredInputs().forEach(function (input) {
         input.addEventListener('input', function () {
           if (input.classList.contains('is-invalid')) validate();
         });
@@ -273,6 +313,14 @@
           'Nombre: ' + data.get('contactName') + '\n' +
           'Teléfono: ' + data.get('contactPhone') +
           (data.get('contactEmail') ? '\nCorreo: ' + data.get('contactEmail') : '');
+        data.forEach(function (value, key) {
+          if (BASE_MSG_KEYS[key]) return;
+          var clean = String(value == null ? '' : value).trim();
+          if (!clean) return;
+          var el = form[key] || form.querySelector('[name="' + key + '"]');
+          var label = (el && el.getAttribute && el.getAttribute('data-msg-label')) || key;
+          msg += '\n' + label + ': ' + clean;
+        });
         window.open('https://wa.me/50581948526?text=' + encodeURIComponent(msg), '_blank', 'noopener');
       });
     })();
