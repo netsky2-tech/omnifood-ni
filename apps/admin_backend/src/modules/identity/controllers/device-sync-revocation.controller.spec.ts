@@ -161,6 +161,7 @@ describe('DeviceSyncRevocationController (B17-02)', () => {
           hasDeclaredGaps: false,
           hasInventoryPending: false,
           inventoryPendingCount: 0,
+          credentialHistory: [],
         },
       ];
       mockService.listTenantTerminals.mockResolvedValue(terminals);

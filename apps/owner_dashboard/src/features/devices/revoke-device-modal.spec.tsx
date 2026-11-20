@@ -48,6 +48,7 @@ const DEVICE: TerminalDevice = {
   hasDeclaredGaps: false,
   hasInventoryPending: false,
   inventoryPendingCount: 0,
+  credentialHistory: [],
 };
 
 function renderModal() {

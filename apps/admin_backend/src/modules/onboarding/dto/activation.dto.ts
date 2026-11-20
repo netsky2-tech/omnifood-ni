@@ -6,6 +6,7 @@ import {
   IsBoolean,
   IsObject,
   IsDateString,
+  IsUUID,
 } from 'class-validator';
 import {
   ActivationCheckCode,
@@ -28,6 +29,11 @@ export class StartActivationDto {
   @IsOptional()
   @IsString()
   posBuild?: string;
+
+  /** Optional approved reactivation challenge ID when re-activating an active terminal (#566). */
+  @IsOptional()
+  @IsUUID()
+  reactivationChallengeId?: string;
 }
 
 export class IngestActivationCheckDto {

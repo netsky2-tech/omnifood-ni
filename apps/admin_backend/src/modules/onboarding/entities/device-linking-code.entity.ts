@@ -52,6 +52,14 @@ export class DeviceLinkingCode {
   @Column({ name: 'device_id', type: 'varchar', length: 128, nullable: true })
   deviceId!: string | null;
 
+  @Column({
+    name: 'replaces_terminal_id',
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+  })
+  replacesTerminalId!: string | null;
+
   @Column({ name: 'created_by_user_id', type: 'varchar', length: 128 })
   createdByUserId!: string;
 

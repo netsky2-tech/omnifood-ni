@@ -19,6 +19,9 @@ import { ActivationCheckResult } from './entities/activation-check-result.entity
 import { ActivationFollowUp } from './entities/activation-follow-up.entity';
 import { DeviceLinkingCode } from './entities/device-linking-code.entity';
 import { InstallToken } from './entities/install-token.entity';
+import { TerminalInstallFingerprint } from './entities/terminal-install-fingerprint.entity';
+import { TerminalReactivationChallenge } from './entities/terminal-reactivation-challenge.entity';
+import { TerminalRecoveryCode } from './entities/terminal-recovery-code.entity';
 import { OnboardingTelemetryEvent } from './entities/onboarding-telemetry-event.entity';
 import { Tenant } from '../tenant/entities/tenant.entity';
 import { User } from '../identity/entities/user.entity';
@@ -62,6 +65,9 @@ import { ActivationController } from './controllers/activation.controller';
 import { DeviceLinkingService } from './services/device-linking.service';
 import { DeviceLinkingController } from './controllers/device-linking.controller';
 import { DeviceLinkingRateLimiter } from './utils/linking-rate-limiter';
+import { TerminalReactivationService } from './services/terminal-reactivation.service';
+import { TerminalReactivationController } from './controllers/terminal-reactivation.controller';
+import { TerminalReactivationRateLimiter } from './utils/terminal-reactivation-rate-limiter';
 import { InstallKitService } from './services/install-kit.service';
 import { InstallTokensController } from './controllers/install-tokens.controller';
 import { InstallKitController } from './controllers/install-kit.controller';
@@ -142,6 +148,9 @@ export const getRequiredOnboardingJwtSecret = (
       ActivationFollowUp,
       DeviceLinkingCode,
       InstallToken,
+      TerminalInstallFingerprint,
+      TerminalReactivationChallenge,
+      TerminalRecoveryCode,
       OnboardingTelemetryEvent,
       Tenant,
       User,
@@ -169,6 +178,7 @@ export const getRequiredOnboardingJwtSecret = (
     OnboardingCatalogController,
     ActivationController,
     DeviceLinkingController,
+    TerminalReactivationController,
     InstallTokensController,
     InstallKitController,
     TerminalPrimingController,
@@ -198,6 +208,8 @@ export const getRequiredOnboardingJwtSecret = (
     ActivationService,
     DeviceLinkingService,
     DeviceLinkingRateLimiter,
+    TerminalReactivationService,
+    TerminalReactivationRateLimiter,
     InstallKitService,
     InstallKitRateLimiter,
     TerminalPrimingService,

@@ -94,5 +94,42 @@ void main() {
         );
       },
     );
+
+    test(
+      'persistCanonicalDeviceId overwrites existing local identity with canonical terminalId',
+      () async {
+        final configDao = _InMemoryLocalConfigDao();
+        final service = TerminalIdentityService(
+          configDao,
+          createLocalId: () => 'pos-local-ephemeral-1',
+        );
+
+        final generated = await service.resolveDeviceId();
+        expect(generated, 'pos-local-ephemeral-1');
+
+        final canonical = await service.persistCanonicalDeviceId(
+          '  terminal-canonical-42  ',
+        );
+        expect(canonical, 'terminal-canonical-42');
+        expect(
+          configDao.saved[TerminalIdentityService.localDeviceIdKey]?.value,
+          'terminal-canonical-42',
+        );
+        expect(await service.resolveDeviceId(), 'terminal-canonical-42');
+      },
+    );
+
+    test(
+      'persistCanonicalDeviceId throws ArgumentError on blank deviceId',
+      () async {
+        final configDao = _InMemoryLocalConfigDao();
+        final service = TerminalIdentityService(configDao);
+
+        expect(
+          () => service.persistCanonicalDeviceId('   '),
+          throwsArgumentError,
+        );
+      },
+    );
   });
 }

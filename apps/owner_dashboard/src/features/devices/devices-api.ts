@@ -2,6 +2,7 @@ import { api, type ApiClientMethodOptions } from "@/lib/api";
 import type {
   DeviceFreshnessState,
   DeviceSyncStatus,
+  TerminalCredentialVersion,
   TerminalDevice,
 } from "./types";
 
@@ -64,6 +65,25 @@ function toBoolean(value: unknown): boolean {
 }
 
 /**
+ * Wire normalization for a single credential history entry in a terminal's
+ * lineage (v1 -> v2 -> ...). Fails closed on unrecognized status values.
+ */
+export function normalizeCredentialVersion(
+  raw: unknown,
+): TerminalCredentialVersion {
+  const r = asRecord(raw);
+  return {
+    id: toRequiredString(r.id),
+    version: toNumber(r.version, 0),
+    status: toStatus(r.status),
+    issuedAt: toRequiredString(r.issuedAt),
+    rotatedAt: toOptionalString(r.rotatedAt),
+    revokedAt: toOptionalString(r.revokedAt),
+    revocationReason: toOptionalString(r.revocationReason),
+  };
+}
+
+/**
  * Wire normalization for a single terminal-device row. Defensive against
  * malformed payloads: unrecognized enum values fail closed (status → PENDING,
  * freshness → UNKNOWN) and malformed numbers/strings fall back to safe
@@ -71,6 +91,9 @@ function toBoolean(value: unknown): boolean {
  */
 export function normalizeTerminalDevice(raw: unknown): TerminalDevice {
   const r = asRecord(raw);
+  const credentialHistory = Array.isArray(r.credentialHistory)
+    ? r.credentialHistory.map(normalizeCredentialVersion)
+    : [];
   return {
     terminalId: toRequiredString(r.terminalId),
     label: toOptionalString(r.label),
@@ -88,6 +111,7 @@ export function normalizeTerminalDevice(raw: unknown): TerminalDevice {
     hasDeclaredGaps: toBoolean(r.hasDeclaredGaps),
     hasInventoryPending: toBoolean(r.hasInventoryPending),
     inventoryPendingCount: toNumber(r.inventoryPendingCount, 0),
+    credentialHistory,
   };
 }
 

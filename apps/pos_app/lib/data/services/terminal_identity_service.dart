@@ -52,5 +52,29 @@ class TerminalIdentityService {
     return generated;
   }
 
+  /// Overwrites `local_configs['terminal_device_id']` with the canonical
+  /// [deviceId] restored during terminal reactivation or factory-reset
+  /// replacement (issue #566).
+  Future<String> persistCanonicalDeviceId(String deviceId) async {
+    final normalized = deviceId.trim();
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(
+        deviceId,
+        'deviceId',
+        'Canonical terminal identity must not be empty',
+      );
+    }
+
+    await _configDao.saveConfig(
+      LocalConfigEntity(
+        key: localDeviceIdKey,
+        value: normalized,
+        description:
+            'Canonical terminal identity restored or assigned by backend.',
+      ),
+    );
+    return normalized;
+  }
+
   static String _defaultCreateLocalId() => 'pos-local-${const Uuid().v4()}';
 }

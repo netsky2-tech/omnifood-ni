@@ -87,6 +87,9 @@ import { ImportStaging } from '../../modules/onboarding/entities/import-staging.
 import { OnboardingSession } from '../../modules/onboarding/entities/onboarding-session.entity';
 import { DeviceLinkingCode } from '../../modules/onboarding/entities/device-linking-code.entity';
 import { InstallToken } from '../../modules/onboarding/entities/install-token.entity';
+import { TerminalInstallFingerprint } from '../../modules/onboarding/entities/terminal-install-fingerprint.entity';
+import { TerminalReactivationChallenge } from '../../modules/onboarding/entities/terminal-reactivation-challenge.entity';
+import { TerminalRecoveryCode } from '../../modules/onboarding/entities/terminal-recovery-code.entity';
 import { OnboardingIdempotencyRecord } from '../../modules/onboarding/entities/onboarding-idempotency.entity';
 import { TemplateApplication } from '../../modules/onboarding/entities/template-application.entity';
 import { TemplateSeedLink } from '../../modules/onboarding/entities/template-seed-link.entity';
@@ -212,6 +215,9 @@ export const createTypeOrmOptions = (configService: ConfigService) => ({
     OnboardingSession,
     DeviceLinkingCode,
     InstallToken,
+    TerminalInstallFingerprint,
+    TerminalReactivationChallenge,
+    TerminalRecoveryCode,
     OnboardingIdempotencyRecord,
     TemplateApplication,
     TemplateSeedLink,

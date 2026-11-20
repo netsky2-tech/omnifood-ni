@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { api } from "@/lib/api";
 import {
   fetchDevices,
+  normalizeCredentialVersion,
   normalizeTerminalDevice,
   revokeDevice,
 } from "./devices-api";
@@ -27,6 +28,7 @@ const validRow = {
   hasDeclaredGaps: false,
   hasInventoryPending: true,
   inventoryPendingCount: 7,
+  credentialHistory: [],
 };
 
 describe("normalizeTerminalDevice", () => {
@@ -53,6 +55,7 @@ describe("normalizeTerminalDevice", () => {
         hasDeclaredGaps: false,
         hasInventoryPending: false,
         inventoryPendingCount: 0,
+        credentialHistory: [],
       });
     }
   });
@@ -123,6 +126,66 @@ describe("normalizeTerminalDevice", () => {
     expect(row.revocationReason).toBeNull();
     expect(row.posBuild).toBeNull();
     expect(row.lastReceiptAt).toBeNull();
+  });
+
+  it("normalizes credentialHistory entries and fails closed on malformed history", () => {
+    const row = normalizeTerminalDevice({
+      ...validRow,
+      credentialHistory: [
+        {
+          id: "cred-v1",
+          version: 1,
+          status: "RETIRED",
+          issuedAt: "2026-10-01T10:00:00.000Z",
+          rotatedAt: "2026-11-19T14:00:00.000Z",
+          revokedAt: null,
+          revocationReason: "reinstall",
+        },
+        {
+          id: "cred-v2",
+          version: 2,
+          status: "INVALID_STATUS",
+          issuedAt: "2026-11-19T14:00:00.000Z",
+          rotatedAt: null,
+          revokedAt: null,
+          revocationReason: null,
+        },
+      ],
+    });
+    expect(row.credentialHistory).toEqual([
+      {
+        id: "cred-v1",
+        version: 1,
+        status: "RETIRED",
+        issuedAt: "2026-10-01T10:00:00.000Z",
+        rotatedAt: "2026-11-19T14:00:00.000Z",
+        revokedAt: null,
+        revocationReason: "reinstall",
+      },
+      {
+        id: "cred-v2",
+        version: 2,
+        status: "PENDING",
+        issuedAt: "2026-11-19T14:00:00.000Z",
+        rotatedAt: null,
+        revokedAt: null,
+        revocationReason: null,
+      },
+    ]);
+
+    expect(
+      normalizeTerminalDevice({ ...validRow, credentialHistory: "not-an-array" })
+        .credentialHistory,
+    ).toEqual([]);
+    expect(normalizeCredentialVersion(null)).toEqual({
+      id: "",
+      version: 0,
+      status: "PENDING",
+      issuedAt: "",
+      rotatedAt: null,
+      revokedAt: null,
+      revocationReason: null,
+    });
   });
 });
 

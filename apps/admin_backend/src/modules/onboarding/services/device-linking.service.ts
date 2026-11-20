@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -11,6 +12,10 @@ import {
   bindTenantContext,
   runInTenantTransaction,
 } from '../../../core/database/tenant-transaction';
+import {
+  DeviceSyncCredential,
+  DeviceSyncCredentialStatus,
+} from '../../identity/entities/device-sync-credential.entity';
 import { LinkingCodeResponseDto } from '../dto/linking-code-response.dto';
 import {
   ActivationAttempt,
@@ -20,6 +25,17 @@ import {
   DeviceLinkingCode,
   DeviceLinkingCodeStatus,
 } from '../entities/device-linking-code.entity';
+import {
+  ReactivationApprovalMethod,
+  ReactivationChallengeStatus,
+  ReactivationReason,
+  TerminalReactivationChallenge,
+} from '../entities/terminal-reactivation-challenge.entity';
+import {
+  HARDWARE_FINGERPRINT_HEX_REGEX,
+  isValidUuid,
+  normalizeHardwareFingerprint,
+} from '../utils/terminal-recovery-code';
 
 /**
  * Pre-auth device linking codes (issue #556 stage 3, founder design).
@@ -84,7 +100,24 @@ export const CLAIM_CANDIDATES_SQL =
  * what permits an unbound transaction to perform this one transition.
  */
 export const CLAIM_LINKING_CODE_SQL =
-  "UPDATE device_linking_codes SET status = 'CLAIMED', device_id = $2, claimed_at = now(), updated_at = now() WHERE id = $1 AND status = 'ACTIVE' AND expires_at > now() RETURNING tenant_id";
+  "UPDATE device_linking_codes SET status = 'CLAIMED', device_id = COALESCE(replaces_terminal_id, $2), claimed_at = now(), updated_at = now() WHERE id = $1 AND status = 'ACTIVE' AND expires_at > now() RETURNING tenant_id, replaces_terminal_id, created_by_user_id";
+
+export const UPSERT_TERMINAL_FINGERPRINT_SQL = `
+  INSERT INTO terminal_install_fingerprints (
+    tenant_id,
+    terminal_id,
+    fingerprint_hash,
+    first_seen_at,
+    last_seen_at,
+    created_at,
+    updated_at
+  )
+  VALUES ($1, $2, $3, now(), now(), now(), now())
+  ON CONFLICT (tenant_id, terminal_id, fingerprint_hash)
+  DO UPDATE SET last_seen_at = now(), updated_at = now()
+`;
+
+export const REACTIVATION_CHALLENGE_TTL_MS = 15 * 60_000;
 
 /**
  * Opportunistic expiry cleanup (issue #556 stage 3, review finding F2):
@@ -119,6 +152,7 @@ export function isUniqueViolationError(error: unknown): boolean {
 
 export interface GenerateLinkingCodeOptions {
   expiryMinutes?: number;
+  replacesTerminalId?: string;
 }
 
 /**
@@ -146,6 +180,7 @@ export interface ClaimLinkingCodeResult {
   readonly slug: string;
   readonly deviceId: string;
   readonly linkedAt: Date;
+  readonly reactivationChallengeId?: string;
 }
 
 export function generateLinkingCodeValue(): string {
@@ -236,6 +271,9 @@ export class DeviceLinkingService {
       );
     }
 
+    const trimmedReplacesTerminalId =
+      options.replacesTerminalId?.trim() || null;
+
     const expiresAt = new Date(Date.now() + expiryMinutes * 60_000);
 
     for (let attempt = 1; attempt <= MAX_GENERATION_ATTEMPTS; attempt++) {
@@ -244,12 +282,40 @@ export class DeviceLinkingService {
       try {
         await this.dataSource.transaction(async (manager: EntityManager) => {
           await bindTenantContext(manager, trimmedTenantId);
+
+          if (trimmedReplacesTerminalId) {
+            const credentials = await manager
+              .getRepository(DeviceSyncCredential)
+              .find({
+                where: { tenantId: trimmedTenantId },
+                relations: ['activationAttempt'],
+                order: { version: 'DESC', createdAt: 'DESC' },
+              });
+            const matchingCreds = credentials.filter(
+              (cred) =>
+                cred.activationAttempt?.trustedTerminalId?.trim() ===
+                trimmedReplacesTerminalId,
+            );
+            if (matchingCreds.length === 0) {
+              throw new NotFoundException(
+                `Terminal '${trimmedReplacesTerminalId}' has no existing credential for replacement`,
+              );
+            }
+            if (matchingCreds[0].status === DeviceSyncCredentialStatus.REVOKED) {
+              throw new ConflictException({
+                code: 'TERMINAL_CREDENTIAL_REVOKED',
+                message: 'Revoked terminal credential cannot be reactivated',
+              });
+            }
+          }
+
           await manager.query(CLEANUP_EXPIRED_LINKING_CODES_SQL);
           await manager.getRepository(DeviceLinkingCode).insert({
             tenantId: trimmedTenantId,
             codeHash,
             status: DeviceLinkingCodeStatus.ACTIVE,
             deviceId: null,
+            replacesTerminalId: trimmedReplacesTerminalId,
             createdByUserId: trimmedActorUserId,
             expiresAt,
           });
@@ -370,9 +436,15 @@ export class DeviceLinkingService {
   async claimCode(
     code: string,
     deviceId: string,
+    hardwareFingerprint?: string,
   ): Promise<ClaimLinkingCodeResult> {
     const normalized = normalizeLinkingCode(code);
     const trimmedDeviceId = deviceId?.trim();
+    const rawFingerprint = hardwareFingerprint?.trim();
+    const normalizedFingerprint =
+      rawFingerprint && HARDWARE_FINGERPRINT_HEX_REGEX.test(rawFingerprint)
+        ? normalizeHardwareFingerprint(rawFingerprint)
+        : null;
 
     if (!isCanonicalLinkingCode(normalized) || !trimmedDeviceId) {
       await bcrypt.compare(normalized, DUMMY_LINKING_CODE_HASH);
@@ -402,7 +474,11 @@ export class DeviceLinkingService {
         throw new UnauthorizedException(LINKING_CODE_GENERIC_FAILURE);
       }
 
-      const claimed = asQueryRows<{ tenant_id: string }>(
+      const claimed = asQueryRows<{
+        tenant_id: string;
+        replaces_terminal_id?: string | null;
+        created_by_user_id?: string | null;
+      }>(
         await manager.query(CLAIM_LINKING_CODE_SQL, [
           matched.id,
           trimmedDeviceId,
@@ -416,6 +492,9 @@ export class DeviceLinkingService {
       }
 
       const tenantId = claimed[0].tenant_id;
+      const replacesTerminalId = claimed[0].replaces_terminal_id?.trim() || null;
+      const effectiveDeviceId = replacesTerminalId ?? trimmedDeviceId;
+
       const tenants = asQueryRows<{ slug: string }>(
         await manager.query('SELECT slug FROM tenants WHERE id = $1', [
           tenantId,
@@ -428,11 +507,54 @@ export class DeviceLinkingService {
         throw new UnauthorizedException(LINKING_CODE_GENERIC_FAILURE);
       }
 
+      let reactivationChallengeId: string | undefined;
+
+      if (normalizedFingerprint || replacesTerminalId) {
+        await bindTenantContext(manager, tenantId);
+
+        if (normalizedFingerprint) {
+          await manager.query(UPSERT_TERMINAL_FINGERPRINT_SQL, [
+            tenantId,
+            effectiveDeviceId,
+            normalizedFingerprint,
+          ]);
+        }
+
+        if (replacesTerminalId) {
+          const now = new Date();
+          const challengeRepo = manager.getRepository(
+            TerminalReactivationChallenge,
+          );
+          const approvedByUserId = isValidUuid(claimed[0].created_by_user_id)
+            ? claimed[0].created_by_user_id!.trim()
+            : null;
+          const challenge = challengeRepo.create({
+            tenantId,
+            terminalId: replacesTerminalId,
+            fingerprintHash: normalizedFingerprint,
+            status: ReactivationChallengeStatus.APPROVED,
+            reason: ReactivationReason.REPLACED,
+            approvalMethod: ReactivationApprovalMethod.DASHBOARD,
+            approvedByUserId,
+            approvedAt: now,
+            completedAt: null,
+            previousCredentialId: null,
+            previousCredentialVersion: null,
+            newCredentialId: null,
+            newCredentialVersion: null,
+            expiresAt: new Date(now.getTime() + REACTIVATION_CHALLENGE_TTL_MS),
+          });
+          const savedChallenge = await challengeRepo.save(challenge);
+          reactivationChallengeId = savedChallenge.id;
+        }
+      }
+
       return {
         tenantId,
         slug: tenants[0].slug,
-        deviceId: trimmedDeviceId,
+        deviceId: effectiveDeviceId,
         linkedAt: new Date(),
+        ...(reactivationChallengeId ? { reactivationChallengeId } : {}),
       };
     });
   }

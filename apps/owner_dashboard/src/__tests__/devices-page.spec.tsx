@@ -24,6 +24,16 @@ vi.mock("@/features/devices/devices-api", () => ({
   fetchDevices: vi.fn(),
 }));
 
+vi.mock("@/features/onboarding/onboarding-api", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("@/features/onboarding/onboarding-api")
+  >();
+  return {
+    ...actual,
+    fetchReactivationChallenges: vi.fn().mockResolvedValue([]),
+  };
+});
+
 // B17-04 Task 5 — permission gate for the revocation column/button.
 // Defaults to granted (OWNER) so existing suites are unaffected.
 vi.mock("@/features/auth/permissions", () => ({
@@ -57,6 +67,7 @@ function deviceFixture(overrides: Partial<TerminalDevice> = {}): TerminalDevice 
     hasDeclaredGaps: false,
     hasInventoryPending: false,
     inventoryPendingCount: 0,
+    credentialHistory: [],
     ...overrides,
   };
 }
@@ -143,7 +154,7 @@ describe("DevicesPage — populated state", () => {
     const row1 = screen.getByText("Caja Principal").closest("tr");
     expect(row1).not.toBeNull();
     expect(row1).toHaveTextContent("pos-term-01");
-    within(row1 as HTMLElement).getByText("Activo");
+    within(row1 as HTMLElement).getByText("Activa");
     within(row1 as HTMLElement).getByText("En sincronía");
     within(row1 as HTMLElement).getByText("#42");
     within(row1 as HTMLElement).getByText("1.2.3");
@@ -156,7 +167,8 @@ describe("DevicesPage — populated state", () => {
     expect(within(row2 as HTMLElement).getAllByText("pos-term-02")).toHaveLength(
       2,
     );
-    within(row2 as HTMLElement).getByText("Revocado");
+    within(row2 as HTMLElement).getByText("Revocada");
+    within(row2 as HTMLElement).getByText("Robo de equipo");
     within(row2 as HTMLElement).getByText("Sin sincronizar");
     // Two dashes: missing sequence evidence (§34) and the non-actionable
     // Acciones cell for a REVOKED credential.
@@ -283,7 +295,7 @@ describe("DevicesPage — accessibility", () => {
     const table = await screen.findByRole("table");
     // Badge renders as a <div> (shadcn Badge); the label text is a direct
     // child, so getByText resolves to the badge element itself.
-    const statusBadge = screen.getByText("Activo");
+    const statusBadge = screen.getByText("Activa");
     expect(statusBadge.tagName).toBe("DIV");
     expect(table).toContainElement(statusBadge);
 
@@ -291,7 +303,7 @@ describe("DevicesPage — accessibility", () => {
     // assistive tech; the label itself is the accessible content. Scoped to
     // the table so the KPI "En sincronía" label is not matched.
     for (const badge of within(table).getAllByText(
-      /^(Activo|Revocado|En sincronía|Sin sincronizar)$/,
+      /^(Activa|Revocada|En sincronía|Sin sincronizar)$/,
     )) {
       const dots = badge.querySelectorAll("span[aria-hidden='true']");
       expect(dots.length).toBe(1);

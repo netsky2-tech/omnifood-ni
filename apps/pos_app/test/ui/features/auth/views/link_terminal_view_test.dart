@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:pos_app/data/services/hardware_fingerprint_service.dart';
 import 'package:pos_app/data/services/install_app_link_service.dart';
 import 'package:pos_app/domain/models/auth/terminal_linking.dart';
 import 'package:pos_app/domain/repositories/auth_repository.dart';
@@ -263,6 +264,125 @@ void main() {
       verify(() => authRepository.claimLinkingCode('GH67JK', 'Q802024120001'))
           .called(1);
       expect(persistedSlugs, ['roastery']);
+      expect(find.text('Login Gate'), findsOneWidget);
+    });
+  });
+
+  group('LinkTerminalView reactivation card (Issue #566)', () {
+    const sampleFingerprint =
+        'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
+
+    testWidgets(
+        'shows Reactivar terminal card with maskedHint and completes with '
+        '6-digit recovery code', (tester) async {
+      when(() => authRepository.lookupReactivationDevice(sampleFingerprint))
+          .thenAnswer(
+        (_) async => const DeviceReactivationLookupResult(
+          found: true,
+          recoveryChallengeId: 'challenge-ui-1',
+          status: 'PENDING',
+          maskedHint: 'Terminal «••••0001» — Ca*** Ce***',
+        ),
+      );
+      when(
+        () => authRepository.completeReactivation(
+          challengeId: 'challenge-ui-1',
+          hardwareFingerprint: sampleFingerprint,
+          recoveryCode: null,
+        ),
+      ).thenThrow(
+        const TerminalReactivationException(
+          'Approval required',
+          code: 'REACTIVATION_APPROVAL_REQUIRED',
+          statusCode: 403,
+        ),
+      );
+      when(
+        () => authRepository.completeReactivation(
+          challengeId: 'challenge-ui-1',
+          hardwareFingerprint: sampleFingerprint,
+          recoveryCode: '739201',
+        ),
+      ).thenAnswer(
+        (_) async => CompletedReactivationResult(
+          tenantId: 'tenant-1',
+          slug: 'cafe-central',
+          terminalId: 'Q802024120001',
+          activationAttemptId: 'attempt-1',
+          credentialId: 'cred-2',
+          version: 2,
+          renewalSecret: 'secret-token-for-widget-test-0123456789',
+          expiresAt: DateTime.utc(2027, 1, 1),
+          previousVersion: 1,
+        ),
+      );
+      when(
+        () => authRepository.confirmReactivationCredential(
+          challengeId: 'challenge-ui-1',
+          credentialId: 'cred-2',
+          version: 2,
+          renewalSecret: 'secret-token-for-widget-test-0123456789',
+        ),
+      ).thenAnswer((_) async {});
+
+      final appLinkService = _FakeInstallAppLinkService();
+      addTearDown(appLinkService.dispose);
+
+      final viewModel = LinkTerminalViewModel(
+        authRepository,
+        deviceId: 'pos-local-temp',
+        persistTenantSlug: (slug) async => persistedSlugs.add(slug),
+        hardwareFingerprintService: HardwareFingerprintService(
+          provider: () async => sampleFingerprint,
+        ),
+      );
+
+      await tester.pumpWidget(
+        buildApp(
+          viewModel: viewModel,
+          appLinkService: appLinkService,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Card is shown with masked hint, and manual linking UI remains intact.
+      expect(find.byKey(const Key('reactivate_terminal_card')), findsOneWidget);
+      expect(find.text('Reactivar terminal'), findsOneWidget);
+      expect(
+        find.text('Terminal «••••0001» — Ca*** Ce***'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('linking_code_input')), findsOneWidget);
+      expect(find.byKey(const Key('scan_linking_qr_button')), findsOneWidget);
+
+      // Tapping primary button before approval surfaces guidance.
+      await tester.tap(find.byKey(const Key('complete_reactivation_button')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Esperando aprobación desde el panel del negocio o ingresá tu código de recuperación de 6 dígitos.',
+        ),
+        findsOneWidget,
+      );
+
+      // Expanding recovery code input and submitting 6-digit code succeeds.
+      await tester.ensureVisible(
+        find.byKey(const Key('toggle_recovery_code_button')),
+      );
+      await tester.tap(find.byKey(const Key('toggle_recovery_code_button')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('recovery_code_input')));
+      await tester.enterText(
+        find.byKey(const Key('recovery_code_input')),
+        '739201',
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('submit_recovery_code_button')),
+      );
+      await tester.tap(find.byKey(const Key('submit_recovery_code_button')));
+      await tester.pumpAndSettle();
+
+      expect(persistedSlugs, ['cafe-central']);
       expect(find.text('Login Gate'), findsOneWidget);
     });
   });

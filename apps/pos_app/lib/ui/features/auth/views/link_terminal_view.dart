@@ -45,11 +45,13 @@ class LinkTerminalView extends StatefulWidget {
 
 class _LinkTerminalViewState extends State<LinkTerminalView> {
   final _codeController = TextEditingController();
+  final _recoveryCodeController = TextEditingController();
   late final InstallAppLinkService _appLinkService;
   late final bool _ownsAppLinkService;
   StreamSubscription<String>? _appLinkSubscription;
 
   bool _isScannerOpen = false;
+  bool _showRecoveryCodeInput = false;
   String? _scanError;
 
   @override
@@ -74,6 +76,10 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
       });
     } else {
       _checkInitialAppLink();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<LinkTerminalViewModel>().checkReactivationAvailability();
+      });
     }
   }
 
@@ -84,6 +90,7 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
       _appLinkService.dispose();
     }
     _codeController.dispose();
+    _recoveryCodeController.dispose();
     super.dispose();
   }
 
@@ -208,10 +215,15 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
                       ),
                     ],
                   ),
+                  if (viewModel.hasPendingReactivation) ...[
+                    const SizedBox(height: 20),
+                    _buildReactivationCard(context, viewModel),
+                  ],
                   const SizedBox(height: 20),
                   TextField(
+                    key: const Key('linking_code_input'),
                     controller: _codeController,
-                    autofocus: true,
+                    autofocus: !viewModel.hasPendingReactivation,
                     textCapitalization: TextCapitalization.characters,
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
@@ -329,6 +341,168 @@ class _LinkTerminalViewState extends State<LinkTerminalView> {
         ),
       ),
     );
+  }
+
+  Widget _buildReactivationCard(
+    BuildContext context,
+    LinkTerminalViewModel viewModel,
+  ) {
+    final textTheme = Theme.of(context).textTheme;
+    final maskedHint = viewModel.reactivationMaskedHint;
+    final reactivationError = viewModel.reactivationError;
+    final isExpired =
+        viewModel.reactivationErrorCode == 'REACTIVATION_CHALLENGE_EXPIRED';
+
+    return Container(
+      key: const Key('reactivate_terminal_card'),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: NhilosColors.brandPrimary.withValues(alpha: 0.06),
+        borderRadius: NhilosRadii.cardRadius,
+        border: Border.all(
+          color: NhilosColors.brandPrimary.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.phonelink_setup_outlined,
+                color: NhilosColors.brandPrimary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Reactivar terminal',
+                  style: textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: NhilosColors.brandPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Reconocimos esta terminal de una instalación anterior. Aprobá la solicitud desde el panel del negocio o usá tu código de recuperación.',
+            style: textTheme.bodySmall?.copyWith(color: Colors.grey.shade800),
+          ),
+          if (maskedHint != null && maskedHint.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              maskedHint,
+              key: const Key('reactivation_masked_hint'),
+              style: textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade900,
+              ),
+            ),
+          ],
+          if (reactivationError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              reactivationError,
+              key: const Key('reactivation_error_text'),
+              style: textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          ElevatedButton(
+            key: const Key('complete_reactivation_button'),
+            onPressed: viewModel.isBusy
+                ? null
+                : () => _completeReactivation(viewModel),
+            child: viewModel.isCompletingReactivation
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Text('Completar reactivación'),
+          ),
+          if (isExpired) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              key: const Key('retry_reactivation_lookup_button'),
+              onPressed: viewModel.isCheckingReactivation || viewModel.isBusy
+                  ? null
+                  : () => viewModel.checkReactivationAvailability(),
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Buscar nuevamente'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          TextButton(
+            key: const Key('toggle_recovery_code_button'),
+            onPressed: viewModel.isBusy
+                ? null
+                : () => setState(() {
+                      _showRecoveryCodeInput = !_showRecoveryCodeInput;
+                    }),
+            child: Text(
+              _showRecoveryCodeInput
+                  ? 'Ocultar código de recuperación'
+                  : 'Usar código de recuperación de 6 dígitos',
+            ),
+          ),
+          if (_showRecoveryCodeInput) ...[
+            const SizedBox(height: 8),
+            TextField(
+              key: const Key('recovery_code_input'),
+              controller: _recoveryCodeController,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              maxLength: 6,
+              decoration: const InputDecoration(
+                labelText: 'Código de recuperación',
+                hintText: '6 dígitos',
+                prefixIcon: Icon(Icons.pin_outlined),
+                counterText: '',
+              ),
+              onSubmitted: (_) => _completeReactivation(
+                viewModel,
+                recoveryCode: _recoveryCodeController.text,
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              key: const Key('submit_recovery_code_button'),
+              onPressed: viewModel.isBusy
+                  ? null
+                  : () => _completeReactivation(
+                        viewModel,
+                        recoveryCode: _recoveryCodeController.text,
+                      ),
+              child: const Text('Reactivar con código'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _completeReactivation(
+    LinkTerminalViewModel viewModel, {
+    String? recoveryCode,
+  }) async {
+    final navigator = Navigator.of(context);
+    final success = await viewModel.completeReactivation(
+      recoveryCode: recoveryCode,
+    );
+    if (success && mounted) {
+      navigator.pushReplacementNamed('/');
+    }
   }
 
   Future<void> _link(LinkTerminalViewModel viewModel) async {
