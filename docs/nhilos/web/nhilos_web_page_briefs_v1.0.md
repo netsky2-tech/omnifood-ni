@@ -283,6 +283,22 @@ Lecturas de éxito al checkpoint de 28 días (coincide con el primer checkpoint 
 - **Title (≤60):** `Precios de NHILOS POS en Nicaragua · Planes desde US$49`
 - **Description (≤155):** `Esencial US$49, Operación US$89 y Pro US$149 al mes. Setups desde US$149. Suscripción por negocio, hardware aparte. Cotiza tu NHILOS POS.`
 
+### 2.10 El costo de arranque se dice, no se calcula (2026-11-20, fundador)
+
+**Verbatim:** *"lo que más me preocupaba es el pricing, que viéndolo desde los ojos de un prospecto o usuario no técnico, sea todo entendible y no parezca que hay varios cobros de un solo para poder contratar."*
+
+**Regla:** la página publica, **en cada ficha de plan con precio**, el total de arranque como una cifra, sin que el lector sume:
+- Esencial: **US$198** (US$149 de setup + primer mes de US$49). Después, solo US$49 al mes.
+- Operación: **US$339** (US$250 + US$89). Después, solo US$89 al mes.
+- Pro: **US$599** (US$450 + US$149). Después, solo US$149 al mes.
+- Enterprise: **sin cifra**. Por cotización, con el alcance validado.
+
+Y la sección de add-ons abre con la separación explícita: *"Nada de esto es obligatorio para empezar: el plan que elijas ya incluye lo necesario para vender. Se suma solo si tu operación lo pide."* Los cinco importes opcionales (terminal adicional, enrolamiento, cuenta de propietario, packs, terminal extra en Pro) dejan de compartir peso visual con los tres obligatorios.
+
+**Guardia:** el total se **recalcula desde las cifras de la misma ficha**, no se escribe a mano. Si cambia el setup o la mensualidad, la guardia falla hasta que el total se corrija: es lo que impide que un día digan cosas distintas.
+
+**Y un claim retirado en la misma pasada:** la página afirmaba *"Cada terminal se sincroniza por la nube: no necesitan una red local para trabajar juntas en tiempo real"*. Eso es la coordinación multi-terminal en tiempo real que se rechaza en todas las demás páginas. Queda en lo verdadero: cada terminal trabaja con su copia del catálogo y sube sus ventas cuando hay conexión.
+
 ### 2.9 Regla de impuestos: lo nuestro, no lo del cliente
 
 **Ninguna página publica afirmaciones sobre IVA en NUESTROS precios** — ni "IVA incluido", ni "IVA aparte", ni "más IVA", ni "precios netos". Mientras NHILOS no esté inscrita como recaudador, no cobra IVA: esas formulaciones son falsas, y "neto" es la misma promesa con otra palabra. El precio publicado es la cifra que se cobra.
@@ -1455,3 +1471,7 @@ Verbatim: *"a como puede ser restaurante, puede ser comiderías, foodparks con c
 ### v2.8 — el food park es el lugar, no el cliente (2026-11-20, fundador)
 
 Verbatim en §6.0. El apartado §6 se escribió sobre el comprador equivocado: asumía que el park contrata y administra los puestos. **NHILOS le vende a cada negocio del park directamente**, como al cliente cafetería que tiene su puesto en un patio y contrató su propio servicio. Derogados: la fórmula del administrador del park como techo, "una suscripción por park", el H3 de roles park/locatario, la tabla fiscal que hacía del park un emisor posible y la guardia que prohibía hablar de precio por negocio. El H1 cambia de sujeto: del park a **tu puesto**. Guardia nueva de clase: nada de administrador del park, gestión de locatarios ni consolidación del patio. La misma corrección alcanza al home (tarjeta de segmentos y FAQ, ambos publicados con el modelo viejo) y a la suite de la página, que tenía el modelo incorrecto escrito como requisito.
+
+### v2.9 — el costo de arranque se dice, no se calcula (2026-11-20, fundador)
+
+§2.10: cada ficha publica el total de arranque como cifra única (US$198 / US$339 / US$599) y los add-ons abren con "nada de esto es obligatorio". Además se retiró un claim de coordinación multi-terminal en tiempo real que se había colado en `/precios/`, la única página donde las guardias de ese claim no estaban puestas.

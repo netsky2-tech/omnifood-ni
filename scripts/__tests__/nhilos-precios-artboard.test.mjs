@@ -90,14 +90,19 @@ test("S2: plan H3 sub-angles from brief §2.4 are present", () => {
 // documentos a la vez; una cifra fuera de este conjunto es una claim sin fuente y falla aquí.
 test("S5: every US$ figure on the page belongs to the frozen price document and the home", () => {
   const pageNums = [...new Set([...src.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]))].sort();
-  // US$88 (total de Esencial+pack) se retiró por decisión del fundador: la aritmética
-// "total" sonaba a doble cobro. Si alguien reintroduce un total compuesto, esta lista lo caza.
-  const expected = ["10", "149", "250", "29", "39", "40", "450", "49", "75", "89"];
+  // Los totales de arranque (US$198/339/599) son aritmética derivada de las dos cifras
+// congeladas de su propia tarjeta (setup + primer mes), decisión del fundador: no son cifras
+// fuente, así que quedan exentos de la paridad con la home y el documento de precios, pero el
+// guard G1 exige que cada total cuadre con las dos cifras de su tarjeta. US$88 (total de
+// Esencial+pack) sigue retirado: un total compuesto distinto cai aquí.
+  const DERIVED_STARTUP_TOTALS = new Set(["198", "339", "599"]);
+  const expected = ["10", "149", "198", "250", "29", "339", "39", "40", "450", "49", "599", "75", "89"];
   assert.deepEqual(pageNums, expected);
   const homeSrc = fs.readFileSync(HOME, "utf8");
   const homeNums = new Set([...homeSrc.matchAll(/US\$\s?(\d+(?:[.,]\d+)?)/g)].map((m) => m[1]));
   const financeSrc = fs.readFileSync(FINANCE, "utf8");
   for (const n of pageNums) {
+    if (DERIVED_STARTUP_TOTALS.has(n)) continue;
     assert.match(financeSrc, new RegExp(`US\\$\\s?${n}\\b`), `US$${n} must exist in the frozen price document`);
     if (n !== "75") assert.ok(homeNums.has(n), `US$${n} must also appear on the home pricing section`);
   }
@@ -370,4 +375,89 @@ test("S18-voseo: zero voseo forms in visible copy", () => {
   for (const re of voseo) {
     assert.ok(!re.test(plain), `voseo form detected: ${re}`);
   }
+});
+
+// G1 (precios, decisión del fundador): el costo de arranque es un número que el prospecto no
+// tiene que computar. En cada tarjeta con precio publicado va una línea "Arrancar cuesta US$T"
+// y el test NO confía en el total: lo recalcula como setup + primer mes leídos de la MISMA
+// tarjeta (f-price) y cruza las tres cifras entre sí. Si alguien cambia el setup, la
+// mensualidad o el total, el guard falla hasta que el número se actualice. Enterprise no
+// publica precio: no lleva figura y nada debe implicarla.
+const STARTUP_TOTAL = /Arrancar cuesta US\$(\d+): US\$(\d+) de setup y el primer mes de US\$(\d+)\. Después, solo US\$(\d+) cada mes\./;
+test("G1: startup totals equal the sum of the two figures on the same card", () => {
+  const fichas = src.split('<div class="plan-ficha">').slice(1);
+  const withTotal = [];
+  for (const chunk of fichas) {
+    const price = chunk.match(/US\$(\d+)\/mes · setup US\$(\d+)/);
+    const start = chunk.match(STARTUP_TOTAL);
+    if (!price) {
+      // Tarjeta sin precio publicado (Enterprise): ni total ni cifra.
+      assert.equal(start, null, "Enterprise must not publish a startup total or any start figure");
+      assert.doesNotMatch(chunk, /Arrancar cuesta/);
+      continue;
+    }
+    const [, monthly, setup] = price;
+    assert.ok(start, `card with price US$${monthly}/mes, setup US$${setup} is missing its startup-total line`);
+    const [, total, startSetup, startFirst, startAfter] = start;
+    assert.equal(startSetup, setup, `card setup US$${setup}: the startup line must show the same setup, saw US$${startSetup}`);
+    assert.equal(startFirst, monthly, `card monthly US$${monthly}: the first month in the startup line must match, saw US$${startFirst}`);
+    assert.equal(startAfter, monthly, `the "Después" figure must stay the monthly price, saw US$${startAfter}`);
+    assert.equal(
+      Number(total), Number(setup) + Number(monthly),
+      `startup total US$${total} must equal setup US$${setup} + first month US$${monthly} on the same card`,
+    );
+    withTotal.push(chunk.match(/<h3[^>]*>([^<:]+)/)?.[1]);
+  }
+  assert.equal(fichas.length, 4, "the three priced plans plus Enterprise");
+  assert.equal(withTotal.length, 3, "exactly the three priced plans carry a startup total");
+});
+
+// G2 (add-ons, decisión del fundador): la sección responde el miedo directo — nada de los
+// add-ons es obligatorio para empezar — y mantiene la lista de cargos debajo.
+test("G2: the add-ons section carries the not-obligatory sentence before the charge list", () => {
+  const addons = vis.split('id="addons"')[1].split("</section>")[0];
+  assert.match(
+    addons,
+    /Nada de esto es obligatorio para empezar: el plan que elijas ya incluye lo necesario para vender\. Se suma solo si tu operación lo pide\./,
+    "the not-obligatory answer must appear in the add-ons section",
+  );
+  assert.doesNotMatch(
+    addons,
+    /los únicos cargos con precio publicado/,
+    "the old lead framing every charge as unavoidable must stay gone",
+  );
+});
+
+// G3 (claim guard /precios): la página no promete coordinación de terminales en tiempo real.
+// La verdad publicable es la copia con sincronización por nube. Se revisa frase por frase para
+// no cazar los usos legítimos de "real" ("primer turno real", "cronograma real") ni la
+// referencia BCN (que no es una terminal ni una red). Prohibido, por frase visible y en el
+// JSON-LD: "tiempo real" junto a terminal/red/juntas, y "red local" con verbos de
+// coordinación o promesa de tiempo real. "Compartir una red local" es la verdad, no la claim.
+test("G3: no real-time terminal coordination promise in visible copy or JSON-LD", () => {
+  const coordinationNearRedLocal = /(juntas?|juntos?|sincroniz\w*|tiempo\s+real|trabaj\w+\s+(juntas|juntos))/;
+  const sentences = txt(vis).split(/(?<=[.;!?])\s+/);
+  for (const [i, s] of sentences.entries()) {
+    const low = s.toLowerCase();
+    if (/en\s+tiempo\s+real|tiempo\s+real/.test(low)) {
+      assert.ok(
+        !(/\bterminales?\b/.test(low) || /\bred\b/.test(low) || /\bjuntas?\b|\bjuntos\b/.test(low)),
+        `real-time terminal coordination promise in visible sentence ${i}: "${s}"`,
+      );
+    }
+    if (/red\s+local/.test(low)) {
+      assert.ok(
+        !coordinationNearRedLocal.test(low),
+        `red-local coordination claim in visible sentence ${i}: "${s}"`,
+      );
+    }
+  }
+  // La misma vigilancia en el JSON-LD: el schema se publica tal cual. "Tiempo real" no tiene
+  // ningún uso legítimo ahí; para "red local" se exige distancia con verbos de coordinación.
+  const jsonLd = JSON.stringify(ld).toLowerCase();
+  assert.equal(jsonLd.includes("tiempo real"), false, "JSON-LD carries a real-time promise");
+  const redLocalCoordination = new RegExp(
+    `(sincroniz\\w*|juntas?|juntos?)[^.]{0,80}?red\\s+local|red\\s+local[^.]{0,80}?(sincroniz\\w*|juntas?|juntos?)`,
+  );
+  assert.equal(redLocalCoordination.test(jsonLd), false, "JSON-LD carries a red-local coordination claim");
 });

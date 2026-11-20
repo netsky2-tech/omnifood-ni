@@ -229,6 +229,7 @@
     .plan-ficha { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: var(--space-8); padding-block: var(--space-6); border-bottom: 1px solid var(--web-border-hairline); align-items: start; }
     .plan-ficha h3 { font-family: var(--font-display); font-size: var(--text-heading-md); font-weight: 600; letter-spacing: -0.015em; margin-bottom: var(--space-2); }
     .plan-ficha .f-price { font-family: var(--font-mono); font-weight: 700; font-size: var(--text-body-md); font-variant-numeric: tabular-nums; color: var(--web-emerald-700); }
+    .plan-ficha .f-start { margin-top: var(--space-2); font-size: var(--text-body-sm); color: var(--web-text-primary); max-width: 48ch; }
     .plan-ficha p { color: var(--web-text-secondary); font-size: var(--text-body-md); }
     @media (max-width: 900px) { .plan-ficha { grid-template-columns: 1fr; gap: var(--space-3); } }
 
@@ -512,6 +513,7 @@
             <div>
               <h3>Esencial: US$49 al mes para empezar a vender y facturar</h3>
               <p class="f-price">US$49/mes · setup US$149</p>
+              <p class="f-start">Arrancar cuesta US$198: US$149 de setup y el primer mes de US$49. Después, solo US$49 cada mes.</p>
             </div>
             <p>Pulperías, kioscos, food trucks y cafeterías pequeñas: venta, catálogo, caja y turnos, doble tipo de cambio, inventario simple, portal del propietario y 2 cuentas de propietario, con 1 terminal incluida. La entrada incluye una terminal táctil con impresora integrada: el equipo está listo para cobrar desde el primer día.</p>
           </div>
@@ -519,6 +521,7 @@
             <div>
               <h3>Operación: US$89 al mes con un pack a elección</h3>
               <p class="f-price">US$89/mes · setup US$250</p>
+              <p class="f-start">Arrancar cuesta US$339: US$250 de setup y el primer mes de US$89. Después, solo US$89 cada mes.</p>
             </div>
             <p>Food parks, bares, cafeterías con mesa y tiendas medianas: todo lo de Esencial más un pack de capacidad a elección y clientes, promociones y lealtad incluidos. El pack se elige por tu operación, no por tu rubro.</p>
           </div>
@@ -526,6 +529,7 @@
             <div>
               <h3>Pro: US$149 al mes con ambos packs y dos terminales</h3>
               <p class="f-price">US$149/mes · setup US$450</p>
+              <p class="f-start">Arrancar cuesta US$599: US$450 de setup y el primer mes de US$149. Después, solo US$149 cada mes.</p>
             </div>
             <p>Restaurantes, minimarkets y operaciones de alto flujo: ambos packs, 2 terminales incluidas (la tercera en adelante a US$29 al mes), 4 cuentas de propietario, reportes de margen y kardex valorizado, y soporte prioritario. El detalle del kardex valorizado está en el control de inventario y costos de NHILOS POS.</p>
             <!-- enlace interno /inventario/ pendiente de publicación: se enlaza cuando la página exista -->
@@ -568,12 +572,12 @@
       <div class="container reveal">
         <p class="eyebrow">Después de la mensualidad</p>
         <h2 class="h-lg" id="addons-title">Add-ons: qué se cobra aparte de la mensualidad</h2>
-        <p class="lead" style="margin-top: var(--space-4);">Después de la mensualidad, estos son los únicos cargos con precio publicado:</p>
+        <p class="lead" style="margin-top: var(--space-4);">Nada de esto es obligatorio para empezar: el plan que elijas ya incluye lo necesario para vender. Se suma solo si tu operación lo pide.</p>
         <div class="charge-list stagger">
           <div class="charge-row">
             <span class="c-name">Terminal adicional</span>
             <span class="c-amount">US$40/mes en Esencial y Operación · US$29/mes en Pro</span>
-            <span class="c-note">Cuota única de enrolamiento: US$75. Cada terminal se sincroniza por la nube: no necesitan una red local para trabajar juntas en tiempo real.</span>
+            <span class="c-note">Cuota única de enrolamiento: US$75. Cada terminal trabaja con su copia del catálogo y sube sus ventas por la nube cuando hay conexión; no necesitan compartir una red local.</span>
           </div>
           <div class="charge-row">
             <span class="c-name">Cuenta de propietario adicional</span>
