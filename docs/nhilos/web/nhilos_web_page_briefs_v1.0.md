@@ -1212,7 +1212,7 @@ Consecuencias para esta página:
 
 Las queries vienen del mapa §5 y de la regla 7 de anti-canibalización (demo e implementación viven separadas: preventa vs postventa); no se inventan:
 
-- **Primary:** `demo de sistema POS para restaurante` — asignada a esta página. La home, el hub y todas las páginas P0 enlazan aquí como CTA: la mayoría del tráfico es navegación interna, no búsqueda — la query medida es la puerta orgánica, no el volumen principal.
+- **Primary:** `demo de sistema POS para restaurante` — asignada a esta página, **en el H2 de segmentos de §9.4 y no en el H1** (decisión 2026-11-20: la puerta de entrada queda de segmento neutro). La home, el hub y todas las páginas P0 enlazan aquí como CTA: la mayoría del tráfico es navegación interna, no búsqueda — la query medida es la puerta orgánica, no el volumen principal.
 - **Secundarias del mapa §5:** `solicitar demo sistema POS`, `demo sistema POS Nicaragua`.
 - **Realidad honesta del set:** la página tiene un set de keywords delgado por diseño — su trabajo es convertir la intención que las otras páginas crearon, no acumular long tail.
 
@@ -1232,13 +1232,19 @@ Las queries vienen del mapa §5 y de la regla 7 de anti-canibalización (demo e 
 
 ### 9.4 Jerarquía de encabezados
 
-#### H1: `Demo de sistema POS para restaurante: qué recibes y cómo se coordina`
+#### H1: `Demo de NHILOS POS: qué recibes y cómo se coordina`
 
 Contenido: keyword exacta + la promesa de proceso claro. *Por qué: la query es de proceso; el H1 responde la pregunta del que duda entre pedir la demo o seguir comparando — saber qué pasa al pedir la convierte.*
+
+> **Actualizado 2026-11-20 (decisión del fundador).** El H1 original (`Demo de sistema POS para restaurante: qué recibes y cómo se coordina`) **encasillaba la página en restaurantes**: habría sido la única de las seis con un segmento en el H1, cuando la home, el hub, `/precios/`, `/facturacion-dgi/` y `/inventario/` son de segmento neutro; el home nombra los segmentos solo **dentro del texto**, en conjunto. Además se contradecía con §9.2, que asigna `sistema POS para restaurante` a `/software-pos/restaurantes/`. La query segmento-calificada sigue siendo objetivo —no tiene otro dueño y su intención es de proceso— y se gana en un **H2 de segmentos** (siguiente bloque), donde además muestra la amplitud.
 
 #### H2: `¿Qué es la demo de NHILOS POS?`
 
 Contenido: definición corta — una demostración del sistema en un escenario armado según tu tipo de negocio y tu prioridad (bullet aprobado del home v1.5): venta en mostrador, contingencia sin internet, recetas con descuento de insumos, bimoneda — según lo que tu operación pida. No es una presentación de slides ni una grabación genérica. *Por qué: la objeción secundaria se resuelve en la primera pantalla; "escenario según tu operación" es exactamente el bullet aprobado, sin adorno.*
+
+#### H2: `Demo de sistema POS para restaurante, cafetería, food park o mostrador`
+
+Contenido: los cuatro casos nombrados seguidos, con una línea del control que ve cada uno: restaurante con recetas (descuento por plato y recálculo de costo); cafetería o panadería (recetas y vitrina); food park (catálogo por puesto y cobro por terminal); tienda o mostrador (modo simple, sin recetas). Cierra con que es **el mismo sistema con el control ajustado a tu negocio**, y que un mostrador simple no necesita recetas. Aquí vive la frase exacta que se busca: `Demo de sistema POS para restaurante`. *Por qué: la query segmento-calificada entra por un encabezado —no por la puerta de entrada—, y la misma línea que la nombra impide que el lector de una cafetería o un park crea que la página no es para él.*
 
 > **H3: `Qué se muestra según tu tipo de negocio`**
 > Contenido: los tres escenarios en una línea cada uno — restaurante con recetas (descuento por plato y recálculo de costo), food park (catálogo por puesto y cobro por terminal), tienda o mostrador (modo simple); más la contingencia sin internet, que se muestra en vivo si es tu prioridad. *Por qué: el comprador reconoce su caso antes de pedir; los escenarios son los mismos de la home — sin inventar demos segmentadas que no estén armadas.*
@@ -1309,7 +1315,7 @@ Lecturas de éxito al checkpoint de 28 días:
 
 ### 9.8 Meta sugerida
 
-- **Title (≤60):** `Demo de NHILOS POS · Sistema POS para restaurante en Nicaragua`
+- **Title (≤60):** `Demo de NHILOS POS: qué recibes y cómo se coordina` — **50 caracteres**, espeja el H1, sin segmento. *(El anterior, `Demo de NHILOS POS · Sistema POS para restaurante en Nicaragua`, medía **62** contra un límite de 60 y además encasillaba; un cambio resolvió las dos cosas.)*
 - **Description (≤155):** `Pide tu demo de NHILOS POS: escenario según tu tipo de negocio, datos de demostración y cotización con cronograma real al finalizar. Sin compromiso.`
 
 ## 10. Briefs pendientes (P0 internas)
@@ -1356,3 +1362,6 @@ Correcciones sobre la página publicada: H2 del setup de "es un casco" (palabra 
 
 NHILOS no está inscrita como recaudador de IVA, así que ni "IVA incluido" ni "IVA aparte" son verdad: se retiraron las seis afirmaciones que había (cinco en `/precios/`, una en la home) y "netos" salió con ellas, porque es la misma promesa con otra palabra. Lo que queda es el hecho útil: precios en USD y, para el cobro en córdobas, la referencia del BCN del día. Regla permanente en §2.9 con su excepción declarada (el `alt` de la captura fiscal, donde el IVA es dato del cliente). Guardia S9 en los tres suites, probada en RED contra los seis textos retirados.
 
+### v2.4 — `/demo/` sale del encasillamiento en restaurantes (2026-11-20, fundador)
+
+Observación del fundador, verbatim: *"veo que estamos encasillando en restaurantes de nuevo en este contenido para la demo"*. Con el brief, `/demo/` habría sido la única de las seis páginas con un segmento en el H1. Se corrigieron tres cosas: **H1 neutro** (`Demo de NHILOS POS: qué recibes y cómo se coordina`), **H2 de segmentos** nuevo que conserva la query exacta y nombra restaurante, cafetería, food park y mostrador, y **title neutro de 50 caracteres** (el anterior medía 62 contra un límite de 60). El H3 `Qué se muestra según tu tipo de negocio` mantiene su texto y pasa a colgar del H2 de segmentos. Se detectó además una **contradicción interna** de §9.2 (asignaba `sistema POS para restaurante` a otro dueño mientras lo usaba como primary del H1) y quedó resuelta. Guardias nuevas en la suite de la página: ningún segmento puede entrar al H1 ni al title, y la query debe existir en un H2.

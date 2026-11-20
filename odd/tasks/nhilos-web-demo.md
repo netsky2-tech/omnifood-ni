@@ -41,7 +41,7 @@ node scripts/build-nhilos-web.mjs
 **La veracidad es la regla de profundidad:** si un dato del proceso no está decidido (por ejemplo la duración), **la página no lo publica**. Lo que sí está decidido y se publica: el plazo de respuesta (**menos de 24 horas hábiles**) y la condición de costo (**se coordina sin compromiso**).
 
 ### S3. Keywords: una primary y dueños explícitos
-- **Primary:** `demo de sistema POS para restaurante` — literal en el H1.
+- **Primary:** `demo de sistema POS para restaurante` — **en un H2 de segmentos, nunca en el H1 ni en el title** (ver S5 y S6).
 - Secundarias: `solicitar demo sistema POS`, `demo sistema POS Nicaragua`.
 - **Realidad honesta del set:** la página tiene un set delgado **por diseño**; su trabajo es convertir la intención que crearon las otras páginas. La mayor parte del tráfico llega por navegación interna, no por búsqueda — eso es correcto y **no** es canibalización.
 - **NO persigue, con dueño:** `instalar / instalación sistema POS` → `/implementacion/` (regla 7: preventa vs postventa, nunca en la misma URL); `precio`, `cotización`, `comprar`, `cuánto cuesta` → `/precios/`; `comparativa` / `mejores POS` → `/comparativas/`; `sistema POS para restaurante`, `POS sin internet`, `sistema de inventario` → sus páginas dueñas. **Esta página no repite esas queries como encabezados.**
@@ -51,23 +51,31 @@ node scripts/build-nhilos-web.mjs
 
 **Corrección declarada (importante):** el brief dice *"te contactamos por el canal que elegiste"*. Hoy hay **un solo canal**: el formulario compone un mensaje y lo entrega a WhatsApp (verificado en `site.js`); no hay correo ni backend. Prometer "el canal que elegiste" cuando solo existe uno es prometer un menú que no está. La frase dice **WhatsApp**, y cuando exista un segundo canal se amplía aquí y en el brief a la vez.
 
-### S5. H1 (verbatim)
-`Demo de sistema POS para restaurante: qué recibes y cómo se coordina`
+### S5. H1 de segmento neutro
+`Demo de NHILOS POS: qué recibes y cómo se coordina`
 
-### S6. Jerarquía: 7 H2 y 2 H3, verbatim y en este orden
+**Decisión del fundador (2026-11-20), verbatim:** *"veo que estamos encasillando en restaurantes de nuevo en este contenido para la demo"*. Con el H1 del brief, `/demo/` habría sido **la única página del sitio con un segmento en el H1**: las otras cinco son neutras (`POS sin internet en Nicaragua`, `Sistema POS en Nicaragua`, `Precios de NHILOS POS en Nicaragua`, `Facturación DGI Nicaragua`, `Sistema de inventario en Nicaragua`).
+
+**Y era una contradicción interna del brief:** §9.2 lista `sistema POS para restaurante` entre las queries que esta página **no persigue** porque su dueña es `/software-pos/restaurantes/`, y a la vez le asignaba `demo de sistema POS para restaurante` como primary del H1. La query segmento-calificada sigue siendo objetivo —no tiene otro dueño y su intención es de proceso—, pero se gana en un **H2 de segmentos** (S6), no en la puerta de entrada.
+
+### S6. Jerarquía: 8 H2 y 2 H3, verbatim y en este orden
 1. `¿Qué es la demo de NHILOS POS?`
+2. `Demo de sistema POS para restaurante, cafetería, food park o mostrador`
    - H3: `Qué se muestra según tu tipo de negocio`
-2. `¿Cómo se coordina y cuánto hay que esperar?`
+3. `¿Cómo se coordina y cuánto hay que esperar?`
    - H3: `¿Cuánto dura la demo?`
-3. `¿Qué necesito preparar?`
-4. `¿Con qué datos se muestra el sistema?`
-5. `¿Qué pasa después de la demo?`
-6. `Preguntas frecuentes sobre la demo`
-7. `Pide tu demo`
+4. `¿Qué necesito preparar?`
+5. `¿Con qué datos se muestra el sistema?`
+6. `¿Qué pasa después de la demo?`
+7. `Preguntas frecuentes sobre la demo`
+8. `Pide tu demo`
+
+**El H3 `Qué se muestra según tu tipo de negocio` cambia de padre** (del H2 1 al H2 de segmentos): su texto no se toca, y su lugar lógico es donde viven los segmentos. Declarado, no deslizado.
 
 Contenido por sección: brief §9.4. Lo que no se puede omitir:
 1 → definición corta: demostración en un escenario armado según tu tipo de negocio y tu prioridad (bullet aprobado del home v1.5): venta en mostrador, contingencia sin internet, recetas con descuento de insumos, bimoneda. **No es una presentación de slides ni una grabación genérica.**
-   H3 → los tres escenarios en una línea cada uno: restaurante con recetas; food park (catálogo por puesto y cobro por terminal); tienda/mostrador (modo simple); más la contingencia sin internet si es tu prioridad. **Los mismos escenarios de la home, sin inventar demos segmentadas.**
+2 → **el H2 de segmentos**: nombra los cuatro casos seguidos (restaurante, cafetería, food park, mostrador) y dice en una línea qué control ve cada uno; cierra con que es **el mismo sistema con el control ajustado a tu negocio**, y que un mostrador simple no necesita recetas. Aquí vive la frase exacta que se busca: `Demo de sistema POS para restaurante`.
+   H3 → los escenarios en una línea cada uno: restaurante con recetas; cafetería/panadería; food park (catálogo por puesto y cobro por terminal); tienda/mostrador (modo simple); más la contingencia sin internet si es tu prioridad. **Los mismos escenarios de la home, sin inventar demos segmentadas.**
 2 → el proceso real: pides por el formulario o WhatsApp directo; te confirmamos **en menos de 24 horas hábiles** y se agenda contigo. Sin cupos limitados, sin cuentas regresivas, sin descuento por pedir hoy.
    H3 → la duración **no se publica en minutos**: se arma con tu operación (rubro, lo que te cuesta hoy, cuántas cajas). Lo que sí se afirma: la cotización con cronograma real sale al finalizar.
 3 → lo mínimo: qué vendes, cuántas cajas operas, cocina o solo mostrador. **No hay que enviar menú, Excel ni archivo alguno**: la carga del catálogo real es de la implementación.
@@ -150,7 +158,7 @@ Ya usados (**no repetir**): hero con fork, ledger de tres filas, banda comparati
 
 ### S17. Suite propia (`scripts/__tests__/nhilos-demo-artboard.test.mjs`)
 Desde cero, cada guardia **RED** antes de cumplirse. Mínimo 24:
-1. H1 verbatim. 2. Los 7 H2 verbatim y en orden. 3. Los 2 H3 verbatim. 4. Title y description con sus límites (**≤60 / ≤155**). 5. Canonical + `og:title`. 6. Respuesta rápida en los primeros 150 px. 7. Las 10 prohibiciones de S8 ausentes. 8. Claims heredados ausentes. 9. **Cero minutos de duración** en cualquier contexto. 10. **Cero "gratis"/"gratuita"**. 11. Plazo exacto "menos de 24 horas hábiles" presente y **ninguna variante más rápida**. 12. Paridad `FAQPage` celda por celda. 13. Las 7 preguntas y en orden. 14. **Campos obligatorios exactos**: los 4 base + contexto; **ausencia de RUC, correo obligatorio y presupuesto**. 15. `terminalCount` reutilizado, sin campo paralelo. 16. `utm_medium=demo` en todos los enlaces de WhatsApp. 17. Etiqueta de datos de demostración con el provenance aprobado. 18. Rutas relativas en el artboard. 19. `faq-cell`/`demo-tag` reutilizados y ningún patrón de S16 repetido. 20. Todo `var(--*)` existe en `site.css`. 21. Cero rayas (—). 22. Voz: cero narración de sitio. 23. Vocabulario interno prohibido. 24. `PAGES` + `design.json`; WhatsApp presente; sin nombres de personas.
+1. H1 verbatim. 2. Los 8 H2 verbatim y en orden. 3. Los 2 H3 verbatim. 4. Title y description con sus límites (**≤60 / ≤155**). 4b. **Ningún segmento en el H1 ni en el title**: falla si aparece restaurante, cafetería, panadería, food park o mostrador. 4c. La query `demo de sistema POS para restaurante` **sí** aparece en un H2. 5. Canonical + `og:title`. 6. Respuesta rápida en los primeros 150 px. 7. Las 10 prohibiciones de S8 ausentes. 8. Claims heredados ausentes. 9. **Cero minutos de duración** en cualquier contexto. 10. **Cero "gratis"/"gratuita"**. 11. Plazo exacto "menos de 24 horas hábiles" presente y **ninguna variante más rápida**. 12. Paridad `FAQPage` celda por celda. 13. Las 7 preguntas y en orden. 14. **Campos obligatorios exactos**: los 4 base + contexto; **ausencia de RUC, correo obligatorio y presupuesto**. 15. `terminalCount` reutilizado, sin campo paralelo. 16. `utm_medium=demo` en todos los enlaces de WhatsApp. 17. Etiqueta de datos de demostración con el provenance aprobado. 18. Rutas relativas en el artboard. 19. `faq-cell`/`demo-tag` reutilizados y ningún patrón de S16 repetido. 20. Todo `var(--*)` existe en `site.css`. 21. Cero rayas (—). 22. Voz: cero narración de sitio. 23. Vocabulario interno prohibido. 24. `PAGES` + `design.json`; WhatsApp presente; sin nombres de personas.
 **Y una guardia fuera de la suite de la página:** la verificación diferencial del mensaje del home (S10), como test propio en el lugar donde vive el handler.
 
 ### S18. Accesibilidad del formulario
@@ -168,7 +176,12 @@ Cada guardia nace roja contra un defecto real. En el reporte: por guardia, qué 
 ### S22. Commits
 Conventional Commits **en inglés**, ~400 líneas por unidad, código + tests + doc juntos.
 
-### S23. Defecto medido del brief: el title excede su propio límite
+### S23. El title: decidido, neutro y dentro del límite
+**Decidido (2026-11-20):** `Demo de NHILOS POS: qué recibes y cómo se coordina` — **50 caracteres**, espeja el H1, sin segmento.
+
+Motivo del cambio: el title del brief (`Demo de NHILOS POS · Sistema POS para restaurante en Nicaragua`) **medía 62 caracteres contra un límite declarado de 60** *y además* encasillaba en restaurantes. Un solo cambio resuelve las dos cosas.
+
+### S23b. Defecto medido del brief (histórico)
 El title del brief §9.8 mide **62 caracteres** y su límite declarado es **60**:
 `Demo de NHILOS POS · Sistema POS para restaurante en Nicaragua` → **62**.
 
@@ -192,7 +205,7 @@ Recomendación del padre: la de **54** (marca + intención + mercado). La decisi
 | ID | Specs | Ruta | Commit sugerido |
 |---|---|---|---|
 | T1 | S1, S15 | Artboard con shell, spine, breadcrumb, tokens; `PAGES` + `design.json`; suite vacía | `feat(web): scaffold the demo page artboard` |
-| T2 | S5, S6, S7 | H1 y H2 1 con su H3 (los tres escenarios) | `feat(web): demo page intro and the three scenarios` |
+| T2 | S5, S6, S7 | H1 neutro, H2 1 (definición) y H2 2 de segmentos con su H3 | `feat(web): demo page intro and the four segments` |
 | T3 | S6, S11 | H2 2 con su H3 (coordinación, plazo, duración no publicada) | `feat(web): how the demo is scheduled` |
 | T4 | S6, S12 | H2 3 y 4 (qué preparar, con qué datos) sin capturas | `feat(web): what to prepare and demo data disclosure` |
 | T5 | S6, S9 | H2 5 + FAQ de 7 con `FAQPage` en paridad + meta + schema | `feat(web): demo FAQ and schema parity` |
@@ -229,3 +242,4 @@ Recomendación del padre: la de **54** (marca + intención + mercado). La decisi
 - **L6.** Esta página **no lleva capturas**: el brief define la prueba como el propio flujo. Es la primera del sitio que puede quedarse sin material gráfico, y se declara para que nadie rellene el hueco con una pantalla que no prueba nada.
 - **L7.** El dato "cuántas cajas operas" del brief **es** el `terminalCount` que el formulario del home ya recoge: se reutiliza. Crear un campo paralelo rompería el contrato de datos y duplicaría la pregunta en el mensaje de WhatsApp.
 - **L8.** La verificación del documento antes de entregarlo cazó dos omisiones: los **bullets aprobados del home v1.5** no estaban citados verbatim. Se agregaron como S6b en vez de renumerar, por la misma razón que en el ODD de inventario: que un número ya citado no apunte a otra regla.
+- **L9.** Corrección del fundador (2026-11-20), verbatim: *"veo que estamos encasillando en restaurantes de nuevo en este contenido para la demo"*. Medido antes de decidir: con el brief, `/demo/` habría sido **la única de las seis páginas con un segmento en el H1** (home, hub, precios, fiscal e inventario son neutras; el home nombra los segmentos dentro del texto, dieciséis veces, siempre en conjunto). Decisión: **H1 y title neutros**, y la query `demo de sistema POS para restaurante` se conserva en un **H2 de segmentos** que además nombra cafetería, food park y mostrador — conserva la frase exacta para búsqueda y muestra la amplitud en la misma línea. El H3 del brief pasa a colgar de ese H2 sin cambiar su texto. Dos guardias nuevas, de clase y no de instancia: ningún segmento puede entrar al H1 ni al title, y la query debe existir en un H2.
