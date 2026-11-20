@@ -373,6 +373,7 @@ class MockAuthRepository extends _i1.Mock implements _i12.AuthRepository {
   _i10.Future<_i2.TerminalLinking> claimLinkingCode(
     String? code,
     String? deviceId,
+    {String? hardwareFingerprint,}
   ) =>
       (super.noSuchMethod(
         Invocation.method(

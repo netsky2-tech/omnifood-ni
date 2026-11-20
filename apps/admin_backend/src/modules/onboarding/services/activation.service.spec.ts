@@ -2014,3 +2014,280 @@ describe('ActivationService — claimFirstSuccessfulSale stamps posBuild write-o
     expect(savedAttempt.posBuild).toBe('2.14.3+918');
   });
 });
+
+describe('ActivationService — Issue #566 lifecycle protection & recovery code', () => {
+  const tenantId = '11111111-1111-4111-8111-111111111111';
+  const userId = '22222222-2222-4222-8222-222222222222';
+  const terminalId = 'pos-term-active-01';
+  const challengeId = '66666666-6666-4666-8666-666666666666';
+
+  const setup = () => {
+    const {
+      DeviceSyncCredential,
+      DeviceSyncCredentialStatus,
+    } = require('../../identity/entities/device-sync-credential.entity') as typeof import('../../identity/entities/device-sync-credential.entity');
+    const {
+      ReactivationChallengeStatus,
+      TerminalReactivationChallenge,
+    } = require('../entities/terminal-reactivation-challenge.entity') as typeof import('../entities/terminal-reactivation-challenge.entity');
+    const {
+      TerminalRecoveryCode,
+    } = require('../entities/terminal-recovery-code.entity') as typeof import('../entities/terminal-recovery-code.entity');
+
+    const attemptRepo = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+      create: jest.fn((dto: Record<string, unknown>) => ({
+        ...dto,
+        id: 'attempt-566-1',
+      })),
+      save: jest.fn((entity: Record<string, unknown>) =>
+        Promise.resolve({ ...entity, id: entity.id || 'attempt-566-1' }),
+      ),
+    };
+    const checkRepo = {
+      findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn((dto: Record<string, unknown>) => dto),
+      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+    };
+    const followUpRepo = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+      create: jest.fn((dto: Record<string, unknown>) => dto),
+      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+    };
+    const sessionRepo = {
+      findOne: jest.fn(),
+      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+    };
+    const invoiceRepo = {
+      findOne: jest.fn(),
+    };
+    const credRepo = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+    const challengeRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+    };
+    const recoveryRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn((dto: Record<string, unknown>) => ({
+        id: 'rc-566-1',
+        ...dto,
+      })),
+      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+    };
+
+    const manager = {
+      query: jest.fn().mockResolvedValue([]),
+      getRepository: (entityClass: unknown) => {
+        if (entityClass === ActivationAttempt) return attemptRepo;
+        if (entityClass === OnboardingSession) return sessionRepo;
+        if (entityClass === ActivationCheckResult) return checkRepo;
+        if (entityClass === ActivationFollowUp) return followUpRepo;
+        if (entityClass === Invoice) return invoiceRepo;
+        if (entityClass === DeviceSyncCredential) return credRepo;
+        if (entityClass === TerminalReactivationChallenge) return challengeRepo;
+        if (entityClass === TerminalRecoveryCode) return recoveryRepo;
+        return null;
+      },
+    };
+
+    const dataSource = {
+      transaction: jest.fn(
+        async <T>(cb: (em: unknown) => Promise<T>): Promise<T> => cb(manager),
+      ),
+    };
+
+    const fiscalConfigVersionService = {
+      getLatestRevision: jest.fn().mockResolvedValue({
+        revision: 2,
+        fingerprint: 'fiscal-fp-2',
+      }),
+    };
+    const onboardingCatalogService = {
+      getVerificationProductCandidate: jest.fn().mockResolvedValue({
+        verificationProductId: 'prod-1',
+        verificationProductRevision: 1,
+        verificationProductFingerprint: 'prod-fp-1',
+      }),
+    };
+    const readinessEvaluator = {
+      evaluate: jest.fn().mockResolvedValue({ saleReady: true }),
+    };
+    const changeLogService = { log: jest.fn().mockResolvedValue(undefined) };
+
+    const service = new ActivationService(
+      attemptRepo as never,
+      checkRepo as never,
+      followUpRepo as never,
+      sessionRepo as never,
+      fiscalConfigVersionService as never,
+      onboardingCatalogService as never,
+      readinessEvaluator as never,
+      dataSource as never,
+      changeLogService as never,
+    );
+
+    return {
+      service,
+      attemptRepo,
+      checkRepo,
+      sessionRepo,
+      credRepo,
+      challengeRepo,
+      recoveryRepo,
+      DeviceSyncCredentialStatus,
+      ReactivationChallengeStatus,
+    };
+  };
+
+  it('rejects startActivation for an already-ACTIVE terminal without an approved reactivationChallengeId', async () => {
+    const ctx = setup();
+    ctx.sessionRepo.findOne.mockResolvedValue({
+      id: 'session-1',
+      tenantId,
+      lifecycleState: OnboardingLifecycleState.ACTIVATED,
+    });
+    ctx.attemptRepo.findOne.mockResolvedValue(null);
+    ctx.credRepo.find.mockResolvedValue([
+      {
+        id: 'cred-1',
+        tenantId,
+        status: ctx.DeviceSyncCredentialStatus.ACTIVE,
+        activationAttempt: { trustedTerminalId: terminalId },
+      },
+    ]);
+
+    try {
+      await ctx.service.startActivation(
+        tenantId,
+        { candidateTerminalId: terminalId },
+        userId,
+      );
+      fail('Expected ConflictException');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ConflictException);
+      const body = (err as ConflictException).getResponse() as {
+        code?: string;
+      };
+      expect(body.code).toBe('TERMINAL_ALREADY_ACTIVE_USE_REACTIVATION');
+    }
+  });
+
+  it('allows startActivation with an APPROVED non-expired reactivationChallengeId and never rolls back ACTIVATED session', async () => {
+    const ctx = setup();
+    const session = {
+      id: 'session-1',
+      tenantId,
+      lifecycleState: OnboardingLifecycleState.ACTIVATED,
+      optimisticVersion: 3,
+    };
+    ctx.sessionRepo.findOne.mockResolvedValue(session);
+    ctx.attemptRepo.findOne.mockResolvedValue(null);
+    ctx.credRepo.find.mockResolvedValue([
+      {
+        id: 'cred-1',
+        tenantId,
+        status: ctx.DeviceSyncCredentialStatus.ACTIVE,
+        activationAttempt: { trustedTerminalId: terminalId },
+      },
+    ]);
+    ctx.challengeRepo.findOne.mockResolvedValue({
+      id: challengeId,
+      tenantId,
+      terminalId,
+      status: ctx.ReactivationChallengeStatus.APPROVED,
+      expiresAt: new Date(Date.now() + 600_000),
+    });
+
+    const attempt = await ctx.service.startActivation(
+      tenantId,
+      {
+        candidateTerminalId: terminalId,
+        reactivationChallengeId: challengeId,
+      },
+      userId,
+    );
+
+    expect(attempt.candidateTerminalId).toBe(terminalId);
+    // Session must remain ACTIVATED (never rolled back to ACTIVATION_IN_PROGRESS or SALE_READY)
+    expect(session.lifecycleState).toBe(OnboardingLifecycleState.ACTIVATED);
+  });
+
+  it('issues a one-time 6-digit recoveryCode on finalizeActivation PASS and persists its bcrypt hash', async () => {
+    const ctx = setup();
+    ctx.attemptRepo.findOne.mockResolvedValue({
+      id: 'attempt-566-1',
+      tenantId,
+      candidateTerminalId: terminalId,
+      trustedTerminalId: terminalId,
+      status: ActivationAttemptStatus.IN_PROGRESS,
+      contractVersion: 2,
+      warningsCount: 0,
+    });
+    ctx.sessionRepo.findOne.mockResolvedValue({
+      id: 'session-1',
+      tenantId,
+      lifecycleState: OnboardingLifecycleState.ACTIVATION_IN_PROGRESS,
+      optimisticVersion: 1,
+    });
+    ctx.checkRepo.find.mockResolvedValue([
+      {
+        checkCode: ActivationCheckCode.TERMINAL_LINKED,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.REQUIRED_CONFIG_LOCAL,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.AUTHORIZED_USER_LOCAL,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.PRINTER_AVAILABLE,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.NON_FISCAL_TEST_PRINT,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.SQLITE_DURABILITY,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.VERIFICATION_SEQUENCE_DRY_RUN,
+        status: ActivationCheckStatus.PASS,
+        detailsSanitizedJson: { proposedSequence: 1 },
+      },
+      {
+        checkCode: ActivationCheckCode.OUTBOX_DURABLE,
+        status: ActivationCheckStatus.PASS,
+      },
+      {
+        checkCode: ActivationCheckCode.POST_RECONNECT_SYNC,
+        status: ActivationCheckStatus.PASS,
+      },
+    ]);
+
+    const finalized = await ctx.service.finalizeActivation(
+      tenantId,
+      'attempt-566-1',
+      userId,
+    );
+
+    expect(finalized.status).toBe(ActivationAttemptStatus.PASS);
+    expect(finalized.recoveryCode).toMatch(/^\d{6}$/);
+    expect(ctx.recoveryRepo.save).toHaveBeenCalledTimes(1);
+    const savedRecord = ctx.recoveryRepo.save.mock.calls[0][0] as {
+      codeHash: string;
+      terminalId: string;
+    };
+    expect(savedRecord.terminalId).toBe(terminalId);
+    expect(savedRecord.codeHash).not.toBe(finalized.recoveryCode);
+    expect(savedRecord.codeHash).toMatch(/^\$2[aby]\$10\$/);
+  });
+});

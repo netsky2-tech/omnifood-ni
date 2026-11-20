@@ -10,7 +10,7 @@ import { DeviceCredentialRevokedException } from '../exceptions/device-credentia
 import { DeviceCredentialRecoveryRequiredException } from '../exceptions/device-credential-recovery-required.exception';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import {
   ActivationAttempt,
@@ -61,12 +61,32 @@ import {
 } from '../../sales/sync-health/terminal-sync-evidence';
 import { deriveSyncFreshness } from '../../sales/sync-health/freshness-derivation';
 import { resolveFreshnessThresholdMinutes } from '../../sales/sync-health/freshness.config';
-import { TenantTerminalDto } from '../dto/tenant-terminal.dto';
+import {
+  CredentialHistoryEntry,
+  TenantTerminalDto,
+} from '../dto/tenant-terminal.dto';
 
 export interface ProvisionCredentialResult {
   readonly credential: DeviceSyncCredential;
   readonly renewalSecret?: string;
   readonly isNoOp?: boolean;
+}
+
+export interface RotateCredentialForReactivationParams {
+  readonly tenantId: string;
+  readonly activationAttemptId: string;
+  readonly previousCredentialId: string;
+  readonly reason: string;
+  readonly approvedByUserId: string | null;
+  readonly approvalMethod: string;
+  readonly challengeId: string;
+  readonly canonicalDeviceId: string;
+}
+
+export interface RotateCredentialForReactivationResult {
+  readonly credential: DeviceSyncCredential;
+  readonly renewalSecret: string;
+  readonly previousVersion: number;
 }
 
 export interface ConfirmCredentialParams {
@@ -476,6 +496,41 @@ export class DeviceSyncCredentialService {
           });
         }
 
+        const historyByDevice = new Map<string, CredentialHistoryEntry[]>();
+        for (const cred of credentials) {
+          const deviceId =
+            cred.activationAttempt?.trustedTerminalId?.trim() ||
+            cred.activationAttempt?.candidateTerminalId?.trim();
+          if (!deviceId) {
+            continue;
+          }
+          const list = historyByDevice.get(deviceId) ?? [];
+          list.push({
+            id: cred.id,
+            version: cred.version,
+            status: cred.status,
+            issuedAt:
+              cred.issuedAt instanceof Date
+                ? cred.issuedAt.toISOString()
+                : new Date(cred.issuedAt).toISOString(),
+            rotatedAt: cred.rotatedAt
+              ? cred.rotatedAt instanceof Date
+                ? cred.rotatedAt.toISOString()
+                : new Date(cred.rotatedAt).toISOString()
+              : null,
+            revokedAt: cred.revokedAt
+              ? cred.revokedAt instanceof Date
+                ? cred.revokedAt.toISOString()
+                : new Date(cred.revokedAt).toISOString()
+              : null,
+            revocationReason: cred.revocationReason ?? null,
+          });
+          historyByDevice.set(deviceId, list);
+        }
+        for (const list of historyByDevice.values()) {
+          list.sort((a, b) => a.version - b.version);
+        }
+
         return latestCredentialByDevice(credentials).map(
           (terminal): TenantTerminalDto => {
             const credential = terminal.credential;
@@ -511,6 +566,7 @@ export class DeviceSyncCredentialService {
                     hasInventoryPending: false,
                     inventoryPendingCount: 0,
                   }),
+              credentialHistory: historyByDevice.get(terminal.deviceId) ?? [],
             };
           },
         );
@@ -717,5 +773,132 @@ export class DeviceSyncCredentialService {
 
       return saved;
     });
+  }
+
+  /**
+   * Rotates a terminal's sync credential in place on its existing
+   * `activationAttemptId` during a human-approved reactivation (#566).
+   *
+   * - Preserves the exact `terminalId` and `activationAttemptId` (no new terminal).
+   * - Rejects `REVOKED` credentials (deliberate revocation is never silently
+   *   reactivated).
+   * - Transitions the previous `ACTIVE`/`PENDING` credential to `RETIRED` with
+   *   `rotatedAt` and `revocationReason = params.reason`, appending a `RETIRED`
+   *   audit event.
+   * - Issues a fresh `PENDING` credential with `version = maxVersion + 1` (15-min
+   *   TTL, fresh `renewalSecret`) and appends a `PROVISIONED` audit event.
+   *
+   * Caller must execute inside a tenant-bound transaction (`bindTenantContext`).
+   */
+  async rotateCredentialForReactivation(
+    manager: EntityManager,
+    params: RotateCredentialForReactivationParams,
+  ): Promise<RotateCredentialForReactivationResult> {
+    const credentialRepo = manager.getRepository(DeviceSyncCredential);
+    const eventRepo = manager.getRepository(DeviceSyncCredentialEvent);
+
+    const previousCredential = await credentialRepo.findOne({
+      where: {
+        id: params.previousCredentialId,
+        tenantId: params.tenantId,
+        activationAttemptId: params.activationAttemptId,
+      },
+    });
+
+    if (!previousCredential) {
+      throw new NotFoundException(
+        `Previous credential '${params.previousCredentialId}' not found for tenant`,
+      );
+    }
+
+    if (previousCredential.status === DeviceSyncCredentialStatus.REVOKED) {
+      throw new ConflictException({
+        code: 'TERMINAL_CREDENTIAL_REVOKED',
+        message: 'Revoked terminal credential cannot be reactivated',
+      });
+    }
+
+    const allAttemptCreds = await credentialRepo.find({
+      where: {
+        tenantId: params.tenantId,
+        activationAttemptId: params.activationAttemptId,
+      },
+      order: { version: 'DESC' },
+    });
+
+    const highestVersion =
+      allAttemptCreds[0]?.version ?? previousCredential.version;
+    const nextVersion = highestVersion + 1;
+    const now = new Date();
+
+    if (
+      previousCredential.status === DeviceSyncCredentialStatus.ACTIVE ||
+      previousCredential.status === DeviceSyncCredentialStatus.PENDING
+    ) {
+      previousCredential.status = DeviceSyncCredentialStatus.RETIRED;
+      previousCredential.rotatedAt = now;
+      previousCredential.revocationReason = params.reason;
+      await credentialRepo.save(previousCredential);
+
+      const retireEvent = eventRepo.create({
+        tenantId: params.tenantId,
+        credentialId: previousCredential.id,
+        eventType: DeviceSyncCredentialEventType.RETIRED,
+        metadata: {
+          challengeId: params.challengeId,
+          reason: params.reason,
+          approvedByUserId: params.approvedByUserId,
+          approvalMethod: params.approvalMethod,
+          previousVersion: previousCredential.version,
+          newVersion: nextVersion,
+          deviceId: params.canonicalDeviceId,
+        },
+      });
+      await eventRepo.save(retireEvent);
+    }
+
+    const renewalSecret = generateDeviceRenewalSecret();
+    const renewalSecretHash = await hashDeviceRenewalSecret(renewalSecret);
+    const pendingLifetimeMs =
+      Math.min(this.jwtConfig.renewalTtlSeconds, 900) * 1000;
+    const expiresAt = new Date(now.getTime() + pendingLifetimeMs);
+
+    const newCredential = credentialRepo.create({
+      tenantId: params.tenantId,
+      activationAttemptId: params.activationAttemptId,
+      renewalSecretHash,
+      scopes: [...DEVICE_SYNC_V1_SCOPES],
+      version: nextVersion,
+      status: DeviceSyncCredentialStatus.PENDING,
+      expiresAt,
+      issuedAt: now,
+    });
+
+    const savedCredential = await credentialRepo.save(newCredential);
+
+    const provisionedEvent = eventRepo.create({
+      tenantId: params.tenantId,
+      credentialId: savedCredential.id,
+      eventType: DeviceSyncCredentialEventType.PROVISIONED,
+      metadata: {
+        reactivationChallengeId: params.challengeId,
+        previousCredentialId: previousCredential.id,
+        previousVersion: previousCredential.version,
+        approvedByUserId: params.approvedByUserId,
+        approvalMethod: params.approvalMethod,
+        reason: params.reason,
+        deviceId: params.canonicalDeviceId,
+        activationAttemptId: params.activationAttemptId,
+        scopes: savedCredential.scopes,
+        version: savedCredential.version,
+      },
+    });
+    await eventRepo.save(provisionedEvent);
+
+    return {
+      credential: savedCredential,
+      renewalSecret,
+      previousVersion: previousCredential.version,
+    };
   }
 }

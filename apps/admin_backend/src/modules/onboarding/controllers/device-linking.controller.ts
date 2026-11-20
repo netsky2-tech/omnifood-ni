@@ -89,7 +89,10 @@ export class DeviceLinkingController {
     return await this.deviceLinkingService.generateLinkingCode(
       tenantId,
       actorUserId,
-      { expiryMinutes: dto.expiryMinutes },
+      {
+        expiryMinutes: dto.expiryMinutes,
+        replacesTerminalId: dto.replacesTerminalId,
+      },
     );
   }
 
@@ -114,6 +117,7 @@ export class DeviceLinkingController {
     slug: string;
     deviceId: string;
     linkedAt: Date;
+    reactivationChallengeId?: string;
   }> {
     const decision = this.rateLimiter.consume(req.ip ?? 'unknown');
     if (!decision.allowed) {
@@ -121,6 +125,10 @@ export class DeviceLinkingController {
       // different from an invalid code.
       throw new UnauthorizedException(LINKING_CODE_GENERIC_FAILURE);
     }
-    return await this.deviceLinkingService.claimCode(dto.code, dto.deviceId);
+    return await this.deviceLinkingService.claimCode(
+      dto.code,
+      dto.deviceId,
+      dto.hardwareFingerprint,
+    );
   }
 }

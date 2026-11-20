@@ -42,8 +42,31 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<User?> loginOnline(String email, String password, {String? tenantSlug}) async => null;
   @override
-  Future<TerminalLinking> claimLinkingCode(String code, String deviceId) async =>
+  Future<TerminalLinking> claimLinkingCode(
+    String code,
+    String deviceId, {
+    String? hardwareFingerprint,
+  }) async =>
       const TerminalLinking(tenantId: '', slug: '', deviceId: '');
+  @override
+  Future<DeviceReactivationLookupResult> lookupReactivationDevice(
+    String hardwareFingerprint,
+  ) async =>
+      const DeviceReactivationLookupResult.notFound();
+  @override
+  Future<CompletedReactivationResult> completeReactivation({
+    required String challengeId,
+    required String hardwareFingerprint,
+    String? recoveryCode,
+  }) async =>
+      throw UnimplementedError();
+  @override
+  Future<void> confirmReactivationCredential({
+    required String challengeId,
+    required String credentialId,
+    required int version,
+    required String renewalSecret,
+  }) async {}
   @override
   Future<bool> authorizeOverride({required String supervisorId, String? pin, String? totpCode}) async => false;
   @override

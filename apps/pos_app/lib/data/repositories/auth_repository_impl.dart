@@ -380,11 +380,16 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
-  Future<TerminalLinking> claimLinkingCode(String code, String deviceId) async {
+  Future<TerminalLinking> claimLinkingCode(
+    String code,
+    String deviceId, {
+    String? hardwareFingerprint,
+  }) async {
     final claimDio = _claimDio ?? _dio;
     // Pre-auth endpoint: never send credentials, even if a stale token sits
     // on the shared client (issue #556).
     claimDio.options.headers.remove('Authorization');
+    final trimmedFingerprint = hardwareFingerprint?.trim();
 
     Response<dynamic>? response;
     DioException? lastDioException;
@@ -411,6 +416,8 @@ class AuthRepositoryImpl implements AuthRepository {
             // Raw user input, trimmed; case normalization is server-side.
             'code': code.trim(),
             'deviceId': deviceId,
+            if (trimmedFingerprint != null && trimmedFingerprint.isNotEmpty)
+              'hardwareFingerprint': trimmedFingerprint,
           },
         );
         lastDioException = null;
@@ -481,12 +488,207 @@ class AuthRepositoryImpl implements AuthRepository {
     }
 
     final data = Map<String, dynamic>.from(response!.data as Map);
+    final rawChallengeId = data['reactivationChallengeId']?.toString().trim();
     return TerminalLinking(
       tenantId: (data['tenantId'] ?? '').toString(),
       slug: (data['slug'] ?? '').toString(),
       deviceId: (data['deviceId'] ?? deviceId).toString(),
       linkedAt: data['linkedAt']?.toString(),
+      reactivationChallengeId:
+          (rawChallengeId != null && rawChallengeId.isNotEmpty)
+              ? rawChallengeId
+              : null,
     );
+  }
+
+  Dio _preAuthOnboardingDio() {
+    final client = _claimDio ?? _dio;
+    client.options.headers.remove('Authorization');
+    return client;
+  }
+
+  TerminalReactivationException _mapReactivationDioError(DioException e) {
+    final status = e.response?.statusCode;
+    if (e is UnconfiguredBackendException) {
+      return const TerminalReactivationException(
+        'Esta terminal no tiene un servidor configurado. Las ventas '
+        'siguen funcionando sin conexión, pero la sincronización no '
+        'está disponible.',
+        code: 'UNCONFIGURED_BACKEND',
+      );
+    }
+
+    String? backendCode;
+    final rawData = e.response?.data;
+    if (rawData is Map) {
+      final codeVal = rawData['code'];
+      if (codeVal is String && codeVal.trim().isNotEmpty) {
+        backendCode = codeVal.trim();
+      }
+    }
+
+    switch (backendCode) {
+      case 'REACTIVATION_APPROVAL_REQUIRED':
+        return TerminalReactivationException(
+          'Esperando aprobación desde el panel del negocio o ingresá tu código de recuperación de 6 dígitos.',
+          code: backendCode,
+          statusCode: status,
+        );
+      case 'INVALID_RECOVERY_CODE':
+        return TerminalReactivationException(
+          'Código de recuperación inválido o ya utilizado.',
+          code: backendCode,
+          statusCode: status,
+        );
+      case 'REACTIVATION_CHALLENGE_EXPIRED':
+        return TerminalReactivationException(
+          'La solicitud expiró. Tocá «Buscar nuevamente» para generar una nueva.',
+          code: backendCode,
+          statusCode: status,
+        );
+      case 'HARDWARE_FINGERPRINT_MISMATCH':
+        return TerminalReactivationException(
+          'Este dispositivo no coincide con la solicitud de reactivación.',
+          code: backendCode,
+          statusCode: status,
+        );
+      case 'TERMINAL_CREDENTIAL_REVOKED':
+        return TerminalReactivationException(
+          'La credencial de esta terminal fue revocada y no puede reactivarse.',
+          code: backendCode,
+          statusCode: status,
+        );
+      case 'RATE_LIMIT_EXCEEDED':
+        return TerminalReactivationException(
+          'Demasiados intentos, aguarde un momento.',
+          code: backendCode,
+          statusCode: status,
+        );
+    }
+
+    if (status == 429) {
+      return TerminalReactivationException(
+        'Demasiados intentos, aguarde un momento.',
+        code: backendCode ?? 'RATE_LIMIT_EXCEEDED',
+        statusCode: status,
+      );
+    }
+    if (status != null && status >= 500 && status <= 504) {
+      return TerminalReactivationException(
+        'El servidor está iniciando o temporalmente no disponible. Intente de nuevo en unos momentos.',
+        code: backendCode,
+        statusCode: status,
+      );
+    }
+
+    return TerminalReactivationException(
+      'Error de conexión. Verifique su red e intente de nuevo.',
+      code: backendCode,
+      statusCode: status,
+    );
+  }
+
+  @override
+  Future<DeviceReactivationLookupResult> lookupReactivationDevice(
+    String hardwareFingerprint,
+  ) async {
+    final client = _preAuthOnboardingDio();
+    try {
+      final response = await client.post(
+        '/onboarding/activation/device-lookup',
+        data: <String, dynamic>{
+          'hardwareFingerprint': hardwareFingerprint.trim(),
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final found = data['found'] == true;
+      if (!found) {
+        return const DeviceReactivationLookupResult.notFound();
+      }
+      final rawExpiresAt = data['expiresAt']?.toString();
+      final expiresAt = rawExpiresAt != null && rawExpiresAt.isNotEmpty
+          ? DateTime.tryParse(rawExpiresAt)?.toUtc()
+          : null;
+      return DeviceReactivationLookupResult(
+        found: true,
+        recoveryChallengeId: data['recoveryChallengeId']?.toString(),
+        status: data['status']?.toString(),
+        maskedHint: data['maskedHint']?.toString(),
+        expiresAt: expiresAt,
+      );
+    } on DioException catch (e) {
+      throw _mapReactivationDioError(e);
+    } catch (_) {
+      throw const TerminalReactivationException(
+        'No se pudo verificar si esta terminal estuvo vinculada.',
+      );
+    }
+  }
+
+  @override
+  Future<CompletedReactivationResult> completeReactivation({
+    required String challengeId,
+    required String hardwareFingerprint,
+    String? recoveryCode,
+  }) async {
+    final client = _preAuthOnboardingDio();
+    final trimmedRecoveryCode = recoveryCode?.trim();
+    try {
+      final response = await client.post(
+        '/onboarding/activation/reactivation/$challengeId/complete',
+        data: <String, dynamic>{
+          'hardwareFingerprint': hardwareFingerprint.trim(),
+          if (trimmedRecoveryCode != null && trimmedRecoveryCode.isNotEmpty)
+            'recoveryCode': trimmedRecoveryCode,
+        },
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final expiresAtRaw = (data['expiresAt'] ?? '').toString();
+      final parsedExpiresAt = DateTime.parse(expiresAtRaw).toUtc();
+      return CompletedReactivationResult(
+        tenantId: (data['tenantId'] ?? '').toString(),
+        slug: (data['slug'] ?? '').toString(),
+        terminalId: (data['terminalId'] ?? '').toString(),
+        activationAttemptId: (data['activationAttemptId'] ?? '').toString(),
+        credentialId: (data['credentialId'] ?? '').toString(),
+        version: (data['version'] as num).toInt(),
+        renewalSecret: (data['renewalSecret'] ?? '').toString(),
+        expiresAt: parsedExpiresAt,
+        previousVersion: (data['previousVersion'] as num?)?.toInt() ?? 0,
+      );
+    } on DioException catch (e) {
+      throw _mapReactivationDioError(e);
+    } catch (_) {
+      throw const TerminalReactivationException(
+        'No se pudo completar la reactivación de la terminal.',
+      );
+    }
+  }
+
+  @override
+  Future<void> confirmReactivationCredential({
+    required String challengeId,
+    required String credentialId,
+    required int version,
+    required String renewalSecret,
+  }) async {
+    final client = _preAuthOnboardingDio();
+    try {
+      await client.post(
+        '/onboarding/activation/reactivation/$challengeId/confirm',
+        data: <String, dynamic>{
+          'credentialId': credentialId,
+          'version': version,
+          'renewalSecret': renewalSecret,
+        },
+      );
+    } on DioException catch (e) {
+      throw _mapReactivationDioError(e);
+    } catch (_) {
+      throw const TerminalReactivationException(
+        'No se pudo confirmar la credencial reactivada.',
+      );
+    }
   }
 
   @override

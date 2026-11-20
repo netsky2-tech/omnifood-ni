@@ -60,8 +60,22 @@ import {
 import { DeviceSyncCredentialResponseDto } from '../dto/device-sync-credential-response.dto';
 import { ConfirmDeviceSyncCredentialDto } from '../dto/confirm-device-sync-credential.dto';
 import { DeviceSyncCredentialService } from '../../identity/services/device-sync-credential.service';
+import {
+  DeviceSyncCredential,
+  DeviceSyncCredentialStatus,
+} from '../../identity/entities/device-sync-credential.entity';
+import {
+  ReactivationChallengeStatus,
+  TerminalReactivationChallenge,
+} from '../entities/terminal-reactivation-challenge.entity';
+import { TerminalRecoveryCode } from '../entities/terminal-recovery-code.entity';
+import { issueRecoveryCodeInTransaction } from '../utils/terminal-recovery-code';
 import { TenantTopologyRevisionService } from '../../fulfillment/services/tenant-topology-revision.service';
 import { readHighestInvoiceSequence } from './fiscal-sequence-watermark';
+
+export type FinalizeActivationResult = ActivationAttempt & {
+  recoveryCode?: string;
+};
 
 export const V1_REQUIRED_ACTIVATION_CHECKS: readonly ActivationCheckCode[] = [
   ActivationCheckCode.TERMINAL_LINKED,
@@ -390,6 +404,61 @@ export class ActivationService {
           );
         }
 
+        // Issue #566 lifecycle protection: reject duplicate activation of an
+        // already-active terminal unless backed by an APPROVED reactivation
+        // challenge for (tenantId, candidateTerminalId).
+        const credRepo = manager.getRepository(DeviceSyncCredential);
+        if (credRepo && typeof credRepo.find === 'function') {
+          const activeCredentials = await credRepo.find({
+            where: {
+              tenantId: trimmedTenant,
+              status: DeviceSyncCredentialStatus.ACTIVE,
+            },
+            relations: ['activationAttempt'],
+          });
+          const hasActiveTerminalCredential = activeCredentials.some(
+            (cred) =>
+              cred.activationAttempt?.trustedTerminalId?.trim() ===
+              trimmedTerminalId,
+          );
+
+          if (hasActiveTerminalCredential) {
+            const challengeId = dto.reactivationChallengeId?.trim();
+            let hasApprovedChallenge = false;
+
+            if (challengeId) {
+              const challengeRepo = manager.getRepository(
+                TerminalReactivationChallenge,
+              );
+              if (challengeRepo && typeof challengeRepo.findOne === 'function') {
+                const challenge = await challengeRepo.findOne({
+                  where: {
+                    id: challengeId,
+                    tenantId: trimmedTenant,
+                    terminalId: trimmedTerminalId,
+                    status: ReactivationChallengeStatus.APPROVED,
+                  },
+                });
+                if (
+                  challenge &&
+                  challenge.expiresAt &&
+                  challenge.expiresAt.getTime() > Date.now()
+                ) {
+                  hasApprovedChallenge = true;
+                }
+              }
+            }
+
+            if (!hasApprovedChallenge) {
+              throw new ConflictException({
+                code: 'TERMINAL_ALREADY_ACTIVE_USE_REACTIVATION',
+                message:
+                  'Esta terminal ya tiene una credencial activa. Usa el flujo de reactivación para rotar la credencial sin crear una terminal nueva.',
+              });
+            }
+          }
+        }
+
         // Pinning: fiscal config snapshot revision & fingerprint
         let fiscalRevision =
           await this.fiscalConfigVersionService.getLatestRevision(
@@ -448,9 +517,12 @@ export class ActivationService {
 
         const savedAttempt = await aRepo.save(attempt);
 
-        // Actualizar sesión a ACTIVATION_IN_PROGRESS
-        session.lifecycleState =
-          OnboardingLifecycleState.ACTIVATION_IN_PROGRESS;
+        // Update session to ACTIVATION_IN_PROGRESS only when not already
+        // ACTIVATED (issue #566: never rollback ACTIVATED lifecycleState).
+        if (session.lifecycleState !== OnboardingLifecycleState.ACTIVATED) {
+          session.lifecycleState =
+            OnboardingLifecycleState.ACTIVATION_IN_PROGRESS;
+        }
         session.currentActivationAttemptId = savedAttempt.id;
         session.activationStartedAt = session.activationStartedAt ?? now;
         session.lastActivityAt = now;
@@ -675,7 +747,7 @@ export class ActivationService {
     tenantId: string,
     attemptId: string,
     actorUserId: string,
-  ): Promise<ActivationAttempt> {
+  ): Promise<FinalizeActivationResult> {
     const trimmedTenant = tenantId?.trim();
     if (!trimmedTenant) {
       throw new BadRequestException('tenantId is required');
@@ -708,6 +780,7 @@ export class ActivationService {
           return {
             savedAttempt: attempt,
             followUpCreated: null,
+            recoveryCode: undefined,
             isReplay: true,
           };
         }
@@ -875,14 +948,34 @@ export class ActivationService {
         const savedAttempt = await aRepo.save(attempt);
 
         // Lifecycle update on OnboardingSession
+        let recoveryCode: string | undefined;
         if (
           attempt.status === ActivationAttemptStatus.PASS ||
           attempt.status === ActivationAttemptStatus.PASS_WITH_WARNING
         ) {
           session.lifecycleState = OnboardingLifecycleState.ACTIVATED;
           session.activatedAt = session.activatedAt ?? attempt.completedAt;
-        } else {
-          // FAIL: liberate active attempt and revert lifecycle based on live readiness
+
+          // Issue #566: issue a one-time 6-digit recovery code for this terminal
+          const trustedTerminalId = savedAttempt.trustedTerminalId?.trim();
+          const recoveryRepo = manager.getRepository(TerminalRecoveryCode);
+          if (
+            trustedTerminalId &&
+            recoveryRepo &&
+            typeof recoveryRepo.find === 'function'
+          ) {
+            const issued = await issueRecoveryCodeInTransaction(manager, {
+              tenantId: trimmedTenant,
+              terminalId: trustedTerminalId,
+              activationAttemptId: savedAttempt.id,
+            });
+            recoveryCode = issued.recoveryCode;
+          }
+        } else if (
+          session.lifecycleState !== OnboardingLifecycleState.ACTIVATED
+        ) {
+          // FAIL: liberate active attempt and revert lifecycle based on live
+          // readiness. Never rollback an already ACTIVATED session (#566).
           const readiness =
             await this.readinessEvaluator.evaluate(trimmedTenant);
           if (readiness.saleReady) {
@@ -897,7 +990,7 @@ export class ActivationService {
         session.optimisticVersion = (session.optimisticVersion ?? 1) + 1;
         await sRepo.save(session);
 
-        return { savedAttempt, followUpCreated, isReplay: false };
+        return { savedAttempt, followUpCreated, recoveryCode, isReplay: false };
       },
     );
 
@@ -935,6 +1028,11 @@ export class ActivationService {
       }
     }
 
+    if (result.recoveryCode) {
+      return Object.assign(result.savedAttempt, {
+        recoveryCode: result.recoveryCode,
+      });
+    }
     return result.savedAttempt;
   }
 

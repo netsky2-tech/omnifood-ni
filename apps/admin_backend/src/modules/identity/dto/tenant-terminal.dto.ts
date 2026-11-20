@@ -1,6 +1,16 @@
 import { DeviceSyncCredentialStatus } from '../entities/device-sync-credential.entity';
 import type { SyncFreshnessTerminalState } from '../../sales/sync-health/freshness-derivation';
 
+export interface CredentialHistoryEntry {
+  readonly id: string;
+  readonly version: number;
+  readonly status: DeviceSyncCredentialStatus;
+  readonly issuedAt: string;
+  readonly rotatedAt: string | null;
+  readonly revokedAt: string | null;
+  readonly revocationReason: string | null;
+}
+
 /**
  * Authoritative, tenant-scoped terminal registry entry (issue #832, AG-03, Batch 17).
  *
@@ -58,4 +68,7 @@ export class TenantTerminalDto {
 
   /** Total count of inventory-pending receipts across this terminal's streams. */
   inventoryPendingCount!: number;
+
+  /** Monotonic credential lineage (v1 → v2 → ...) for this terminal (#566). */
+  credentialHistory!: CredentialHistoryEntry[];
 }

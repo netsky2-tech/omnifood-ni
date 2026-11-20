@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, RefreshCw, Smartphone } from "lucide-react";
+import { Plus, RefreshCw, RotateCw, Smartphone } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -14,10 +14,16 @@ import { Button } from "@/components/ui/button";
 import { cn, formatDate, formatDateTime } from "@/lib/utils";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { useCanRevokeDevice } from "@/features/auth/permissions";
+import { ReactivationChallengesCard } from "@/features/onboarding/reactivation-challenges-card";
 import { useDevices } from "./use-devices";
 import { RevokeDeviceModal } from "./revoke-device-modal";
+import { ReactivateDeviceModal } from "./reactivate-device-modal";
 import { AddTerminalKitDialog } from "./add-terminal-kit-dialog";
-import type { DeviceSyncStatus, TerminalDevice } from "./types";
+import type {
+  DeviceSyncStatus,
+  TerminalCredentialVersion,
+  TerminalDevice,
+} from "./types";
 
 interface BadgeTone {
   label: string;
@@ -28,7 +34,7 @@ interface BadgeTone {
 /** §46: color is never the only signal — every badge carries its label. */
 const STATUS_BADGES: Record<DeviceSyncStatus, BadgeTone> = {
   ACTIVE: {
-    label: "Activo",
+    label: "Activa",
     className: "border-transparent bg-emerald-50 text-emerald-700",
     dotClassName: "bg-emerald-500",
   },
@@ -38,16 +44,62 @@ const STATUS_BADGES: Record<DeviceSyncStatus, BadgeTone> = {
     dotClassName: "bg-amber-500",
   },
   REVOKED: {
-    label: "Revocado",
+    label: "Revocada",
     className: "border-transparent bg-destructive/10 text-destructive",
     dotClassName: "bg-destructive",
   },
   RETIRED: {
-    label: "Retirado",
-    className: "border-transparent bg-muted text-muted-foreground",
-    dotClassName: "bg-muted-foreground",
+    label: "Reemplazada",
+    className: "border-transparent bg-slate-100 text-slate-700",
+    dotClassName: "bg-slate-500",
   },
 };
+
+const LINEAGE_REASON_LABELS: Record<string, string> = {
+  reinstall: "Reinstalación",
+  replaced: "Reemplazo",
+};
+
+function formatLineageReason(reason: string | null): string | null {
+  if (!reason) return null;
+  const trimmed = reason.trim();
+  if (!trimmed) return null;
+  return LINEAGE_REASON_LABELS[trimmed.toLowerCase()] ?? trimmed;
+}
+
+function formatShortDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Intl.DateTimeFormat("es-NI", {
+    timeZone: "America/Managua",
+    day: "numeric",
+    month: "short",
+  }).format(parsed);
+}
+
+/**
+ * Formats monotonic credential lineage (`v1 (Reemplazada · Reinstalación · 19 nov) → v2 (Activa · 19 nov)`).
+ */
+export function formatCredentialLineage(
+  history: TerminalCredentialVersion[],
+): string | null {
+  if (!Array.isArray(history) || history.length === 0) return null;
+  const sorted = [...history].sort((a, b) => a.version - b.version);
+  return sorted
+    .map((entry) => {
+      const statusLabel = STATUS_BADGES[entry.status]?.label ?? entry.status;
+      const reason = formatLineageReason(entry.revocationReason);
+      const eventDate = formatShortDate(
+        entry.rotatedAt ?? entry.revokedAt ?? entry.issuedAt,
+      );
+      const details = [statusLabel, reason, eventDate].filter(
+        (part): part is string => Boolean(part),
+      );
+      return `v${entry.version} (${details.join(" · ")})`;
+    })
+    .join(" → ");
+}
 
 const FRESHNESS_TONES = {
   green: {
@@ -162,9 +214,15 @@ interface DevicesTableProps {
   devices: TerminalDevice[];
   canRevoke: boolean;
   onRevoke: (device: TerminalDevice) => void;
+  onReactivate: (device: TerminalDevice) => void;
 }
 
-function DevicesTable({ devices, canRevoke, onRevoke }: DevicesTableProps) {
+function DevicesTable({
+  devices,
+  canRevoke,
+  onRevoke,
+  onReactivate,
+}: DevicesTableProps) {
   return (
     <div className="rounded-md border border-border bg-card shadow-sm">
       <Table
@@ -188,6 +246,12 @@ function DevicesTable({ devices, canRevoke, onRevoke }: DevicesTableProps) {
           {devices.map((device) => {
             const statusTone = STATUS_BADGES[device.status];
             const freshTone = freshnessTone(device);
+            const lineageText = formatCredentialLineage(device.credentialHistory);
+            const canReactivateRow =
+              device.status === "ACTIVE" || device.status === "RETIRED";
+            const canRevokeRow =
+              device.status === "ACTIVE" || device.status === "PENDING";
+            const hasRowAction = canReactivateRow || canRevokeRow;
             return (
               <TableRow key={device.credentialId}>
                 <TableCell>
@@ -199,7 +263,17 @@ function DevicesTable({ devices, canRevoke, onRevoke }: DevicesTableProps) {
                   )}
                 </TableCell>
                 <TableCell>
-                  <StateBadge tone={statusTone} />
+                  <div className="space-y-1">
+                    <StateBadge tone={statusTone} />
+                    {device.status === "REVOKED" && device.revocationReason && (
+                      <p
+                        data-testid={`revocation-reason-${device.terminalId}`}
+                        className="text-xs text-muted-foreground max-w-[200px]"
+                      >
+                        {device.revocationReason}
+                      </p>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   <StateBadge tone={freshTone} />
@@ -230,19 +304,43 @@ function DevicesTable({ devices, canRevoke, onRevoke }: DevicesTableProps) {
                       ? `Emitida ${formatOrDash(device.issuedAt, formatDate)}`
                       : "—"}
                   </p>
+                  {lineageText && (
+                    <p
+                      data-testid={`credential-lineage-${device.terminalId}`}
+                      className="mt-1 text-[11px] font-mono text-muted-foreground leading-snug"
+                    >
+                      {lineageText}
+                    </p>
+                  )}
                 </TableCell>
                 {canRevoke && (
                   <TableCell className="text-right">
-                    {device.status === "ACTIVE" || device.status === "PENDING" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => onRevoke(device)}
-                        aria-label={`Revocar terminal ${device.terminalId}`}
-                      >
-                        Revocar
-                      </Button>
+                    {hasRowAction ? (
+                      <div className="inline-flex items-center justify-end gap-1">
+                        {canReactivateRow && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 gap-1 px-2 text-primary hover:bg-primary/10 hover:text-primary"
+                            onClick={() => onReactivate(device)}
+                            aria-label={`Reactivar terminal ${device.terminalId}`}
+                          >
+                            <RotateCw className="h-3.5 w-3.5" aria-hidden="true" />
+                            Reactivar
+                          </Button>
+                        )}
+                        {canRevokeRow && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => onRevoke(device)}
+                            aria-label={`Revocar terminal ${device.terminalId}`}
+                          >
+                            Revocar
+                          </Button>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
@@ -261,6 +359,8 @@ export function DevicesPage() {
   const { data, isLoading, isError, error, isFetching, refetch } = useDevices();
   const devices = data ?? [];
   const [revokingDevice, setRevokingDevice] = useState<TerminalDevice | null>(null);
+  const [reactivatingDevice, setReactivatingDevice] =
+    useState<TerminalDevice | null>(null);
   const [addKitOpen, setAddKitOpen] = useState(false);
   const canRevoke = useCanRevokeDevice();
 
@@ -306,6 +406,9 @@ export function DevicesPage() {
           </Button>
         </div>
       </div>
+
+      {/* Issue #566: pending/approved terminal reactivation alerts surfaced in Dispositivos too */}
+      <ReactivationChallengesCard canManage={canRevoke} />
 
       {/* §41 P0: SUMMARY → DETAIL. Executive counts first, device rows below. */}
       {data && (
@@ -394,6 +497,7 @@ export function DevicesPage() {
               devices={devices}
               canRevoke={canRevoke}
               onRevoke={(device) => setRevokingDevice(device)}
+              onReactivate={(device) => setReactivatingDevice(device)}
             />
             <p className="text-xs text-muted-foreground" aria-live="polite">
               Mostrando {devices.length}{" "}
@@ -408,6 +512,14 @@ export function DevicesPage() {
         open={revokingDevice !== null}
         onOpenChange={(open) => {
           if (!open) setRevokingDevice(null);
+        }}
+      />
+
+      <ReactivateDeviceModal
+        device={reactivatingDevice}
+        open={reactivatingDevice !== null}
+        onOpenChange={(open) => {
+          if (!open) setReactivatingDevice(null);
         }}
       />
 

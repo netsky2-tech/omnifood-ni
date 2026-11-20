@@ -55,6 +55,7 @@ import 'domain/repositories/auth_repository.dart';
 import 'data/repositories/audit_repository_impl.dart';
 import 'domain/repositories/audit_repository.dart';
 import 'data/services/fiscal_projection_repair_service.dart';
+import 'data/services/hardware_fingerprint_service.dart';
 import 'data/services/local_auth_service.dart';
 import 'data/services/network_connectivity_service.dart';
 import 'data/services/sync_service.dart';
@@ -266,6 +267,7 @@ void main() async {
   final terminalIdentityService = TerminalIdentityService(
     database.localConfigDao,
   );
+  final hardwareFingerprintService = HardwareFingerprintService();
   final deviceId = await terminalIdentityService
       .resolveDeviceId(buildTimeDeviceId: provisionedDeviceId);
   final dioClients = PosDioClients(baseUrl: baseUrl);
@@ -654,6 +656,9 @@ void main() async {
             persistTenantSlug: (slug) => tenantConfigService.persistTenantSlug(slug),
             persistTenantId: (tenantId) =>
                 tenantConfigService.persistTenantId(tenantId),
+            hardwareFingerprintService: hardwareFingerprintService,
+            terminalIdentityService: terminalIdentityService,
+            deviceSyncCredentialStore: deviceSyncStore,
           ),
         ),
         ChangeNotifierProvider(

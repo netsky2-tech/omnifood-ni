@@ -21,6 +21,7 @@ import { isApiError } from "@/lib/api";
 import { toast } from "@/hooks/use-toast";
 import { localize, backendActivationErrorLabels, lifecycleStateLabels, onboardingBlockerLabels, onboardingWarningLabels } from "@/lib/labels";
 import { CatalogAcquisitionModal } from "./catalog-acquisition-modal";
+import { ReactivationChallengesCard } from "./reactivation-challenges-card";
 import { AddTerminalKitDialog } from "@/features/devices/add-terminal-kit-dialog";
 import { useSeedCatalogDefaults } from "@/features/catalog/use-catalog";
 import { useHasPermission } from "@/features/users/use-has-permission";
@@ -640,6 +641,10 @@ export function SetupCenterView({ onNavigateToTab }: SetupCenterViewProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Issue #566 — Tarjeta "Reactivar terminal" when pending/approved
+          reactivation challenges exist for this tenant. */}
+      <ReactivationChallengesCard canManage={hasActivationPermission} />
 
       {/* Issue #556 stage 12c + issue #569 single linking flow — Vincular y
           Activar Terminal: single-use pre-login linking code plus automatic

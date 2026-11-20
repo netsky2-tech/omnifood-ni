@@ -328,3 +328,116 @@ export interface InstallTokenListItem {
   useCount: number;
   active: boolean;
 }
+
+/**
+ * Terminal reactivation challenge status vocabulary, matching
+ * `ReactivationChallengeStatus` in
+ * apps/admin_backend/src/modules/onboarding/entities/terminal-reactivation-challenge.entity.ts
+ * (issue #566).
+ */
+export const ReactivationChallengeStatus = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  COMPLETED: "COMPLETED",
+  EXPIRED: "EXPIRED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type ReactivationChallengeStatus =
+  (typeof ReactivationChallengeStatus)[keyof typeof ReactivationChallengeStatus];
+
+/**
+ * Reason for terminal reactivation (issue #566).
+ */
+export const ReactivationReason = {
+  REINSTALL: "reinstall",
+  REPLACED: "replaced",
+} as const;
+
+export type ReactivationReason =
+  (typeof ReactivationReason)[keyof typeof ReactivationReason];
+
+/**
+ * Approval method for a reactivation challenge (issue #566).
+ */
+export const ReactivationApprovalMethod = {
+  DASHBOARD: "DASHBOARD",
+  RECOVERY_CODE: "RECOVERY_CODE",
+} as const;
+
+export type ReactivationApprovalMethod =
+  (typeof ReactivationApprovalMethod)[keyof typeof ReactivationApprovalMethod];
+
+export type ReactivationInitiationMode = "challenge" | "factory_reset";
+
+/**
+ * Active reactivation challenge item returned by
+ * GET /onboarding/activation/reactivation-challenges (issue #566).
+ */
+export interface ReactivationChallenge {
+  id: string;
+  terminalId: string;
+  terminalLabel: string;
+  status: ReactivationChallengeStatus;
+  reason: ReactivationReason;
+  approvalMethod: ReactivationApprovalMethod | null;
+  latestCredentialVersion: number | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+/**
+ * Full challenge entity returned by approve/cancel/initiate-challenge endpoints.
+ */
+export interface ReactivationChallengeRecord {
+  id: string;
+  tenantId: string;
+  terminalId: string;
+  status: ReactivationChallengeStatus;
+  reason: ReactivationReason;
+  approvalMethod: ReactivationApprovalMethod | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  completedAt: string | null;
+  previousCredentialId: string | null;
+  previousCredentialVersion: number | null;
+  newCredentialId: string | null;
+  newCredentialVersion: number | null;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Request body for POST /onboarding/activation/terminals/:terminalId/reactivate (issue #566).
+ */
+export interface InitiateTerminalReactivationDto {
+  reason: ReactivationReason;
+  mode?: ReactivationInitiationMode;
+}
+
+/**
+ * Response union for POST /onboarding/activation/terminals/:terminalId/reactivate (issue #566).
+ */
+export type InitiateTerminalReactivationResponse =
+  | {
+      mode: "factory_reset";
+      terminalId: string;
+      linkingCode: string;
+      expiresAt: string;
+    }
+  | {
+      mode: "challenge";
+      terminalId: string;
+      challenge: ReactivationChallengeRecord;
+    };
+
+/**
+ * Response of POST /onboarding/activation/terminals/:terminalId/recovery-code (issue #566).
+ * Plaintext 6-digit recovery code is returned once and never stored in plaintext.
+ */
+export interface RecoveryCodeResponse {
+  terminalId: string;
+  recoveryCode: string;
+  issuedAt: string;
+}

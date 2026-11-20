@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
 import {
   MAX_LINKING_EXPIRY_MINUTES,
   MIN_LINKING_EXPIRY_MINUTES,
@@ -13,4 +13,14 @@ export class GenerateLinkingCodeDto {
   @Min(MIN_LINKING_EXPIRY_MINUTES)
   @Max(MAX_LINKING_EXPIRY_MINUTES)
   expiryMinutes?: number;
+
+  /**
+   * Optional existing terminalId being replaced after a factory reset (#566).
+   * When set, claiming this code preserves `replacesTerminalId` as the
+   * terminal's canonical deviceId and opens an approved reactivation challenge.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(1, 128)
+  replacesTerminalId?: string;
 }

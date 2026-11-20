@@ -14,6 +14,11 @@ import {
   listInstallTokens,
   createInstallToken,
   revokeInstallToken,
+  fetchReactivationChallenges,
+  approveReactivationChallenge,
+  cancelReactivationChallenge,
+  initiateTerminalReactivation,
+  rotateTerminalRecoveryCode,
 } from "./onboarding-api";
 import {
   OnboardingLifecycleState,
@@ -24,6 +29,7 @@ import {
   type CreateManualProductDto,
   type StartActivationDto,
   type CreateInstallTokenDto,
+  type InitiateTerminalReactivationDto,
 } from "./types";
 
 import { getActiveTenantId, useTenantId } from "@/lib/tenant";
@@ -36,6 +42,8 @@ export const onboardingKeys = {
   activationAttempt: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "activation-attempt"] as const,
   linkingCodes: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "linking-codes"] as const,
   installTokens: (tenantId?: string) => ["onboarding", tenantId ?? getActiveTenantId(), "install-tokens"] as const,
+  reactivationChallenges: (tenantId?: string) =>
+    ["onboarding", tenantId ?? getActiveTenantId(), "reactivation-challenges"] as const,
 };
 
 export function calculateSetupCenterProgress(
@@ -383,5 +391,88 @@ export function useRevokeInstallToken() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: onboardingKeys.installTokens(tenantId) });
     },
+  });
+}
+
+/**
+ * Polls active (PENDING / APPROVED) terminal reactivation challenges every 5s
+ * while mounted (issue #566).
+ */
+export function useReactivationChallenges(options?: { enabled?: boolean }) {
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: onboardingKeys.reactivationChallenges(tenantId),
+    queryFn: fetchReactivationChallenges,
+    enabled: options?.enabled ?? true,
+    refetchInterval: 5000,
+    staleTime: 2500,
+  });
+}
+
+/**
+ * Approves a pending reactivation challenge (issue #566).
+ * Invalidates both reactivation challenges and the devices table snapshot.
+ */
+export function useApproveReactivationChallenge() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  return useMutation({
+    mutationFn: (challengeId: string) => approveReactivationChallenge(challengeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: onboardingKeys.reactivationChallenges(tenantId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["devices", tenantId] });
+    },
+  });
+}
+
+/**
+ * Cancels/rejects a pending or approved reactivation challenge (issue #566).
+ */
+export function useCancelReactivationChallenge() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  return useMutation({
+    mutationFn: (challengeId: string) => cancelReactivationChallenge(challengeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: onboardingKeys.reactivationChallenges(tenantId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["devices", tenantId] });
+    },
+  });
+}
+
+/**
+ * Initiates reactivation for an existing terminal (either challenge mode for
+ * reinstall or factory_reset mode for device replacement) (issue #566).
+ */
+export function useInitiateTerminalReactivation() {
+  const queryClient = useQueryClient();
+  const tenantId = useTenantId();
+  return useMutation({
+    mutationFn: ({
+      terminalId,
+      payload,
+    }: {
+      terminalId: string;
+      payload: InitiateTerminalReactivationDto;
+    }) => initiateTerminalReactivation(terminalId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: onboardingKeys.reactivationChallenges(tenantId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["devices", tenantId] });
+    },
+  });
+}
+
+/**
+ * Issues or rotates a one-time 6-digit recovery code for a terminal (issue #566).
+ */
+export function useRotateTerminalRecoveryCode() {
+  return useMutation({
+    mutationFn: (terminalId: string) => rotateTerminalRecoveryCode(terminalId),
   });
 }

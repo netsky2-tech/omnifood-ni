@@ -1328,6 +1328,114 @@ describe('DeviceSyncCredentialService', () => {
         status: DeviceSyncCredentialStatus.REVOKED,
         revocationReason: 'Re-provisioned device',
       });
+      expect(result[0].credentialHistory).toHaveLength(2);
+      expect(result[0].credentialHistory.map((h) => h.version)).toEqual([1, 2]);
+      expect(result[0].credentialHistory[0].id).toBe('cred-v1');
+      expect(result[0].credentialHistory[1].id).toBe('cred-v2');
+      expect(result[0].credentialHistory[1].revocationReason).toBe(
+        'Re-provisioned device',
+      );
+    });
+  });
+
+  describe('rotateCredentialForReactivation (#566)', () => {
+    const ROTATE_TENANT_ID = '11111111-1111-4111-8111-111111111111';
+    const ROTATE_ATTEMPT_ID = '22222222-2222-4222-8222-222222222222';
+
+    it('retires previous ACTIVE credential with reason and issues version + 1 on the same attempt with audit events', async () => {
+      const prevCred = {
+        id: 'cred-v1',
+        tenantId: ROTATE_TENANT_ID,
+        activationAttemptId: ROTATE_ATTEMPT_ID,
+        version: 1,
+        status: DeviceSyncCredentialStatus.ACTIVE,
+        rotatedAt: null,
+        revocationReason: null,
+      } as unknown as DeviceSyncCredential;
+
+      credentialRepo.findOne.mockResolvedValue(prevCred);
+      credentialRepo.find.mockResolvedValue([prevCred]);
+      credentialRepo.create.mockImplementation((dto) => ({
+        id: 'cred-v2',
+        ...dto,
+      }));
+      credentialRepo.save.mockImplementation(async (entity) => entity);
+      eventRepo.create.mockImplementation((dto) => ({ id: 'evt-1', ...dto }));
+      eventRepo.save.mockImplementation(async (entity) => entity);
+
+      const rotated = await service.rotateCredentialForReactivation(
+        mockManager as unknown as import('typeorm').EntityManager,
+        {
+          tenantId: ROTATE_TENANT_ID,
+          activationAttemptId: ROTATE_ATTEMPT_ID,
+          previousCredentialId: 'cred-v1',
+          reason: 'reinstall',
+          approvedByUserId: 'user-owner-1',
+          approvalMethod: 'DASHBOARD',
+          challengeId: 'challenge-1',
+          canonicalDeviceId: 'pos-01',
+        },
+      );
+
+      expect(prevCred.status).toBe(DeviceSyncCredentialStatus.RETIRED);
+      expect(prevCred.rotatedAt).toBeInstanceOf(Date);
+      expect(prevCred.revocationReason).toBe('reinstall');
+      expect(rotated.previousVersion).toBe(1);
+      expect(rotated.credential.version).toBe(2);
+      expect(rotated.credential.activationAttemptId).toBe(ROTATE_ATTEMPT_ID);
+      expect(rotated.credential.status).toBe(DeviceSyncCredentialStatus.PENDING);
+      expect(rotated.renewalSecret.length).toBeGreaterThanOrEqual(32);
+
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: DeviceSyncCredentialEventType.RETIRED,
+          credentialId: 'cred-v1',
+          metadata: expect.objectContaining({
+            challengeId: 'challenge-1',
+            reason: 'reinstall',
+            previousVersion: 1,
+            newVersion: 2,
+          }),
+        }),
+      );
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: DeviceSyncCredentialEventType.PROVISIONED,
+          credentialId: 'cred-v2',
+          metadata: expect.objectContaining({
+            reactivationChallengeId: 'challenge-1',
+            previousCredentialId: 'cred-v1',
+            previousVersion: 1,
+            version: 2,
+          }),
+        }),
+      );
+    });
+
+    it('rejects rotation when previous credential is REVOKED', async () => {
+      credentialRepo.findOne.mockResolvedValue({
+        id: 'cred-v1',
+        tenantId: ROTATE_TENANT_ID,
+        activationAttemptId: ROTATE_ATTEMPT_ID,
+        version: 1,
+        status: DeviceSyncCredentialStatus.REVOKED,
+      } as unknown as DeviceSyncCredential);
+
+      await expect(
+        service.rotateCredentialForReactivation(
+          mockManager as unknown as import('typeorm').EntityManager,
+          {
+            tenantId: ROTATE_TENANT_ID,
+            activationAttemptId: ROTATE_ATTEMPT_ID,
+            previousCredentialId: 'cred-v1',
+            reason: 'reinstall',
+            approvedByUserId: 'user-owner-1',
+            approvalMethod: 'DASHBOARD',
+            challengeId: 'challenge-1',
+            canonicalDeviceId: 'pos-01',
+          },
+        ),
+      ).rejects.toThrow(ConflictException);
     });
   });
 });

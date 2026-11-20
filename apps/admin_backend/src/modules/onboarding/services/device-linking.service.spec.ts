@@ -436,6 +436,7 @@ describe('DeviceLinkingService.listLinkingCodes', () => {
     codeHash: '$2b$10$secret-hash',
     status: DeviceLinkingCodeStatus.ACTIVE,
     deviceId: null,
+    replacesTerminalId: null,
     createdByUserId: 'user-9',
     expiresAt: new Date('2026-01-01T00:15:00Z'),
     claimedAt: null,

@@ -12,6 +12,11 @@ import type {
   CreateInstallTokenDto,
   CreateInstallTokenResponse,
   InstallTokenListItem,
+  ReactivationChallenge,
+  ReactivationChallengeRecord,
+  InitiateTerminalReactivationDto,
+  InitiateTerminalReactivationResponse,
+  RecoveryCodeResponse,
 } from "./types";
 
 export function isVersionConflictError(error: unknown): boolean {
@@ -125,6 +130,63 @@ export async function createInstallToken(
  */
 export async function revokeInstallToken(tokenId: string): Promise<void> {
   await api.delete<void>(`/onboarding/install-tokens/${encodeURIComponent(tokenId)}`);
+}
+
+/**
+ * Lists active (PENDING / APPROVED) terminal reactivation challenges for the
+ * caller's tenant (issue #566).
+ */
+export async function fetchReactivationChallenges(): Promise<ReactivationChallenge[]> {
+  const raw = await api.get<unknown>("/onboarding/activation/reactivation-challenges");
+  return Array.isArray(raw) ? (raw as ReactivationChallenge[]) : [];
+}
+
+/**
+ * Approves a pending terminal reactivation challenge with 1 click (issue #566).
+ */
+export async function approveReactivationChallenge(
+  challengeId: string,
+): Promise<ReactivationChallengeRecord> {
+  return api.post<ReactivationChallengeRecord>(
+    `/onboarding/activation/reactivation-challenges/${encodeURIComponent(challengeId)}/approve`,
+  );
+}
+
+/**
+ * Cancels/rejects a pending or approved terminal reactivation challenge (issue #566).
+ */
+export async function cancelReactivationChallenge(
+  challengeId: string,
+): Promise<ReactivationChallengeRecord> {
+  return api.post<ReactivationChallengeRecord>(
+    `/onboarding/activation/reactivation-challenges/${encodeURIComponent(challengeId)}/cancel`,
+  );
+}
+
+/**
+ * Initiates reactivation for an existing terminal, preserving its canonical
+ * terminalId and fiscal sequence (issue #566).
+ */
+export async function initiateTerminalReactivation(
+  terminalId: string,
+  payload: InitiateTerminalReactivationDto,
+): Promise<InitiateTerminalReactivationResponse> {
+  return api.post<InitiateTerminalReactivationResponse>(
+    `/onboarding/activation/terminals/${encodeURIComponent(terminalId)}/reactivate`,
+    payload,
+  );
+}
+
+/**
+ * Issues/rotates a one-time 6-digit recovery code for offline/dashboard-less
+ * terminal reactivation approval (issue #566).
+ */
+export async function rotateTerminalRecoveryCode(
+  terminalId: string,
+): Promise<RecoveryCodeResponse> {
+  return api.post<RecoveryCodeResponse>(
+    `/onboarding/activation/terminals/${encodeURIComponent(terminalId)}/recovery-code`,
+  );
 }
 
 /**
