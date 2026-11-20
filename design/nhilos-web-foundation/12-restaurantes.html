@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema POS para restaurante en Nicaragua | NHILOS POS</title>
+  <meta name="description" content="POS para restaurante que sigue cobrando sin internet: cada plato vendido descuenta sus ingredientes, con costo por plato. Demo con tu menú. NHILOS POS.">
+  <link rel="canonical" href="https://nhilospos.com/software-pos/restaurantes/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_NI">
+  <meta property="og:site_name" content="NHILOS POS">
+  <meta property="og:title" content="Sistema POS para restaurante en Nicaragua | NHILOS POS">
+  <meta property="og:description" content="POS para restaurante que sigue cobrando sin internet: cada plato vendido descuenta sus ingredientes, con costo por plato. Demo con tu menú. NHILOS POS.">
+  <meta property="og:url" content="https://nhilospos.com/software-pos/restaurantes/">
+  <meta name="robots" content="index, follow">
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="media/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="media/favicon-192.png">
+  <link rel="apple-touch-icon" href="media/apple-touch-icon.png">
+  <meta name="theme-color" content="#001829">
+
+  <!-- Social sharing -->
+  <meta property="og:image" content="https://nhilospos.com/media/og-home.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Terminal NHILOS POS en mano con la interfaz real del sistema de punto de venta">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Sistema POS para restaurante en Nicaragua | NHILOS POS">
+  <meta name="twitter:description" content="POS para restaurante que sigue cobrando sin internet: cada plato vendido descuenta sus ingredientes, con costo por plato. Demo con tu menú. NHILOS POS.">
+  <meta name="twitter:image" content="https://nhilospos.com/media/og-home.jpg">
+
+  <!-- CLAIM GUARD (brief /software-pos/restaurantes/ §5.5 + odd/tasks/nhilos-web-restaurantes.md S1-S23):
+       1. Comandas: "el pedido queda registrado" en la terminal con modificadores; sin envio por red ni pantallas de cocina.
+       2. Facturacion: "factura con la mecanica que exige la DT 09-2007"; solo impresora integrada en terminales Sunmi/iPOS.
+       3. DGI: la autorizacion (carta, codigo y numeracion) la posee el contribuyente; sin miedo ni promesas de multas.
+       4. Continuidad: condicionada a "la terminal quedo configurada con tu catalogo"; sincronizacion eventual.
+       5. Escala (S5b): cuerpo abierto a comiderias, fritangas, comedores, puestos de comida, cafeterias y restaurantes pequenos o medianos.
+       6. Evidencia auditada: dsh_bom_recetas.13330051.mp4 muestra recalculo de costo al recibir un lote, no la venta. Control de Mesas verificado en codigo, sin captura disponible (media-slot documentado).
+       Analitica (S14): atributos data-event en marcado; sin scripts de terceros. -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://nhilospos.com/#organization",
+      "name": "NHILOS POS",
+      "url": "https://nhilospos.com/",
+      "description": "Sistema de punto de venta local-first para restaurantes, comiderías, cafeterías, food parks y comercios de mostrador en Nicaragua. Funciona sin internet, con mecánica de facturación conforme a la DT 09-2007 y control de inventario a la medida.",
+      "areaServed": [
+        {
+          "@type": "City",
+          "name": "Managua"
+        },
+        {
+          "@type": "Country",
+          "name": "Nicaragua"
+        }
+      ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "contactType": "sales",
+        "telephone": "+505 8194 8526",
+        "availableLanguage": "Spanish",
+        "hoursAvailable": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday"
+          ],
+          "opens": "00:00",
+          "closes": "23:59"
+        }
+      },
+      "sameAs": [
+        "https://www.instagram.com/nhilosapp/",
+        "https://www.facebook.com/nhilosapp",
+        "https://www.tiktok.com/@nhilosapp"
+      ]
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://nhilospos.com/software-pos/restaurantes/#breadcrumb",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Inicio",
+          "item": "https://nhilospos.com/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Software POS",
+          "item": "https://nhilospos.com/software-pos/"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Restaurantes",
+          "item": "https://nhilospos.com/software-pos/restaurantes/"
+        }
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "@id": "https://nhilospos.com/software-pos/restaurantes/#faq",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "¿Sirve para un restaurante con mesas y para llevar?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS permite atender pedidos en mesa y pedidos para llevar o en mostrador dentro de la misma operación. Cada mesa mantiene su estado en el Control de Mesas y cada pedido queda registrado en la terminal con sus modificadores y cobro bimoneda."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cada plato descuenta sus ingredientes de verdad?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sí: en Nicaragua, NHILOS POS vincula cada plato preparado a su receta para que cada venta descuente los ingredientes correspondientes de tu inventario. Los productos de reventa como bebidas embotelladas o postres comprados conviven en modo simple dentro del mismo catálogo, y el detalle completo del método vive en control de inventario y kardex: recetas, insumos y merma."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Qué pasa si cambia el precio de un insumo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, cuando registras una compra nueva de un insumo en NHILOS POS, el sistema recalcula el costo por plato de las recetas que usan ese ingrediente. Así revisas el margen de tu menú el mismo día de la compra en lugar de descubrirlo al cierre del mes."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Y si se cae el internet en hora pico?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS sigue cobrando en la terminal aunque se caiga la red, siempre que la terminal quedó configurada con tu catálogo: emite el ticket con su correlativo consecutivo y guarda cada venta en la cola de salida del dispositivo para subirla en orden al reconectar. Los límites completos están en cómo sigue la venta sin internet: POS sin conexión."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Sirve para la DGI?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, NHILOS POS factura con la mecánica que exige la DT 09-2007: correlativo consecutivo que no se puede saltar, ningún comprobante se borra y cada anulación exige motivo auditado. La autorización ante la DGI (carta, código y numeración) la posee tu negocio como contribuyente; la división completa está en mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Mis muchachos lo aprenden rápido?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, la implementación de NHILOS POS incluye capacitación para tu equipo sobre la pantalla táctil y el flujo real de tu negocio, con el alcance definido en cada plan. Puedes empezar cobrando en modo simple y activar recetas cuando tu cocina esté lista."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "¿Cuánto cuesta al mes?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "En Nicaragua, la mensualidad de NHILOS POS depende de cuántas terminales usas y de si activas recetas y control de insumos, mientras que el hardware Android se cotiza aparte. Los planes públicos Esencial, Operación y Pro con sus implementaciones se consultan en ver planes y precios de NHILOS POS."
+          }
+        }
+      ]
+    }
+  ]
+}
+  </script>
+
+  <link rel="stylesheet" href="assets/site.css">
+
+  <style>
+    /* =====================================================================
+       /software-pos/restaurantes/ — page-local patterns (rst-*)
+       Tokens inherited from assets/site.css. Reuses .faq-cell & .demo-tag.
+       Novel patterns:
+         - rst-hero + rst-quick-band + rst-hero-stair
+         - rst-format-dict (Diccionario de formatos) + rst-stair-note
+         - rst-op-rail (Mesa y mostrador en una operacion)
+         - rst-dish-anatomy (Plato que se desarma) + rst-video-stage
+         - rst-cost-delta (Antes / despues del cambio de precio de un insumo)
+         - rst-mod-strip (Modificadores sin romper la receta)
+         - rst-offline-band, rst-fiscal-bar, rst-cost-guide, rst-close-band
+       ===================================================================== */
+
+    /* ---- 3-level breadcrumb on dark hero canopy ---- */
+    .rst-hero {
+      background: linear-gradient(168deg, var(--web-navy-950) 0%, var(--web-navy-900) 64%, var(--web-navy-800) 100%);
+      color: #ffffff;
+      padding: var(--space-5) 0 var(--space-12);
+      position: relative;
+      overflow: hidden;
+    }
+    .rst-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 86% 18%, rgba(0, 191, 129, 0.14) 0%, transparent 46%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+      background-size: auto, 96px 100%;
+      pointer-events: none;
+    }
+    .rst-hero > .container {
+      position: relative;
+      z-index: 1;
+    }
+
+    .rst-breadcrumb {
+      margin-bottom: var(--space-8);
+    }
+    .rst-breadcrumb ol {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.68);
+    }
+    .rst-breadcrumb li + li::before {
+      content: "/";
+      margin-right: 10px;
+      color: rgba(255, 255, 255, 0.34);
+    }
+    .rst-breadcrumb a {
+      color: rgba(255, 255, 255, 0.86);
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.24);
+      padding-bottom: 1px;
+    }
+    .rst-breadcrumb a:hover {
+      color: var(--web-emerald-400);
+      border-bottom-color: var(--web-emerald-400);
+    }
+    .rst-breadcrumb [aria-current="page"] {
+      color: var(--web-emerald-400);
+      font-weight: 600;
+    }
+
+    .rst-hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr);
+      gap: var(--space-10);
+      align-items: end;
+    }
+    .rst-hero .eyebrow {
+      color: var(--web-emerald-400);
+    }
+    .rst-hero h1 {
+      font-size: clamp(2rem, 3.8vw, 3.15rem);
+      line-height: 1.07;
+      letter-spacing: -0.025em;
+      color: #ffffff;
+      margin-top: var(--space-3);
+      max-width: 19ch;
+    }
+    .rst-quick-band {
+      margin-top: var(--space-5);
+      padding: var(--space-4) var(--space-5);
+      border-left: 3px solid var(--web-emerald-500);
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      max-width: 62ch;
+    }
+    .rst-quick-band p {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.58;
+      color: rgba(255, 255, 255, 0.94);
+    }
+    .rst-hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      margin-top: var(--space-6);
+    }
+    .rst-hero-actions .btn {
+      min-height: 46px;
+    }
+
+    /* Compact hero right card: escalera de control at a glance */
+    .rst-hero-stair {
+      background: rgba(0, 24, 41, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      backdrop-filter: blur(6px);
+    }
+    .rst-hero-stair-kicker {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--web-emerald-400);
+      display: block;
+      margin-bottom: var(--space-4);
+    }
+    .rst-stair-steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: var(--space-4);
+    }
+    .rst-stair-steps li {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      gap: var(--space-3);
+      align-items: start;
+      padding-bottom: var(--space-4);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .rst-stair-steps li:last-child {
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .rst-stair-num {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--web-navy-900);
+      background: var(--web-emerald-400);
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      margin-top: 2px;
+    }
+    .rst-stair-steps strong {
+      display: block;
+      font-size: 15px;
+      color: #ffffff;
+      margin-bottom: 3px;
+    }
+    .rst-stair-steps span {
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    /* ---- Section 1: Definition + Diccionario de formatos + Mesa y mostrador ---- */
+    .rst-def-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.85fr);
+      gap: var(--space-8);
+      align-items: start;
+      margin-top: var(--space-5);
+    }
+    .rst-def-copy {
+      font-size: 16.5px;
+      line-height: 1.68;
+      color: var(--web-text-secondary);
+      margin: 0;
+    }
+    .rst-def-copy + .rst-def-copy {
+      margin-top: var(--space-4);
+    }
+    .rst-def-facts {
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: grid;
+      gap: var(--space-3);
+    }
+    .rst-def-fact {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: var(--space-4);
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid var(--web-border-hairline);
+      font-size: 14px;
+    }
+    .rst-def-fact:last-child {
+      padding-bottom: 0;
+      border-bottom: none;
+    }
+    .rst-def-fact dt {
+      color: var(--web-text-muted);
+      font-weight: 500;
+    }
+    .rst-def-fact dd {
+      margin: 0;
+      color: var(--web-navy-900);
+      font-weight: 600;
+      text-align: right;
+    }
+
+    /* Diccionario de formatos (novel pattern, S16) */
+    .rst-subblock {
+      margin-top: var(--space-12);
+      padding-top: var(--space-8);
+      border-top: 1px solid var(--web-border-hairline);
+    }
+    .rst-subblock h3 {
+      font-size: clamp(1.3rem, 2.2vw, 1.65rem);
+      color: var(--web-navy-900);
+      letter-spacing: -0.015em;
+      margin: var(--space-2) 0 var(--space-3);
+    }
+    .rst-sublead {
+      font-size: 15.5px;
+      line-height: 1.62;
+      color: var(--web-text-secondary);
+      max-width: 66ch;
+      margin: 0;
+    }
+
+    .rst-format-dict {
+      margin-top: var(--space-6);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      border-top: 1px solid var(--web-border-hairline);
+      border-left: 1px solid var(--web-border-hairline);
+      background: var(--web-bg-canvas);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .rst-format-entry {
+      padding: var(--space-5) var(--space-6);
+      border-right: 1px solid var(--web-border-hairline);
+      border-bottom: 1px solid var(--web-border-hairline);
+      display: grid;
+      gap: var(--space-2);
+      transition: background-color 180ms var(--ease-out);
+    }
+    .rst-format-entry:hover {
+      background: var(--web-bg-subtle);
+    }
+    .rst-format-head {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: var(--space-2);
+    }
+    .rst-format-name {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--web-navy-900);
+    }
+    .rst-format-scale {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--web-emerald-700);
+      background: var(--web-emerald-50);
+      padding: 3px 8px;
+      border-radius: 999px;
+    }
+    .rst-format-entry p {
+      margin: 0;
+      font-size: 14.5px;
+      line-height: 1.56;
+      color: var(--web-text-secondary);
+    }
+
+    .rst-stair-note {
+      margin-top: var(--space-5);
+      background: var(--web-navy-900);
+      color: #ffffff;
+      border-radius: var(--radius-lg);
+      padding: var(--space-5) var(--space-6);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: var(--space-5);
+      align-items: center;
+    }
+    .rst-stair-badge {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--web-navy-900);
+      background: var(--web-emerald-400);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .rst-stair-note p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.58;
+      color: rgba(255, 255, 255, 0.9);
+    }
+
+    /* H3 1.2: Mesa y mostrador rail */
+    .rst-op-rail {
+      margin-top: var(--space-6);
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-4);
+    }
+    .rst-op-card {
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .rst-op-idx {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--web-emerald-700);
+    }
+    .rst-op-card strong {
+      font-size: 15.5px;
+      color: var(--web-navy-900);
+      line-height: 1.3;
+    }
+    .rst-op-card p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.56;
+      color: var(--web-text-secondary);
+    }
+    .rst-op-states {
+      margin-top: auto;
+      padding-top: var(--space-3);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .rst-op-states span {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: var(--web-bg-subtle);
+      border: 1px solid var(--web-border-hairline);
+      color: var(--web-navy-800);
+    }
+
+    /* ---- Section 2: Plato que se desarma + Audited video + Delta + Modifiers ---- */
+    .rst-dish-anatomy {
+      margin-top: var(--space-6);
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: var(--space-3);
+    }
+    .rst-dish-step {
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--space-4) var(--space-5);
+      position: relative;
+    }
+    .rst-dish-step-tag {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--web-emerald-700);
+      display: block;
+      margin-bottom: var(--space-2);
+    }
+    .rst-dish-step strong {
+      display: block;
+      font-size: 15px;
+      color: var(--web-navy-900);
+      margin-bottom: 4px;
+    }
+    .rst-dish-step p {
+      margin: 0;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--web-text-secondary);
+    }
+
+    .rst-video-stage {
+      margin-top: var(--space-8);
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.75fr);
+      gap: var(--space-8);
+      align-items: center;
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+    }
+    .rst-video-frame {
+      margin: 0;
+    }
+    .rst-video-bezel {
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--web-border-hairline);
+      background: var(--web-navy-900);
+      box-shadow: var(--shadow-card);
+      position: relative;
+    }
+    .rst-video-bezel video {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1440 / 900;
+      object-fit: cover;
+    }
+    .rst-video-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      margin-top: var(--space-3);
+    }
+    .rst-play-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 0 var(--space-4);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--web-navy-800);
+      background: var(--web-navy-900);
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 160ms var(--ease-out);
+    }
+    .rst-play-btn:hover {
+      background: var(--web-navy-800);
+    }
+    .rst-video-aside h4 {
+      font-size: 18px;
+      color: var(--web-navy-900);
+      margin: 0 0 var(--space-3);
+    }
+    .rst-video-aside p {
+      font-size: 14.5px;
+      line-height: 1.6;
+      color: var(--web-text-secondary);
+      margin: 0 0 var(--space-4);
+    }
+    .rst-video-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      font-size: 14.5px;
+      font-weight: 600;
+      color: var(--web-navy-800);
+      text-decoration: none;
+      border-bottom: 2px solid var(--web-emerald-500);
+    }
+    .rst-video-link:hover {
+      color: var(--web-emerald-700);
+    }
+
+    /* H3 2.1: Antes / despues del cambio de precio de un insumo */
+    .rst-cost-delta {
+      margin-top: var(--space-5);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-4);
+      background: var(--web-navy-900);
+      color: #ffffff;
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+    }
+    .rst-delta-cell {
+      padding: var(--space-4);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .rst-delta-cell--after {
+      background: rgba(0, 191, 129, 0.12);
+      border-color: rgba(0, 191, 129, 0.42);
+    }
+    .rst-delta-label {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--web-emerald-400);
+      display: block;
+      margin-bottom: var(--space-2);
+    }
+    .rst-delta-cell strong {
+      display: block;
+      font-size: 16px;
+      color: #ffffff;
+      margin-bottom: 6px;
+    }
+    .rst-delta-cell p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.54;
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    /* H3 2.2: Modificadores sin romper la receta */
+    .rst-mod-strip {
+      margin-top: var(--space-5);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-4);
+    }
+    .rst-mod-item {
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+    }
+    .rst-mod-pill {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--web-navy-900);
+      background: var(--web-bg-subtle);
+      border: 1px solid var(--web-border-hairline);
+      padding: 3px 9px;
+      border-radius: 999px;
+      margin-bottom: var(--space-3);
+    }
+    .rst-mod-item p {
+      margin: 0;
+      font-size: 14.5px;
+      line-height: 1.56;
+      color: var(--web-text-secondary);
+    }
+
+    /* ---- Section 3: Contingencia condensada (dark band) ---- */
+    .rst-offline-band {
+      background: var(--web-navy-900);
+      color: #ffffff;
+    }
+    .rst-offline-band .eyebrow {
+      color: var(--web-emerald-400);
+    }
+    .rst-offline-band h2 {
+      color: #ffffff;
+    }
+    .rst-offline-grid {
+      margin-top: var(--space-6);
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr);
+      gap: var(--space-8);
+      align-items: start;
+    }
+    .rst-offline-copy p {
+      font-size: 16px;
+      line-height: 1.66;
+      color: rgba(255, 255, 255, 0.88);
+      margin: 0 0 var(--space-4);
+    }
+    .rst-offline-cond {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-left: 3px solid var(--web-emerald-400);
+      border-radius: 0 var(--radius-md) var(--radius-md) 0;
+      padding: var(--space-5);
+    }
+    .rst-offline-cond strong {
+      display: block;
+      font-size: 14.5px;
+      color: var(--web-emerald-400);
+      margin-bottom: var(--space-2);
+    }
+    .rst-offline-cond p {
+      margin: 0;
+      font-size: 14.5px;
+      line-height: 1.56;
+      color: rgba(255, 255, 255, 0.86);
+    }
+    .rst-offline-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 44px;
+      margin-top: var(--space-4);
+      color: var(--web-emerald-400);
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(0, 191, 129, 0.5);
+    }
+    .rst-offline-link:hover {
+      color: #ffffff;
+      border-bottom-color: #ffffff;
+    }
+
+    /* ---- Section 4: Facturacion DT 09-2007 ---- */
+    .rst-fiscal-bar {
+      margin-top: var(--space-6);
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: var(--space-4);
+    }
+    .rst-fiscal-pillar {
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5);
+    }
+    .rst-fiscal-pillar strong {
+      display: block;
+      font-size: 15.5px;
+      color: var(--web-navy-900);
+      margin-bottom: var(--space-2);
+    }
+    .rst-fiscal-pillar p {
+      margin: 0;
+      font-size: 14.5px;
+      line-height: 1.56;
+      color: var(--web-text-secondary);
+    }
+    .rst-fiscal-split {
+      margin-top: var(--space-5);
+      padding: var(--space-5) var(--space-6);
+      background: var(--web-bg-subtle);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-4);
+    }
+    .rst-fiscal-split p {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.58;
+      color: var(--web-text-primary);
+      max-width: 62ch;
+    }
+
+    /* ---- Section 5: Costo sin tabla ---- */
+    .rst-cost-guide {
+      margin-top: var(--space-6);
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+      gap: var(--space-6);
+      align-items: stretch;
+    }
+    .rst-cost-box {
+      background: var(--web-bg-canvas);
+      border: 1px solid var(--web-border-hairline);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+    }
+    .rst-cost-box h3 {
+      font-size: 18px;
+      color: var(--web-navy-900);
+      margin: 0 0 var(--space-3);
+    }
+    .rst-cost-box p {
+      margin: 0 0 var(--space-4);
+      font-size: 15px;
+      line-height: 1.62;
+      color: var(--web-text-secondary);
+    }
+    .rst-cost-box p:last-child {
+      margin-bottom: 0;
+    }
+    .rst-cost-points {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: var(--space-3);
+    }
+    .rst-cost-points li {
+      padding-left: 18px;
+      position: relative;
+      font-size: 14.5px;
+      line-height: 1.55;
+      color: var(--web-text-secondary);
+    }
+    .rst-cost-points li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 9px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--web-emerald-500);
+    }
+
+    /* ---- Section 7: Close band ---- */
+    .rst-close-band {
+      background: linear-gradient(165deg, var(--web-navy-900) 0%, var(--web-navy-800) 100%);
+      color: #ffffff;
+    }
+    .rst-close-band .eyebrow {
+      color: var(--web-emerald-400);
+    }
+    .rst-close-band h2 {
+      color: #ffffff;
+    }
+    .rst-close-bullets {
+      list-style: none;
+      margin: var(--space-5) 0 0;
+      padding: 0;
+      display: grid;
+      gap: var(--space-2);
+      max-width: 60ch;
+    }
+    .rst-close-bullets li {
+      padding-left: 22px;
+      position: relative;
+      font-size: 15.5px;
+      line-height: 1.55;
+      color: rgba(255, 255, 255, 0.9);
+    }
+    .rst-close-bullets li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: var(--web-emerald-400);
+      font-weight: 700;
+    }
+    .rst-close-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      margin-top: var(--space-6);
+    }
+    .rst-close-actions .btn {
+      min-height: 46px;
+    }
+    .rst-close-links {
+      margin-top: var(--space-6);
+      padding-top: var(--space-5);
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3) var(--space-6);
+    }
+    .rst-close-links a {
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .rst-close-links a:hover {
+      color: var(--web-emerald-400);
+      border-bottom-color: var(--web-emerald-400);
+    }
+
+    /* ---- Responsive breakpoints ---- */
+    @media (max-width: 1024px) {
+      .rst-hero-grid,
+      .rst-def-grid,
+      .rst-video-stage,
+      .rst-offline-grid,
+      .rst-cost-guide {
+        grid-template-columns: 1fr;
+      }
+      .rst-op-rail,
+      .rst-dish-anatomy {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 720px) {
+      .rst-hero {
+        padding: var(--space-4) 0 var(--space-10);
+      }
+      .rst-format-dict,
+      .rst-op-rail,
+      .rst-dish-anatomy,
+      .rst-cost-delta,
+      .rst-mod-strip,
+      .rst-fiscal-bar {
+        grid-template-columns: 1fr;
+      }
+      .rst-stair-note {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+      }
+      .rst-video-stage {
+        padding: var(--space-4);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hilo-progress" aria-hidden="true"><span id="hiloProgress"></span></div>
+
+  <nav class="spine" id="spineNav" aria-label="Secciones de la página">
+    <a href="#inicio" data-target="inicio" data-label="Inicio" aria-label="Inicio"><span class="num">01</span></a>
+    <a href="#operacion" data-target="operacion" data-label="Operación" aria-label="Operación"><span class="num">02</span></a>
+    <a href="#recetas" data-target="recetas" data-label="Recetas" aria-label="Recetas"><span class="num">03</span></a>
+    <a href="#sin-internet" data-target="sin-internet" data-label="Sin internet" aria-label="Sin internet"><span class="num">04</span></a>
+    <a href="#facturacion" data-target="facturacion" data-label="DGI" aria-label="Facturación DGI"><span class="num">05</span></a>
+    <a href="#costo" data-target="costo" data-label="Costo" aria-label="Costo"><span class="num">06</span></a>
+    <a href="#preguntas" data-target="preguntas" data-label="Preguntas" aria-label="Preguntas frecuentes"><span class="num">07</span></a>
+    <a href="#demo" data-target="demo" data-label="Demo" aria-label="Solicitar demo"><span class="num">08</span></a>
+    <a href="#inicio" class="spine-top" data-label="Volver arriba" aria-label="Volver arriba"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+  </nav>
+
+  <button type="button" class="back-top" id="backTop" aria-label="Volver arriba">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+  </button>
+
+  <header class="site-header" id="inicio">
+    <div class="container site-header-inner">
+      <a class="wordmark" href="/" aria-label="NHILOS POS, ir al inicio">
+        <img src="media/logo.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">
+        NHILOS <span class="pos">POS</span>
+      </a>
+      <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
+        <a href="/software-pos/">Software POS</a>
+        <a href="/precios/">Precios</a>
+        <a href="/facturacion-dgi/">Facturación DGI</a>
+        <a href="/inventario/">Inventario</a>
+        <a href="/demo/" class="btn btn-primary" data-event="cta_demo_restaurante">Solicitar una demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Hero con breadcrumb de 3 niveles, H1 con segmento y respuesta rapida en los primeros 150 px -->
+    <section class="rst-hero">
+      <div class="container">
+        <nav class="rst-breadcrumb" aria-label="Ruta de navegación">
+          <ol>
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li aria-current="page">Restaurantes</li>
+          </ol>
+        </nav>
+
+        <div class="rst-hero-grid">
+          <div>
+            <p class="eyebrow">Cocina, mesa y mostrador · Nicaragua</p>
+            <h1>Sistema POS para restaurante: cada plato vendido descuenta sus ingredientes</h1>
+            <div class="rst-quick-band">
+              <p>POS táctil local-first para restaurante: sigue cobrando sin internet y cada plato vendido descuenta sus ingredientes, receta por receta, con costo por plato. Bimoneda y correlativo DT 09-2007.</p>
+            </div>
+            <div class="rst-hero-actions">
+              <a class="btn btn-on-dark" href="/demo/" data-event="cta_demo_restaurante">Solicitar una demo con tu menú</a>
+              <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=restaurantes" data-event="cta_whatsapp_restaurante">Escribir por WhatsApp</a>
+            </div>
+          </div>
+
+          <aside class="rst-hero-stair" aria-label="Escalera de control según tu cocina">
+            <span class="rst-hero-stair-kicker">Escalera de control a tu ritmo</span>
+            <ol class="rst-stair-steps">
+              <li>
+                <span class="rst-stair-num">01</span>
+                <div>
+                  <strong>Empiezas en modo simple</strong>
+                  <span>Cobras platos del día, bebidas y reventa con una o dos cajas sin complicarte con recetas desde el primer día.</span>
+                </div>
+              </li>
+              <li>
+                <span class="rst-stair-num">02</span>
+                <div>
+                  <strong>Activas recetas cuando tu cocina lo pida</strong>
+                  <span>Cada plato descuenta sus ingredientes y recalcula su costo cuando cambia el precio de un insumo.</span>
+                </div>
+              </li>
+            </ol>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 1: Definicion + H3 1.1 Reconocimiento de formatos + H3 1.2 Mesa y mostrador -->
+    <section class="section" id="operacion" aria-labelledby="operacion-title">
+      <div class="container">
+        <p class="eyebrow">Operación diaria en cocina y caja</p>
+        <h2 class="h-lg" id="operacion-title">¿Qué es NHILOS POS para tu restaurante?</h2>
+
+        <div class="rst-def-grid reveal">
+          <div>
+            <p class="rst-def-copy">NHILOS POS es un sistema punto de venta táctil local-first pensado para negocios que cocinan y venden en Nicaragua, tanto en mesa como en mostrador. Reúne tu catálogo con recetas, el cobro bimoneda en córdobas y dólares, y los turnos con arqueo firmado por usuario dentro de la misma terminal.</p>
+            <p class="rst-def-copy">En el mismo catálogo conviven tus platos preparados con los productos de reventa: gaseosas, botellas de agua o postres comprados que operan en modo simple sin obligarte a crear recetas donde no hacen falta. Todo corre primero en la terminal física para responder en hora pico y sube al panel web cuando hay conexión.</p>
+          </div>
+
+          <dl class="rst-def-facts">
+            <div class="rst-def-fact">
+              <dt>Operación</dt>
+              <dd>Mesa y mostrador en una terminal</dd>
+            </div>
+            <div class="rst-def-fact">
+              <dt>Catálogo mixto</dt>
+              <dd>Recetas y reventa en modo simple</dd>
+            </div>
+            <div class="rst-def-fact">
+              <dt>Cobro</dt>
+              <dd>Córdobas, dólares o combinado</dd>
+            </div>
+            <div class="rst-def-fact">
+              <dt>Turnos</dt>
+              <dd>Arqueo cerrado y firmado por usuario</dd>
+            </div>
+          </dl>
+        </div>
+
+        <!-- H3 1.1: Reconocimiento de formatos pequenos (S5b) -->
+        <div class="rst-subblock reveal" id="formatos">
+          <p class="eyebrow">Escala real en Nicaragua</p>
+          <h3>Comidería, fritanga o comedor: si cocinas, es tu página</h3>
+          <p class="rst-sublead">Hablar de restaurante no significa hablar de un local grande. Si manejas una o dos cajas, diez o veinte platos del día, una cocina y un mostrador, el sistema está pensado para esa escala cotidiana.</p>
+
+          <div class="rst-format-dict stagger">
+            <article class="rst-format-entry">
+              <div class="rst-format-head">
+                <span class="rst-format-name">Comidería o comedor de barrio</span>
+                <span class="rst-format-scale">1 o 2 cajas · plato del día</span>
+              </div>
+              <p>Cobra almuerzos rápidos, extras y frescos en la misma cuenta, con cierre de caja claro al terminar la jornada.</p>
+            </article>
+
+            <article class="rst-format-entry">
+              <div class="rst-format-head">
+                <span class="rst-format-name">Fritanga o puesto de comida</span>
+                <span class="rst-format-scale">Alta rotación · recetas cortas</span>
+              </div>
+              <p>Atiende fila nocturna sin frenar el cobro, combina carne asada, tajadas y bebidas de reventa, y controla porciones clave.</p>
+            </article>
+
+            <article class="rst-format-entry">
+              <div class="rst-format-head">
+                <span class="rst-format-name">Cafetería con cocina</span>
+                <span class="rst-format-scale">Bebidas + platos en un catálogo</span>
+              </div>
+              <p>Descuenta leche, café y jarabes por receta mientras los postres comprados o botellas se venden en modo simple.</p>
+            </article>
+
+            <article class="rst-format-entry">
+              <div class="rst-format-head">
+                <span class="rst-format-name">Food park con cocina</span>
+                <span class="rst-format-scale">Catálogo propio por puesto</span>
+              </div>
+              <p>Cada cocina carga sus diez o veinte platos con sus modificadores, y cada receta trae su costo por plato.</p>
+            </article>
+
+            <article class="rst-format-entry">
+              <div class="rst-format-head">
+                <span class="rst-format-name">Negocio que cocina en casa o en ventana</span>
+                <span class="rst-format-scale">1 terminal · pedidos para llevar</span>
+              </div>
+              <p>Registra pedidos por ventana o para llevar con correlativo ordenado y cálculo claro de cuánto deja cada plato.</p>
+            </article>
+
+            <article class="rst-format-entry">
+              <div class="rst-format-head">
+                <span class="rst-format-name">Restaurante pequeño o mediano</span>
+                <span class="rst-format-scale">Mesas y mostrador juntos</span>
+              </div>
+              <p>Lleva cuentas abiertas por mesa, pedidos para llevar y costo real de carta sin comprar herramientas de operaciones gigantes.</p>
+            </article>
+          </div>
+
+          <div class="rst-stair-note">
+            <span class="rst-stair-badge">Sin pagar control de sobra</span>
+            <p>Empiezas en modo simple para cobrar rápido y ordenarte desde la primera semana, y activas recetas cuando tu negocio lo pida. Un negocio pequeño no tiene que comprar el control de uno grande para trabajar con orden.</p>
+          </div>
+        </div>
+
+        <!-- H3 1.2: Mesa y mostrador en la misma operacion -->
+        <div class="rst-subblock reveal" id="mesa-mostrador">
+          <p class="eyebrow">Flujo en la terminal</p>
+          <h3>Mesa y mostrador en la misma operación</h3>
+          <p class="rst-sublead">Desde una sola pantalla táctil atiendes a quien se sienta y a quien pasa a retirar. Cada terminal opera por su cuenta con el catálogo cargado.</p>
+
+          <!-- media-slot: control-mesas — falta captura del Control de Mesas con una mesa ocupada -->
+
+          <div class="rst-op-rail stagger">
+            <div class="rst-op-card">
+              <span class="rst-op-idx">01</span>
+              <strong>Control de Mesas y mostrador</strong>
+              <p>Abre la cuenta en una mesa o cobra directo en mostrador y para llevar desde la misma terminal.</p>
+              <div class="rst-op-states" aria-label="Estados del Control de Mesas">
+                <span>Disponible</span>
+                <span>Ocupada</span>
+                <span>Por cobrar</span>
+                <span>Reservada</span>
+              </div>
+            </div>
+
+            <div class="rst-op-card">
+              <span class="rst-op-idx">02</span>
+              <strong>El pedido queda registrado</strong>
+              <p>Cada comanda se registra en el sistema con sus modificadores rápidos, sin papeles ni notas a mano que se pierden en hora pico.</p>
+            </div>
+
+            <div class="rst-op-card">
+              <span class="rst-op-idx">03</span>
+              <strong>Cobro bimoneda al instante</strong>
+              <p>Acepta pagos en córdobas, dólares o combinados con cálculo automático del vuelto y comprobante desde la impresora integrada de la terminal.</p>
+            </div>
+
+            <div class="rst-op-card">
+              <span class="rst-op-idx">04</span>
+              <strong>Arqueo firmado por usuario</strong>
+              <p>Al cerrar turno, cada cajero declara su conteo y deja el arqueo firmado por usuario. El cierre de caja detallado se amplía en la guía de cierre de caja y arqueo<!-- pending route: /software-pos/caja/ -->.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 2: El diferenciador + Plato que se desarma + Clip auditado + H3 2.1 + H3 2.2 -->
+    <section class="section section--tinted" id="recetas" data-event="restaurante_llega_recetas" aria-labelledby="recetas-title">
+      <div class="container">
+        <p class="eyebrow">El diferenciador en tu cocina</p>
+        <h2 class="h-lg" id="recetas-title">El diferenciador: recetas que descuentan insumos por plato vendido</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 68ch;">En lugar de llevar el inventario a ojo al final de la semana, cada plato preparado lleva su receta. Cuando cobras un capuchino o un plato del día, el sistema descuenta los gramos de café, la leche o los insumos definidos para esa porción y actualiza el costo por plato.</p>
+
+        <!-- Patron propio: Plato que se desarma -->
+        <div class="rst-dish-anatomy stagger" aria-label="Cómo se desarma un plato vendido">
+          <div class="rst-dish-step">
+            <span class="rst-dish-step-tag">Paso 01 · Venta</span>
+            <strong>Se cobra un plato</strong>
+            <p>La caja registra el plato del menú junto con los modificadores elegidos por el cliente.</p>
+          </div>
+          <div class="rst-dish-step">
+            <span class="rst-dish-step-tag">Paso 02 · Receta</span>
+            <strong>Se lee su receta activa</strong>
+            <p>El sistema identifica cada ingrediente y la cantidad exacta definida para esa porción.</p>
+          </div>
+          <div class="rst-dish-step">
+            <span class="rst-dish-step-tag">Paso 03 · Insumos</span>
+            <strong>Se descuentan ingredientes</strong>
+            <p>Cada insumo sale del inventario conforme a la venta, mientras la reventa descuenta por unidad.</p>
+          </div>
+          <div class="rst-dish-step">
+            <span class="rst-dish-step-tag">Paso 04 · Margen</span>
+            <strong>Ves el costo por plato</strong>
+            <p>Comparas precio de carta contra costo actualizado para decidir ajustes de menú con datos reales.</p>
+          </div>
+        </div>
+
+        <!-- Clip real auditado: recalculo de costo como decision de menu -->
+        <div class="rst-video-stage reveal">
+          <figure class="rst-video-frame">
+            <div class="rst-video-bezel">
+              <video
+                id="rstRecetasVideo"
+                src="media/dsh_bom_recetas.13330051.mp4"
+                poster="media/dsh_bom_recetas_poster.7fa0d248.webp"
+                width="1440"
+                height="900"
+                muted
+                loop
+                playsinline
+                preload="metadata"
+                disablepictureinpicture
+                title="Pantalla Recetas y BOM de NHILOS POS: costo de Capuchino Vainilla 12oz pasando de C$24.50 tachado a C$20 tras recibir un lote de leche, con aviso Costo recalculado en Kardex (NIC 2)"
+              ></video>
+            </div>
+            <div class="rst-video-controls">
+              <button
+                type="button"
+                class="rst-play-btn"
+                id="rstPlayRecetas"
+                data-event="restaurante_clip_costo"
+                aria-controls="rstRecetasVideo"
+                aria-pressed="false"
+              >Reproducir recálculo de costo</button>
+              <span class="demo-tag">Grabación real del panel web · datos de demostración</span>
+            </div>
+          </figure>
+
+          <div class="rst-video-aside">
+            <h4>Costo por plato para decidir tu menú a tiempo</h4>
+            <p>La grabación muestra el recálculo automático en el panel web cuando se recibe un lote de leche: el costo de receta de Capuchino Vainilla 12oz pasa de C$24.50 tachado a C$20 frente a su precio de carta de C$115.00. Lo que ves aquí es el recálculo del costo, no la pantalla de venta en caja.</p>
+            <p>Valuación, conteos físicos y control de merma se trabajan completos en<!-- pending route: /inventario/restaurantes/ -->.</p>
+            <a class="rst-video-link" href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>
+          </div>
+        </div>
+
+        <!-- H3 2.1: Antes / despues del cambio de precio de un insumo -->
+        <div class="rst-subblock reveal" id="cambio-precio">
+          <p class="eyebrow">Decisión de margen</p>
+          <h3>Qué pasa cuando cambia el precio de un insumo</h3>
+          <p class="rst-sublead">Cuando sube el queso, la leche o la carne en el mercado, el costo por plato se recalcula con la compra nueva. Revisas el margen de tu carta antes de que el contador lo descubra a fin de mes.</p>
+
+          <div class="rst-cost-delta">
+            <div class="rst-delta-cell">
+              <span class="rst-delta-label">Antes de la compra</span>
+              <strong>Costo basado en compras previas</strong>
+              <p>Cada plato mantiene su costo de receta calculado con los insumos que ya estaban en bodega.</p>
+            </div>
+            <div class="rst-delta-cell">
+              <span class="rst-delta-label">Entra factura de proveedor</span>
+              <strong>Registras el nuevo lote de insumo</strong>
+              <p>Al ingresar la compra con el precio nuevo, el sistema actualiza el costo del ingrediente en el kardex.</p>
+            </div>
+            <div class="rst-delta-cell rst-delta-cell--after">
+              <span class="rst-delta-label">Después del recálculo</span>
+              <strong>Nuevo costo por plato visible</strong>
+              <p>Todos los platos que llevan ese insumo reflejan su costo actualizado para revisar porciones o precio de carta.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- H3 2.2: Modificadores sin romper la receta -->
+        <div class="rst-subblock reveal" id="modificadores">
+          <p class="eyebrow">Servicio real, no recetas de libro</p>
+          <h3>Modificadores sin romper la receta</h3>
+          <p class="rst-sublead">En cocina ningún cliente pide siempre igual. Los agregados y sustituciones se aplican sobre el plato base para que el descuento de insumos acompañe lo que realmente salió.</p>
+
+          <div class="rst-mod-strip stagger">
+            <div class="rst-mod-item">
+              <span class="rst-mod-pill">+ Extra sobre el plato</span>
+              <p>Si el cliente agrega queso extra, porción adicional o un shot de espresso, se suma el precio y se descuenta ese insumo adicional.</p>
+            </div>
+            <div class="rst-mod-item">
+              <span class="rst-mod-pill">⇄ Sustitución de ingrediente</span>
+              <p>Cambiar leche entera por leche descremada o elegir acompañante ajusta el registro sin duplicar productos en el menú.</p>
+            </div>
+            <div class="rst-mod-item">
+              <span class="rst-mod-pill">− Retiro sin enredar la caja</span>
+              <p>Quitar un ingrediente queda registrado en el pedido con un toque rápido en pantalla para evitar errores al preparar.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 3: Contingencia condensada en hora pico -->
+    <section class="section rst-offline-band" id="sin-internet" aria-labelledby="offline-title">
+      <div class="container reveal">
+        <p class="eyebrow">Continuidad en hora pico</p>
+        <h2 class="h-lg" id="offline-title">¿Qué pasa cuando se cae el internet en hora pico?</h2>
+
+        <div class="rst-offline-grid">
+          <div class="rst-offline-copy">
+            <p>Si el internet se cae un sábado al mediodía con fila en caja, la terminal sigue cobrando sobre su copia local del catálogo: acepta córdobas o dólares, emite el ticket con su correlativo consecutivo desde su impresora integrada y guarda cada operación en la cola de salida del dispositivo.</p>
+            <p>Cuando vuelve la red, las ventas suben al panel web en orden y sin duplicar. Mientras dura el corte, los reportes en el panel web esperan a que regrese la conexión para reflejar esas ventas.</p>
+            <a class="rst-offline-link" href="/software-pos/sin-internet/">cómo sigue la venta sin internet: POS sin conexión</a>
+          </div>
+
+          <div class="rst-offline-cond">
+            <strong>La condición honesta</strong>
+            <p>Esta continuidad aplica cuando la terminal quedó configurada con tu catálogo antes del corte y cuenta con energía eléctrica. La lista completa de qué sigue operando y qué espera al reconectar vive en el detalle técnico de contingencia.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 4: Facturacion DT 09-2007 -->
+    <section class="section" id="facturacion" aria-labelledby="facturacion-title">
+      <div class="container reveal">
+        <p class="eyebrow">Cumplimiento fiscal en cada venta</p>
+        <h2 class="h-lg" id="facturacion-title">Facturación que cumple la DT 09-2007 en cada comprobante</h2>
+        <p class="lead" style="margin-top: var(--space-3); max-width: 68ch;">Tu restaurante factura con la mecánica que exige la DT 09-2007 sin frenar la caja. La emisión física integrada opera hoy en terminales Sunmi e iPOS, mientras el registro fiscal mantiene el orden que tu contador necesita.</p>
+
+        <div class="rst-fiscal-bar stagger">
+          <div class="rst-fiscal-pillar">
+            <strong>Consecutivo que no se puede saltar</strong>
+            <p>El sistema asigna el siguiente folio en secuencia, sin botones para editar ni reescribir numeración.</p>
+          </div>
+          <div class="rst-fiscal-pillar">
+            <strong>Nada se borra del registro</strong>
+            <p>No existe eliminación física de comprobantes: cada factura emitida conserva su rastro auditable.</p>
+          </div>
+          <div class="rst-fiscal-pillar">
+            <strong>Anulación solo con motivo auditado</strong>
+            <p>Si hay que anular una factura, el sistema exige motivo, autorización de supervisor y Nota de Crédito con folio propio.</p>
+          </div>
+        </div>
+
+        <div class="rst-fiscal-split">
+          <p><strong>División clara:</strong> NHILOS sostiene la mecánica normativa del sistema; la autorización ante la DGI (carta, código y numeración) la posee tu negocio como contribuyente<!-- pending route: /facturacion-dgi/restaurantes/ -->.</p>
+          <a class="rst-video-link" href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 5: Costo orientado sin tabla duplicada -->
+    <section class="section section--tinted" id="costo" aria-labelledby="costo-title">
+      <div class="container reveal">
+        <p class="eyebrow">Inversión sin sorpresas</p>
+        <h2 class="h-lg" id="costo-title">¿Cuánto cuesta un POS para tu restaurante?</h2>
+
+        <div class="rst-cost-guide">
+          <div class="rst-cost-box">
+            <h3>Depende de tus terminales y de si activas recetas</h3>
+            <p>Los planes públicos Esencial, Operación y Pro se organizan según la etapa de tu cocina. Si manejas un puesto pequeño o una comidería con una caja en modo simple, no pagas por módulos que todavía no usas.</p>
+            <p>Para un restaurante con recetas activas y dos terminales en operación, el plan Pro reúne ambos packs junto con las dos terminales incluidas. El hardware Android se cotiza aparte según el equipo que necesites.</p>
+            <a class="rst-video-link" href="/precios/">ver planes y precios de NHILOS POS</a>
+          </div>
+
+          <div class="rst-cost-box">
+            <h3>Qué revisamos antes de cotizar</h3>
+            <ul class="rst-cost-points">
+              <li>Cuántas cajas o terminales operan en tu local.</li>
+              <li>Si arrancas en modo simple o con recetas y descuento de insumos desde el inicio.</li>
+              <li>El alcance de la implementación y capacitación para tu equipo, detallado en cada plan público.</li>
+              <li>Si más adelante abres otros locales, se evalúa aparte en su alcance correspondiente<!-- pending route: /software-pos/multisucursal/ -->.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 6: FAQ de 7 preguntas en paridad exacta con JSON-LD -->
+    <section class="section" id="preguntas" aria-labelledby="faq-title">
+      <div class="container">
+        <p class="eyebrow">Respuestas directas</p>
+        <h2 class="h-lg" id="faq-title">Preguntas frecuentes sobre el POS para restaurantes</h2>
+
+        <div class="faq-grid stagger" style="margin-top: var(--space-8);">
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Sirve para un restaurante con mesas y para llevar?</h3>
+            <p>En Nicaragua, NHILOS POS permite atender pedidos en mesa y pedidos para llevar o en mostrador dentro de la misma operación. Cada mesa mantiene su estado en el Control de Mesas y cada pedido queda registrado en la terminal con sus modificadores y cobro bimoneda.</p>
+          </div>
+
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Cada plato descuenta sus ingredientes de verdad?</h3>
+            <p>Sí: en Nicaragua, NHILOS POS vincula cada plato preparado a su receta para que cada venta descuente los ingredientes correspondientes de tu inventario. Los productos de reventa como bebidas embotelladas o postres comprados conviven en modo simple dentro del mismo catálogo, y el detalle completo del método vive en <a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>.</p>
+          </div>
+
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Qué pasa si cambia el precio de un insumo?</h3>
+            <p>En Nicaragua, cuando registras una compra nueva de un insumo en NHILOS POS, el sistema recalcula el costo por plato de las recetas que usan ese ingrediente. Así revisas el margen de tu menú el mismo día de la compra en lugar de descubrirlo al cierre del mes.</p>
+          </div>
+
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Y si se cae el internet en hora pico?</h3>
+            <p>En Nicaragua, NHILOS POS sigue cobrando en la terminal aunque se caiga la red, siempre que la terminal quedó configurada con tu catálogo: emite el ticket con su correlativo consecutivo y guarda cada venta en la cola de salida del dispositivo para subirla en orden al reconectar. Los límites completos están en <a href="/software-pos/sin-internet/">cómo sigue la venta sin internet: POS sin conexión</a>.</p>
+          </div>
+
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Sirve para la DGI?</h3>
+            <p>En Nicaragua, NHILOS POS factura con la mecánica que exige la DT 09-2007: correlativo consecutivo que no se puede saltar, ningún comprobante se borra y cada anulación exige motivo auditado. La autorización ante la DGI (carta, código y numeración) la posee tu negocio como contribuyente; la división completa está en <a href="/facturacion-dgi/">mecánica de facturación DT 09-2007: qué garantiza el sistema y qué te corresponde a ti</a>.</p>
+          </div>
+
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Mis muchachos lo aprenden rápido?</h3>
+            <p>En Nicaragua, la implementación de NHILOS POS incluye capacitación para tu equipo sobre la pantalla táctil y el flujo real de tu negocio, con el alcance definido en cada plan. Puedes empezar cobrando en modo simple y activar recetas cuando tu cocina esté lista.</p>
+          </div>
+
+          <div class="faq-cell" data-event="faq_restaurante_abre">
+            <h3>¿Cuánto cuesta al mes?</h3>
+            <p>En Nicaragua, la mensualidad de NHILOS POS depende de cuántas terminales usas y de si activas recetas y control de insumos, mientras que el hardware Android se cotiza aparte. Los planes públicos Esencial, Operación y Pro con sus implementaciones se consultan en <a href="/precios/">ver planes y precios de NHILOS POS</a>.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- H2 7: Cierre con demo del menu -->
+    <section class="section rst-close-band" id="demo" aria-labelledby="demo-title">
+      <div class="container reveal">
+        <p class="eyebrow">Demo guiada con tu carta</p>
+        <h2 class="h-lg" id="demo-title">Solicita una demo con el menú de tu restaurante</h2>
+        <p class="lead" style="margin-top: var(--space-4); max-width: 64ch; color: rgba(255, 255, 255, 0.86);">En lugar de una presentación genérica, preparamos la demostración con ejemplos de tus platos, tus modificadores y el ritmo real de tu cocina y caja.</p>
+        <ul class="rst-close-bullets">
+          <li>Escenario armado según tu tipo de negocio y tu prioridad.</li>
+          <li>Cotización con cronograma real al finalizar la demo.</li>
+        </ul>
+        <div class="rst-close-actions">
+          <a class="btn btn-on-dark" href="/demo/" data-event="cta_demo_restaurante">solicitar una demo con el menú de tu restaurante</a>
+          <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=restaurantes" data-event="cta_whatsapp_restaurante">Escribir por WhatsApp</a>
+        </div>
+        <div class="rst-close-links">
+          <a href="/software-pos/">qué es NHILOS POS: venta local-first</a>
+          <a href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>
+          <a href="/facturacion-dgi/">mecánica de facturación DT 09-2007</a>
+          <a href="/precios/">ver planes y precios de NHILOS POS</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <a class="wordmark" href="/"><img src="media/logo.png" width="36" height="36" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
+          <p class="footer-tagline">Conectamos los hilos de tu negocio.</p>
+          <p class="footer-desc">Sistema de punto de venta local-first para restaurantes, comiderías, cafeterías, food parks y comercios de mostrador en Nicaragua.</p>
+          <p class="footer-contact">
+            WhatsApp: <a href="https://wa.me/50581948526?utm_medium=restaurantes" data-event="cta_whatsapp_restaurante">+505 8194 8526</a><br>
+            Managua, Nicaragua · área de servicio nacional
+          </p>
+          <div class="footer-social">
+            <a href="https://www.instagram.com/nhilosapp/" aria-label="Instagram de NHILOS" title="Instagram"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37a4 4 0 1 1-7.914 1.173A4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+            <a href="https://www.facebook.com/nhilosapp" aria-label="Facebook de NHILOS" title="Facebook"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
+            <a href="https://www.tiktok.com/@nhilosapp" aria-label="TikTok de NHILOS" title="TikTok"><svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg></a>
+          </div>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Restaurantes</h3>
+          <ul class="footer-list">
+            <li><a href="#formatos">Formatos y escala</a></li>
+            <li><a href="#mesa-mostrador">Mesa y mostrador</a></li>
+            <li><a href="#recetas">Recetas y costo</a></li>
+            <li><a href="#sin-internet">Hora pico sin red</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Producto</h3>
+          <ul class="footer-list">
+            <li><a href="/">Inicio</a></li>
+            <li><a href="/software-pos/">Software POS</a></li>
+            <li><a href="/software-pos/sin-internet/">Sin internet</a></li>
+            <li><a href="/precios/">Planes y precios</a></li>
+            <li><a href="/facturacion-dgi/">Facturación DGI</a></li>
+            <li><a href="/inventario/">Inventario</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="footer-col-title">Contacto</h3>
+          <ul class="footer-list">
+            <li><a href="https://wa.me/50581948526?utm_medium=restaurantes" data-event="cta_whatsapp_restaurante">WhatsApp directo</a></li>
+            <li><a href="/demo/" data-event="cta_demo_restaurante">Solicitar una demo</a></li>
+            <li><a href="#preguntas">Preguntas frecuentes</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>© 2026 NHILOS. Estructura de facturación conforme a la Disposición Técnica 09-2007; la autorización DGI y la valuación fiscal corresponden a cada contribuyente con su contador.</p>
+        <a class="footer-top-link" href="#inicio">Volver arriba <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg></a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/site.js"></script>
+  <script>
+    (function () {
+      var video = document.getElementById("rstRecetasVideo");
+      var btn = document.getElementById("rstPlayRecetas");
+      if (!video || !btn) return;
+      function sync() {
+        var playing = !video.paused && !video.ended;
+        btn.setAttribute("aria-pressed", playing ? "true" : "false");
+        btn.textContent = playing ? "Pausar recálculo de costo" : "Reproducir recálculo de costo";
+      }
+      btn.addEventListener("click", function () {
+        if (video.paused || video.ended) {
+          video.play().catch(function () {});
+        } else {
+          video.pause();
+        }
+        sync();
+      });
+      video.addEventListener("play", sync);
+      video.addEventListener("pause", sync);
+    })();
+  </script>
+</body>
+</html>

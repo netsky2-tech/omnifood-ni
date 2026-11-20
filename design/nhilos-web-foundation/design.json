@@ -79,6 +79,13 @@
       "tradeoff": "Primera página hija de tres niveles (/software-pos/sin-internet/) con H1 y title neutros (57 chars), condición honesta en primera pantalla y en panel oscuro con casillas, línea de tiempo del peor momento (sábado 12:30) junto a grabación real auditada en marco de terminal (badge de cola 2 + barra verde de éxito), par de honestidad (qué sigue vs qué no es instantáneo con poster editado auditado de cola) y separación explícita de apagón de red vs apagón eléctrico.",
       "width": 1440,
       "height": 900
+    },
+    {
+      "file": "12-restaurantes.html",
+      "title": "12 — /software-pos/restaurantes/ (segmento que cocina, ruta de 3 niveles)",
+      "tradeoff": "Página dueña del término restaurante (H1 con segmento, title 54 chars sin comidería/fritanga) con ampliación de escala S5b en el cuerpo: diccionario de seis formatos pequeños y medianos antes del diferenciador, escalera de control modo simple -> recetas, riel mesa y mostrador con Control de Mesas verificado en código y media-slot documentado sin captura falsa, plato que se desarma junto al clip auditado de recálculo de costo enfocado en decisión de menú, antes/después del cambio de precio de insumo, modificadores y FAQ de 7 en paridad JSON-LD.",
+      "width": 1440,
+      "height": 900
     }
   ]
 }

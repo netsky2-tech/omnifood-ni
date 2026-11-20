@@ -47,6 +47,12 @@ const PAGES = [
     url: "/software-pos/sin-internet/",
     title: "POS sin internet en Nicaragua: qué pasa cuando cae la red",
   },
+  {
+    source: "12-restaurantes.html",
+    out: "software-pos/restaurantes/index.html",
+    url: "/software-pos/restaurantes/",
+    title: "Sistema POS para restaurante en Nicaragua | NHILOS POS",
+  },
 ];
 const NOT_FOUND = "404.html";
 const OUTPUT = path.join(ROOT, "dist/nhilos-web");
