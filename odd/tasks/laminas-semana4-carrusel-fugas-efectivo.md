@@ -1,0 +1,26 @@
+# Feature: laminas_semana4_carrusel_fugas_efectivo
+
+Objective: Implementar la Pieza 1 de la Semana 4 (Martes 17/11) — Carrusel educativo de 4 láminas en 4:5 (1080 × 1350 px) sobre "3 fugas de efectivo silenciosas", como composición Remotion estática (`Semana4Carrusel`) renderizada a PNG y entregada en la carpeta de Windows.
+Branch: feat/video-clip-anulaciones-pin-auditoria | Runner: `tsc --noEmit` & `remotion still`
+
+## Specs
+
+- **S1 (Formato y naturaleza de la pieza):** Carrusel educativo de 4 láminas en 4:5 · 1080 × 1350 px. No es un anuncio de software; es criterio gerencial puro que el dueño de negocio va a guardar. Sin capturas de UI, sin badge de comercio/RUC.
+- **S2 (Lámina 1 — Portada / Gancho de dolor):** Badge superior: `AUDITORÍA OPERATIVA`. Titular (Renogare): `3 fugas de efectivo silenciosas en tu mostrador` (en blanco) `que no aparecen en tus reportes de venta.` (en #00BF81). Pie: `01 / 04 →`.
+- **S3 (Lámina 2 — Fuga 01):** Título: `01 · EL REDONDEO DEL TIPO DE CAMBIO`. Texto: `Cuando el cajero calcula el vuelto de billetes en dólares con calculadora manual, los redondeos hacia arriba y errores de tasa acumulan pérdidas invisibles en cada turno.`
+- **S4 (Lámina 3 — Fuga 02):** Título: `02 · EL ARQUEO CON META EN PANTALLA`. Texto: `Si el operador ve cuánto dinero "debería" tener antes de contar la gaveta, los sobrantes nunca se reportan y los faltantes se maquillan con tickets pendientes.`
+- **S5 (Lámina 4 — Fuga 03 + Cierre suave):** Título: `03 · TICKETS ANULADOS SIN HUELLA`. Texto: `Borrar una venta cobrada en efectivo es la forma más rápida de extraer dinero sin alterar el inventario aparente.` Remate inferior: `¿Quieres auditar estos 3 puntos en tu local? Comenta CONTROL y te enviamos la lista de verificación completa.`
+- **S6 (Entrega):** Renderizar las 4 láminas como PNG (`remotion still` por lámina) y copiarlas a `/mnt/c/Users/Octavio Morales/Pictures/nhilos/laminas/semana4/`. Nota TikTok: mismas imágenes sirven en 1080×1350 o 1080×1920.
+
+## Tasks
+
+- **T1** (`S1`–`S5`) — Inline: Implementar `src/scenes/semana4_carrusel/Semana4CarruselScene.tsx` (lámina seleccionada por `useCurrentFrame`), composición `Semana4Carrusel` (1080×1350, 4 frames), preset `semana4Carrusel` en `brand.ts` y registro en `Root.tsx`. Status: `done` (`TYPECHECK_OK`; cgroup `pids.max` elevado a 4096 tras fallo SIGTRAP de Chromium).
+- **T3** (`S6`) — Inline: Variante TikTok Photo Mode 9:16 (1080×1920) con zona segura inferior (~300px de UI). Implementar `Semana4CarruselVerticalScene`, composición `Semana4CarruselVertical` y renderizar `tiktok_9x16/semana4_lamina_1..4.png`. Status: `done` (validada visualmente: pie sobre la UI inferior, texto fuera de la columna de iconos).
+- **T2** (`S6`) — Inline: Typecheck, renderizar los 4 stills (`semana4_lamina_1..4.png`), validar composición visual y copiar a `/mnt/c/Users/Octavio Morales/Pictures/nhilos/laminas/semana4/`. Status: `done` (4 PNG ~1 MB c/u, validados visualmente).
+
+## Log
+
+- **L1:** Solicitud original del usuario (verbatim):
+  > Vamos a prepara el nuevo contenido para esta semana. Vamos a crear estas laminas: Desarrollo de Piezas para Semana 4 Pieza 1: Martes 17/11 — Carrusel Educativo (4 Láminas en 4:5 · 1080 × 1350 px). No es un anuncio de software; es criterio gerencial puro que el dueño de negocio va a guardar. Lámina 1 (Portada — Gancho de dolor): Badge superior: AUDITORÍA OPERATIVA. Titular (Renogare): 3 fugas de efectivo silenciosas en tu mostrador (en blanco) que no aparecen en tus reportes de venta. (en #00BF81). Pie: 01 / 04 →. Lámina 2 (Fuga 01 — El vuelto en dólares): Título: 01 · EL REDONDEO DEL TIPO DE CAMBIO. Texto: Cuando el cajero calcula el vuelto de billetes en dólares con calculadora manual, los redondeos hacia arriba y errores de tasa acumulan pérdidas invisibles en cada turno. Lámina 3 (Fuga 02 — El cuadre con saldo visible): Título: 02 · EL ARQUEO CON META EN PANTALLA. Texto: Si el operador ve cuánto dinero "debería" tener antes de contar la gaveta, los sobrantes nunca se reportan y los faltantes se maquillan con tickets pendientes. Lámina 4 (Fuga 03 + Cierre suave): Título: 03 · TICKETS ANULADOS SIN HUELLA. Texto: Borrar una venta cobrada en efectivo es la forma más rápida de extraer dinero sin alterar el inventario aparente. Remate inferior: ¿Quieres auditar estos 3 puntos en tu local? Comenta CONTROL y te enviamos la lista de verificación completa. Nota para TikTok: Exportas estas mismas 4 imágenes en 1080×1350 o 1080×1920.
+- **L2:** Validadas las 4 láminas renderizadas (badge, titular bicolor, numeración fantasma, remate `Comenta CONTROL`). Entregadas en `/mnt/c/Users/Octavio Morales/Pictures/nhilos/laminas/semana4/semana4_lamina_1..4.png`.
+- **L3:** Investigación confirmó que TikTok Photo Mode recomienda nativamente 1080×1920 (9:16); el 4:5 se muestra dentro de un marco 9:16. Además, la UI inferior de TikTok (caption/audio) cubre ~300px, por lo que la variante vertical se re-diseñó con layout propio (pie en ~1580px, tipografía ampliada) en lugar de estirar el 4:5. Fuentes: postfa.st/sizes/tiktok/carousel, buffer.com/resources/tiktok-carousel, scribegap.com/articles/tiktok-slideshow. Entregadas las 4 láminas 9:16 en `laminas/semana4/tiktok_9x16/`.

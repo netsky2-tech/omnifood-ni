@@ -1,0 +1,236 @@
+{
+  "piece_id": "viernes20_cafeteria_venta_codigo",
+  "version": "1.2",
+  "agent_roles_signoff": {
+    "marketing_strategist": {
+      "status": "SIGNED",
+      "owned_sections": ["1. Estrategia"]
+    },
+    "creative_strategist": {
+      "status": "SIGNED",
+      "owned_sections": ["2. Concepto creativo", "3. Guion"]
+    },
+    "art_director": {
+      "status": "SIGNED",
+      "owned_sections": ["4. Dirección de arte", "5. Especificaciones técnicas"]
+    },
+    "creative_critic": {
+      "verdict": "PASS_TO_PRODUCTION",
+      "owned_sections": ["6. Validación"]
+    }
+  },
+  "estrategia": {
+    "objetivo_marketing": "Generar comentarios comerciales DEMO (único CTA por pieza según Eje 5) y elevar visto del total en TikTok >= 40% y completado >= 15%.",
+    "publico_objetivo": "Dueños-operadores de cafeterías en Nicaragua (25-44 años, Problem/Solution-Aware, sin exponer clientes reales ni nombres de personas o dispositivos).",
+    "insight_consumidor": "Cuando un cajero nuevo entra a las 8 a. m. y hay fila, lo que traba el mostrador es buscar cada artículo entre carpetas durante 15 segundos por pedido.",
+    "problema_o_deseo": "D9 (Mi cajero necesita una semana para aprenderlo) + D6 (La fila se atasca en hora pico): digitar código corto SKU en 'Nombre o SKU' + Enter para añadir al carrito y cobrar rápido.",
+    "dolor_code": "D9",
+    "mensaje_principal": "Si un cajero nuevo busca por código corto en lugar de navegar carpetas, agrega el pedido al carrito con Enter y cobra en segundos sin frenar la fila de tu cafetería.",
+    "etapa_embudo": "MOFU"
+  },
+  "concepto_creativo": {
+    "nombre_concepto": "Cajero nuevo a las 8 a. m.: un código y al cobro",
+    "idea_central": "Replicar la fórmula ganadora del Día 2 (Semana4Pieza2Digital.tsx: BG compartido para loop f0==f749, aritmética condicional ámbar, UI Handheld real etiquetada 'Pantalla real · cafetería de ejemplo', banda #00BF81 y resolución esmeralda) aplicada a una sola historia causal en cafetería.",
+    "angulo_comunicacion": "Aritmética condicional (20 pedidos × 15 s = 5 minutos frenados) resuelta con búsqueda SKU real (código 104 -> Americano 12oz C$ 100.00 -> COBRAR -> Vuelto C$ 100.00) y subtítulos R6.",
+    "emocion_buscada": "Tensión matutina de fila llena seguida de alivio y control táctico sin hype.",
+    "diferenciacion": "Estrena dolor libre D9, rota el gancho a G4 (distinto a G1/G3 del Jueves 19/11), usa layout Handheld fiel a sale_view.dart (sin mezclar tablet ni inventar rótulos) y mantiene CTA único DEMO."
+  },
+  "guion": {
+    "hook_alternativas": [
+      {
+        "gancho_code": "G4",
+        "hook_verbal": "Ocho de la mañana, fila llena y cajero nuevo.",
+        "hook_visual_frame_0": "f0 en BG compartido para loop perfecto; f1 Macro-Zoom 1.75x sobre campo Handheld 'Nombre o SKU' y titular en top 360px: '¿Tu cajero nuevo frena la fila?'"
+      },
+      {
+        "gancho_code": "G5",
+        "hook_verbal": "En una cafetería a las ocho, cada toque extra cuesta clientes.",
+        "hook_visual_frame_0": "Reloj 08:00 a. m. + barra 'Nombre o SKU' ampliada."
+      },
+      {
+        "gancho_code": "G2",
+        "hook_verbal": "Tu fila no es lenta por el barista. Es por el menú del POS.",
+        "hook_visual_frame_0": "Contraste entre menú saturado y buscador directo 'Nombre o SKU'."
+      }
+    ],
+    "hook_seleccionado_y_justificacion": "Alternativa 1 (G4): cumple rotación C2 frente al Jueves 19/11 (G1+G3), evita loop flash manteniendo f0 en BG, abre en Macro-Zoom 1.75x en f1, entrega dirección de solución antes de 3s (f65) y respeta separación de zonas seguras (chip CTA en top 128px vs titular en top 360px).",
+    "desarrollo_narrativo": "De escenario matutino G4 y desenlace temprano (<3s) pasa a aritmética condicional consistente (20 pedidos × 15 s = 5 min frenados en ámbar), demuestra en SaleView Handheld real (Americano 12oz sin modificadores obligatorios: digita 104 + Enter -> MobileFloatingCartBar VER CARRITO -> COBRAR -> Cobro y Facturación C$ 200.00 -> Vuelto C$ 100.00 -> COBRAR), y resuelve el número ámbar a esmeralda (0 min buscando menús).",
+    "climax_o_revelacion": "Macro-Zoom real sobre 'Nombre o SKU' agregando el producto sin diálogo extra + cálculo automático Vuelto: C$ 100.00 y resolución 5 min -> 0 min en #00BF81.",
+    "resolucion": "La pérdida hipotética ámbar se transforma en control esmeralda: cero minutos buscando entre carpetas desde el primer turno.",
+    "cta": {
+      "keyword": "DEMO",
+      "spoken_phrase": "Comenta DEMO abajo para enviarte el acceso directo.",
+      "button_label": "Comenta DEMO"
+    },
+    "voz_en_off_y_textos": [
+      {
+        "beat_id": "beat_0_hook",
+        "time_window": "0.0-3.0s (0-90)",
+        "voiceover_es_ni": "Ocho de la mañana, fila llena y cajero nuevo. Con un código corto deja de buscar botones.",
+        "on_screen_text": "¿Tu cajero nuevo frena la fila?",
+        "visual_action": "f0 en BG compartido; f1..f45 Macro-Zoom 1.75x en campo Handheld 'Nombre o SKU'; f45 reset 1.18x + chip Comenta DEMO en top 128px; subtítulos R6 en bottom >= 335px."
+      },
+      {
+        "beat_id": "beat_1_aritmetica",
+        "time_window": "3.0-7.5s (90-225)",
+        "voiceover_es_ni": "Si tarda quince segundos por orden entre carpetas, en veinte pedidos ya frenó cinco minutos tu mostrador.",
+        "on_screen_text": "20 pedidos × 15 s = 5 minutos de fila parada",
+        "visual_action": "SlamType ancho T2 en ámbar #F59E0B sobre BG limpio para máxima nitidez a 360px + subtítulos R6."
+      },
+      {
+        "beat_id": "beat_2_macro_sku",
+        "time_window": "7.5-16.5s (225-495)",
+        "voiceover_es_ni": "En una cafetería con NHILOS digita el código del producto, presiona Enter y ya quedó en el carrito. Un toque en cobrar.",
+        "on_screen_text": "104 + Enter -> al carrito · Total C$ 100.00",
+        "visual_action": "SaleView Handheld ('Pantalla real · cafetería de ejemplo', AppBar cubierto sin nombres personales): digita 104 + Enter (Americano 12oz C$ 100.00), MobileFloatingCartBar VER CARRITO -> COBRAR."
+      },
+      {
+        "beat_id": "beat_3_cobro_resolucion",
+        "time_window": "16.5-22.0s (495-660)",
+        "voiceover_es_ni": "Paga con doscientos córdobas: vuelto exacto al instante y cero curva de aprendizaje.",
+        "on_screen_text": "Vuelto exacto C$ 100.00 -> 0 min buscando menús",
+        "visual_action": "Cobro y Facturación (sin folio pre-emitido): tap C$ 200.00 -> Vuelto: C$ 100.00 -> botón COBRAR, seguido de resolución T2 ámbar 5 min -> esmeralda 0 min."
+      },
+      {
+        "beat_id": "beat_4_cta_loop",
+        "time_window": "22.0-25.0s (660-750)",
+        "voiceover_es_ni": "Comenta DEMO abajo para enviarte el acceso directo.",
+        "on_screen_text": "NHILOS POS · Comenta DEMO",
+        "visual_action": "Logo oficial logo.png + eslogan + botón #00BF81 Comenta DEMO (sin URL no verificada); salida f732..f744 dejando BG idéntico a f0."
+      }
+    ]
+  },
+  "direccion_de_arte": {
+    "carpeta_referencias": "C:\\Users\\Octavio Morales\\Pictures\\nhilos\\referencias",
+    "referencias_visuales": [
+      "C:\\Users\\Octavio Morales\\Pictures\\nhilos\\referencias (/mnt/c/Users/Octavio Morales/Pictures/nhilos/referencias) — pendiente de verificación directa fuera de sandbox",
+      "Semana4Pieza2Digital.tsx — BG compartido para loop f0==f749, SlamType ancho, DeviceScreen cubriendo AppBar y salida f732..f744",
+      "v4 — cifras tabulares gigantes legibles a 360px"
+    ],
+    "paleta_y_composicion": {
+      "safe_zones": {
+        "top_px": 140,
+        "bottom_px": 320,
+        "left_px": 90,
+        "right_px": 120
+      },
+      "palette": {
+        "authority_navy": "#003757",
+        "control_emerald": "#00BF81",
+        "loss_amber": "#F59E0B",
+        "alert_red": "#EF4444"
+      },
+      "typography_scale": {
+        "display_font": "Renogare",
+        "body_font": "Poppins",
+        "min_hook_px_1080w": 64,
+        "tabular_nums": true
+      }
+    },
+    "storyboard_por_escena": [
+      {
+        "beat_id": "beat_0_hook",
+        "treatment": "T5",
+        "focal_subject": "SearchBarWidget Handheld ('Nombre o SKU') en Macro-Zoom 1.75x desde f1",
+        "composition_notes": "f0 en BG compartido; f1 input centrado en top 720px; titular arriba en top 360px separado del chip CTA (top 128px); subtítulos R6 en top 1500px."
+      },
+      {
+        "beat_id": "beat_1_aritmetica",
+        "treatment": "T2",
+        "focal_subject": "20 pedidos × 15 s = 5 minutos de fila parada",
+        "composition_notes": "Tipografía cinética tabular en #F59E0B sobre BG limpio para legibilidad total a 360px."
+      },
+      {
+        "beat_id": "beat_2_macro_sku",
+        "treatment": "T5",
+        "focal_subject": "SaleView Handheld + MobileFloatingCartBar -> COBRAR",
+        "composition_notes": "AppBar cubierto con etiqueta 'Pantalla real · cafetería de ejemplo'; zoom 1.38x sobre barra y carrito inferior; banda esmeralda en top 1380px sobre subtítulos en top 1500px."
+      },
+      {
+        "beat_id": "beat_3_cobro_resolucion",
+        "treatment": "T2",
+        "focal_subject": "Cobro y Facturación (C$ 200 -> Vuelto C$ 100.00) + contraste 5 min -> 0 min",
+        "composition_notes": "Modal ampliado 1.12x legible a 360px seguido de contraste ámbar a esmeralda centrado."
+      },
+      {
+        "beat_id": "beat_4_cta_loop",
+        "treatment": "T2",
+        "focal_subject": "logo.png + NHILOS POS + Comenta DEMO",
+        "composition_notes": "Sin URL; salida limpia f732..f744 empatando f749 con f0."
+      }
+    ],
+    "movimiento_camara": {
+      "frame_0_strategy": "f0 en BG compartido para loop perfecto; f1..f45 Macro-Zoom 1.75x sobre campo Handheld 'Nombre o SKU' sin placa estática.",
+      "attention_reset_frame": 45,
+      "camera_notes": "Reset zoom-out 1.75x -> 1.18x en f45; paneo vertical continuo en beat_2 hacia MobileFloatingCartBar; transición sin animateEnter al modal Cobro y Facturación."
+    },
+    "transiciones": "Crossfades concéntricos absolute inset-0 sin flash blanco; animateEnter=false en transición interna Handheld; salida f732..f744 para loop continuo f749 == f0.",
+    "diseno_sonoro": "Edge TTS es-NI-FedericoNeural (rate -2%, respaldo es-MX-JorgeNeural) grabado previo al render + SFX Enter (f265) y cobro (f545) a -8 dB; silencio final >= 24 frames.",
+    "duracion_escenas": [
+      { "beat_id": "beat_0_hook", "frame_start": 0, "frame_end": 90, "duration_seconds": 3.0 },
+      { "beat_id": "beat_1_aritmetica", "frame_start": 90, "frame_end": 225, "duration_seconds": 4.5 },
+      { "beat_id": "beat_2_macro_sku", "frame_start": 225, "frame_end": 495, "duration_seconds": 9.0 },
+      { "beat_id": "beat_3_cobro_resolucion", "frame_start": 495, "frame_end": 660, "duration_seconds": 5.5 },
+      { "beat_id": "beat_4_cta_loop", "frame_start": 660, "frame_end": 750, "duration_seconds": 3.0 }
+    ]
+  },
+  "especificaciones_tecnicas": {
+    "motor": "Remotion",
+    "componentes_y_assets": {
+      "brand_logo": "apps/owner_dashboard/public/logo.png",
+      "product_media": [
+        "apps/pos_app/lib/ui/features/sales/sale_view.dart (SearchBarWidget handheld hint 'Nombre o SKU' línea 1005 + MobileFloatingCartBar + botón 'COBRAR' línea 2773)",
+        "apps/pos_app/lib/ui/features/sales/widgets/multi_currency_checkout_dialog.dart ('Cobro y Facturación' + botón 'COBRAR' línea 708)",
+        "apps/showcase_video/src/scenes/semana4_fisico/Semana4HeroSalesScreenAsset.tsx (Americano 12oz C$ 100.00)"
+      ],
+      "vector_or_3d_assets": [
+        "Subtítulos obligatorios R6 en scrim #001F33",
+        "Cursor táctil con dwell de 4 frames + ripple"
+      ],
+      "audio_tracks": [
+        "apps/showcase_video/public/audio/viernes20_cafeteria_codigo_vo.mp3"
+      ]
+    },
+    "animaciones": "Springs (damping: 18, stiffness: 120, mass: 0.9); interpolación determinista para tipeo '104' + Enter con dwell de 4 frames; subtítulos R6 sincronizados en zona segura; tabular-nums.",
+    "resolucion_y_formato": {
+      "width": 1080,
+      "height": 1920,
+      "fps": 30,
+      "aspect_ratio": "9:16",
+      "output_format": "mp4"
+    },
+    "timing_elementos": "Total 750 frames (25.0s @ 30fps) sincronizados al TTS con salida coordinada en f732..f744.",
+    "remotion_execution_spec": {
+      "composition_id": "Viernes20CafeteriaCodigoReel",
+      "sequence_map": [
+        { "beat_id": "beat_0_hook", "duration_frames": 90, "audio_padding_frames": 0, "animate_enter": false },
+        { "beat_id": "beat_1_aritmetica", "duration_frames": 135, "audio_padding_frames": 15, "animate_enter": true },
+        { "beat_id": "beat_2_macro_sku", "duration_frames": 270, "audio_padding_frames": 20, "animate_enter": false },
+        { "beat_id": "beat_3_cobro_resolucion", "duration_frames": 165, "audio_padding_frames": 20, "animate_enter": true },
+        { "beat_id": "beat_4_cta_loop", "duration_frames": 90, "audio_padding_frames": 24, "animate_enter": true }
+      ],
+      "cursor_choreography": "Dwell 4f sobre 'Nombre o SKU' (f236-240), digita 104 + Enter (f265), tap en VER CARRITO (f365), tap en COBRAR (f445), tap en chip C$ 200.00 (f525) y botón COBRAR (f565).",
+      "layer_stack_order": [
+        "shared_radial_navy_bg",
+        "handheld_sale_view_and_checkout_macro_zoom",
+        "emerald_proof_band_and_example_label",
+        "t2_kinetic_typography",
+        "mandatory_r6_subtitles",
+        "persistent_early_cta_comenta_demo",
+        "outro_logo_slogan_and_final_cta"
+      ]
+    },
+    "threejs_execution_spec": {
+      "enabled": false,
+      "integration_mode": "none"
+    }
+  },
+  "validacion": {
+    "coherencia_marca": "PASS — Cero menciones a clientes reales del piloto, cero nombres de personas/dispositivos, cero URLs no publicadas y fidelidad exacta a sale_view.dart Handheld + multi_currency_checkout_dialog.dart.",
+    "calidad_hook": "PASS — f0 comparte BG del cierre; f1 entra en Macro-Zoom 1.75x con escenario G4 nuevo y desenlace <3s (f65) + reset f45.",
+    "claridad_mensaje": "PASS — Producto único simple (Americano 12oz, SKU 104) legible a 360px, subtítulos R6 obligatorios y zonas seguras libres de colisión.",
+    "potencial_retencion": "PASS_TO_PRODUCTION — 5 beats dinámicos con cambios visuales cada <= 4.5s en 25s (con variante recortable a 15s si TikTok cae tras 12s tras resolver los 6 bloqueos de v1.0).",
+    "capacidad_generar_accion": "PASS — CTA único Comenta DEMO (Eje 5) presente en chip temprano 1.5s, voz, cierre y copys sin dilución.",
+    "hipotesis_publicacion": "H1: Visto total TikTok >= 40% y completado >= 15%. H2: Comentarios DEMO > 0 con CTA único f45 + cierre. H3: Detectar en curva de retención TikTok si los 25s sostienen atención en demo Handheld o conviene recorte de 15s."
+  }
+}

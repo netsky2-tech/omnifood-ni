@@ -1,5 +1,7 @@
 # Estrategia de Comercialización de OmniFood NI
 
+> **Propuesta en revisión:** la escalera de planes, packs y kits de hardware está en [`estrategia_precios_nhilos_pos_v1.md`](./estrategia_precios_nhilos_pos_v1.md). No sustituye esta política hasta su aprobación.
+
 ## Posicionamiento y oferta vigente
 
 OmniFood NI se posiciona como una plataforma de operación para negocios gastronómicos que mantiene el POS de un solo dispositivo funcionando sin internet y sincroniza datos con la nube cuando vuelve la conectividad. Su diferenciador comercial combina operación local, control de inventario y costos, trazabilidad, reportes y un portal para propietarios incluido al go-live.

@@ -67,11 +67,10 @@ Sustituto viable y ya guionizado: el S23 con un billete real sobre una mesa. El
 gancho cambia de "mira este hardware" a "esto corre en el teléfono que ya tienes",
 que además es más diferencial.
 
-### 6. El caso de ferretería del viernes no existe
+### 6. El caso de ferretería del viernes se sustituye por cafetería real (sin nombrar cliente)
 
-El plan promete "cómo opera NHILOS en una Ferretería / Tienda de Repuestos". No
-hay cliente de ferretería. Se puede demostrar la venta por código con el tenant
-de demostración y decirlo, pero no presentarlo como caso real.
+El plan original proponía "cómo opera NHILOS en una Ferretería / Tienda de Repuestos". No
+hay cliente de ferretería. Se reemplaza por el rubro real **cafetería** (con datos de ejemplo y etiqueta `"Pantalla real · cafetería de ejemplo"`, **sin mencionar el nombre ni datos del cliente real**).
 
 ## Plan de la semana, corregido
 
@@ -79,7 +78,7 @@ de demostración y decirlo, pero no presentarlo como caso real.
 |---|---|---|
 | **Martes 17** | Carrusel 4:5 "3 formas silenciosas en las que se fuga dinero en tu caja" | Se mantiene. Es la pieza con más probabilidad de generar guardados, que es la métrica en cero. Cada slide debe ser autocontenido y el último debe ser una lista que valga conservar |
 | **Jueves 19** | Bimoneda real con el S23 y un billete sobre la mesa | Sustituye la Q80. Mismo dolor, hardware que sí existe. Guion en `nhilos_video_pieza2_bimoneda_telefono_v1.0.md` |
-| **Viernes 20** | Macro-zoom Remotion de venta por código | Se mantiene el formato, se corrige el claim: se presenta como demostración con datos de prueba, no como caso de ferretería |
+| **Viernes 20** | Macro-zoom Remotion de venta por código en cafetería (`25s`) | Se reemplaza el caso inexistente de ferretería por flujo real de **cafetería** (`Pantalla real · cafetería de ejemplo`, cero nombres personales ni de cliente real), replicando la estructura argumentativa del Día 2. Brief en `creative_production_brief_viernes20_cafeteria_codigo_v1.0.md` |
 
 ## Reglas nuevas que salen de este diagnóstico
 

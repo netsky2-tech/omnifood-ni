@@ -1,5 +1,7 @@
 # Estrategia Financiera de OmniFood NI
 
+> **Propuesta en revisión:** la escalera de planes, packs y kits de hardware está en [`estrategia_precios_nhilos_pos_v1.md`](./estrategia_precios_nhilos_pos_v1.md). No sustituye las decisiones vigentes hasta su aprobación.
+
 ## Decisiones vigentes
 
 - La oferta pública es **US$250 de implementación + US$89/mes** por una ubicación y un terminal, con portal para propietarios incluido.
