@@ -777,6 +777,46 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 
 ## 6. Brief — `/software-pos/food-parks/` (G1)
 
+> ### 6.0 Corrección de fondo: quién es el cliente (2026-11-20, fundador, vinculante)
+>
+> **Verbatim:** *"No me gusta el enfoque que le dimos a /food-parks/, porque se entiende como que el producto se lo vendemos al foodpark como tal, y ellos gestionan cada kiosco/puesto. Cuando no es así, nosotros le vendemos a los negocios del foodpark directamente. Por ejemplo el cliente que tenemos que es cafetería, tiene su puesto en un foodpark, pero le ofrecimos el servicio directamente a él, no a los que gestionan el foodpark en general."*
+>
+> **El modelo correcto, y lo que el resto de este apartado debe respetar:**
+>
+> 1. **El food park no es el cliente. Es el lugar.** El cliente es **el negocio que opera un puesto**, con su RUC, su catálogo, su caja, sus turnos y sus reportes.
+> 2. **Nadie gestiona los puestos del park.** No existe el papel de "administrador del park" que compra para todos, ni una suscripción por park, ni un panel que consolide las ventas de los puestos. Esas tres cosas se retiran del brief y de la página.
+> 3. **Cada negocio del park contrata lo suyo.** Dos puestos del mismo patio son dos clientes distintos del sistema, aunque compartan local.
+> 4. **Lo que la página vende es independencia dentro de un lugar compartido:** no dependes de la caja del park, ni de su contabilidad, ni de su criterio de numeración. Tu puesto emite lo suyo.
+> 5. **El park importa por lo que cambia en la operación**, no por quién lo administra: espacio pequeño, fila continua, varios giros en el mismo patio, energía y red compartidas que fallan juntas.
+>
+> **Queda derogado** por contradicción con lo anterior, en todo el apartado §6:
+> - la fórmula del administrador del park como "techo aprobado" (§6.3 y §6.4 H2 2), y su H3 de roles;
+> - "una suscripción por park, sus propios puestos y sus propias marcas" (§6.0 original y §6.1);
+> - la tabla de estructuras fiscales que hace del park un emisor posible (§6.9), salvo la fila que dice que **cada negocio emite lo suyo**, que es la única real;
+> - la guardia §6.5.5 en su forma original: el precio **sí es por negocio**, que es exactamente lo que publica `/precios/`.
+>
+> **H1 corregido:** `Software para food park: tu puesto con su catálogo, su cobro y su factura`
+> Mantiene la query (`software para food park`) y cambia el sujeto: no el park, **tu puesto**.
+>
+> **Mapa de H2 corregido (8, verbatim):**
+> 1. `¿Qué es NHILOS POS para tu puesto en un food park?`
+>    - H3: `Tu puesto es el negocio: catálogo, cobro y turno propios`
+>    - H3: `Tres puestos o veinte: el park también es pequeño`
+> 2. `Lo que no tienes que compartir con el park`
+>    - H3: `Tu cajero responde a ti, no a la administración del patio`
+> 3. `Puestos que revenden y cocinas que preparan, en el mismo patio`
+> 4. `¿Qué pasa cuando se cae el internet en el park?`
+> 5. `Facturación por puesto conforme a la DT 09-2007`
+> 6. `¿Cuánto cuesta si estás en un food park?`
+> 7. `Preguntas frecuentes sobre el software para food park`
+> 8. `Solicita una demo con el menú de tu puesto`
+>
+> **Guardia nueva, de clase:** la página **no puede** decir "administrador del park", "el park contrata", "una suscripción por park", "los puestos del park llegan al panel", "vista del park", ni "gestión de locatarios". Y **debe** afirmar, al menos una vez y en el primer bloque, que el puesto es el negocio y que el park es el lugar.
+>
+> **El meta cambia con el sujeto.** Title y description vigentes en §6.8 quedan derogados; el nuevo texto vive en el ODD de la página (T1).
+
+
+
 > **Escrito 2026-11-18, después de la auditoría de claims del home (copy v1.8).** Es la página del segmento primario del avatar y del posicionamiento (P0 por avatar, no por volumen). **Regla de consistencia vinculante:** el home v1.8 acotó el claim del food park a **"una suscripción por park, sus propios puestos y sus propias marcas"** y retiró "vista consolidada de todas las marcas" y "cajas compartidas" — esta página usa exactamente ese alcance y no lo ensancha. La fórmula aprobada del administrador es la del FAQ G6 del home: *el administrador del park ve su operación desde el panel web, y las ventas de todos llegan al panel cuando la conexión está disponible*. El KDS no se vende (#993) y no aparece.
 
 ### 6.1 Datos del brief
@@ -785,7 +825,9 @@ Lecturas de éxito al checkpoint de 28 días (primer checkpoint del baseline GSC
 |---|---|
 | Keyword principal | `software para food park` (G1, arquitectura §5) |
 | Keywords secundarias | `sistema POS para food park`, `sistema POS para food court`, `administración de food park`, `software para food park en Managua` (mapa §5); `software para food park con múltiples puestos` y `POS para food park vs POS tradicional` (consideración, tabla de keywords) |
+> ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 | Intención | Comercial-transaccional de segmento: el dueño o administrador del park evalúa si un sistema cubre la operación multi-marca |
+> ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 | Respuesta rápida (primeros 150 px) | Un sistema para todo el park: cada puesto con su catálogo y su cobro, el administrador ve la operación desde el panel web. Puestos de reventa y cocinas con recetas conviven en el mismo sistema. Correlativo DT 09-2007 |
 | Objeción principal | "¿Cada puesto necesita su propio sistema y su propia suscripción?" |
 | Objeción secundaria | "¿Puede el administrador ver lo que pasa en el park sin complicar a cada locatario?" |
@@ -816,29 +858,30 @@ Las queries vienen de la tabla de keywords, del mapa §5 y del grupo G1 de la ar
 
 ### 6.3 Regla de profundidad de `/software-pos/food-parks/`
 
+> ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 > **Esta página muestra el park operando dentro del alcance aprobado del home v1.8 — ni un claim más.** Cada bloque responde una pregunta del administrador o del dueño del park (¿cómo opera cada puesto? ¿qué ve el administrador? ¿qué pasa si un puesto cocina y otro revende? ¿y sin internet? ¿cuánto para todo el park?). Lo que NO entra: vista consolidada multi-marca como promesa, caja compartida entre puestos, coordinación por red local, KDS, dashboards de cadena — ninguno es capacidad vigente. El método offline es de `/software-pos/sin-internet/`; el método de inventario por puesto es de `/inventario/`; la mecánica fiscal es de `/facturacion-dgi/`.
 
 ### 6.4 Jerarquía de encabezados
 
-#### H1: `Software para food park: cada puesto con su catálogo y su cobro, en un solo sistema`
+#### H1: `Software para food park: tu puesto con su catálogo, su cobro y su factura`
 
 Contenido: keyword exacta + el alcance aprobado en un renglón. El cuerpo desarrolla la fórmula del home v1.8: una suscripción por park, sus propios puestos y sus propias marcas. *Por qué: intención sin competencia directa en la SERP; el H1 lleva la query y la promesa exacta que el producto puede sostener — ni "todas las marcas consolidadas" ni "caja compartida".*
 
-#### H2: `¿Qué es NHILOS POS en un food park?`
+#### H2: `¿Qué es NHILOS POS para tu puesto en un food park?`
 
 Contenido: definición en 100–150 palabras — el park contrata una suscripción como negocio; cada puesto opera con su catálogo y su cobro en su terminal; los puestos de reventa (botanas, bebidas embotelladas) trabajan en modo simple y las cocinas activan recetas e insumos: ambos modos conviven en el mismo sistema. *Por qué: responde la objeción principal ("¿un sistema por puesto?") desde la primera pantalla y refleja la escalera continua del posicionamiento §0 sin prometer nada que no opere hoy.*
 
-> **H3: `Cada puesto: su catálogo, su cobro, su turno`**
+> **H3: `Tu puesto es el negocio: catálogo, cobro y turno propios`**
 > Contenido: la operación por terminal — catálogo propio, cobro bimoneda, arqueo por turno y usuario. *Por qué: traduce el modelo a la operación diaria del puesto.*
 
-#### H2: `¿Cómo opera el administrador del park?`
+#### H2: `Lo que no tienes que compartir con el park`
 
 Contenido: la fórmula exacta del FAQ G6 del home, sin ensancharla — el administrador del park ve su operación desde el panel web, y las ventas de los puestos llegan al panel cuando la conexión está disponible. Lo que la página no dice: "vista consolidada de todas las marcas", "todos tus parks desde el teléfono", "dashboard de cadena" (guardia §6.5). *Por qué: es la objeción secundaria; responderla con la fórmula aprobada mantiene el home y esta página sincronizados — un claim ensanchado aquí sería un tercer alcance que desincronizar.*
 
-> **H3: `Roles: el administrador administra, el locatario opera`**
+> **H3: `Tu cajero responde a ti, no a la administración del patio`**
 > Contenido: separación de roles entre la administración del park y la operación del puesto (portal del propietario, habilitado al terminar la puesta en marcha según las condiciones publicadas del home). Sin prometer permisos finos que no estén publicados. *Por qué: pregunta de gobernanza real de un park; la respuesta queda dentro del alcance de roles ya publicado.*
 
-#### H2: `Puestos que revenden y cocinas que preparan, en el mismo park`
+#### H2: `Puestos que revenden y cocinas que preparan, en el mismo patio`
 
 Contenido: el caso mixto — un puesto en modo simple junto a una cocina con recetas e insumos; el control se activa por puesto, no por park. El detalle del descuento por receta enlaza a `/inventario/` con anchor `control de inventario y kardex: recetas, insumos y merma`. *Por qué: es la continuidad de la escalera (posicionamiento §0) aplicada al segmento donde más se nota; diferencia a NHILOS de un POS de un solo modo.*
 
@@ -850,15 +893,15 @@ Contenido: cada terminal enrolada sigue cobrando con su catálogo cargado y emit
 
 Contenido: cada comprobante que emite cada puesto sigue la misma mecánica — numeración consecutiva inalterable, anulación solo con motivo auditado, libros exportables; la autorización la posee el contribuyente que emite. La mecánica completa es de `/facturacion-dgi/`. **No se explica en esta página cómo se autoriza fiscalmente cada locatario frente al park** — es una definición del negocio que esta página no inventa (ver bandera en el informe del brief). *Por qué: el comprador de un park pregunta por el correlativo de cada puesto; la respuesta segura es la mecánica, no un arreglo de autorizaciones que el producto no define hoy.*
 
-#### H2: `¿Cuánto cuesta para todo el park?`
+#### H2: `¿Cuánto cuesta si estás en un food park?`
 
 Contenido: la suscripción es del negocio (el park), no por puesto ni por marca; las terminales adicionales son add-on con enrolamiento, según lo publicado en `/precios/` con anchor `ver planes y precios de NHILOS POS`. Sin cifras propias ni "precio por locatario" inventado. *Por qué: responde la objeción de costo con la estructura de precios publicada — el riesgo de inventar una regla de precios por puesto es publicar algo que el documento de precios no dice.*
 
-#### H2: `Preguntas frecuentes sobre el POS para food parks`
+#### H2: `Preguntas frecuentes sobre el software para food park`
 
 Contenido: acordeón con schema `FAQPage` (respuestas con entidad y mercado en la primera frase): ¿Cada puesto necesita su propio sistema? (no: una suscripción por park, puestos propios en el mismo sistema), ¿Puede el administrador ver la operación del park? (fórmula exacta del FAQ G6 del home), ¿Un puesto que revende y una cocina pueden usar el mismo sistema? (sí: modos que conviven), ¿Qué pasa con la facturación de cada puesto? (mecánica DT 09-2007; autorización del contribuyente + enlace al hub fiscal), ¿Funciona sin internet? (fórmula condicionada + enlace al hijo), ¿Cuánto cuesta para el park? (suscripción por negocio + terminales como add-on + enlace a `/precios/`). *Por qué: las preguntas del park son distintas a las del restaurante — el FAQ las responde en su vocabulario y deja el método al dueño de cada cluster.*
 
-#### H2: `Solicita una demo con la operación de tu park`
+#### H2: `Solicita una demo con el menú de tu puesto`
 
 Contenido: CTA final — demo con escenario armado según tu tipo de negocio y tu prioridad + WhatsApp directo; cotización con cronograma real al finalizar la demo. *Por qué: cierra el funnel con la conversión estándar (G14); el escenario demostrado con varios puestos es la prueba que el park necesita.*
 
@@ -868,6 +911,7 @@ Contenido: CTA final — demo con escenario armado según tu tipo de negocio y t
 2. **"Vista consolidada de todas las marcas" / "todos tus parks desde el teléfono" / "dashboard de cadena" — NO publicar.** La consolidación multi-sucursal no se vende (documento de precios, lista "no se venden todavía") y el home v1.8 la retiró. Reemplazo único: la fórmula del FAQ G6 del home (administrador ve la operación del park desde el panel web; ventas llegan cuando la conexión está disponible). Esta fórmula es el techo — no se reescribe más alta en esta página.
 3. **Coordinación entre terminales por red local / LAN en tiempo real — NO publicar.** No es capacidad vigente (#994). Cada terminal opera por su lado y sincroniza al reconectar.
 4. **KDS / pantallas de cocina / despacho de comandas por red — NO publicar.** No se vende (#993). En un food park la tentativa de prometer "la cocina de cada puesto ve su comanda" es alta: prohibida.
+> ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 5. **Suscripción por puesto o por locatario con precio — NO publicar.** Los precios son por negocio (el park); terminales adicionales como add-on según `/precios/`. Inventar una regla de precios por locatario contradiría el documento de precios congelado.
 6. **Arreglo fiscal del park vs locatarios (quién factura, quién está autorizado) — NO especificar.** La página se queda en la mecánica DT 09-2007 y en la división mecánica/autorización del hub fiscal; cómo se autoriza cada locatario es definición del negocio que no está en los documentos y que esta página no inventa.
 7. **Caso local de Managua — NO inventar.** La variante `en Managua` se menciona como mercado; sin dirección, caso o contenido local real no hay claims de presencia ni hijo `/managua/` (regla 3 de anti-canibalización).
@@ -902,6 +946,7 @@ Lecturas de éxito al checkpoint de 28 días:
 - **Title (≤60):** `Software para food park en Nicaragua | NHILOS POS`
 - **Description (≤155):** `Un sistema para todo el food park: cada puesto con su catálogo y su cobro, y la operación visible en el panel web. Pide una demo. NHILOS POS.`
 
+> ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 ### 6.9 Quién factura en un food park: no es una decisión de producto
 
 > **Renumerado 2026-11-20.** Era el segundo `6.6` del apartado (el primero es *Enlazado interno*), el mismo defecto de numeración que el §8 arrastra con dos `8.6`. El contenido no cambió: solo el número.
@@ -910,6 +955,7 @@ Lecturas de éxito al checkpoint de 28 días:
 
 | Estructura del park | Quién emite | ¿Soportado hoy? |
 |---|---|---|
+> ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 | El park es dueño de sus marcas y factura todo bajo su RUC | El park, con su autorización | **Sí** — un tenant, un establecimiento, una serie |
 | Cada locatario independiente tiene su RUC y vende lo suyo | Cada locatario, con la suya | **Sí** — una suscripción por locatario |
 | Caja compartida que cobra y factura **por cuenta de terceros** | Ambiguo | **No** — depende de #994 (topología) y de quién emite |
@@ -1405,3 +1451,7 @@ Verbatim: *"a como puede ser restaurante, puede ser comiderías, foodparks con c
 **Precisión contra el código:** `CatalogValue` es un catálogo maestro de valores (unidad de medida, categoría, tipo de producto) y `Product` solo lleva `category_code`; no existe puesto, marca ni catálogo propio por puesto, ni una terminal limitada a una parte del catálogo. Por eso "cada puesto con su catálogo" —que el H1 y el home ya publicado usan— significa **un catálogo por negocio, organizado por puesto mediante categorías**, y así se explica en el primer H2. Queda prohibido el sentido fuerte: "catálogo independiente", "catálogo aparte", "inventario por puesto", "stock por puesto", "almacén por puesto", la misma familia que la guardia G28 de `/restaurantes/`.
 
 **Numeración:** el segundo `6.6` pasa a `6.9`.
+
+### v2.8 — el food park es el lugar, no el cliente (2026-11-20, fundador)
+
+Verbatim en §6.0. El apartado §6 se escribió sobre el comprador equivocado: asumía que el park contrata y administra los puestos. **NHILOS le vende a cada negocio del park directamente**, como al cliente cafetería que tiene su puesto en un patio y contrató su propio servicio. Derogados: la fórmula del administrador del park como techo, "una suscripción por park", el H3 de roles park/locatario, la tabla fiscal que hacía del park un emisor posible y la guardia que prohibía hablar de precio por negocio. El H1 cambia de sujeto: del park a **tu puesto**. Guardia nueva de clase: nada de administrador del park, gestión de locatarios ni consolidación del patio. La misma corrección alcanza al home (tarjeta de segmentos y FAQ, ambos publicados con el modelo viejo) y a la suite de la página, que tenía el modelo incorrecto escrito como requisito.

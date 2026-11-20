@@ -40,69 +40,78 @@ function loadPage() {
   return { src, body, vis, ld, faq, cells };
 }
 
-// G01 (S5 / S16.1): Single H1 verbatim with segment primary keyword
-test("G01 (S5): single h1 verbatim with segment primary keyword", () => {
+// G01 (S6.0 / S16.1): Single H1 verbatim with segment primary keyword
+const H1_EXPECTED = "Software para food park: tu puesto con su catálogo, su cobro y su factura";
+test("G01 (S6.0): single h1 verbatim with segment primary keyword", () => {
   const { src } = loadPage();
   const h1 = [...src.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/g)];
   assert.equal(h1.length, 1);
   const h1Text = txt(h1[0][1]);
-  assert.equal(h1Text, "Software para food park: cada puesto con su catálogo y su cobro, en un solo sistema");
+  assert.equal(h1Text, H1_EXPECTED);
   assert.ok(h1Text.toLowerCase().includes("software para food park"), "primary keyword missing in H1");
 });
 
-// G02 (S6 / S16.2): All 8 H2 headings verbatim and in exact order
-test("G02 (S6): 8 H2 headings match brief §6.4 and S6 verbatim and in order", () => {
+// G02 (S6.0 / S16.2): All 8 H2 headings verbatim and in exact order (brief §6.0 corrected map)
+const H2_EXPECTED = [
+  "¿Qué es NHILOS POS para tu puesto en un food park?",
+  "Lo que no tienes que compartir con el park",
+  "Puestos que revenden y cocinas que preparan, en el mismo patio",
+  "¿Qué pasa cuando se cae el internet en el park?",
+  "Facturación por puesto conforme a la DT 09-2007",
+  "¿Cuánto cuesta si estás en un food park?",
+  "Preguntas frecuentes sobre el software para food park",
+  "Solicita una demo con el menú de tu puesto",
+];
+test("G02 (S6.0): 8 H2 headings match brief §6.0 corrected map verbatim and in order", () => {
   const { vis } = loadPage();
-  const expected = [
-    "¿Qué es NHILOS POS en un food park?",
-    "¿Cómo opera el administrador del park?",
-    "Puestos que revenden y cocinas que preparan, en el mismo park",
-    "¿Qué pasa cuando se cae el internet en el park?",
-    "Facturación por puesto conforme a la DT 09-2007",
-    "¿Cuánto cuesta para todo el park?",
-    "Preguntas frecuentes sobre el POS para food parks",
-    "Solicita una demo con la operación de tu park",
-  ];
   const actual = [...vis.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)].map((m) => txt(m[1]));
-  assert.deepEqual(actual, expected);
+  assert.deepEqual(actual, H2_EXPECTED);
 });
 
-// G03 (S6 / S16.3): All 3 required H3 headings verbatim and under their parent H2s
-test("G03 (S6): all 3 H3 sub-angles match verbatim and sit under their parent H2s", () => {
+// G03 (S6.0 / S16.3): All 3 required H3 headings verbatim and under their parent H2s
+const H3_1 = "Tu puesto es el negocio: catálogo, cobro y turno propios";
+const H3_2 = "Tres puestos o veinte: el park también es pequeño";
+const H3_3 = "Tu cajero responde a ti, no a la administración del patio";
+test("G03 (S6.0): all 3 H3 sub-angles match verbatim and sit under their parent H2s", () => {
   const { vis } = loadPage();
   const h3s = [...vis.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/g)].map((m) => txt(m[1]));
-  const expectedH3s = [
-    "Cada puesto: su catálogo, su cobro, su turno",
-    "Tres puestos o veinte: el park también es pequeño",
-    "Roles: el administrador administra, el locatario opera",
-  ];
-  for (const h of expectedH3s) {
+  for (const h of [H3_1, H3_2, H3_3]) {
     assert.ok(h3s.includes(h), `missing H3: ${h}`);
   }
-  const idxH2_1 = vis.indexOf("¿Qué es NHILOS POS en un food park?");
-  const idxH2_2 = vis.indexOf("¿Cómo opera el administrador del park?");
-  const idxH2_3 = vis.indexOf("Puestos que revenden y cocinas que preparan, en el mismo park");
-  const idxH3_1 = vis.indexOf("Cada puesto: su catálogo, su cobro, su turno");
-  const idxH3_2 = vis.indexOf("Tres puestos o veinte: el park también es pequeño");
-  const idxH3_3 = vis.indexOf("Roles: el administrador administra, el locatario opera");
+  const h2Pos = [...vis.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/g)]
+    .map((m) => ({ text: txt(m[1]), pos: m.index }))
+    .filter((h) => H2_EXPECTED.includes(h.text));
+  const h3Pos = [...vis.matchAll(/<h3[^>]*>([\s\S]*?)<\/h3>/g)]
+    .map((m) => ({ text: txt(m[1]), pos: m.index }))
+    .filter((h) => [H3_1, H3_2, H3_3].includes(h.text));
+  const byText = (arr, t) => arr.find((x) => x.text === t)?.pos ?? -1;
+  const idxH2_1 = byText(h2Pos, H2_EXPECTED[0]);
+  const idxH2_2 = byText(h2Pos, H2_EXPECTED[1]);
+  const idxH2_3 = byText(h2Pos, H2_EXPECTED[2]);
+  const idxH3_1 = byText(h3Pos, H3_1);
+  const idxH3_2 = byText(h3Pos, H3_2);
+  const idxH3_3 = byText(h3Pos, H3_3);
 
-  assert.ok(idxH3_1 > idxH2_1 && idxH3_1 < idxH2_2, "H3 puestos must be inside H2 1");
+  assert.ok(idxH2_1 > -1 && idxH2_2 > -1 && idxH2_3 > -1, "parent H2s missing from markup");
+  assert.ok(idxH3_1 > idxH2_1 && idxH3_1 < idxH2_2, "H3 puesto-es-el-negocio must be inside H2 1");
   assert.ok(idxH3_2 > idxH2_1 && idxH3_2 < idxH2_2, "H3 scale must be inside H2 1");
-  assert.ok(idxH3_3 > idxH2_2 && idxH3_3 < idxH2_3, "H3 roles must be inside H2 2");
+  assert.ok(idxH3_3 > idxH2_2 && idxH3_3 < idxH2_3, "H3 cajero must be inside H2 2");
 });
 
-// G04 (S10 / S16.4): Title and meta description exact and within limits
-test("G04 (S10): title <= 60 chars and meta description <= 155 chars verbatim", () => {
+// G04 (S6.0 / S16.4): Title and meta description exact and within limits (puesto as subject)
+test("G04 (S6.0): title <= 60 chars and meta description <= 155 chars verbatim, puesto as subject", () => {
   const { src } = loadPage();
   const title = txt(src.match(/<title>([\s\S]*?)<\/title>/)?.[1] || "");
   const desc = src.match(/<meta name="description" content="([^"]*)"/)?.[1] || "";
-  assert.equal(title, "Software para food park en Nicaragua | NHILOS POS");
+  assert.equal(title, "Software para food park: tu puesto, tu sistema | NHILOS POS");
   assert.ok(title.length <= 60, `title too long: ${title.length}`);
+  assert.ok(!/administrador|gestiona/i.test(title), "title must not use administrador/gestiona");
   assert.equal(
     desc,
-    "Un sistema para todo el food park: cada puesto con su catálogo y su cobro, y la operación visible en el panel web. Pide una demo. NHILOS POS.",
+    "Software para food park para el negocio que opera un puesto: tu catálogo, tu cobro, tu factura DT 09-2007 y tus reportes son tuyos. Pide una demo.",
   );
   assert.ok(desc.length <= 155, `description too long: ${desc.length}`);
+  assert.ok(!/administrador|gestiona/i.test(desc), "description must not use administrador/gestiona");
 });
 
 // G05 (S10 / S14 / S16.5): Canonical, og:title, Organization, 3-level BreadcrumbList
@@ -135,13 +144,13 @@ test("G05 (S10/S14): canonical, og:title, Organization and 3-level BreadcrumbLis
   assert.match(vis, /href="\/software-pos\/"/, "breadcrumb must link to /software-pos/");
 });
 
-// G06 (S4 / S16.6): Verbatim quick answer in hero before first H2
-test("G06 (S4): quick answer verbatim in hero before first H2", () => {
+// G06 (S6.0 / S16.6): Model-first quick answer verbatim in hero before first H2
+const QUICK_ANSWER =
+  "En Nicaragua, NHILOS POS le vende al negocio que opera cada puesto del park: el puesto es el negocio, y el park es el lugar donde vendes. Tu catálogo, tu cobro, tu factura y tus reportes son tuyos; nadie de la administración del patio tiene que comprar nada por ti. Correlativo DT 09-2007.";
+test("G06 (S6.0): model-first quick answer verbatim in hero before first H2", () => {
   const { vis } = loadPage();
   const beforeH2 = txt(vis.split(/<h2\b/i)[0] || "");
-  const expected =
-    "Un sistema para todo el park: cada puesto con su catálogo y su cobro, el administrador ve la operación desde el panel web. Puestos de reventa y cocinas con recetas conviven en el mismo sistema. Correlativo DT 09-2007.";
-  assert.ok(beforeH2.includes(expected), "verbatim quick answer missing before first H2");
+  assert.ok(beforeH2.includes(QUICK_ANSWER), "verbatim model-first quick answer missing before first H2");
 });
 
 // G07 (S8 / S16.7): S8 prohibitions absent (cross-cutting, exports, locatario pricing, Managua case)
@@ -173,14 +182,14 @@ test("G07 (S8): all S8 prohibitions absent from visible copy", () => {
   }
 });
 
-// G08 (S5b / S16.8): Catalog precision present; banned isolated-catalog / per-puesto inventory absent
-test("G08 (S5b): one catalog organized by puesto stated once; isolated catalog/inventory banned", () => {
+// G08 (S5b / S16.8): Catalog precision present (restated for the puesto as owner); banned isolated-catalog / per-puesto inventory absent
+test("G08 (S5b): one catalog per business organized by categories stated once; isolated catalog/inventory banned", () => {
   const { vis } = loadPage();
   const plain = txt(vis);
   assert.match(
     plain,
-    /cat[aá]logo es uno y se organiza por puesto/i,
-    "S5b precision 'el catálogo es uno y se organiza por puesto' missing",
+    /cat[aá]logo es de tu negocio, uno solo, y se organiza por categor[ií]as/i,
+    "S5b precision 'el catálogo es de tu negocio, uno solo, y se organiza por categorías' missing",
   );
   const banned = [
     /cat[aá]logo independiente/i,
@@ -228,13 +237,36 @@ test("G09 (S5c): at least 3 park formats named and corporate scale phrases absen
   }
 });
 
-// G10 (S6.2 / S16.10): Exact admin ceiling formula verbatim
-test("G10 (S6.2): exact admin formula verbatim without widening", () => {
+// G10 (S6.0): Model statement required: the puesto is the business, the park is the place
+// (replaces the old admin-ceiling-formula guard, derogated by brief §6.0)
+test("G10 (S6.0): model statement present: puesto is the business, park is the place, nobody buys for you", () => {
   const { vis } = loadPage();
   const plain = txt(vis);
-  const formula =
-    "el administrador del park ve su operación desde el panel web, y las ventas de los puestos llegan al panel cuando la conexión está disponible";
-  assert.ok(plain.toLowerCase().includes(formula), "verbatim admin ceiling formula missing");
+  assert.match(plain, /el puesto es el negocio/i, "model statement 'el puesto es el negocio' missing");
+  assert.match(plain, /el park es el lugar donde vendes/i, "model statement 'el park es el lugar donde vendes' missing");
+  assert.match(
+    plain,
+    /nadie de la administraci[oó]n del patio tiene que comprar nada por ti/i,
+    "statement 'nadie del park tiene que comprar nada por ti' missing",
+  );
+});
+
+// G28 (S6.0): Class guard on the old, wrong model: banned phrases absent (attributes included)
+test("G28 (S6.0): old park-as-customer model phrases absent everywhere in the page", () => {
+  const { vis } = loadPage();
+  const banned = [
+    "administrador del park",
+    "el park contrata",
+    "suscripci[oó]n por park",
+    "los puestos del park",
+    "vista del park",
+    "gesti[oó]n de locatarios",
+    "consolidado del patio",
+  ];
+  for (const phrase of banned) {
+    const rx = new RegExp(phrase, "i");
+    assert.ok(!rx.test(vis), `old-model phrase detected in page: ${phrase}`);
+  }
 });
 
 // G11 (S8.1 / S16.11): Zero shared/central register claims
@@ -277,14 +309,20 @@ test("G13 (S8.3/S8.4): zero KDS, kitchen screens, despacho, or LAN coordination"
   }
 });
 
-// G14 (S7 / S16.14): Both supported fiscal structures present; third structure NOT as capability
-test("G14 (S7): both supported fiscal structures present and third structure not published as capability", () => {
+// G14 (S6.0 / S16.14): Each business in the patio emits its own documents; park-as-emitter absent
+test("G14 (S6.0): cada negocio emite lo suyo present and park-as-emitter structure absent", () => {
   const { vis } = loadPage();
   const plain = txt(vis);
-  assert.match(plain, /due[nñ]o de sus marcas/i, "first fiscal structure (park owns brands) missing");
-  assert.match(plain, /locatario independiente/i, "second fiscal structure (independent locatario) missing");
-  assert.match(plain, /una serie/i, "single series mention for first structure missing");
-  assert.doesNotMatch(plain, /por cuenta de terceros/i, "third structure must not appear as capability");
+  assert.match(plain, /cada negocio emite lo suyo/i, "'cada negocio emite lo suyo' missing");
+  assert.match(plain, /contribuyente que emite/i, "'contribuyente que emite' missing");
+  assert.match(plain, /emite sus propios (documentos|comprobantes)/i, "own-documents statement missing");
+  for (const rx of [
+    /due[nñ]o de sus marcas/i,
+    /factura todo bajo su ruc/i,
+    /el park, con su autorizaci/i,
+  ]) {
+    assert.doesNotMatch(plain, rx, `park-as-emitter structure matched: ${rx}`);
+  }
 });
 
 // G15 (S9 / S16.15): FAQPage JSON-LD parity cell-for-cell + GEO Rule 1
@@ -298,23 +336,24 @@ test("G15 (S9): FAQPage JSON-LD parity cell-for-cell and GEO Rule 1", () => {
     const firstSentence = cells[i][1].split(/\.\s/)[0] || cells[i][1];
     assert.ok(firstSentence.includes("NHILOS POS"), `FAQ ${i + 1} first sentence missing NHILOS POS`);
     assert.ok(firstSentence.includes("Nicaragua"), `FAQ ${i + 1} first sentence missing Nicaragua`);
+    assert.ok(firstSentence.startsWith("En Nicaragua"), `FAQ ${i + 1} first sentence must start 'En Nicaragua'`);
   }
 });
 
-// G16 (S9 / S16.16): Exact 6 FAQ questions in brief order
-test("G16 (S9): 6 FAQ questions verbatim and in brief §6.4 order", () => {
+// G16 (S9 / S16.16): Exact 6 FAQ questions in order, reframed to the stall owner
+const FAQ_QUESTIONS = [
+  "¿Necesito mi propio sistema para mi puesto?",
+  "¿La administración del patio ve mis ventas?",
+  "¿Un puesto que revende y una cocina pueden usar el mismo sistema?",
+  "¿Qué pasa con la facturación de cada puesto?",
+  "¿Funciona sin internet?",
+  "¿Cuánto cuesta para un puesto en un food park?",
+];
+test("G16 (S9): 6 FAQ questions verbatim, stall-owner framing, in order", () => {
   const { cells } = loadPage();
-  const expected = [
-    "¿Cada puesto necesita su propio sistema?",
-    "¿Puede el administrador ver la operación del park?",
-    "¿Un puesto que revende y una cocina pueden usar el mismo sistema?",
-    "¿Qué pasa con la facturación de cada puesto?",
-    "¿Funciona sin internet?",
-    "¿Cuánto cuesta para el park?",
-  ];
   assert.deepEqual(
     cells.map((c) => c[0]),
-    expected,
+    FAQ_QUESTIONS,
   );
 });
 
@@ -396,6 +435,22 @@ test("G21 (S1): source artboard keeps relative paths for assets/ and media/", ()
   assert.match(src, /src="assets\/site\.js"/);
   assert.doesNotMatch(src, /(?:href|src|poster)="\/assets\//, "source artboard must not hardcode /assets/");
   assert.doesNotMatch(src, /(?:href|src|poster)="\/media\//, "source artboard must not hardcode /media/");
+});
+
+// G29 (S11 / S6.0): Declared media limit line states one business's panel, not several stalls
+test("G29 (S11): media limit line keeps the honest one-business scope", () => {
+  const { vis } = loadPage();
+  const plain = txt(vis);
+  assert.match(
+    plain,
+    /corresponde al panel de un solo negocio/i,
+    "media limit line 'panel de un solo negocio' missing",
+  );
+  assert.match(
+    plain,
+    /no muestra los paneles de varios negocios del patio/i,
+    "media limit line 'no muestra los paneles de varios negocios del patio' missing",
+  );
 });
 
 // G22 (S14 / S15 / S16.22): Shared shell reused without repeating sibling pattern classes
