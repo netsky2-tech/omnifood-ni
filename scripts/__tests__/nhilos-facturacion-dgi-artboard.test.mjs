@@ -497,3 +497,38 @@ test("G27 (S15/S19): noscript reveal fallback present and responsive mobile rule
   assert.match(src, /<nav class="spine"/, "missing shared spine navigation");
   assert.match(src, /<button type="button" class="back-top"/, "missing back-to-top button");
 });
+
+// Voseo guard (site rule, founder): the site writes in tú throughout. A Nicaraguan
+// reader hears voseo as somebody else's Spanish, so the whole class is banned, not a
+// list of incidents. Same guard as G27 in the restaurant suite. Accented endings only,
+// so the noun "cocinas" never trips it.
+test("S18-voseo: zero voseo forms in visible copy", () => {
+  const { vis } = loadPage();
+  const plain = txt(vis);
+  const voseo = [
+    /\bvos\b/i,
+    /\btenés\b/i,
+    /\bpodés\b/i,
+    /\bsabés\b/i,
+    /\bquerés\b/i,
+    /\bhacés\b/i,
+    /\bcocinás\b/i,
+    /\bvendés\b/i,
+    /\bcobrás\b/i,
+    /\bactivás\b/i,
+    /\bempezás\b/i,
+    /\bcerrás\b/i,
+    /\bvenís\b/i,
+    /\bpodrías\b/i,
+    /\bcalcen\b/i,
+    /\bcontanos\b/i,
+    /\bdecime\b/i,
+    /\bfijate\b/i,
+    /\bmirá\b/i,
+    /\bverificá\b/i,
+    /\barreglá\b/i,
+  ];
+  for (const re of voseo) {
+    assert.ok(!re.test(plain), `voseo form detected: ${re}`);
+  }
+});
