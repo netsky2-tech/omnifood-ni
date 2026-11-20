@@ -6,6 +6,7 @@ import '../models/inventory/product_entity.dart';
 import '../models/local_config_entity.dart';
 import '../ports/activation_priming_port.dart';
 import 'fiscal_inbox_handler.dart';
+import 'sales/dgi_numbering_service_impl.dart';
 import '../../core/utils/numeric_utils.dart';
 
 /// The outcome of applying a priming payload to the local database.
@@ -221,5 +222,50 @@ class ActivationPrimingService {
       fiscalOutcome: fiscalOutcome,
       serverCurrentVersion: payload.currentVersion,
     );
+  }
+
+  /// Ensures a wiped/reactivated terminal (#566) automatically receives the
+  /// tenant's fiscal projection (FX rates, DGI metadata) and initializes its
+  /// local DGI sequence cursor at `max(cloud issued) + 1` on its first online
+  /// login, without repeating the activation wizard or restarting at folio 1.
+  ///
+  /// Returns `false` immediately when both the fiscal projection and DGI
+  /// cursor are already present locally (zero network overhead on normal
+  /// logins).
+  Future<bool> primeIfNeededAfterLogin() async {
+    final currentSeqRow =
+        await _database.localConfigDao.getConfigByKey('dgi_current_number');
+    final currentSeq = int.tryParse(currentSeqRow?.value.trim() ?? '');
+    final fxRow = await _database.localConfigDao
+        .getConfigByKey(FiscalProjectionKeys.commercialExchangeRate);
+    final hasFx = (fxRow?.value.trim().isNotEmpty ?? false);
+    final hasSeq = currentSeq != null && currentSeq >= 1;
+
+    if (hasSeq && hasFx) {
+      return false;
+    }
+
+    await primeTerminal();
+
+    final seqAfterPrimeRow =
+        await _database.localConfigDao.getConfigByKey('dgi_current_number');
+    final seqAfterPrime = int.tryParse(seqAfterPrimeRow?.value.trim() ?? '');
+    if (seqAfterPrime == null || seqAfterPrime < 1) {
+      final cloudHighestRow = await _database.localConfigDao
+          .getConfigByKey('dgi_cloud_highest_sequence');
+      final cloudHighest = int.tryParse(cloudHighestRow?.value.trim() ?? '') ?? 0;
+      final existingPrefixRow =
+          await _database.localConfigDao.getConfigByKey('dgi_prefix');
+      final nextStart = cloudHighest >= 0 ? cloudHighest + 1 : 1;
+
+      await DgiNumberingServiceImpl(
+        _database.localConfigDao,
+      ).initializeRange(
+        prefix: existingPrefixRow?.value ?? '',
+        start: nextStart,
+      );
+    }
+
+    return true;
   }
 }

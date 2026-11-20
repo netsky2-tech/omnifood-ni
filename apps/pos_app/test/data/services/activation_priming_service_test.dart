@@ -438,6 +438,23 @@ void main() {
           await database.productDao.findProductById('prod-uuid-1');
       expect(cleared!.categoryId, isNull);
     });
+
+    test(
+        'primeIfNeededAfterLogin primes FX + initializes DGI sequence at max(cloud)+1 when empty after wipe (#566)',
+        () async {
+      primingPort.payload = payload(highestSequenceNumber: 15);
+
+      final didPrime = await service.primeIfNeededAfterLogin();
+
+      expect(didPrime, isTrue);
+      final seqRow =
+          await database.localConfigDao.getConfigByKey('dgi_current_number');
+      expect(seqRow?.value, equals('16'));
+
+      // Second call when both FX and DGI sequence are present is a fast no-op.
+      final didPrimeAgain = await service.primeIfNeededAfterLogin();
+      expect(didPrimeAgain, isFalse);
+    });
   });
 }
 

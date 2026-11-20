@@ -647,6 +647,9 @@ void main() async {
           create: (_) => LoginViewModel(
             authRepository,
             resolveTenantSlug: () => tenantConfigService.getTenantSlug(),
+            onOnlineLoginSuccess: () async {
+              await activationPrimingService.primeIfNeededAfterLogin();
+            },
           ),
         ),
         ChangeNotifierProvider(

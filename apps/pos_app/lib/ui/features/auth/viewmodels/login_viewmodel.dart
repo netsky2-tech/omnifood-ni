@@ -8,8 +8,17 @@ class LoginViewModel extends ChangeNotifier {
   /// #556). Null/absent resolver means legacy behavior: no slug is sent.
   final Future<String?> Function()? _resolveTenantSlug;
 
-  LoginViewModel(this._authRepository, {Future<String?> Function()? resolveTenantSlug})
-      : _resolveTenantSlug = resolveTenantSlug;
+  /// Optional best-effort hook executed right after a successful online login
+  /// (e.g. post-reactivation fiscal/FX re-priming for #566). Failures never
+  /// block login.
+  final Future<void> Function()? _onOnlineLoginSuccess;
+
+  LoginViewModel(
+    this._authRepository, {
+    Future<String?> Function()? resolveTenantSlug,
+    Future<void> Function()? onOnlineLoginSuccess,
+  })  : _resolveTenantSlug = resolveTenantSlug,
+        _onOnlineLoginSuccess = onOnlineLoginSuccess;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -36,6 +45,13 @@ class LoginViewModel extends ChangeNotifier {
 
     final onlineUser =
         await _authRepository.loginOnline(email, password, tenantSlug: tenantSlug);
+    if (onlineUser != null && _onOnlineLoginSuccess != null) {
+      try {
+        await _onOnlineLoginSuccess();
+      } catch (_) {
+        // Post-login re-priming is best-effort and must never block login.
+      }
+    }
     final user = onlineUser ?? await _authRepository.loginOffline(email, password);
     
     _isLoading = false;

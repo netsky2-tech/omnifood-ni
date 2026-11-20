@@ -1095,7 +1095,7 @@ export async function seedProspectDemo(
     reason: `Prospect demo provisioning (${config.vertical}/${config.mode}) via seed:prospect-demo`,
   });
 
-  // 5. Fiscal setup (CUOTA_FIJA, configured FX, operationMode, businessName)
+  // 5. Fiscal setup (CUOTA_FIJA, configured FX, DGI authorization, operationMode, businessName)
   await deps.fiscalSetupService.configureFiscalSetup(
     tenantId,
     {
@@ -1107,6 +1107,11 @@ export async function seedProspectDemo(
       operationMode: config.mode,
       checkoutFxMode: CheckoutFxMode.COMMERCIAL,
       email: config.email,
+      phone: '+505 8194 8526',
+      address: 'Managua, Nicaragua',
+      dgiAuthorizationCode: 'DGI-DEMO-2026-001',
+      dgiAuthorizationIssuedAt: '2026-01-01',
+      dgiAuthorizationExpiresAt: '2027-12-31',
     },
     createdUsers.owner.id,
   );
