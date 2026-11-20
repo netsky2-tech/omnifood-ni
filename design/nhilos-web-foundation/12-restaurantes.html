@@ -1026,11 +1026,24 @@
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
-        <a href="/software-pos/">Software POS</a>
-        <a href="/precios/">Precios</a>
-        <a href="/facturacion-dgi/">Facturación DGI</a>
-        <a href="/inventario/">Inventario</a>
-        <a href="/demo/" class="btn btn-primary" data-event="cta_demo_restaurante">Solicitar una demo</a>
+        <details class="nav-group">
+          <summary>Producto<svg class="nav-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+          <div class="nav-group-panel">
+            <a href="/software-pos/">Software POS</a>
+            <a href="/software-pos/sin-internet/">Sin internet</a>
+            <a href="/precios/">Precios</a>
+            <a href="/facturacion-dgi/">Facturación DGI</a>
+            <a href="/inventario/">Inventario</a>
+          </div>
+        </details>
+        <details class="nav-group">
+          <summary>Segmentos<svg class="nav-caret" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+          <div class="nav-group-panel">
+            <a href="/software-pos/restaurantes/">Restaurantes</a>
+            <a href="/software-pos/food-parks/">Food parks</a>
+          </div>
+        </details>
+        <a class="btn btn-primary" href="/demo/" data-event="cta_demo_restaurante">Solicitar una demo</a>
       </nav>
     </div>
   </header>

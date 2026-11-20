@@ -1,6 +1,7 @@
 // Class guard for internal linking across the nine published NHILOS artboards.
 // Run: node --test scripts/__tests__/nhilos-web-internal-links.test.mjs
-// Source of truth: odd/tasks/nhilos-web-enlazado-interno.md (S1-S5).
+// Source of truth: odd/tasks/nhilos-web-enlazado-interno.md (S1-S9).
+// S7-S9: el menú superior único, con la arquitectura del footer, en las nueve páginas.
 // The route registry is parsed from the PAGES array of scripts/build-nhilos-web.mjs:
 // the guard never invents a route, so a page added there is guarded and a route
 // removed there stops being demanded.
@@ -82,6 +83,91 @@ test("S5c: every route except / has an inbound link from the home and from the h
     assert.ok(
       hub.html.includes(needle),
       `${p.source}: published route ${route} has no inbound link from the hub (${HUB})`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// S9: el menú superior único en las nueve páginas (segunda ronda).
+// ---------------------------------------------------------------------------
+
+function siteNavBlock(html) {
+  return html.match(/<nav class="site-nav" id="siteNav"[\s\S]*?<\/nav>/)?.[0] ?? null;
+}
+
+// Normalizado: sin comentarios, sin atributos por página (data-event) y con el
+// espacio colapsado. Lo que queda debe ser byte a byte igual en las nueve páginas.
+function normalisedNav(html) {
+  const block = siteNavBlock(html);
+  if (block === null) return null;
+  return block
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/\sdata-event="[^"]*"/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function headerBlock(html) {
+  return html.match(/<header class="site-header"[^>]*>[\s\S]*?<\/header>/)?.[0] ?? null;
+}
+
+// S9(a): las nueve páginas comparten el mismo menú, comparado normalizado.
+test("S9a: the top menu is identical on all nine published pages", () => {
+  const navs = pages.map((p) => ({ source: p.source, nav: normalisedNav(p.html) }));
+  for (const { source, nav } of navs) {
+    assert.ok(nav !== null, `${source}: no site-nav block found`);
+  }
+  const reference = navs[0].nav;
+  for (const { source, nav } of navs.slice(1)) {
+    assert.equal(
+      nav,
+      reference,
+      `${source}: top menu differs from ${navs[0].source} (normalised comparison)`,
+    );
+  }
+});
+
+// S9(b): el menú contiene las nueve rutas publicadas. El logo aporta "/" y el
+// CTA "/demo/"; los dos grupos aportan las otras siete.
+test("S9b: the top menu carries all nine published routes", () => {
+  for (const p of pages) {
+    const header = headerBlock(p.html);
+    assert.ok(header, `${p.source}: no site-header found`);
+    const hrefs = new Set([...header.matchAll(/href="([^"]*)"/g)].map((m) => m[1]));
+    for (const route of byUrl.keys()) {
+      assert.ok(
+        hrefs.has(route),
+        `${p.source}: top menu is missing published route ${route}`,
+      );
+    }
+  }
+});
+
+// S9(c): ninguna página usa anclas locales en el menú superior. La home y el
+// hub eran las dos que las tenían; el CTA del hub de precios también.
+test("S9c: no page uses local anchors in the top menu", () => {
+  for (const p of pages) {
+    const nav = siteNavBlock(p.html);
+    assert.ok(nav, `${p.source}: no site-nav block found`);
+    const anchors = [...nav.matchAll(/href="#([^"]*)"/g)].map((m) => `#${m[1]}`);
+    assert.deepEqual(
+      anchors,
+      [],
+      `${p.source}: top menu still uses local anchors: ${anchors.join(", ")}`,
+    );
+  }
+});
+
+// S9(d): el botón móvil y el panel #siteNav siguen presentes en todas las páginas.
+test("S9d: mobile menu button and siteNav panel still exist on every page", () => {
+  for (const p of pages) {
+    assert.ok(
+      p.html.includes('class="mobile-menu-btn"'),
+      `${p.source}: .mobile-menu-btn is missing`,
+    );
+    assert.ok(
+      p.html.includes('id="siteNav"'),
+      `${p.source}: #siteNav is missing`,
     );
   }
 });

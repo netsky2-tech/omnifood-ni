@@ -265,8 +265,16 @@ test("S2: shared shell (site.css + site.js + noscript), one JSON-LD block", () =
   // El FAQ replica la retícula del home (componente de sistema, único reuse permitido)
   assert.match(src, /class="faq-wrap reveal"/);
   assert.match(src, /class="faq-cells stagger"/);
-  assert.equal(src.includes("<details"), false);
-  assert.equal(src.includes("<summary"), false);
+  // El menú compartido usa <details>/<summary> nativos (S7, enlazado interno, segunda
+  // ronda); la prohibición de acordeón aplica al cuerpo de la página. Se excluye solo
+  // el bloque exacto del menú (apertura literal, cierre perezoso al primer </nav>),
+  // nunca un recorte genérico del documento.
+  const shellNoNav = src.replace(
+    /<nav class="site-nav" id="siteNav" aria-label="Navegación principal">[\s\S]*?<\/nav>/,
+    "",
+  );
+  assert.equal(shellNoNav.includes("<details"), false);
+  assert.equal(shellNoNav.includes("<summary"), false);
 });
 
 // Patrones de sección propios: la página NO puede reciclar las composiciones del home ni del hub
