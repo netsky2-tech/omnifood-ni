@@ -41,7 +41,9 @@
       }
       if (reduced || !('IntersectionObserver' in window)) {
         docEl.classList.add('hero-ready');
-        if (heroVideo && heroVideo.paused) { var pv = heroVideo.play(); if (pv && pv.catch) pv.catch(function () {}); }
+        // Con preferencia de movimiento reducido la media queda quieta en su primer frame.
+        if (heroVideo && !reduced && heroVideo.paused) { var pv = heroVideo.play(); if (pv && pv.catch) pv.catch(function () {}); }
+        if (heroVideo && reduced) heroVideo.pause();
       } else {
         // Doble rAF: garantiza que el estado inicial pintado sea el pre-animación (sin flash).
         requestAnimationFrame(function () {

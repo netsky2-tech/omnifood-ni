@@ -232,6 +232,8 @@
   <noscript>
     <style>
       .reveal, .stagger > *, .hero .hero-in, .hero .device-wrap, .hero .chip, .hilo .hilo-num { opacity: 1 !important; transform: none !important; }
+      .hero .device video { display: none !important; }
+      .hero .device { background: var(--web-bg-subtle); }
       .hilo::before { transform: scaleX(1) !important; }
       .hilo-progress { display: none; }
     </style>
@@ -294,8 +296,13 @@
           <p class="hero-proof-note hero-in" style="--hero-delay: 360ms;">Terminal con la interfaz real de NHILOS POS · datos de demostración.</p>
         </div>
         <div class="device-wrap">
-          <figure class="hero-media" aria-label="Mano sujetando una terminal de punto de venta con impresora integrada mostrando la interfaz de NHILOS POS">
-            <img src="media/pos_hand_device_transparent.webp" width="768" height="1376" alt="Terminal de punto de venta NHILOS POS en mano con el menú de café, precios en córdobas y barra de carrito en pantalla" loading="eager" fetchpriority="high" title="NHILOS POS: terminal con impresora integrada">
+          <figure class="hero-media" aria-label="Terminal de punto de venta NHILOS POS mostrando el catálogo de la cafetería en la interfaz real del sistema">
+            <!-- Hero en movimiento (camino A): grabación real de la terminal con la demo.
+                 El montaje en mano con cámara queda documentado en nhilos_web_media_capture_brief_v1.0.md. -->
+            <div class="device" role="img" aria-label="Terminal de punto de venta NHILOS POS en funcionamiento: catálogo con fotos y precios en córdobas, carrito con Total: C$ 100.00">
+              <video src="media/pos_hero_live_loop_web.mp4" width="864" height="1852" muted loop playsinline autoplay preload="metadata" disablepictureinpicture title="NHILOS POS: catálogo y carrito de la terminal en la demo"></video>
+            </div>
+            <figcaption class="demo-tag">Grabación real de la terminal · datos de demostración</figcaption>
           </figure>
           <span class="chip chip-a chip-ok"><span class="mono">C$125.00</span> pedido en carrito</span>
           <span class="chip chip-b chip-warn"><span class="mono">Offline</span> cobro local activo</span>
