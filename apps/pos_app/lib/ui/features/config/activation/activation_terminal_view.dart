@@ -193,6 +193,7 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                 const SizedBox(height: 16),
                 _buildReconnectCard(context, viewModel),
                 if (viewModel.errorMessage != null &&
+                    viewModel.errorMessage!.trim().isNotEmpty &&
                     !_isErrorAlreadyRenderedInBlockers(viewModel)) ...[
                   const SizedBox(height: 16),
                   _buildErrorCard(context, viewModel.errorMessage!),

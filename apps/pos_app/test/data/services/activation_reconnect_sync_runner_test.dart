@@ -678,5 +678,23 @@ void main() {
       expect(terminalLinked!.status, equals('PASS'));
       expect(terminalLinked.evidenceRef, equals('link-ref-001'));
     });
+
+    test('populates errors with failureCode when backend finalize returns FAIL (e.g. mock printer #961)', () async {
+      await seedAttemptWithEvidence();
+      syncPort.finalizeVerdict = 'FAIL';
+      syncPort.finalizeFailureCode = 'ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED';
+
+      final result = await syncRunner.syncActivationEvidence(
+        const ActivationReconnectSyncParams(tenantId: tenantId, attemptId: attemptId),
+      );
+
+      expect(result.isSuccess, isFalse);
+      expect(result.attemptStatus, equals('FAILED'));
+      expect(result.errors, isNotEmpty);
+      expect(
+        result.errors.first,
+        startsWith('ACTIVATION_MOCK_PRINTER_EVIDENCE_NOT_ALLOWED:'),
+      );
+    });
   });
 }

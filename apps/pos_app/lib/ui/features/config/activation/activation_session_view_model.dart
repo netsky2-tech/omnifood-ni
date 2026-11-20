@@ -173,6 +173,10 @@ class ActivationSessionViewModel extends ChangeNotifier {
         }
       }
     }
+    if (friendly.isEmpty) {
+      return 'Ocurrió un error durante la activación. '
+          'Revise el resultado en el panel o contacte soporte.';
+    }
     return friendly.join('\n');
   }
 
