@@ -57,7 +57,7 @@ const PAGES = [
     source: "13-food-parks.html",
     out: "software-pos/food-parks/index.html",
     url: "/software-pos/food-parks/",
-    title: "Software para food park en Nicaragua | NHILOS POS",
+    title: "Software para food park: tu puesto, tu sistema | NHILOS POS",
   },
 ];
 const NOT_FOUND = "404.html";
@@ -164,9 +164,14 @@ for (const page of PAGES) {
   // Frase cortada: un enlace inline comentado deja la preposición colgando y el
   // texto termina en "…se trabajan completos en." El comentario se veía en el
   // fuente, el hueco en la página. Esta guardia lo mide sobre el texto visible.
+  // Las etiquetas inline se quitan sin dejar espacio: cambiar <a>texto</a>. por
+  // "texto ." inventa un espacio antes del punto y hace que la guardia acuse una frase
+  // correcta. Solo las etiquetas de bloque separan palabras.
   const visible = html
     .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<\/?(?:p|li|h[1-6]|div|section|article|td|th|figcaption|blockquote|ul|ol|table|tr)\b[^>]*>/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<[^>]+>/g, "")
     .replace(/&[a-z]+;/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -182,6 +187,27 @@ for (const page of PAGES) {
         `un enlace comentado dejó el hueco. Cierra la frase o enlaza una ruta publicada.`,
     );
   }
+  // Dos fuentes de verdad para el título terminan en dos títulos distintos: el que el
+  // build declara en PAGES y el que la página publica. Manda el de la página (es el que
+  // viaja en el HTML) y el build falla si el declarado se separó.
+  const pageTitle = html.match(/<title>([^<]*)<\/title>/);
+  if (pageTitle && page.title && pageTitle[1].trim() !== page.title.trim()) {
+    fail(
+      `${page.out}: el título declarado en PAGES no coincide con el de la página.\n` +
+        `  PAGES: ${page.title}\n  página: ${pageTitle[1].trim()}`,
+    );
+  }
+
+  // Espacio antes de la puntuación: nace de enlaces inline cortados y es invisible al
+  // leer el fuente. Se mide sobre el texto visible, no sobre las etiquetas.
+  const looseSpace = visible.replace(/\s+/g, " ").match(/[^\s][ \u00A0]+[.,;:](?=\s|$)/g);
+  if (looseSpace) {
+    fail(`${page.out} deja un espacio antes de la puntuación (${looseSpace.length} casos, ej. "${looseSpace[0]}")`);
+  }
+
+  // Identificador de build: permite comparar producción con dist/ sin adivinar si el
+  // borde sirvió la versión anterior.
+  html = html.replace(/<\/head>/i, '  <meta name="build" content="__NHILOS_BUILD__">\n</head>');
   const target = path.join(OUTPUT, page.out);
   mkdirSync(path.dirname(target), { recursive: true });
   // Guardia de clase: una página publicada no puede dejar NINGUNA referencia
@@ -323,6 +349,19 @@ writeFileSync(
 // refleja cuándo se publicó el contenido, no cuándo alguien recordó actualizarlo.
 // Las rutas internas del home viven en anclas; las páginas P0 se suman a PAGES
 // cuando se publican, y cada una entra al sitemap con su URL canónica.
+// Sello del build: hash de las piezas con nombre hasheado más la fecha del día, para
+// comparar lo publicado con dist/ de un vistazo.
+const buildId = createHash("sha256")
+  .update([...hashedAssets.values()].sort().join("|"))
+  .update(new Date().toISOString().slice(0, 10))
+  .digest("hex")
+  .slice(0, 12);
+for (const page of PAGES) {
+  const file = path.join(OUTPUT, page.out);
+  writeFileSync(file, readFileSync(file, "utf8").replaceAll("__NHILOS_BUILD__", buildId));
+}
+console.log(`[nhilos-web] Build ${buildId}`);
+
 writeFileSync(
   path.join(OUTPUT, "sitemap.xml"),
   [
