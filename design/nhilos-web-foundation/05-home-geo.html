@@ -230,6 +230,9 @@
        sin ellos el <a> heredaría el color del texto y se vería como texto plano. */
     .seg-card a { color: var(--web-emerald-700); font-weight: 600; text-decoration: none; }
     .seg-card a:hover { text-decoration: underline; }
+    /* Caja sin JS del formulario de demo: misma pieza que en la página de demo */
+    .dm-noscript-box { margin-top: var(--space-4); padding: var(--space-4); background: var(--web-emerald-50); border: 1px solid var(--web-emerald-500); border-radius: var(--radius-sm); color: var(--web-text-primary); font-size: var(--text-body-sm); }
+    .dm-noscript-box a { color: var(--web-emerald-700); font-weight: 700; text-decoration: underline; }
   </style>
   <noscript>
     <style>
@@ -238,6 +241,8 @@
       .hero .device { background: var(--web-bg-subtle); }
       .hilo::before { transform: scaleX(1) !important; }
       .hilo-progress { display: none; }
+      /* S10.4: sin JS el formulario no puede enviarse ni navegar; solo queda el enlace directo de WhatsApp */
+      #nhilosDemoForm { display: none !important; }
     </style>
   </noscript>
 </head>
@@ -271,12 +276,12 @@
     <div class="container site-header-inner">
       <a class="wordmark" href="/"><img src="assets/logo-64.png" width="32" height="32" alt="Isotipo de NHILOS POS" title="NHILOS POS">NHILOS <span class="pos">POS</span></a>
       <button type="button" class="mobile-menu-btn" aria-label="Abrir menú" aria-controls="siteNav" aria-expanded="false">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path class="menu-bar-1" d="M4 6h16"/><path class="menu-bar-2" d="M4 12h16"/><path class="menu-bar-3" d="M4 18h16"/></svg>
       </button>
       <nav class="site-nav" id="siteNav" aria-label="Navegación principal">
         <div class="nav-group">
-          <span class="nav-group-label">Producto</span>
-          <div class="nav-group-panel">
+          <button type="button" class="nav-group-label" aria-expanded="false" aria-controls="nav-panel-producto">Producto</button>
+          <div class="nav-group-panel" id="nav-panel-producto">
             <a href="/software-pos/">Software POS</a>
             <a href="/software-pos/sin-internet/">Sin internet</a>
             <a href="/precios/">Precios</a>
@@ -285,8 +290,8 @@
           </div>
         </div>
         <div class="nav-group">
-          <span class="nav-group-label">Segmentos</span>
-          <div class="nav-group-panel">
+          <button type="button" class="nav-group-label" aria-expanded="false" aria-controls="nav-panel-segmentos">Segmentos</button>
+          <div class="nav-group-panel" id="nav-panel-segmentos">
             <a href="/software-pos/restaurantes/">Restaurantes</a>
             <a href="/software-pos/food-parks/">Food parks</a>
           </div>
@@ -768,9 +773,16 @@
               <p class="form-error" data-error-for="contactEmail" hidden>El correo no parece válido.</p>
             </div>
 
-            <button type="submit" class="btn btn-on-dark form-submit">Solicitar mi demo</button>
+            <button type="button" class="btn btn-on-dark form-submit">Solicitar mi demo</button>
             <p class="form-note">Tus datos se usan solo para coordinar tu demo. Te contactamos por WhatsApp en horario hábil.</p>
           </form>
+
+          <noscript>
+            <div class="dm-noscript-box">
+              Tu navegador tiene JavaScript desactivado. Puedes pedir la demo directo por WhatsApp aquí:
+              <a href="https://wa.me/50581948526?text=Hola%20NHILOS%2C%20quiero%20coordinar%20una%20demo%20para%20mi%20negocio.">Escribir por WhatsApp al +505 8194 8526</a>.
+            </div>
+          </noscript>
         </div>
       </div>
     </section>

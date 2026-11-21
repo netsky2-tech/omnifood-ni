@@ -137,6 +137,8 @@
           nav.classList.toggle('is-open', open);
           menuBtn.setAttribute('aria-expanded', String(open));
           menuBtn.setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
+          // El menú sostiene la página: sin scroll detrás mientras está abierto
+          document.body.classList.toggle('is-menu-locked', open);
         }
         menuBtn.addEventListener('click', function () {
           setMenu(!nav.classList.contains('is-open'));
@@ -154,6 +156,65 @@
           if (window.innerWidth > 900 && nav.classList.contains('is-open')) setMenu(false);
         });
       }
+
+      /* ---- Menú de escritorio: grupos desplegables accesibles ----
+         La etiqueta es un botón real: Enter o Espacio alternan (clic del botón),
+         Escape cierra y devuelve el foco al botón, y el estado (is-open + aria-expanded)
+         sincroniza con el hover para que el chevron y los lectores de pantalla nunca
+         mientan. Sin manejadores inline: la CSP va por hash. */
+      var navGroups = Array.prototype.slice.call(document.querySelectorAll('.nav-group'));
+      function setGroupOpen(group, open) {
+        group.classList.toggle('is-open', open);
+        var label = group.querySelector('.nav-group-label');
+        if (label) label.setAttribute('aria-expanded', String(open));
+      }
+      function isDesktopNav() { return window.innerWidth > 900; }
+      navGroups.forEach(function (group) {
+        var label = group.querySelector('.nav-group-label');
+        if (!label) return;
+        label.addEventListener('click', function () {
+          // En móvil los grupos son encabezados de sección con panel siempre visible
+          if (!isDesktopNav()) return;
+          var willOpen = !group.classList.contains('is-open');
+          navGroups.forEach(function (other) {
+            if (other !== group && other.classList.contains('is-open')) setGroupOpen(other, false);
+          });
+          setGroupOpen(group, willOpen);
+        });
+        // El hover abre como hoy; la clase de estado lo refleja para chevron y aria
+        group.addEventListener('mouseenter', function () {
+          if (!isDesktopNav()) return;
+          setGroupOpen(group, true);
+        });
+        group.addEventListener('mouseleave', function () {
+          if (!isDesktopNav()) return;
+          setGroupOpen(group, false);
+        });
+        group.addEventListener('focusout', function (e) {
+          if (!isDesktopNav()) return;
+          if (!e.relatedTarget || !group.contains(e.relatedTarget)) setGroupOpen(group, false);
+        });
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && isDesktopNav() && group.classList.contains('is-open') && group.contains(document.activeElement)) {
+            setGroupOpen(group, false);
+            label.focus();
+          }
+        });
+      });
+      function syncGroupsToViewport() {
+        var desktop = isDesktopNav();
+        navGroups.forEach(function (group) {
+          if (desktop) {
+            // Volviendo a escritorio ningún grupo queda abierto de una sesión móvil
+            if (group.classList.contains('is-open')) setGroupOpen(group, false);
+          } else {
+            // En móvil los paneles son siempre visibles: el estado real es abierto
+            setGroupOpen(group, true);
+          }
+        });
+      }
+      if (!isDesktopNav()) syncGroupsToViewport();
+      window.addEventListener('resize', syncGroupsToViewport);
     })();
 
     /* ---- Spine: índice tipo libro (ubicación + navegación) ---- */
@@ -320,7 +381,7 @@
         });
       });
 
-      form.addEventListener('submit', function (e) {
+      function handleSubmit(e) {
         e.preventDefault();
         if (!validate()) {
           var firstBad = form.querySelector('.is-invalid') || form.querySelector('input[name="businessType"]');
@@ -344,6 +405,12 @@
           msg += '\n' + label + ': ' + clean;
         });
         window.open('https://wa.me/50581948526?text=' + encodeURIComponent(msg), '_blank', 'noopener');
-      });
+      }
+      // El submit nativo queda bloqueado también vía Enter (con JS activo) y el
+      // remitente ya no es un botón de submit: con JS desactivado el formulario
+      // no navega y solo queda el enlace directo dentro de <noscript>.
+      form.addEventListener('submit', handleSubmit);
+      var sendBtn = form.querySelector('button.form-submit');
+      if (sendBtn) sendBtn.addEventListener('click', handleSubmit);
     })();
   

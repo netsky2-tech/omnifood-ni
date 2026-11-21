@@ -146,15 +146,19 @@
        a la vez: abrir uno cierra el otro por construcción. Los enlaces del panel
        están siempre en el DOM y son enfocables, así que :focus-within cubre teclado. */
     .nav-group { position: relative; }
-    .nav-group-label { color: var(--web-text-secondary); font-size: 0.9375rem; font-weight: 500; min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; }
-    .nav-group:hover .nav-group-label, .nav-group:focus-within .nav-group-label { color: var(--web-text-primary); }
+    .nav-group-label { color: var(--web-text-secondary); font-size: 0.9375rem; font-weight: 500; min-height: 44px; display: inline-flex; align-items: center; cursor: pointer; border: none; background: none; padding: 0; font-family: var(--font-sans); text-align: left; }
+    .nav-group:hover .nav-group-label, .nav-group:focus-within .nav-group-label, .nav-group.is-open .nav-group-label { color: var(--web-text-primary); }
     /* Chevron: sin el, el rotulo se lee como texto plano y el hover no se descubre.
        Solo en escritorio; en movil los grupos son encabezados, no desplegables. */
     .nav-group-label::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); opacity: 0.5; transition: transform var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out); }
     .nav-group:hover .nav-group-label::after, .nav-group:focus-within .nav-group-label::after { transform: translateY(0) rotate(225deg); opacity: 0.9; }
+    /* Estado abierto por clase: el chevron responde al estado real (teclado incluido), no solo al hover */
+    .nav-group.is-open .nav-group-label::after { transform: translateY(0) rotate(225deg); opacity: 0.9; }
     @media (max-width: 900px) { .nav-group-label::after { display: none; } }
     .nav-group-panel { position: absolute; top: 100%; left: 0; min-width: 208px; display: none; flex-direction: column; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: 0 18px 40px rgba(0, 24, 41, 0.12); padding: var(--space-2) 0; z-index: 70; }
     .nav-group:hover .nav-group-panel, .nav-group:focus-within .nav-group-panel { display: flex; }
+    /* El estado abierto también es una clase: Enter o Espacio la alternan y el panel queda accesible por teclado */
+    .nav-group.is-open .nav-group-panel { display: flex; }
     .nav-group-panel a { padding: 0 var(--space-4); white-space: nowrap; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
     /* El item bajo el cursor tiene que distinguirse: cambiar solo el color del texto
        deja el fondo igual y no se lee sobre cual esta el puntero. */
@@ -162,6 +166,14 @@
     /* Mobile menu (hamburguesa, accesible) */
     .mobile-menu-btn { display: none; min-width: 44px; min-height: 44px; background: transparent; border: 1px solid var(--web-border-manual); border-radius: var(--radius-sm); color: var(--web-text-primary); cursor: pointer; align-items: center; justify-content: center; transition: background-color var(--motion-fast) var(--ease-out); }
     .mobile-menu-btn:hover { background: var(--web-bg-elevated); }
+    /* Estado abierto del icono: las dos barras exteriores se cruzan y la central desaparece.
+       Lo dirige aria-expanded (clase de estado real), no un atributo de presentación. */
+    .mobile-menu-btn .menu-bar-1, .mobile-menu-btn .menu-bar-2, .mobile-menu-btn .menu-bar-3 { transform-box: view-box; transform-origin: 12px 12px; transition: transform var(--motion-fast) var(--ease-out), opacity var(--motion-fast) var(--ease-out); }
+    .mobile-menu-btn[aria-expanded="true"] .menu-bar-2 { opacity: 0; }
+    .mobile-menu-btn[aria-expanded="true"] .menu-bar-1 { transform: translateY(6px) rotate(45deg); }
+    .mobile-menu-btn[aria-expanded="true"] .menu-bar-3 { transform: translateY(-6px) rotate(-45deg); }
+    /* El menú móvil sostiene la página: sin scroll detrás mientras está abierto */
+    body.is-menu-locked { overflow: hidden; }
     @media (max-width: 900px) {
       .site-nav { position: absolute; top: 100%; left: 0; right: 0; flex-direction: column; align-items: stretch; gap: var(--space-1); background: #FFFFFF; padding: var(--space-4) var(--space-6) var(--space-6); border-bottom: 1px solid var(--web-border-hairline); box-shadow: 0 18px 40px rgba(0, 24, 41, 0.12); display: none; }
       .site-nav.is-open { display: flex; }
@@ -331,8 +343,8 @@
     /* Sin backdrop-filter: en la espina crea un contexto de composición que, con hijos
        transformados (scale en hover) y un tooltip con transición de opacidad, deja
        capas sin repintar: se ven franjas sueltas del borde del tooltip después del hover. */
-    .spine { position: fixed; left: clamp(10px, 2vw, 26px); top: 50%; transform: translate3d(-12px, -50%, 0); opacity: 0; pointer-events: none; z-index: 80; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 9px; background: rgba(0, 24, 41, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); transition: opacity var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out); }
-    .spine.is-visible { opacity: 1; transform: translate3d(0, -50%, 0); pointer-events: auto; }
+    .spine { position: fixed; left: clamp(10px, 2vw, 26px); top: 50%; transform: translate3d(-12px, -50%, 0); opacity: 0; pointer-events: none; visibility: hidden; z-index: 80; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 9px; background: rgba(0, 24, 41, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-full); transition: opacity var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out), visibility 0s linear var(--motion-base); }
+    .spine.is-visible { opacity: 1; transform: translate3d(0, -50%, 0); pointer-events: auto; visibility: visible; transition: opacity var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out), visibility 0s; }
     .spine-track { position: absolute; top: 24px; bottom: 24px; left: 50%; width: 1px; background: rgba(255,255,255,0.12); transform: translateX(-50%); }
     .spine-progress { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--web-emerald-500); transform: scaleY(0); transform-origin: top; transition: transform var(--motion-base) var(--ease-out); }
     .spine a { position: relative; z-index: 1; width: 44px; height: 44px; margin: -9px; /* target táctil 44px (WCAG 2.5.8); el círculo visible queda en 26px */ display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 1px solid rgba(255,255,255,0.16); background: var(--web-navy-950); color: var(--web-text-on-dark-muted); font-family: var(--font-mono); font-size: 0.625rem; font-weight: 700; font-variant-numeric: tabular-nums; transition: background-color var(--motion-fast) var(--ease-out), border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out); }
@@ -342,6 +354,8 @@
     /* Tooltip SOLO al hover: el estado actual no lo muestra (no roba atención del contenido) */
     .spine a::after { content: attr(data-label); position: absolute; left: calc(100% + 12px); top: 50%; transform: translate3d(0, -50%, 0); background: var(--web-navy-950); color: #FFFFFF; font-family: var(--font-subheading); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; padding: 6px 10px; border-radius: var(--radius-sm); white-space: nowrap; display: none; pointer-events: none;  border: 1px solid rgba(255,255,255,0.1); }
     .spine a:hover::after { display: block; }
+    /* La etiqueta también aparece al enfocar con teclado: sin esto, el foco no revela la sección */
+    .spine a:focus-visible::after { display: block; }
     .spine-top { margin-top: 4px; width: 30px; height: 30px; }
     @media (max-width: 1024px) { .spine { display: none; } }
 
