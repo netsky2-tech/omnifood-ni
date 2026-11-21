@@ -338,3 +338,25 @@ test("S14-canonical: una sola forma de la URL, en las nueve páginas", () => {
     assert.equal(m[1], expected, `${page.url} canonical distinto del esperado`);
   }
 });
+
+test("S15-voseo-clase: ninguna página conjuga en voseo, mirado por forma y no por lista", () => {
+  // Las nueve suites tenían una lista de palabras prohibidas, y "comprás" no estaba
+  // en ninguna: la lista no puede ser la guardia, porque el próximo verbo que se
+  // escape tampoco va a estar. Se mira la forma — toda palabra terminada en -ás,
+  // -és o -ís que no sea una de estas — y se exige que cualquier excepción nueva
+  // se agregue acá con su razón.
+  const permitidas = new Set([
+    "además", "después", "jamás", "atrás", "demás", "interés", "través",
+    "país", "cafés", "pagarés", "rubíes", "maniquíes", "ciempiés",
+  ]);
+  const ofensores = [];
+  for (const page of pages) {
+    const visible = page.html
+      .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+      .replace(/<[^>]+>/g, " ");
+    for (const m of visible.matchAll(/\b[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{4,}(?:ás|és|ís)\b/g)) {
+      if (!permitidas.has(m[0].toLowerCase())) ofensores.push(`${page.url} → ${m[0]}`);
+    }
+  }
+  assert.deepEqual(ofensores, [], `voseo por forma: ${ofensores.join(", ")}`);
+});

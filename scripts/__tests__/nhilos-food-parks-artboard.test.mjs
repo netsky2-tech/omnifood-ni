@@ -336,7 +336,10 @@ test("G15 (S9): FAQPage JSON-LD parity cell-for-cell and GEO Rule 1", () => {
     const firstSentence = cells[i][1].split(/\.\s/)[0] || cells[i][1];
     assert.ok(firstSentence.includes("NHILOS POS"), `FAQ ${i + 1} first sentence missing NHILOS POS`);
     assert.ok(firstSentence.includes("Nicaragua"), `FAQ ${i + 1} first sentence missing Nicaragua`);
-    assert.ok(firstSentence.startsWith("En Nicaragua"), `FAQ ${i + 1} first sentence must start 'En Nicaragua'`);
+    // Site rule: the country name may not be the repeated opening formula of
+    // every answer. Opening diversity is guarded by
+    // scripts/__tests__/nhilos-faq-openings.test.mjs; here only entity + market
+    // presence in the first sentence is enforced.
   }
 });
 
