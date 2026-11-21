@@ -59,3 +59,50 @@ enforcing, los hashes del header se comprobaron contra el HTML servido, bloque p
 
 L6: se retira del P0 la cobertura no-JS: el `<noscript>` de `05-home-geo.html:236` revela
 `.reveal`, `.stagger` y el hero. Queda como debilidad menor si `site.js` falla con JS activo.
+
+## Segunda pasada — lectura completa del informe externo (2026-11-20)
+
+Leído `docs/nhilos/web/nhilos_web_auditoria_externa_v1.0.md` entero. Nueve hallazgos no
+estaban en las tres notas del fundador y ocho siguen abiertos.
+
+### Cerrado en esta pasada
+
+| Hallazgo (sección) | Estado |
+|---|---|
+| S8.1 menú de escritorio inalcanzable con teclado | `01250882` — botón con aria-expanded, Enter/Espacio/Escape |
+| S8.2 la espina roba los 12 primeros tabs | `01250882` — visibility:hidden inactiva, tooltip en :focus-visible |
+| S8.3 menú móvil sin estado visible ni bloqueo de scroll | `01250882` — icono en cruz, scroll bloqueado |
+| S10.4 formulario filtra nombre y teléfono sin JS | `01250882` — emisor type=button, formulario oculto sin JS |
+| S9.4 título de food-parks distinto en build y página | `fabf6187` — el build falla por deriva |
+| S4.5 espacio antes del punto | `fabf6187` — lint de build, probado en rojo |
+| S11.5 sin identificador de versión | `fabf6187` — `<meta name="build">`, verificado en producción |
+| S9.4 fuentes/pies y S4.5 "en preparación" | commits anteriores |
+
+### Abierto, con dueño
+
+| Hallazgo | Dueño | Nota |
+|---|---|---|
+| S4.6 el párrafo jurídico de /inventario/ supera 110 palabras | parent | partirlo en tres viñetas |
+| S5 CTA de demo ausente en el hero de /facturacion-dgi/ y /inventario/ | parent | son las páginas de mayor intención |
+| S5 dos de las cuatro tarjetas de segmento parecen clicables y no lo son | parent | |
+| S5 ancla "ver planes y precios de NHILOS POS" 17 veces idéntica | parent | SEO y lectores de pantalla |
+| S6.1 /food-parks/ sin una sola animación de entrada | parent | única página que se siente estática |
+| S6.3 capturas en caja 1/1 con object-fit contain y sin zoom | parent | el texto interno se dibuja a ~5 px |
+| S7.3 sin srcset/sizes ni AVIF | T4 | 2.9 MB de media referenciada |
+| S8.5 enlaces de pie con altura menor a 24 px | parent | |
+| S9.1 la misma pregunta FAQ en 4–5 páginas | decisión | "una pregunta, una página dueña" |
+| S11.1 45 archivos de media sin referenciar | parent | no llegan al usuario; es higiene de repo |
+| S11.2 cada página lleva su propio `<style>` | refactor | por eso el bug de /precios/ vivió en una sola página |
+| S11.3 las claim guard como comentario en vez de lint | parent | el comentario ya no viaja; falta el lint |
+| S10.1 `Access-Control-Allow-Origin: *` | infra | `_headers` agrega, no borra: necesita Worker |
+| S10.3 SPF, CAA y DNSSEC | fundador | panel de Cloudflare y registrador |
+| S6.4 hero 402×811 ampliado 1.94× en móvil | fundador | requiere captura real nueva (U5) |
+
+### Descartado a propósito
+
+- **WebGL/Three.js/GSAP (S6.2).** Coincide con la recomendación del informe y con la
+  decisión previa: la audiencia navega en Android de gama baja sobre 3G.
+- **HSTS `preload` (S10.2).** No se pone hasta saber que ningún subdominio necesita HTTP;
+  es difícil de deshacer y el informe mismo lo advierte.
+- **`security.txt`.** Necesita una dirección real de reporte y el dominio no tiene correo
+  (sin MX). Publicar un contacto que no recibe nada es peor que no publicarlo.
