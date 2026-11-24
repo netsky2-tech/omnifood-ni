@@ -2,10 +2,23 @@ import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
 import { CreateDeviceLinkingCodes1809360000000 } from './1809360000000-CreateDeviceLinkingCodes';
-import {
-  CLAIM_LINKING_CODE_SQL,
-  asQueryRows,
-} from '../modules/onboarding/services/device-linking.service';
+import { asQueryRows } from '../modules/onboarding/services/device-linking.service';
+
+/**
+ * The single-use conditional UPDATE as the 1809360000000 schema supports
+ * it.
+ *
+ * The service constant (CLAIM_LINKING_CODE_SQL) now coalesces the terminal
+ * replacement column `replaces_terminal_id` (added by migration
+ * 1810900000000-CreateTerminalReactivationTables), which does not exist in
+ * the schema this migration builds — running the service constant here
+ * would fail on that column, not on the guarantee under test. The WHERE
+ * clause and the SET transition are identical to the service SQL minus the
+ * later feature, so the SQL-level single-use guarantee of the migration's
+ * own table is exercised faithfully.
+ */
+const CLAIM_LINKING_CODE_SQL_180936 =
+  "UPDATE device_linking_codes SET status = 'CLAIMED', device_id = $2, claimed_at = now(), updated_at = now() WHERE id = $1 AND status = 'ACTIVE' AND expires_at > now() RETURNING tenant_id, device_id, created_by_user_id";
 
 /**
  * Real-PostgreSQL contract for the device linking codes migration (issue
@@ -221,7 +234,10 @@ describe('CreateDeviceLinkingCodes1809360000000 (db)', () => {
         // used for the claim contract here).
         const first = asQueryRows<{ tenant_id: string }>(
           await dataSource.transaction(async (manager) =>
-            manager.query(CLAIM_LINKING_CODE_SQL, [liveCodeId, 'POS-01']),
+            manager.query(CLAIM_LINKING_CODE_SQL_180936, [
+              liveCodeId,
+              'POS-01',
+            ]),
           ),
         );
         expect(first).toHaveLength(1);
@@ -229,7 +245,10 @@ describe('CreateDeviceLinkingCodes1809360000000 (db)', () => {
 
         const expiredClaim = asQueryRows<unknown>(
           await dataSource.transaction(async (manager) =>
-            manager.query(CLAIM_LINKING_CODE_SQL, [expiredCodeId, 'POS-01']),
+            manager.query(CLAIM_LINKING_CODE_SQL_180936, [
+              expiredCodeId,
+              'POS-01',
+            ]),
           ),
         );
         expect(expiredClaim).toHaveLength(0);
@@ -248,7 +267,10 @@ describe('CreateDeviceLinkingCodes1809360000000 (db)', () => {
         // Second claim of the same row matches zero rows: single-use.
         const second = asQueryRows<unknown>(
           await dataSource.transaction(async (manager) =>
-            manager.query(CLAIM_LINKING_CODE_SQL, [liveCodeId, 'POS-02']),
+            manager.query(CLAIM_LINKING_CODE_SQL_180936, [
+              liveCodeId,
+              'POS-02',
+            ]),
           ),
         );
         expect(second).toHaveLength(0);
@@ -296,7 +318,7 @@ describe('CreateDeviceLinkingCodes1809360000000 (db)', () => {
         )
       )[0].id as string;
       await dataSource.transaction(async (manager) =>
-        manager.query(CLAIM_LINKING_CODE_SQL, [liveCodeId, 'POS-01']),
+        manager.query(CLAIM_LINKING_CODE_SQL_180936, [liveCodeId, 'POS-01']),
       );
 
       await expect(
