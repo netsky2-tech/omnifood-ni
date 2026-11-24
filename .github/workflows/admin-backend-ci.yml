@@ -80,6 +80,15 @@ jobs:
           DB_PASSWORD: admin
           DB_DATABASE: omnifood
 
+      - name: Run migrations for E2E database
+        run: npm run migration:run:ts
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: admin
+          DB_DATABASE: omnifood
+
       - name: Run E2E tests
         # Serialized temporarily: the migration-built fixture can destroy a
         # concurrently running suite's schema or roles, which makes the

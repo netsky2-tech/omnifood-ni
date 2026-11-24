@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { DataSource } from 'typeorm';
 import { CreateDeviceLinkingCodes1809360000000 } from '../../src/migrations/1809360000000-CreateDeviceLinkingCodes';
 import { FixDeviceLinkingClaimRlsPredicate1809520000000 } from '../../src/migrations/1809520000000-FixDeviceLinkingClaimRlsPredicate';
+import { CreateTerminalReactivationTables1810900000000 } from '../../src/migrations/1810900000000-CreateTerminalReactivationTables';
 import { DeviceLinkingCode } from '../../src/modules/onboarding/entities/device-linking-code.entity';
 import {
   DeviceLinkingService,
@@ -17,8 +18,10 @@ import {
  * the staging 500 lives — is unreachable there.
  *
  * The schema is built by the REAL migrations (1809360000000 + the claim
- * RLS predicate fix 1809520000000) against a scratch schema holding the
- * minimal `tenants` shape, following the 1809360000000 db spec mold.
+ * RLS predicate fix 1809520000000 + the terminal reactivation slice
+ * 1810900000000, which adds `replaces_terminal_id` to
+ * `device_linking_codes`) against a scratch schema holding the minimal
+ * `tenants` shape, following the 1809360000000 db spec mold.
  */
 
 const postgresConnection = {
@@ -78,7 +81,9 @@ async function withFreshSchema(
 
 const runMigrations = async (dataSource: DataSource) => {
   // Sequential on purpose: the predicate fix (1809520000000) reconciles the
-  // policy the create migration (1809360000000) just installed.
+  // policy the create migration (1809360000000) just installed, and the
+  // terminal reactivation slice (1810900000000) alters
+  // `device_linking_codes` (adds `replaces_terminal_id`) after both.
   // R3-QUERY-RUNNER-LEAK: each migration query runner is RELEASED after its
   // up() — a Postgres query runner checks out a pooled connection until
   // release(), and a leaked runner would hang dataSource.destroy() below
@@ -94,6 +99,14 @@ const runMigrations = async (dataSource: DataSource) => {
     await new FixDeviceLinkingClaimRlsPredicate1809520000000().up(fixRunner);
   } finally {
     await fixRunner.release();
+  }
+  const reactivationRunner = dataSource.createQueryRunner();
+  try {
+    await new CreateTerminalReactivationTables1810900000000().up(
+      reactivationRunner,
+    );
+  } finally {
+    await reactivationRunner.release();
   }
 };
 

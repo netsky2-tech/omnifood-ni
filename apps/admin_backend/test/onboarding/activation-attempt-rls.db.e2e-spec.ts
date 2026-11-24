@@ -26,6 +26,9 @@ import {
 } from '../../src/modules/onboarding/entities/onboarding-session.entity';
 import { FiscalConfigRevision } from '../../src/modules/onboarding/entities/fiscal-config-revision.entity';
 import { ChangeLog } from '../../src/modules/audit/entities/change-log.entity';
+import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
+import { TerminalReactivationChallenge } from '../../src/modules/onboarding/entities/terminal-reactivation-challenge.entity';
+import { TerminalRecoveryCode } from '../../src/modules/onboarding/entities/terminal-recovery-code.entity';
 import { Tenant } from '../../src/modules/tenant/entities/tenant.entity';
 import { TenantBrandAsset } from '../../src/modules/tenant/entities/tenant-brand-asset.entity';
 import {
@@ -134,6 +137,12 @@ const entities = [
   ActivationAttempt,
   ActivationCheckResult,
   ActivationFollowUp,
+  // Slice 566: the activation path resolves these through
+  // manager.getRepository(...) — the entities must be registered for
+  // TypeORM to resolve their metadata.
+  DeviceSyncCredential,
+  TerminalReactivationChallenge,
+  TerminalRecoveryCode,
   FiscalConfigRevision,
   ChangeLog,
 ];
