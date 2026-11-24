@@ -41,8 +41,6 @@ export async function ensurePublicAuthTables(
     CREATE UNIQUE INDEX IF NOT EXISTS uq_tenants_slug ON public.tenants (slug);
     ALTER TABLE public.tenants ALTER COLUMN slug SET NOT NULL;
 
-    ALTER TABLE public.users ADD COLUMN IF NOT EXISTS hashed_refresh_token varchar;
-
     CREATE TABLE IF NOT EXISTS public.users (
       id varchar(64) PRIMARY KEY,
       tenant_id varchar(64) NOT NULL,
@@ -57,5 +55,7 @@ export async function ensurePublicAuthTables(
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+
+    ALTER TABLE public.users ADD COLUMN IF NOT EXISTS hashed_refresh_token varchar;
   `);
 }
