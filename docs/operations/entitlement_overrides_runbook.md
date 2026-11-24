@@ -199,41 +199,51 @@ done
 No se edita la tabla de overrides a mano, y no se concede nada que el cliente no haya acordado:
 el motivo de cada excepción es lo que se lee en una auditoría.
 
-## 7. Provisión de un tenant nuevo con plan (ENT-08)
+## 7. Provisión de un tenant nuevo con plan (ENT-08 / #997)
 
-Un tenant nuevo se crea **operable en un solo comando**: el mismo `npm run provision` crea el
-tenant, su owner, los catálogos por defecto **y su suscripción auditada**, escrita por
-`TenantSubscriptionService` — el mismo camino del §4, nunca SQL suelto.
+Un tenant nuevo se crea **operable en un solo comando**, y **el plan es obligatorio**: ninguna
+vía de alta puede crear un tenant sin plan ni aplicar un valor silencioso por defecto. El mismo
+`npm run provision` crea el tenant, su owner y su suscripción auditada en **una sola
+transacción** (a través de `TenantSubscriptionService`, nunca SQL suelto), y luego siembra los
+catálogos por defecto.
 
 ```bash
-# Alta estándar de la etapa fundador: PRO por defecto, soporte y add-ons del plan
-npm run provision
+# Alta con plan explícito (PRO ya incluye ambos packs)
+npm run provision -- --plan=PRO
 
 # Alta con plan explícito, add-ons y nivel de soporte
 npm run provision -- --plan=OPERACION --add-ons=pack.retail --support-tier=standard
 
-# Sin add-ons (PRO ya incluye ambos packs)
-npm run provision -- --plan=PRO
+# Alta en plan Esencial
+npm run provision -- --plan=ESENCIAL
 ```
 
-| Bandera | Valores | Predeterminado |
+| Bandera | Valores | Requisito / Predeterminado |
 |---|---|---|
-| `--plan=<código>` | `ESENCIAL`, `OPERACION`, `PRO` | `PRO` mientras dure la etapa fundador |
-| `--support-tier=<nivel>` | `standard`, `priority` | el nivel del plan elegido (PRO → `priority`) |
+| `--plan=<código>` | `ESENCIAL`, `OPERACION`, `PRO` | **Obligatorio** (sin valor por defecto; omitirlo falla con `PROVISION_PLAN_REQUIRED`) |
+| `--support-tier=<nivel>` | `standard`, `priority` | el nivel del plan elegido (PRO → `priority`, resto → `standard`) |
 | `--add-ons=a,b` | códigos del catálogo §5, separados por coma | ninguno |
 
 Qué garantiza el comando:
 
-- **Valida ANTES de crear nada.** Un plan o add-on inválido se rechaza **antes** de abrir la
-  base de datos o hacer una sola pregunta: el proceso sale con código 1 y un código estable
-  (`PLAN_CODE_NOT_REGISTERED`, `ADD_ON_NOT_REGISTERED`, `SUBSCRIPTION_SUPPORT_TIER_INVALID`,
+- **Exige el plan y valida ANTES de crear nada.** Omitir `--plan` o pasar un plan o add-on
+  inválido se rechaza **antes** de abrir la base de datos o hacer una sola pregunta: el proceso
+  sale con código 1 y un código estable (`PROVISION_PLAN_REQUIRED`,
+  `PLAN_CODE_NOT_REGISTERED`, `ADD_ON_NOT_REGISTERED`, `SUBSCRIPTION_SUPPORT_TIER_INVALID`,
   `PROVISION_FLAG_NOT_RECOGNIZED`, `PROVISION_ADD_ON_LIST_EMPTY_SEGMENT`). No queda jamás un
-  tenant a medio provisionar por un error de escritura de la bandera.
+  tenant sin plan por omisión ni a medio provisionar por un error de escritura.
+- **Alta atómica.** El tenant, su owner y su suscripción auditada se escriben en la **misma
+  transacción**: si la suscripción falla (por ejemplo, una combinación incompatible como
+  `ESENCIAL` + `bundle.convenio`), la transacción se revierte por completo y no queda ningún
+  tenant huérfano en `tenants`.
 - **La suscripción es auditada.** El actor es el correo del owner recién creado y el motivo
   nombra la provisión; la fila de `tenant_entitlement_change_history` se escribe en la misma
   transacción que la suscripción. Consulte el rastro con el §4 (`--list`).
 - **El nivel de soporte por defecto es el del plan**, no un valor fijo: un contrato PRO es de
   soporte `priority` según el catálogo §4; si usted pasa `--support-tier` explícito, manda usted.
+- **Provisión de desarrollo (`provision-dev.ts`).** También exige plan explícito mediante
+  `--plan=<código>` o la variable `PROVISION_PLAN=<código>` y escribe la suscripción en la
+  misma transacción que el tenant.
 
 ## 8. Backfill de clientes existentes (migración 1810700000000)
 

@@ -12,6 +12,11 @@ import {
   isValidRuc,
 } from '../modules/onboarding/utils/nicaragua-fiscal.validator';
 import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
+import { TenantSubscriptionService } from '../modules/entitlements/tenant-subscription.service';
+import {
+  parseProvisionPlanArgs,
+  type ProvisionPlanArgs,
+} from './provision-plan-args';
 
 /** The physical Q80 terminal identity, not its Wi-Fi ADB transport serial. */
 export const Q80_TERMINAL_ID = 'Q802024120001';
@@ -43,6 +48,8 @@ export interface FounderPilotFixture {
   tenantSlug: string;
   terminalId: string;
   ruc: string;
+  /** Explicit plan contract required by issue #997 (no silent default). */
+  plan: ProvisionPlanArgs;
   owner: {
     name: string;
     email: string;
@@ -56,7 +63,31 @@ const secret = (bytes: number) => randomBytes(bytes).toString('base64url');
 
 export function buildFounderPilotFixture(
   env: FixtureEnvironment = process.env,
+  argv: readonly string[] = [],
 ): FounderPilotFixture {
+  // Issue #997: require an explicit plan (via --plan or ONBOARDING_FOUNDER_PLAN)
+  // before touching the database.
+  const planArgv = [...argv];
+  if (
+    !planArgv.some((arg) => arg.startsWith('--plan=')) &&
+    env.ONBOARDING_FOUNDER_PLAN !== undefined
+  ) {
+    planArgv.push(`--plan=${env.ONBOARDING_FOUNDER_PLAN}`);
+  }
+  if (
+    !planArgv.some((arg) => arg.startsWith('--support-tier=')) &&
+    env.ONBOARDING_FOUNDER_SUPPORT_TIER !== undefined
+  ) {
+    planArgv.push(`--support-tier=${env.ONBOARDING_FOUNDER_SUPPORT_TIER}`);
+  }
+  if (
+    !planArgv.some((arg) => arg.startsWith('--add-ons=')) &&
+    env.ONBOARDING_FOUNDER_ADD_ONS !== undefined
+  ) {
+    planArgv.push(`--add-ons=${env.ONBOARDING_FOUNDER_ADD_ONS}`);
+  }
+  const plan = parseProvisionPlanArgs(planArgv);
+
   const runId = `${Date.now()}-${randomUUID().slice(0, 8)}`;
   const password = env.ONBOARDING_FOUNDER_OWNER_PASSWORD ?? secret(24);
   const offlinePin =
@@ -99,6 +130,7 @@ export function buildFounderPilotFixture(
     tenantSlug,
     terminalId: Q80_TERMINAL_ID,
     ruc,
+    plan,
     owner: {
       name: 'Founder Pilot Owner',
       email: `founder-pilot-${runId}@pilot.omnifood.ni`,
@@ -110,7 +142,7 @@ export function buildFounderPilotFixture(
 }
 
 async function seedFounderPilot(): Promise<void> {
-  const fixture = buildFounderPilotFixture();
+  const fixture = buildFounderPilotFixture(process.env, process.argv.slice(2));
 
   if (isFounderPilotPlaceholderRuc(fixture.ruc)) {
     // Loud, actionable, non-fatal: the pilot may proceed with the placeholder,
@@ -124,11 +156,14 @@ async function seedFounderPilot(): Promise<void> {
 
   const app = await NestFactory.createApplicationContext(AppModule);
   const dataSource = app.get(DataSource);
+  const subscriptions = app.get(TenantSubscriptionService);
 
   try {
     // The tenant id must be known before the transaction opens: the wrapper
     // binds the transaction-local RLS context from it. `tenants` is a public
     // (non-RLS) table, so inserting it inside the bound callback is fine.
+    // Issue #997: tenant, owner and audited subscription share ONE transaction
+    // so no pilot tenant can be created without a plan.
     const tenantId = randomUUID();
     const ids = await runInTenantTransaction(
       dataSource,
@@ -164,10 +199,23 @@ async function seedFounderPilot(): Promise<void> {
             is_totp_enabled: false,
           }),
         );
+        const subscription = await subscriptions.changePlanInTransaction(
+          manager,
+          {
+            tenantId: tenant.id,
+            planCode: fixture.plan.planCode,
+            supportTier: fixture.plan.supportTier,
+            addOns: fixture.plan.addOns,
+            startsAt: new Date(),
+            actor: fixture.owner.email,
+            reason: `Alta piloto fundador por seed:onboarding-founder-pilot (issue #997): plan ${fixture.plan.planCode}`,
+          },
+        );
         return {
           tenantId: tenant.id,
           ownerId: owner.id,
           securityProfileId: profile.id,
+          subscriptionId: subscription.subscriptionId,
         };
       },
     );
@@ -185,6 +233,12 @@ async function seedFounderPilot(): Promise<void> {
           name: fixture.tenantName,
           slug: fixture.tenantSlug,
           ruc: fixture.ruc,
+        },
+        subscription: {
+          id: ids.subscriptionId,
+          planCode: fixture.plan.planCode,
+          supportTier: fixture.plan.supportTier,
+          addOns: fixture.plan.addOns,
         },
         owner: {
           id: ids.ownerId,

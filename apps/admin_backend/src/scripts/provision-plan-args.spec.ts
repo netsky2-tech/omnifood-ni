@@ -5,16 +5,57 @@ import {
 } from './provision-plan-args';
 
 /**
- * ENT-08 of issue #984 (ODD S19): the provisioning script must refuse an
- * invalid plan, add-on or support tier BEFORE it touches any database, so an
- * operator typo never leaves a half-created tenant. Pure parsing, no Nest
- * context, no clock, no I/O.
+ * Issue #997 (and ENT-08 of #984, ODD S19): the provisioning script must
+ * require `--plan` explicitly (no invisible default) and refuse an invalid
+ * plan, add-on or support tier BEFORE it touches any database, so an
+ * operator omission or typo never leaves a half-created or silently defaulted
+ * tenant. Pure parsing, no Nest context, no clock, no I/O.
  */
-describe('provision plan arguments (ENT-08 #984, S19)', () => {
-  it('sin banderas: PRO (etapa fundador), sin add-ons y el nivel de soporte del plan', () => {
-    expect(parseProvisionPlanArgs([])).toEqual({
+describe('provision plan arguments (#997 / ENT-08 #984)', () => {
+  it('sin --plan: rechaza con PROVISION_PLAN_REQUIRED y mensaje en español antes de crear nada', () => {
+    try {
+      parseProvisionPlanArgs([]);
+      throw new Error('should have thrown when --plan is omitted');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProvisionArgsError);
+      const argsError = error as ProvisionArgsError;
+      expect(argsError.code).toBe(PROVISION_ARG_REJECTION_CODES.PLAN_REQUIRED);
+      expect(argsError.message).toMatch(/--plan/i);
+      expect(argsError.message).toMatch(/Nada fue creado/i);
+    }
+  });
+
+  it('con --add-ons o --support-tier pero sin --plan: también rechaza con PROVISION_PLAN_REQUIRED', () => {
+    expect(PROVISION_ARG_REJECTION_CODES.PLAN_REQUIRED).toBe(
+      'PROVISION_PLAN_REQUIRED',
+    );
+    for (const argv of [
+      ['--add-ons=pack.cooking'],
+      ['--support-tier=priority'],
+    ]) {
+      try {
+        parseProvisionPlanArgs(argv);
+        throw new Error(
+          `should have thrown when --plan is omitted: ${argv.join(' ')}`,
+        );
+      } catch (error) {
+        expect(error).toBeInstanceOf(ProvisionArgsError);
+        expect((error as ProvisionArgsError).code).toBe(
+          PROVISION_ARG_REJECTION_CODES.PLAN_REQUIRED,
+        );
+      }
+    }
+  });
+
+  it('acepta plan explícito y aplica el nivel de soporte del plan por defecto', () => {
+    expect(parseProvisionPlanArgs(['--plan=PRO'])).toEqual({
       planCode: 'PRO',
       supportTier: 'priority',
+      addOns: [],
+    });
+    expect(parseProvisionPlanArgs(['--plan=ESENCIAL'])).toEqual({
+      planCode: 'ESENCIAL',
+      supportTier: 'standard',
       addOns: [],
     });
   });
@@ -33,8 +74,10 @@ describe('provision plan arguments (ENT-08 #984, S19)', () => {
     });
   });
 
-  it('acepta add-ons sin espacios ni nivel de soporte explícito', () => {
-    expect(parseProvisionPlanArgs(['--add-ons=pack.cooking'])).toEqual({
+  it('acepta add-ons sin espacios con plan explícito y sin nivel de soporte explícito', () => {
+    expect(
+      parseProvisionPlanArgs(['--plan=PRO', '--add-ons=pack.cooking']),
+    ).toEqual({
       planCode: 'PRO',
       supportTier: 'priority',
       addOns: ['pack.cooking'],
@@ -56,21 +99,21 @@ describe('provision plan arguments (ENT-08 #984, S19)', () => {
   });
 
   it('rechaza un add-on desconocido con código estable', () => {
-    expect(() => parseProvisionPlanArgs(['--add-ons=pack.blockchain'])).toThrow(
-      /ADD_ON_NOT_REGISTERED/,
-    );
+    expect(() =>
+      parseProvisionPlanArgs(['--plan=PRO', '--add-ons=pack.blockchain']),
+    ).toThrow(/ADD_ON_NOT_REGISTERED/);
   });
 
   it('rechaza un add-on vacío en la lista', () => {
-    expect(() => parseProvisionPlanArgs(['--add-ons=pack.retail,'])).toThrow(
-      /PROVISION_ADD_ON_LIST_EMPTY_SEGMENT/,
-    );
+    expect(() =>
+      parseProvisionPlanArgs(['--plan=PRO', '--add-ons=pack.retail,']),
+    ).toThrow(/PROVISION_ADD_ON_LIST_EMPTY_SEGMENT/);
   });
 
   it('rechaza un nivel de soporte inválido con código estable', () => {
-    expect(() => parseProvisionPlanArgs(['--support-tier=urgent'])).toThrow(
-      /SUBSCRIPTION_SUPPORT_TIER_INVALID/,
-    );
+    expect(() =>
+      parseProvisionPlanArgs(['--plan=PRO', '--support-tier=urgent']),
+    ).toThrow(/SUBSCRIPTION_SUPPORT_TIER_INVALID/);
   });
 
   it('rechaza una bandera no reconocida (un typo no se ignora en silencio)', () => {
