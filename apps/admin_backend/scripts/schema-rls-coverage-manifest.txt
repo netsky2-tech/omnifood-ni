@@ -38,7 +38,7 @@
 #
 # The three declared command sets, and why each group is declared as it is:
 #
-#   direct:SIUD (56) — ordinary business tables whose lifecycle reads, inserts,
+#   direct:SIUD (60) — ordinary business tables whose lifecycle reads, inserts,
 #                   updates AND deletes rows; their write paths mutate and
 #                   remove state as part of normal operation.
 #   direct:SI    (14) — append-only ledgers (sync credential events, human-auth
@@ -65,7 +65,7 @@
 
 # ---------------------------------------------------------------------------
 # direct — tenant_id + ENABLE + FORCE + a declared per-command policy set
-# (78 entries: 56 direct:SIUD + 14 direct:SI + 8 direct:SIU; entry ORDER is
+# (81 entries: 60 direct:SIUD + 14 direct:SI + 7 direct:SIU; entry ORDER is
 # unchanged from the pre-slice-10 manifest for pre-existing entries)
 # ---------------------------------------------------------------------------
 batch_outflow_traces|direct:SI
@@ -146,6 +146,11 @@ tenant_topology_revisions|direct:SI
 tenant_brand_assets|direct:SIU
 warehouses|direct:SIUD
 uom_conversions|direct:SIUD
+# Onboarding Install Kit (#958) & Terminal Reactivation (#566): tenant_id + ENABLE/FORCE RLS + SIUD policies.
+install_tokens|direct:SIUD
+terminal_install_fingerprints|direct:SIUD
+terminal_reactivation_challenges|direct:SIUD
+terminal_recovery_codes|direct:SIUD
 
 # ---------------------------------------------------------------------------
 # parent-owned — no tenant_id; isolation through a tenant-bearing parent FK.
