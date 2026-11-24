@@ -17,6 +17,9 @@ import {
   UserRole,
 } from '../../src/modules/identity/entities/user.entity';
 import { SecurityProfile } from '../../src/modules/identity/entities/security-profile.entity';
+import { DeviceSyncCredential } from '../../src/modules/identity/entities/device-sync-credential.entity';
+import { TerminalReactivationChallenge } from '../../src/modules/onboarding/entities/terminal-reactivation-challenge.entity';
+import { TerminalRecoveryCode } from '../../src/modules/onboarding/entities/terminal-recovery-code.entity';
 import {
   SystemParametersConfig,
   SystemParametersConfigActiveView,
@@ -246,6 +249,12 @@ async function with74ScenariosIsolatedSchema(
         ActivationAttempt,
         ActivationCheckResult,
         ActivationFollowUp,
+        // Slice 566: the activation path resolves these through
+        // manager.getRepository(...) — the entities must be registered for
+        // TypeORM to resolve their metadata.
+        DeviceSyncCredential,
+        TerminalReactivationChallenge,
+        TerminalRecoveryCode,
         OnboardingTelemetryEvent,
         ChangeLog,
         CatalogValue,
