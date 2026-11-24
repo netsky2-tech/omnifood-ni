@@ -26,6 +26,9 @@ import {
   ActivationFollowUpStatus,
 } from '../entities/activation-follow-up.entity';
 import { ChangeLog } from '../../audit/entities/change-log.entity';
+import { DeviceSyncCredential } from '../../identity/entities/device-sync-credential.entity';
+import { TerminalRecoveryCode } from '../entities/terminal-recovery-code.entity';
+import { TerminalReactivationChallenge } from '../entities/terminal-reactivation-challenge.entity';
 import { ChangeLogService } from '../../audit/change-log.service';
 import { Invoice } from '../../sales/entities/invoice.entity';
 import { InvoiceItem } from '../../sales/entities/invoice-item.entity';
@@ -99,6 +102,13 @@ async function withIsolatedSchema(
         InvoiceItem,
         InvoiceItemModifier,
         Payment,
+        // Issue #566 lifecycle protection: the service resolves its
+        // terminal-identity guards through the transaction manager
+        // (manager.getRepository), so these entities must be registered or
+        // TypeORM throws EntityMetadataNotFoundError before the guard runs.
+        DeviceSyncCredential,
+        TerminalRecoveryCode,
+        TerminalReactivationChallenge,
       ],
       synchronize: true,
     });
