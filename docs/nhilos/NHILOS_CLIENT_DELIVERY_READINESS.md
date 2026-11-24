@@ -1323,6 +1323,6 @@ With **Gate DR-1 (Contracts)**, **Gate DR-2 (Go-Live Pack)**, **Gate DR-3 (Custo
 The single remaining track prior to production launch is the **Technical Execution of SOHO Day-1 (Track A)**, documented in `odd/tasks/soho-dia1-integral-test.md`:
 
 1. **Obtain Client Open Inputs:** Real business/legal name, official RUC, owner password & 6-digit PIN.
-2. **Execute Provisioning (`OP-01`):** Run clean tenant setup via `npm run provision` and fiscal setup endpoint.
+2. **Execute Provisioning (`OP-01`):** Run clean tenant setup via `npm run provision -- --plan=PRO` and fiscal setup endpoint.
 3. **Menu Ingestion:** Preview & commit `Menu_SOHO_import_listo.xlsx` (58 items SIMPLE).
 4. **Terminal QA & Activation:** Run Fases 1–14 on the physical MIRAY Q80 terminal in accordance with `docs/plans/sales/prueba_integral_dia_1_soho.md`.

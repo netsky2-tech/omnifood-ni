@@ -24,6 +24,7 @@ import { SUPPORT_TIERS } from '../modules/entitlements/tenant-subscription.servi
 
 /** Rejection codes, stable strings callers branch on. */
 export const PROVISION_ARG_REJECTION_CODES = {
+  PLAN_REQUIRED: 'PROVISION_PLAN_REQUIRED',
   PLAN_CODE_NOT_REGISTERED: 'PLAN_CODE_NOT_REGISTERED',
   ADD_ON_NOT_REGISTERED: 'ADD_ON_NOT_REGISTERED',
   SUBSCRIPTION_SUPPORT_TIER_INVALID: 'SUBSCRIPTION_SUPPORT_TIER_INVALID',
@@ -52,13 +53,11 @@ export interface ProvisionPlanArgs {
 
 const KNOWN_FLAGS: readonly string[] = ['plan', 'support-tier', 'add-ons'];
 
-/** The founder-stage default (ODD S18): the plan that grants full access. */
-const DEFAULT_PLAN_CODE = 'PRO';
-
 /**
- * Parses and validates `--plan=<code>`, `--support-tier=<tier>` and
- * `--add-ons=a,b`. Defaults: plan `PRO`, support tier = the plan's own tier
- * (a PRO contract IS priority support per catalog §4), no add-ons.
+ * Parses and validates `--plan=<code>` (required — issue #997 forbids a
+ * silent default), `--support-tier=<tier>` and `--add-ons=a,b`.
+ * Defaults: support tier = the chosen plan's own tier (e.g. PRO → priority),
+ * no add-ons.
  *
  * Throws `ProvisionArgsError` with a stable code before anything is created;
  * never returns a partially valid set.
@@ -85,7 +84,14 @@ export function parseProvisionPlanArgs(
     flags.set(name, value);
   }
 
-  const planCode = (flags.get('plan') ?? DEFAULT_PLAN_CODE).trim();
+  if (!flags.has('plan')) {
+    throw new ProvisionArgsError(
+      PROVISION_ARG_REJECTION_CODES.PLAN_REQUIRED,
+      'Debe indicar --plan=<código> de forma explícita (ESENCIAL, OPERACION, PRO). No existe un plan por defecto. Nada fue creado.',
+    );
+  }
+
+  const planCode = (flags.get('plan') ?? '').trim();
   const plan = planCode ? findPlan(planCode) : null;
   if (!plan) {
     throw new ProvisionArgsError(

@@ -186,12 +186,15 @@ staging database; stop immediately if the connection target does not resolve
 to staging.
 
 ```bash
-npm run provision                     # INTERACTIVE — prompts for: tenant name,
-                                      # RUC (optional), owner name, owner email,
-                                      # initial password, initial PIN
-npm run seed:onboarding-founder-pilot # NON-INTERACTIVE — seeds the founder-pilot
-                                      # onboarding fixture; reads
-                                      # ONBOARDING_FOUNDER_OWNER_PASSWORD and
+npm run provision -- --plan=PRO       # INTERACTIVE — --plan is required
+                                      # (ESENCIAL, OPERACION, PRO); prompts for:
+                                      # tenant name, RUC (optional), owner name,
+                                      # owner email, initial password, initial PIN
+ONBOARDING_FOUNDER_PLAN=PRO npm run seed:onboarding-founder-pilot
+                                      # NON-INTERACTIVE — seeds the founder-pilot
+                                      # onboarding fixture with an explicit plan
+                                      # (ONBOARDING_FOUNDER_PLAN or -- --plan=...);
+                                      # reads ONBOARDING_FOUNDER_OWNER_PASSWORD and
                                       # ONBOARDING_FOUNDER_OWNER_PIN from the
                                       # environment and, when either is unset,
                                       # falls back to a freshly generated random

@@ -251,6 +251,14 @@ const contractJson = (
 const HISTORY_DEFAULT_LIMIT = 50;
 const HISTORY_MAX_LIMIT = 200;
 
+/**
+ * Structural SQL surface shared by TypeORM `QueryRunner` and `EntityManager`,
+ * allowing callers that already hold a tenant-bound transaction (such as
+ * `runInTenantTransaction` during provisioning, issue #997) to write the
+ * initial subscription atomically with the tenant.
+ */
+export type SqlExecutor = Pick<QueryRunner, 'query'>;
+
 @Injectable()
 export class TenantSubscriptionService {
   constructor(private readonly dataSource: DataSource) {}
@@ -260,71 +268,86 @@ export class TenantSubscriptionService {
    * post-condition, all in the same tenant-bound transaction (ODD S10/S13).
    */
   async changePlan(input: PlanChangeInput): Promise<ChangedPlan> {
+    // Validate pure inputs before borrowing a connection or opening a txn.
+    normalizePlanChange(input);
+    return this.inTenantTransaction(input.tenantId, (runner) =>
+      this.changePlanInTransaction(runner, input),
+    );
+  }
+
+  /**
+   * Same contract write, audit trail and snapshot post-condition as
+   * `changePlan`, executed inside a caller-managed transaction that ALREADY
+   * bound `app.tenant_id` (e.g. `runInTenantTransaction` in `provision.ts`,
+   * issue #997). If validation or the snapshot post-condition throws, the
+   * caller's transaction rolls back so no orphan tenant can survive.
+   */
+  async changePlanInTransaction(
+    executor: SqlExecutor,
+    input: PlanChangeInput,
+  ): Promise<ChangedPlan> {
     const normalized = normalizePlanChange(input);
     const now = input.now ?? new Date();
+    const previous = await this.readSubscription(executor, now);
 
-    return this.inTenantTransaction(input.tenantId, async (runner) => {
-      const previous = await this.readSubscription(runner, now);
-
-      const inserted = (await runner.query(
-        `INSERT INTO tenant_subscription
-           (tenant_id, plan_code, status, starts_at, ends_at, add_ons, support_tier)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
-         RETURNING id`,
-        [
-          input.tenantId,
-          normalized.planCode,
-          normalized.status,
-          normalized.startsAt,
-          normalized.endsAt,
-          JSON.stringify(normalized.addOns),
-          normalized.supportTier,
-        ],
-      )) as Array<{ id: string }>;
-      const subscriptionId = inserted[0].id;
-
-      const newContract: SubscriptionInput = {
-        plan_code: normalized.planCode,
-        status: normalized.status,
-        starts_at: normalized.startsAt,
-        ends_at: normalized.endsAt,
-        add_ons: normalized.addOns,
-        support_tier: normalized.supportTier,
-      };
-
-      await runner.query(
-        `INSERT INTO tenant_entitlement_change_history
-           (tenant_id, change_type, subscription_id, capability_key,
-            previous_value_json, new_value_json, actor, reason, occurred_at)
-         VALUES ($1, 'plan', $2, NULL, $3::jsonb, $4::jsonb, $5, $6, $7)`,
-        [
-          input.tenantId,
-          subscriptionId,
-          previous === null ? null : JSON.stringify(contractJson(previous)),
-          JSON.stringify(contractJson(newContract)),
-          normalized.actor,
-          normalized.reason,
-          now,
-        ],
-      );
-
-      await this.assertSnapshotResolves(
-        runner,
+    const inserted = (await executor.query(
+      `INSERT INTO tenant_subscription
+         (tenant_id, plan_code, status, starts_at, ends_at, add_ons, support_tier)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+       RETURNING id`,
+      [
         input.tenantId,
-        now,
-        normalized,
-      );
+        normalized.planCode,
+        normalized.status,
+        normalized.startsAt,
+        normalized.endsAt,
+        JSON.stringify(normalized.addOns),
+        normalized.supportTier,
+      ],
+    )) as Array<{ id: string }>;
+    const subscriptionId = inserted[0].id;
 
-      return {
+    const newContract: SubscriptionInput = {
+      plan_code: normalized.planCode,
+      status: normalized.status,
+      starts_at: normalized.startsAt,
+      ends_at: normalized.endsAt,
+      add_ons: normalized.addOns,
+      support_tier: normalized.supportTier,
+    };
+
+    await executor.query(
+      `INSERT INTO tenant_entitlement_change_history
+         (tenant_id, change_type, subscription_id, capability_key,
+          previous_value_json, new_value_json, actor, reason, occurred_at)
+       VALUES ($1, 'plan', $2, NULL, $3::jsonb, $4::jsonb, $5, $6, $7)`,
+      [
+        input.tenantId,
         subscriptionId,
-        planCode: normalized.planCode,
-        status: normalized.status,
-        startsAt: normalized.startsAt,
-        endsAt: normalized.endsAt,
-        addOns: normalized.addOns,
-        supportTier: normalized.supportTier,
-      };
-    });
+        previous === null ? null : JSON.stringify(contractJson(previous)),
+        JSON.stringify(contractJson(newContract)),
+        normalized.actor,
+        normalized.reason,
+        now,
+      ],
+    );
+
+    await this.assertSnapshotResolves(
+      executor,
+      input.tenantId,
+      now,
+      normalized,
+    );
+
+    return {
+      subscriptionId,
+      planCode: normalized.planCode,
+      status: normalized.status,
+      startsAt: normalized.startsAt,
+      endsAt: normalized.endsAt,
+      addOns: normalized.addOns,
+      supportTier: normalized.supportTier,
+    };
   }
 
   /**
@@ -386,7 +409,7 @@ export class TenantSubscriptionService {
    * where it would still be invisible to the "most recent started row" rule.
    */
   private async assertSnapshotResolves(
-    runner: QueryRunner,
+    runner: SqlExecutor,
     tenantId: string,
     now: Date,
     change: NormalizedPlanChange,
@@ -410,7 +433,7 @@ export class TenantSubscriptionService {
   // the DB spec proves both agree by observing the snapshot change right
   // after a plan change.
   private async readSubscription(
-    runner: QueryRunner,
+    runner: SqlExecutor,
     now: Date,
   ): Promise<SubscriptionInput | null> {
     const rows = (await runner.query(
@@ -432,7 +455,7 @@ export class TenantSubscriptionService {
   }
 
   private async readOverrides(
-    runner: QueryRunner,
+    runner: SqlExecutor,
     now: Date,
   ): Promise<OverrideInput[]> {
     return (await runner.query(

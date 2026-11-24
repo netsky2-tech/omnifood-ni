@@ -7,11 +7,20 @@ import { User, UserRole } from '../modules/identity/entities/user.entity';
 import { SecurityProfile } from '../modules/identity/entities/security-profile.entity';
 import { runInTenantTransaction } from '../core/database/tenant-transaction';
 import { normalizeTenantSlug } from '../modules/tenant/tenant-slug';
+import { TenantSubscriptionService } from '../modules/entitlements/tenant-subscription.service';
 import * as bcrypt from 'bcrypt';
+import {
+  ProvisionArgsError,
+  parseProvisionPlanArgs,
+  type ProvisionPlanArgs,
+} from './provision-plan-args';
 
 /**
  * NON-INTERACTIVE DEV PROVISIONING
- * Creates tenant SOHO + owner Maxwell with the values provided.
+ * Creates tenant SOHO + owner Maxwell + audited subscription with the values
+ * provided. Issue #997: requires an explicit plan via `--plan=<code>` or
+ * `PROVISION_PLAN=<code>` (no silent default) and creates the subscription
+ * atomically in the same transaction as the tenant.
  */
 
 const TENANT_NAME = process.env.PROVISION_TENANT_NAME ?? 'SOHO';
@@ -24,8 +33,27 @@ const OWNER_PIN = process.env.PROVISION_OWNER_PIN ?? '150898';
 async function provision() {
   console.log('--- OmniFood NI: Dev Provisioning ---');
 
+  const rawArgv = [...process.argv.slice(2)];
+  const hasPlanFlag = rawArgv.some((arg) => arg.startsWith('--plan='));
+  if (!hasPlanFlag && process.env.PROVISION_PLAN !== undefined) {
+    rawArgv.push(`--plan=${process.env.PROVISION_PLAN}`);
+  }
+
+  let planArgs: ProvisionPlanArgs;
+  try {
+    planArgs = parseProvisionPlanArgs(rawArgv);
+  } catch (error) {
+    if (error instanceof ProvisionArgsError) {
+      console.error(`❌ ${error.message}`);
+    } else {
+      console.error('❌ Error al leer los argumentos:', error);
+    }
+    process.exit(1);
+  }
+
   const app = await NestFactory.createApplicationContext(AppModule);
   const dataSource = app.get(DataSource);
+  const subscriptions = app.get(TenantSubscriptionService);
 
   let failed = false;
   try {
@@ -60,8 +88,24 @@ async function provision() {
       profile.is_pin_enabled = true;
       profile.is_totp_enabled = false;
       await manager.save(profile);
+
+      const subscription = await subscriptions.changePlanInTransaction(
+        manager,
+        {
+          tenantId,
+          planCode: planArgs.planCode,
+          supportTier: planArgs.supportTier,
+          addOns: planArgs.addOns,
+          startsAt: new Date(),
+          actor: OWNER_EMAIL,
+          reason: `Alta dev del tenant por provision-dev (issue #997): plan ${planArgs.planCode}`,
+        },
+      );
       console.log(`Owner created: ${savedUser.id}`);
       console.log(`Tenant ID: ${savedTenant.id}`);
+      console.log(
+        `Subscription created: ${subscription.planCode} (${subscription.subscriptionId})`,
+      );
     });
 
     console.log('--- Provisioning complete ---');

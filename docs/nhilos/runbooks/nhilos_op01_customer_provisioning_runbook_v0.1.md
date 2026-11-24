@@ -39,8 +39,8 @@ Ejecutar en el entorno de backend (o mediante el script de aprovisionamiento aut
 ```bash
 cd apps/admin_backend
 
-# 1. Ejecutar aprovisionamiento interactivo o script CLI
-npm run provision
+# 1. Ejecutar aprovisionamiento interactivo con plan explícito (ESENCIAL, OPERACION o PRO)
+npm run provision -- --plan=PRO
 ```
 
 ### Datos requeridos por el asistente:
@@ -55,6 +55,7 @@ npm run provision
 ### Validación de Salida:
 - [ ] Se crea la fila en la tabla `tenants` con `is_active = true`.
 - [ ] Se crea el usuario en `users` con rol `OWNER` vinculado al `tenant_id` generado.
+- [ ] Se crea la suscripción auditada en `tenant_subscription` en la misma transacción (`npm run entitlements:subscription -- --tenant=<uuid> --list`).
 - [ ] Verificar aislamiento en PostgreSQL: `SELECT id, name, slug FROM tenants WHERE slug = 'soho-cafe';`.
 
 ---

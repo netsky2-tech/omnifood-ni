@@ -58,7 +58,7 @@ Los 2 productos `productsToUpdate` son `Espresso Doble` y `Latte 12oz`, que qued
 
 | # | Check | Evidencia esperada | Estado |
 |---|---|---|---|
-| 0.1 | Tenant provisionado (`npm run provision`) con nombre, RUC y slug correctos | fila en `tenants`, `is_active=true` | |
+| 0.1 | Tenant provisionado (`npm run provision -- --plan=PRO`) con nombre, RUC, slug y suscripción correctos | fila en `tenants` (`is_active=true`) y en `tenant_subscription` (`PRO`, `active`) | |
 | 0.2 | Dueño creado con email, contraseña y PIN de 6 dígitos | login del dueño funciona | |
 | 0.3 | **Serie fiscal DGI configurada** (prefijo + consecutivo inicial de la autorización) | `initializeRange()` ejecutado; sin esto `FiscalSequenceUnconfiguredError` **bloquea toda facturación** | |
 | 0.4 | Menú importado por Excel (`Configuración → Importar menú`) | preview sin errores; ver Fase 0-bis | |

@@ -24,12 +24,14 @@ import {
  * This script allows for the manual creation of a new Tenant and its initial Owner.
  * Useful for onboarding new clients massively or for initial setup.
  *
- * ENT-08 of issue #984 (ODD S18): a provisioned tenant is operable in ONE
- * command, so besides the tenant and its owner this script creates the
- * audited plan subscription through TenantSubscriptionService (never raw
- * SQL), right after the owner exists, with the owner's email as actor and a
- * reason naming the provisioning. Flags: --plan=<code> (default PRO while
- * the founder stage lasts), --support-tier=<tier>, --add-ons=a,b.
+ * ENT-08 of issue #984 / issue #997: a provisioned tenant is operable in ONE
+ * command and can NEVER be created without an explicit plan. `--plan=<code>`
+ * is required (no silent default), validated BEFORE any database connection
+ * or prompt, and the audited subscription is written through
+ * `TenantSubscriptionService.changePlanInTransaction` inside the SAME
+ * transaction that creates the tenant and owner — so a failed subscription
+ * rolls back the tenant too. Flags: --plan=<code> (required),
+ * --support-tier=<tier>, --add-ons=a,b.
  *
  * ENT-08 (ODD S19): an invalid plan or add-on is rejected BEFORE any
  * database connection, prompt or write — exit 1 with a stable code and
@@ -56,7 +58,7 @@ async function provision() {
     planArgs = parseProvisionPlanArgs(process.argv.slice(2));
   } catch (error) {
     if (error instanceof ProvisionArgsError) {
-      console.error(`❌ ${error.code}: ${error.message}`);
+      console.error(`❌ ${error.message}`);
     } else {
       console.error('❌ Error al leer los argumentos:', error);
     }
@@ -81,6 +83,10 @@ async function provision() {
     // The tenant id must be known before the transaction opens: the wrapper
     // binds the transaction-local RLS context from it. `tenants` is a public
     // (non-RLS) table, so inserting it inside the bound callback is fine.
+    // Issue #997: tenant, owner and audited subscription share ONE transaction
+    // so a rejected or failing subscription rolls back the whole alta and
+    // never leaves a tenant without a contract.
+    const subscriptions = app.get(TenantSubscriptionService);
     const tenantId = randomUUID();
     await runInTenantTransaction(dataSource, tenantId, async (manager) => {
       // 1. Create Tenant
@@ -112,11 +118,28 @@ async function provision() {
       profile.is_totp_enabled = false;
       await manager.save(profile);
       console.log(`✅ Usuario OWNER creado: ${savedUser.id}`);
+
+      // 3. Create Audited Subscription atomically in the same transaction
+      const subscription = await subscriptions.changePlanInTransaction(
+        manager,
+        {
+          tenantId,
+          planCode: planArgs.planCode,
+          supportTier: planArgs.supportTier,
+          addOns: planArgs.addOns,
+          startsAt: new Date(),
+          actor: ownerEmail,
+          reason: `Alta inicial del tenant por npm run provision (issue #997): plan ${planArgs.planCode} con add-ons [${planArgs.addOns.join(', ')}]`,
+        },
+      );
+      console.log(
+        `✅ Suscripción creada: plan ${subscription.planCode} (${subscription.subscriptionId})`,
+      );
     });
 
     // Issue #903: a provisioned tenant must be born OPERATIONAL — seed the
     // default master catalogs (UOM, inventory/sales categories and types)
-    // right after the owner exists, inside the tenant context. Idempotent:
+    // right after the tenant, owner and subscription commit. Idempotent:
     // seedDefaults skips codes that already exist and never clobbers tenant
     // edits. Without this, a blank tenant cannot create its first insumo
     // (no UOM in the catalog) and the only seed entry point is a hidden
@@ -125,25 +148,6 @@ async function provision() {
     const seeded = await catalogService.seedDefaults(tenantId);
     assertSeedOutcome(tenantId, seeded);
     console.log(`✅ Catálogos por defecto sembrados: ${seeded} valores`);
-
-    // ENT-08 (ODD S18): the audited subscription goes through
-    // TenantSubscriptionService — the same transaction the CLI uses, which
-    // writes the new contract AND its tenant_entitlement_change_history row
-    // and refuses a contract that would break the snapshot. The OWNER just
-    // created is the actor; the reason names the provisioning.
-    const subscriptions = app.get(TenantSubscriptionService);
-    const subscription = await subscriptions.changePlan({
-      tenantId,
-      planCode: planArgs.planCode,
-      supportTier: planArgs.supportTier,
-      addOns: planArgs.addOns,
-      startsAt: new Date(),
-      actor: ownerEmail,
-      reason: `Alta inicial del tenant por npm run provision (issue #984): plan ${planArgs.planCode} con add-ons [${planArgs.addOns.join(', ')}]`,
-    });
-    console.log(
-      `✅ Suscripción creada: plan ${subscription.planCode} (${subscription.subscriptionId})`,
-    );
 
     console.log('--- Provisión completada exitosamente ---');
   } catch (error) {
