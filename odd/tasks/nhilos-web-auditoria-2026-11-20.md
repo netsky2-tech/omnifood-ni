@@ -82,14 +82,14 @@ estaban en las tres notas del fundador y ocho siguen abiertos.
 
 | Hallazgo | Dueño | Nota |
 |---|---|---|
-| S4.6 el párrafo jurídico de /inventario/ supera 110 palabras | parent | partirlo en tres viñetas |
-| S5 CTA de demo ausente en el hero de /facturacion-dgi/ y /inventario/ | parent | son las páginas de mayor intención |
-| S5 dos de las cuatro tarjetas de segmento parecen clicables y no lo son | parent | |
-| S5 ancla "ver planes y precios de NHILOS POS" 17 veces idéntica | parent | SEO y lectores de pantalla |
+| S4.6 el párrafo jurídico de /inventario/ supera 110 palabras | parent | hecho (worker 2026-11-20) — tres viñetas sin perder una palabra; guardia en la suite de auditoría |
+| S5 CTA de demo ausente en el hero de /facturacion-dgi/ y /inventario/ | parent | hecho (worker 2026-11-20) — CTA primaria de WhatsApp "Revisar mi caso con un especialista" en ambos hero, con utm_medium por página; las anclas internas quedan como secundarias. Sin potentialAction en el JSON-LD de estas páginas, nada que espejar |
+| S5 dos de las cuatro tarjetas de segmento parecen clicables y no lo son | parent | hecho (worker 2026-11-20) — cafeterías y tiendas vuelven a bloques de texto (el árbol tenía enlaces en borrador); lift solo en las tarjetas con enlace real |
+| S5 ancla "ver planes y precios de NHILOS POS" 17 veces idéntica | parent | hecho (worker 2026-11-20, con parent-issued surfaces ampliadas) — los enlaces no-FAQ de las nueve páginas varían por contexto (hrefs intactos), la frase queda 3 veces solo dentro de respuestas FAQ, y la guard S16 fija el tope de 3 por texto de enlace del cuerpo en todo el sitio |
 | S6.1 /food-parks/ sin una sola animación de entrada | parent | única página que se siente estática |
 | S6.3 capturas en caja 1/1 con object-fit contain y sin zoom | parent | el texto interno se dibuja a ~5 px |
 | S7.3 sin srcset/sizes ni AVIF | T4 | 2.9 MB de media referenciada |
-| S8.5 enlaces de pie con altura menor a 24 px | parent | |
+| S8.5 enlaces de pie con altura menor a 24 px | parent | hecho (worker 2026-11-20) — línea de contacto a 24 px en escritorio y enlaces de pie a 44 px en táctil, sin mover la grilla en escritorio |
 | S9.1 la misma pregunta FAQ en 4–5 páginas | decisión | "una pregunta, una página dueña" |
 | S11.1 45 archivos de media sin referenciar | parent | no llegan al usuario; es higiene de repo |
 | S11.2 cada página lleva su propio `<style>` | refactor | por eso el bug de /precios/ vivió en una sola página |
@@ -106,3 +106,20 @@ estaban en las tres notas del fundador y ocho siguen abiertos.
   es difícil de deshacer y el informe mismo lo advierte.
 - **`security.txt`.** Necesita una dirección real de reporte y el dominio no tiene correo
   (sin MX). Publicar un contacto que no recibe nada es peor que no publicarlo.
+
+### Tercera pasada — worker, seis fixes de la auditoría (2026-11-20)
+
+Hero de las dos páginas de cumplimiento con WhatsApp como primaria (palabrao del informe:
+"Revisar mi caso con un especialista"), anclas internas conservadas; tarjetas de segmento
+sin enlace reducidas a bloques de texto (los enlaces de borrador se retiran a pedido de la
+delegación); anchor de precios variado por contexto en las páginas permitidas y, con las
+superficies que el parent aprobó después, en las cuatro restantes: los seis textos de enlace
+que superaban el tope (demo, WhatsApp, mecánica fiscal, inventario, offline, precios) quedan
+a 3 instancias exactas sitio, donde tres de ellas viven dentro de respuestas FAQ que el parent
+mandó no tocar; guard S16 de clase (tope 3 por texto de enlace del cuerpo, navegación fuera).
+Párrafo de estado
+dividido en tres viñetas con el texto íntegro; taps del pie a 24/44 px; brief con la segunda
+`8.6` renumerada a `8.9` (renumerar a `8.7` habría creado un nuevo duplicado con la sección
+de medición) y `foodpark_admin_lee` renombrado a `foodpark_llega_independencia` con nota de
+quiebre de serie. Guardias de las seis correcciones en
+`scripts/__tests__/nhilos-web-auditoria-2026-11-20.test.mjs` (RED observado, luego GREEN).

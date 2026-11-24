@@ -94,7 +94,11 @@
 
     .container { max-width: var(--container-max); margin: 0 auto; padding-inline: clamp(1.25rem, 4vw, 3rem); }
     .section { padding-block: var(--space-12); }
-    @media (max-width: 640px) { .section { padding-block: var(--space-10); } }
+    /* Continuación de un bloque temático: la mitad de aire que una sección nueva
+       para que subsecciones (packs, add-ons, condiciones) se lean como parte del
+       bloque anterior y no como secciones sueltas. */
+    .section-cont { padding-block: var(--space-8); }
+    @media (max-width: 640px) { .section { padding-block: var(--space-10); } .section-cont { padding-block: var(--space-8); } }
     .section-subtle { background: var(--web-bg-subtle); }
     .section-dark { background: var(--web-navy-950); color: var(--web-text-on-dark); }
     .section-dark p { color: var(--web-text-on-dark-muted); }
@@ -127,8 +131,15 @@
     .hilo-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 100; background: transparent; pointer-events: none; }
     .hilo-progress span { display: block; height: 100%; width: 100%; background: var(--web-emerald-500); transform: scaleX(0); transform-origin: left center; will-change: transform; }
 
+    /* <picture> solo elige la fuente de un <img>. Si creara caja, rompería los
+       selectores `.hero-media img` y compañía, así que se aplana. */
+    picture { display: contents; }
+
     /* Header */
-    .site-header { position: sticky; top: 0; z-index: 60; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--web-border-hairline); transition: box-shadow var(--motion-base) var(--ease-out); }
+    /* Opaco: con rgba + backdrop-filter el texto de la página se transparentaba
+       como una mancha bajo la barra al hacer scroll. La legibilidad manda sobre
+       el efecto de vidrio. */
+    .site-header { position: sticky; top: 0; z-index: 60; background: #FFFFFF; border-bottom: 1px solid var(--web-border-hairline); transition: box-shadow var(--motion-base) var(--ease-out); }
     .site-header.is-scrolled { box-shadow: 0 1px 0 var(--web-border-hairline), 0 8px 24px -12px rgba(0, 24, 41, 0.12); }
     .site-header-inner { display: flex; align-items: center; justify-content: space-between; height: 64px; }
     .wordmark { font-family: var(--font-subheading); font-weight: 700; font-size: 1.125rem; letter-spacing: 0.06em; text-decoration: none; color: var(--web-text-primary); display: inline-flex; align-items: center; gap: 10px; }
@@ -189,14 +200,21 @@
     }
 
     /* HERO — split (S1) */
-    .hero { padding-block: var(--space-10) var(--space-12); overflow: hidden; }
+    .hero { padding-block: var(--space-10) var(--space-8); overflow: hidden; }
     .hero-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: var(--space-10); align-items: center; }
     .hero h1 { font-size: var(--text-display-xl); line-height: 1.08; font-weight: 700; letter-spacing: -0.03em; margin-bottom: var(--space-5); }
-    .hero h1 em { font-style: normal; color: var(--web-navy-800); position: relative; }
+    /* El navy-800 es más claro que la tinta del H1: sin refuerzo, la frase clave
+       se lee como texto atenuado. El emerald-700 es el token AA para texto en
+       superficie clara (5.38:1) y da al énfasis más peso que al resto del título. */
+    .hero h1 em { font-style: normal; color: var(--web-emerald-700); }
     .hero .lead { margin-bottom: var(--space-6); }
     .hero-ctas { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-    .hero-proof-note { margin-top: var(--space-6); font-size: var(--text-body-sm); color: var(--web-text-muted); display: flex; align-items: center; gap: 8px; }
-    .hero-proof-note::before { content: ""; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    .hero-proof-note { margin-top: var(--space-6); font-size: var(--text-body-sm); color: var(--web-text-muted); display: flex; align-items: flex-start; gap: 8px; }
+    .hero-proof-note::before { content: ""; flex: 0 0 auto; margin-top: 0.55em; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    @media (max-width: 640px) {
+      .hero-ctas { flex-direction: column; align-items: stretch; }
+      .hero-ctas .btn { width: 100%; }
+    }
 
     /* Device bezel (S23-like, CSS only) */
     .device-wrap { position: relative; display: flex; justify-content: center; }
@@ -206,8 +224,30 @@
     .device video, .device img { width: 100%; height: 100%; object-fit: contain; border-radius: 27px; background: var(--web-navy-950); display: block; }
 
     /* Hero media: terminal en mano con fondo transparente (flota sobre el canvas, como la referencia) */
-    .hero-media { margin: 0 auto; position: relative; width: min(260px, 74vw); }
-    .hero-media img { display: block; width: 100%; height: auto; filter: drop-shadow(0 28px 32px rgba(0, 24, 41, 0.18)); }
+    .hero-media { margin: 0 auto; position: relative; width: min(340px, 80vw); }
+    .hero-media img { display: block; width: 100%; height: auto; filter: drop-shadow(0 18px 24px rgba(0, 24, 41, 0.14)); }
+
+    /* Capturas abribles: la miniatura conserva el marco del dispositivo y el clic
+       abre la captura completa en un <dialog> (site.js). Sin JS el mismo href abre
+       la imagen sola: el enlace es el fallback, no un extra. */
+    .shot { display: block; position: relative; text-decoration: none; color: inherit; border-radius: 36px; }
+    .shot .device { transition: transform var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out); }
+    .shot:hover .device, .shot:focus-visible .device { transform: translateY(-3px); box-shadow: 0 28px 52px -14px rgba(0, 24, 41, 0.42), 0 2px 6px rgba(0, 24, 41, 0.18); }
+    .shot-zoom { position: absolute; right: 14px; bottom: 14px; z-index: 4; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); background: rgba(0, 24, 41, 0.82); color: #FFFFFF; opacity: 0; transform: translateY(4px); transition: opacity var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out); pointer-events: none; }
+    .shot:hover .shot-zoom, .shot:focus-visible .shot-zoom { opacity: 1; transform: none; }
+    @media (hover: none) { .shot-zoom { opacity: 0.9; transform: none; } }
+
+    /* Lightbox de capturas: <dialog> nativo, foco atrapado por el navegador */
+    .shot-dialog { width: fit-content; max-width: 96vw; max-height: 94vh; padding: 0; border: 0; border-radius: var(--radius-lg); background: var(--web-navy-950); color: var(--web-text-on-dark); box-shadow: 0 40px 80px -20px rgba(0, 0, 0, 0.6); }
+    .shot-dialog::backdrop { background: rgba(0, 16, 26, 0.78); }
+    .shot-dialog .shot-figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-4); padding-top: 54px; }
+    .shot-dialog img { max-width: 100%; max-height: calc(94vh - 128px); width: auto; height: auto; object-fit: contain; border-radius: var(--radius-sm); background: #FFFFFF; }
+    .shot-dialog figcaption { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.04em; color: var(--web-text-on-dark-muted); }
+    .shot-close { position: absolute; top: 10px; right: 10px; z-index: 2; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius-full); border: 1px solid rgba(255, 255, 255, 0.22); background: rgba(0, 24, 41, 0.85); color: #FFFFFF; cursor: pointer; }
+    .shot-close:hover { background: var(--web-navy-700); }
+    .shot-dialog[open] { animation: shotIn 180ms var(--ease-out) both; }
+    @keyframes shotIn { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
+    html.shot-open, html.shot-open body { overflow: hidden; }
 
     .chip { position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 10px 14px; font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
     .chip .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
@@ -268,7 +308,8 @@
     .proof-bar { display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--web-border-hairline); background: var(--web-bg-elevated); }
     .proof-bar i { width: 10px; height: 10px; border-radius: var(--radius-full); background: var(--web-border-manual); }
     .proof-bar .url { margin-left: 10px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--web-text-muted); }
-    .proof img, .proof video { width: 100%; max-height: 430px; object-fit: contain; background: #FFFFFF; }
+    .proof img, .proof video { width: 100%; height: auto; max-height: 430px; object-fit: contain; background: #FFFFFF; }
+    .proof .shot { border-radius: 0; }
     .demo-tag { display: inline-block; margin-top: var(--space-3); font-family: var(--font-mono); font-size: 0.6875rem; letter-spacing: 0.06em; color: var(--web-text-muted); }
 
     .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-10); align-items: center; }
@@ -278,7 +319,11 @@
     /* ===== Segmentos ===== */
     .seg-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-top: var(--space-6); }
     .seg-card { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); padding: var(--space-5); transition: transform var(--motion-base) var(--ease-out), box-shadow var(--motion-base) var(--ease-out); }
-    .seg-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); }
+    /* El lift de "clickeable" solo lo tienen las tarjetas que llevan enlace real
+       (.seg-card--link). Las tarjetas de texto (cafeterías, tiendas) sin página
+       propia no simulan ser control: sin lift, sin cursor, sin anillo de foco
+       (informe externo S5: tarjeta que parece clicable y no lo es). */
+    .seg-card--link:hover { transform: translateY(-2px); box-shadow: var(--shadow-card); }
     .seg-card h3 { font-family: var(--font-display); font-size: var(--text-heading-sm); font-weight: 600; margin-bottom: var(--space-1); }
     .seg-card p { font-size: var(--text-body-sm); color: var(--web-text-secondary); }
     @media (max-width: 1024px) { .seg-grid { grid-template-columns: 1fr 1fr; } }
@@ -304,7 +349,7 @@
     .pack-note { margin-top: var(--space-4); font-size: var(--text-body-sm); color: var(--web-text-secondary); }
     /* Notas de los planes bajo la grilla: capacidad fiscal, terminal y Enterprise (banda continua con #precios) */
     #precios { padding-bottom: 0; }
-    .section-pricing-notes { padding-top: var(--space-6); }
+    .section-pricing-notes { padding-block: var(--space-6) var(--space-8); }
     .plan-fiscal { max-width: 72ch; font-size: var(--text-body-md); line-height: 1.6; color: var(--web-text-primary); }
     .plan-terminal-note, .plan-enterprise-line { max-width: 72ch; margin-top: var(--space-3); font-size: var(--text-body-sm); line-height: 1.6; color: var(--web-text-secondary); }
     /* Add-ons: bloque propio y compacto, lista de definición (nombre a la izquierda, precio en mono a la derecha) */
@@ -314,7 +359,7 @@
     .addon-row + .addon-row { border-top: 1px solid var(--web-border-hairline); }
     .addon-row dt { font-family: var(--font-subheading); font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
     .addon-row dd { margin: 0; font-family: var(--font-mono); font-size: 0.8125rem; color: var(--web-text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .section-condiciones { padding-block: var(--space-8); }
+    .section-condiciones { padding-block: var(--space-8) var(--space-12); }
     .fineprint { background: var(--web-bg-subtle); border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); padding: var(--space-5) var(--space-6); }
     .fineprint-title { font-family: var(--font-subheading); font-size: var(--text-eyebrow); font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--web-text-primary); }
     .fineprint-list { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; gap: var(--space-3); }
@@ -410,7 +455,11 @@
     .footer-tagline { font-family: var(--font-subheading); font-size: 1.0625rem; font-weight: 600; color: var(--web-text-on-dark); margin: 0 0 var(--space-3); }
     .footer-desc { font-size: var(--text-body-sm); line-height: 1.6; max-width: 44ch; margin: 0 0 var(--space-4); }
     .footer-contact { font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.7; color: var(--web-text-on-dark-muted); }
-    .footer-contact a { color: var(--web-emerald-400); text-decoration: none; }
+    /* El enlace de la línea de WhatsApp del pie quedaba bajo 24 px (informe
+       externo S8.5): inline y sin padding media 17 px de alto. Con caja y
+       padding llega al mínimo de 24 px en escritorio; el crecimiento se queda
+       dentro de la caja del propio enlace. */
+    .footer-contact a { color: var(--web-emerald-400); text-decoration: none; display: inline-block; vertical-align: middle; padding: 0.25rem 0; min-height: 24px; }
     .footer-contact a:hover { text-decoration: underline; }
     .footer-col-title { font-family: var(--font-subheading); font-size: var(--text-eyebrow); font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: var(--web-text-on-dark); margin: 0 0 var(--space-4); }
     .footer-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
@@ -425,6 +474,15 @@
     .footer-top-link:hover { text-decoration: underline; }
     @media (max-width: 1024px) { .footer-grid { grid-template-columns: 1fr 1fr; } }
     @media (max-width: 640px) { .footer-grid { grid-template-columns: 1fr; gap: var(--space-6); } .footer-bottom { flex-direction: column; align-items: flex-start; } }
+    /* Táctil: los enlaces de texto del pie (columnas y línea de contacto) y las
+       banderas sociales alcanzan los 44 px del objetivo táctil; en escritorio
+       no cambia nada, así que el layout del pie no se mueve. */
+    @media (hover: none), (pointer: coarse) {
+      .footer-list a { min-height: 44px; }
+      .footer-contact a { min-height: 44px; }
+      .footer-social a { width: 40px; height: 40px; min-height: 44px; }
+      .footer-brand .wordmark { min-height: 44px; }
+    }
 
     /* ===== Motion system (staged entrances, stagger grids, hilo draw) ===== */
     .reveal { opacity: 0; transform: translate3d(0, 22px, 0); transition: opacity var(--motion-scene) var(--ease-out), transform var(--motion-scene) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 70ms); will-change: opacity, transform; }

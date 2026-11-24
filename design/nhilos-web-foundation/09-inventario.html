@@ -247,6 +247,13 @@
     .inv-norm-badge--system { background: var(--web-emerald-50); color: var(--web-emerald-700); }
     .inv-norm-item p { font-size: var(--text-body-md); color: var(--web-text-secondary); max-width: 70ch; }
     .inv-norm-item strong { color: var(--web-text-primary); }
+    /* El párrafo "Estado actual del sistema" reparte tres ideas jurídicas en tres
+       viñetas (informe externo S4.6): registro, mecanismo de precio de mercado y
+       lo que el sistema no hace. Mismo peso tipográfico que el párrafo que era. */
+    .inv-norm-facts { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-3); max-width: 70ch; }
+    .inv-norm-facts li { position: relative; padding-left: 1.15rem; font-size: var(--text-body-md); color: var(--web-text-secondary); }
+    .inv-norm-facts li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--web-emerald-500); }
+    .inv-norm-facts strong { color: var(--web-text-primary); }
     @media (max-width: 760px) { .inv-norm-item { grid-template-columns: 1fr; gap: var(--space-2); } }
 
     /* H3 3: División operativa vs obligaciones fiscales en tablero unificado */
@@ -377,7 +384,12 @@
           <p>Cada venta descuenta lo que consumió, el plato por su receta, el producto de reventa por su stock, con kardex y costo promedio ponderado, conteos y merma teórica vs física. El marco que exige la ley (Ley 822 art. 44, Reglamento art. 33, NIC 2) explicado; la valuación fiscal la cierra tu contador.</p>
         </div>
         <div class="inv-hero-cta hero-in" style="--hero-delay: 270ms;">
-          <a class="btn btn-primary" href="#kardex">Ver cómo sale el costo</a>
+          <!-- CTA primaria del hero: WhatsApp con el contexto del utm_medium por página.
+               Redacción propuesta por el informe externo (S5): revisar el caso con un especialista, no un "solicitar demo" genérico.
+               Las anclas del hero quedan como acciones secundarias. -->
+          <a class="btn btn-primary" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_whatsapp_inventario">Revisar mi caso con un especialista</a>
+          <a class="btn btn-secondary" href="/demo/">Solicitar una demo</a>
+          <a class="btn btn-secondary" href="#kardex">Ver cómo sale el costo</a>
           <a class="btn btn-secondary" href="#marco">Ver el marco legal</a>
         </div>
       </div>
@@ -498,7 +510,11 @@
           </div>
           <div class="inv-norm-item">
             <div><span class="inv-norm-badge inv-norm-badge--system">Estado actual del sistema</span></div>
-            <p>NHILOS POS opera con <strong>costo promedio ponderado</strong> (sin método UEPS) y lleva el registro operativo de kardex, descuento por venta, sesiones de conteo y merma teórica vs física. Además, el sistema permite declarar un <strong>precio de mercado por insumo con fecha de vigencia</strong>, valuar al menor entre el costo promedio ponderado y ese precio declarado, y registrar el castigo contable correspondiente; si un insumo no tiene precio de mercado cargado, toma el último costo de compra como referencia. Hoy el sistema <strong>no</strong> registra autorizaciones escritas de cambio de método ni genera las hojas firmadas del inventario físico anual; la conformidad fiscal del caso concreto siempre la valida y firma tu contador.</p>
+            <ul class="inv-norm-facts">
+              <li>NHILOS POS opera con <strong>costo promedio ponderado</strong> (sin método UEPS) y lleva el registro operativo de kardex, descuento por venta, sesiones de conteo y merma teórica vs física.</li>
+              <li>Además, el sistema permite declarar un <strong>precio de mercado por insumo con fecha de vigencia</strong>, valuar al menor entre el costo promedio ponderado y ese precio declarado, y registrar el castigo contable correspondiente; si un insumo no tiene precio de mercado cargado, toma el último costo de compra como referencia.</li>
+              <li>Hoy el sistema <strong>no</strong> registra autorizaciones escritas de cambio de método ni genera las hojas firmadas del inventario físico anual; la conformidad fiscal del caso concreto siempre la valida y firma tu contador.</li>
+            </ul>
           </div>
         </div>
 
@@ -584,7 +600,7 @@
             <span class="inv-pack-scope">Recetas con sus insumos, subrecetas, modificadores, órdenes de producción, combos, márgenes por plato y menú QR.</span>
           </div>
         </div>
-        <p class="inv-pack-foot">El kardex valorizado y los reportes de margen corresponden al plan Pro. Para revisar qué pack incluye cada plan mensual y todos los cargos publicados, puedes <a href="/precios/">ver planes y precios de NHILOS POS</a> o conocer primero <a href="/software-pos/">qué es NHILOS POS: venta local-first</a>.</p>
+        <p class="inv-pack-foot">El kardex valorizado y los reportes de margen corresponden al plan Pro. Para revisar qué pack incluye cada plan mensual y todos los cargos publicados, revisa <a href="/precios/">los planes y packs en la tabla de precios</a> o conocer primero <a href="/software-pos/">qué resuelve el sistema</a>.</p>
       </div>
     </section>
 
@@ -638,13 +654,13 @@
         <h2 class="h-lg" id="demo-title">Solicita una demo con tu inventario real</h2>
         <p class="lead" style="margin-top: var(--space-4); max-width: 62ch;">Te mostramos el kardex, el descuento automático por receta y el flujo de conteo usando datos de demostración etiquetados. Al terminar la sesión recibes una cotización con alcance y cronograma real según tu operación.</p>
         <div class="inv-close-actions">
-          <a class="btn btn-on-dark" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_demo_inventario">Solicitar una demo</a>
+          <a class="btn btn-on-dark" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_demo_inventario">Solicitar una demo de tu inventario</a>
           <a class="btn btn-ghost-dark" href="https://wa.me/50581948526?utm_medium=inventario" data-event="cta_whatsapp_inventario">Escribir por WhatsApp</a>
         </div>
         <div class="inv-close-links">
-          <a href="/precios/">ver planes y precios de NHILOS POS</a>
+          <a href="/precios/">la tabla completa de precios de NHILOS POS</a>
           <a href="/facturacion-dgi/">mecánica de facturación DGI</a>
-          <a href="/software-pos/">qué es NHILOS POS: venta local-first</a>
+          <a href="/software-pos/">qué es NHILOS POS</a>
         </div>
       </div>
     </section>

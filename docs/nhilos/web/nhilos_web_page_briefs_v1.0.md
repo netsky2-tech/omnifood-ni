@@ -5,7 +5,7 @@
 | Campo | Valor |
 |---|---|
 | Documento | `nhilos_web_page_briefs_v1.0.md` |
-| Versión | 1.9 |
+| Versión | 2.11 |
 | Estado | WORKING DRAFT — briefs del home, `/precios/`, hub `/software-pos/`, hub fiscal `/facturacion-dgi/` y las cinco P0 restantes (restaurantes, food parks, sin internet, inventario, demo) escritos |
 | Owner | Founder / Marketing |
 | Audiencia | Founder, Marketing, Web, redactores |
@@ -944,7 +944,7 @@ Contenido: CTA final — demo con escenario armado según tu tipo de negocio y t
 Eventos (GA4 o equivalente, todos legibles por nombre):
 
 - `foodpark_llega_puestos` — scroll hasta el H2 de cómo opera cada puesto (sección visible ≥75%).
-- `foodpark_admin_lee` — scroll hasta el H2 del administrador (el corazón de la objeción secundaria).
+- `foodpark_llega_independencia` — scroll hasta el H2 de lo que no tienes que compartir con el park (la independencia del puesto en un lugar compartido; era `foodpark_admin_lee`). **La serie histórica se rompe en este punto:** los datos previos de `foodpark_admin_lee` no son comparables con el evento nuevo. Renombrado 2026-11-20 con §6.0: el administrador del park dejó de ser el cliente, así que el evento ya no describía lo que mide su sección.
 - `faq_foodpark_abre` — apertura de cualquier ítem del FAQ.
 - `cta_demo_foodpark` — clic en "Solicitar una demo".
 - `cta_whatsapp_foodpark` — clic de WhatsApp con UTM `utm_medium=food-parks`.
@@ -952,7 +952,7 @@ Eventos (GA4 o equivalente, todos legibles por nombre):
 Lecturas de éxito al checkpoint de 28 días:
 
 - **≥60%** de las sesiones llegan al H2 de operación por puesto.
-- **≥40%** de las sesiones llegan al H2 del administrador — la página funciona si el que evalúa gobernanza encuentra su respuesta.
+- **≥40%** de las sesiones llegan al H2 de lo que no tienes que compartir con el park — la página funciona si el que evalúa su independencia encuentra su respuesta (el umbral hereda la serie de `foodpark_admin_lee`, que se rompe con el rename).
 - **≥8%** de las sesiones generan clic a demo o WhatsApp.
 - **GSC:** impresiones de `software para food park` y variantes (food court, administración) atribuidas a esta página. Fronteras vigiadas: el hub (que la nombra en su H3 con anchor) y la home (tarjeta de escenarios). Regla 9 de anti-canibalización, revisión mensual.
 - Con un dominio nuevo, se miden **tasas y primer movimiento** (impresiones > 0), no absolutos; umbrales absolutos tras el primer checkpoint con datos reales.
@@ -965,7 +965,7 @@ Lecturas de éxito al checkpoint de 28 días:
 > ⚠️ **Derogado por §6.0:** el park es el lugar donde el negocio vende, no el cliente. No hay administrador que compre por los puestos.
 ### 6.9 Quién factura en un food park: no es una decisión de producto
 
-> **Renumerado 2026-11-20.** Era el segundo `6.6` del apartado (el primero es *Enlazado interno*), el mismo defecto de numeración que el §8 arrastra con dos `8.6`. El contenido no cambió: solo el número.
+> **Renumerado 2026-11-20.** Era el segundo `6.6` del apartado (el primero es *Enlazado interno*), el mismo defecto de numeración que el §8 arrastraba con dos `8.6`. El contenido no cambió: solo el número.
 
 **Resuelto 2026-11-18 por análisis, no por preferencia.** Rige el principio de que **quien vende es quien factura**: el sistema no elige al emisor, lo registra. De ahí salen tres estructuras y sólo dos son soportables hoy:
 
@@ -1251,7 +1251,9 @@ Lecturas de éxito al checkpoint de 28 días:
 - **Title (≤60):** `Sistema de inventario en Nicaragua · Kardex y merma | NHILOS`
 - **Description (≤155):** `Cada venta descuenta lo que consumió: kardex con costo promedio ponderado, conteos y merma teórica vs física. El marco legal, explicado. Pide una demo.`
 
-### 8.6 R-01: la decisión de producto que cambia lo que esta página puede prometer
+### 8.9 R-01: la decisión de producto que cambia lo que esta página puede prometer
+
+> **Renumerado 2026-11-20.** Era el segundo `8.6` del apartado (el primero es *Enlazado interno*): el §8 llevaba dos secciones `8.6`. Pasa a `8.9`, el primer número libre después del `8.8` de meta, con el mismo método que el segundo `6.6` renumerado a `6.9`. El contenido no cambió: solo el número.
 
 **Verificado 2026-11-18 contra el código, no contra la documentación.** R-01 (Ley 822 art. 44) **no es una brecha**: el mecanismo está entregado. `InventoryValuationService` expone `setMarketPrice` (precio de mercado por insumo con fecha de vigencia) y `applyLowerOfCostWritedown` (castigo con asiento compensatorio `VALUATION_WRITEDOWN`), y el controller de reportes tiene las dos rutas vivas: `POST /inventory/reports/valuation/market-price` y `POST /inventory/reports/valuation/writedown`.
 
@@ -1475,3 +1477,11 @@ Verbatim en §6.0. El apartado §6 se escribió sobre el comprador equivocado: a
 ### v2.9 — el costo de arranque se dice, no se calcula (2026-11-20, fundador)
 
 §2.10: cada ficha publica el total de arranque como cifra única (US$198 / US$339 / US$599) y los add-ons abren con "nada de esto es obligatorio". Además se retiró un claim de coordinación multi-terminal en tiempo real que se había colado en `/precios/`, la única página donde las guardias de ese claim no estaban puestas.
+
+### v2.10 — numeración del §8 y medición del food park sin administrador (2026-11-20)
+
+Dos defectos de forma: el §8 llevaba dos secciones numeradas `8.6` (*Enlazado interno* y R-01), y el evento de medición `foodpark_admin_lee` ya no describía lo que dice su sección después del reencadre de §6.0 (el administrador del park dejó de ser el cliente). La segunda `8.6` pasa a `8.9`, primer número libre después del `8.8` de meta, con el mismo método que el segundo `6.6` renumerado a `6.9`; renumerar a `8.7` habría creado un nuevo duplicado con la sección de medición. El evento se renombra a `foodpark_llega_independencia` (mide el H2 *Lo que no tienes que compartir con el park*, la independencia del puesto en un lugar compartido), la lectura de éxito del 40% pasa a ese H2 y la serie histórica se rompe en el rename: los datos previos de `foodpark_admin_lee` no son comparables. La página publicada lleva el evento renombrado en la sección que mide.
+
+### v2.11 — el tope de 3 por texto de enlace, aplicado a todo el cuerpo del sitio (2026-11-20)
+
+La regla del brief §2.6 (anchors descriptivos y variados, nunca el mismo anchor exacto desde muchas páginas) llevaba en vigor sin aplicarse fuera de la frase de /precios/: seis textos de enlace repetían 4 a 9 veces idénticos ("Solicitar una demo", "Escribir por WhatsApp", el anchor del hub fiscal, el de /inventario/, el de /sin-internet/ y "qué es NHILOS POS: venta local-first"), y el informe externo ya había medido la frase de /precios/ 17 veces. Aplicado el tope de 3 instancias idénticas por texto de enlace del cuerpo (en la suite de auditoría se excluye la navegación: header, footer y todo elemento nav, incluidos breadcrumb y riel lateral). Los excedentes variaron por contexto con los hrefs intactos; las tres instancias que quedan de la frase de precios y la del hub fiscal viven dentro de respuestas de FAQ, que son respuesta plana, no anchor elegido.

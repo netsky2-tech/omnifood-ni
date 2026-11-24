@@ -414,3 +414,51 @@
       if (sendBtn) sendBtn.addEventListener('click', handleSubmit);
     })();
   
+
+    /* ---- Capturas ampliables: <dialog> nativo ----
+       La miniatura del hilo se dibuja a ~286 px y su texto no se lee; el clic abre
+       la captura completa. <dialog> da foco atrapado, Escape y backdrop sin JS extra.
+       Sin soporte o sin JS el <a href> abre la imagen sola: nunca hay un callejon. */
+    (function () {
+      var shots = Array.prototype.slice.call(document.querySelectorAll('a.shot[data-shot]'));
+      if (!shots.length || typeof document.createElement('dialog').showModal !== 'function') return;
+      var docEl = document.documentElement;
+
+      var dlg = document.createElement('dialog');
+      dlg.className = 'shot-dialog';
+      dlg.setAttribute('aria-label', 'Captura ampliada');
+      dlg.innerHTML =
+        '<button type="button" class="shot-close" aria-label="Cerrar captura">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>' +
+        '</button>' +
+        '<figure class="shot-figure"><img alt=""><figcaption></figcaption></figure>';
+      document.body.appendChild(dlg);
+
+      var img = dlg.querySelector('img');
+      var cap = dlg.querySelector('figcaption');
+      var closeBtn = dlg.querySelector('.shot-close');
+      var lastFocus = null;
+
+      function close() { if (dlg.open) dlg.close(); }
+
+      shots.forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          e.preventDefault();
+          var source = a.querySelector('img');
+          lastFocus = a;
+          img.src = a.getAttribute('href');
+          img.alt = source ? source.alt : (a.getAttribute('data-shot') || '');
+          cap.textContent = a.getAttribute('data-shot') || '';
+          dlg.showModal();
+          // showModal no congela el fondo: se congela aquí para que la captura no se mueva
+          docEl.classList.add('shot-open');
+        });
+      });
+
+      closeBtn.addEventListener('click', close);
+      dlg.addEventListener('click', function (e) { if (e.target === dlg) close(); });
+      dlg.addEventListener('close', function () {
+        docEl.classList.remove('shot-open');
+        if (lastFocus) lastFocus.focus();
+      });
+    })();

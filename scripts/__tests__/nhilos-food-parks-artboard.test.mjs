@@ -551,9 +551,12 @@ test("G26 (S17): zero voseo in visible copy", () => {
 // G27 (S12 / S13): Exact measurement events, outgoing anchors, and pending routes unlinked
 test("G27 (S12/S13): 5 measurement hooks, required outgoing anchors, and pending routes unlinked", () => {
   const { vis } = loadPage();
+  // El evento del H2 de lo que no compartes con el park se renombra con el
+  // reencadre de §6.0 (el administrador del park ya no es el cliente): su viejo
+  // nombre, foodpark_admin_lee, describe una sección que ya no existe.
   const events = [
     "foodpark_llega_puestos",
-    "foodpark_admin_lee",
+    "foodpark_llega_independencia",
     "faq_foodpark_abre",
     "cta_demo_foodpark",
     "cta_whatsapp_foodpark",
@@ -561,14 +564,18 @@ test("G27 (S12/S13): 5 measurement hooks, required outgoing anchors, and pending
   for (const ev of events) {
     assert.ok(vis.includes(`data-event="${ev}"`), `missing data-event="${ev}"`);
   }
+  assert.ok(!vis.includes("foodpark_admin_lee"), "the obsolete foodpark_admin_lee event still ships");
   assert.ok(vis.includes("utm_medium=food-parks"), "WhatsApp link missing utm_medium=food-parks");
 
   assert.ok(
     vis.includes('href="/inventario/">control de inventario y kardex: recetas, insumos y merma</a>'),
     "missing /inventario/ link with required anchor",
   );
+  // El anchor a /precios/ se varía por contexto (audit externa S9.2 y regla del
+  // brief §2.6: nunca el mismo anchor exacto desde muchas páginas); el href no
+  // cambia y la respuesta del FAQ, que es texto plano y no enlace, queda igual.
   assert.ok(
-    vis.includes('href="/precios/">ver planes y precios de NHILOS POS</a>'),
+    vis.includes('href="/precios/">la tabla de planes, packs y setups</a>'),
     "missing /precios/ link with required anchor",
   );
   assert.ok(

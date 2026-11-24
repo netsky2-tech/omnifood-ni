@@ -360,6 +360,8 @@ No se cambia una URL por un bucket de volumen aislado. La estructura se mantiene
 
 Todo el progreso posterior se mide contra este cero. El primer checkpoint de baseline real es a los 28 días de la publicación.
 
+**Primer movimiento después del baseline (16–22/11):** 2 clics y 10 impresiones, todo en la home, CTR 20%, posición media 5.8 (mejor día 19/11, pos 3). Detalle en `registro_publicaciones.md`. Queries individuales aún bajo el umbral de privacidad de GSC (no legibles).
+
 **SERP P0 — go/no-go con evidencia de mercado (2026-11-16):**
 
 | Cluster | Veredicto | Gap confirmado |
