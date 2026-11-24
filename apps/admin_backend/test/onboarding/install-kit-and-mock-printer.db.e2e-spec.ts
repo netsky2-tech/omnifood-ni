@@ -10,7 +10,10 @@ import * as request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../../src/core/app/app.module';
 import { runInTenantTransaction } from '../../src/core/database/tenant-transaction';
-import { User, UserRole } from '../../src/modules/identity/entities/user.entity';
+import {
+  User,
+  UserRole,
+} from '../../src/modules/identity/entities/user.entity';
 import {
   ACTIVATION_CONTRACT_V2,
   ActivationAttempt,
@@ -333,16 +336,16 @@ describe('Install Kit (#958) & Mock Printer Rejection (#961) real DB & HTTP E2E'
 
       // Verify PostgreSQL stores only the 64-char SHA-256 hex digest, never plaintext
       const expectedHash = hashInstallToken(created.token);
-      const storedRows = await runInTenantTransaction(
+      const storedRows: InstallTokenDbRow[] = await runInTenantTransaction(
         dataSource,
         tenantA.tenantId,
         async (manager) =>
-          (await manager.query(
+          await manager.query(
             `SELECT id, tenant_id, token_hash, token_prefix, use_count, last_used_at, revoked_at
                FROM install_tokens
               WHERE id = $1`,
             [created.id],
-          )) as InstallTokenDbRow[],
+          ),
       );
       expect(storedRows).toHaveLength(1);
       expect(storedRows[0].token_hash).toBe(expectedHash);
@@ -412,16 +415,16 @@ describe('Install Kit (#958) & Mock Printer Rejection (#961) real DB & HTTP E2E'
       expect(locationHeader).toContain('X-Amz-Signature=');
       expect(locationHeader).toContain(TEMP_RELEASE_STORAGE_KEY);
 
-      const usedRows = await runInTenantTransaction(
+      const usedRows: InstallTokenDbRow[] = await runInTenantTransaction(
         dataSource,
         tenantA.tenantId,
         async (manager) =>
-          (await manager.query(
+          await manager.query(
             `SELECT id, tenant_id, token_hash, token_prefix, use_count, last_used_at, revoked_at
                FROM install_tokens
               WHERE id = $1`,
             [created.id],
-          )) as InstallTokenDbRow[],
+          ),
       );
       expect(usedRows).toHaveLength(1);
       expect(usedRows[0].use_count).toBe(1);
@@ -580,16 +583,16 @@ describe('Install Kit (#958) & Mock Printer Rejection (#961) real DB & HTTP E2E'
       );
 
       // Verify persisted row in PostgreSQL
-      const mockDbRows = await runInTenantTransaction(
+      const mockDbRows: ActivationAttemptDbRow[] = await runInTenantTransaction(
         dataSource,
         tenantA.tenantId,
         async (manager) =>
-          (await manager.query(
+          await manager.query(
             `SELECT id, status, failure_code
                FROM onboarding_activation_attempts
               WHERE id = $1`,
             [mockAttemptId],
-          )) as ActivationAttemptDbRow[],
+          ),
       );
       expect(mockDbRows).toHaveLength(1);
       expect(mockDbRows[0].status).toBe(ActivationAttemptStatus.FAIL);
@@ -615,17 +618,18 @@ describe('Install Kit (#958) & Mock Printer Rejection (#961) real DB & HTTP E2E'
       expect(finalizedHardware.failureCode).toBeNull();
 
       // Verify persisted row in PostgreSQL
-      const hardwareDbRows = await runInTenantTransaction(
-        dataSource,
-        tenantA.tenantId,
-        async (manager) =>
-          (await manager.query(
-            `SELECT id, status, failure_code
+      const hardwareDbRows: ActivationAttemptDbRow[] =
+        await runInTenantTransaction(
+          dataSource,
+          tenantA.tenantId,
+          async (manager) =>
+            await manager.query(
+              `SELECT id, status, failure_code
                FROM onboarding_activation_attempts
               WHERE id = $1`,
-            [hardwareAttemptId],
-          )) as ActivationAttemptDbRow[],
-      );
+              [hardwareAttemptId],
+            ),
+        );
       expect(hardwareDbRows).toHaveLength(1);
       expect(hardwareDbRows[0].status).toBe(ActivationAttemptStatus.PASS);
       expect(hardwareDbRows[0].failure_code).toBeNull();

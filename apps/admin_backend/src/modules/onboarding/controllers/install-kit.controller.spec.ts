@@ -19,7 +19,8 @@ interface MockResponseHandle {
   res: Response;
   headers: Record<string, string>;
   statusCode: number | null;
-  body: unknown;
+  /** `send` carries HTML strings; `json` carries the assetlinks payload array. */
+  body: string | readonly unknown[] | null;
   redirectStatus: number | null;
   redirectUrl: string | null;
 }
@@ -43,11 +44,11 @@ function createMockResponse(): MockResponseHandle {
       handle.statusCode = code;
       return res;
     }),
-    send: jest.fn((payload: unknown) => {
+    send: jest.fn((payload: string) => {
       handle.body = payload;
       return res;
     }),
-    json: jest.fn((payload: unknown) => {
+    json: jest.fn((payload: readonly unknown[]) => {
       handle.body = payload;
       return res;
     }),
@@ -120,7 +121,9 @@ describe('InstallKitController', () => {
         sha256: 'a'.repeat(64),
       });
 
-      const req = createMockRequest({ accept: 'text/html,application/xhtml+xml' });
+      const req = createMockRequest({
+        accept: 'text/html,application/xhtml+xml',
+      });
       const resHandle = createMockResponse();
 
       await controller.handleInstallLink(
@@ -164,7 +167,7 @@ describe('InstallKitController', () => {
         "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; form-action 'none'; frame-ancestors 'none'",
       );
 
-      const html = String(resHandle.body);
+      const html = resHandle.body as string;
       expect(html).toContain('Descargar APK');
       expect(html).toContain('/i/tok_abc?download=1&amp;abi=arm64-v8a');
       expect(html).toContain('/i/tok_abc?download=1&amp;abi=armeabi-v7a');
@@ -194,7 +197,7 @@ describe('InstallKitController', () => {
         undefined,
       );
 
-      const html = String(resHandle.body);
+      const html = resHandle.body as string;
       expect(resHandle.statusCode).toBe(HttpStatus.OK);
       expect(html).not.toContain('<script>');
       expect(html).not.toContain('alert(1)');
@@ -209,14 +212,10 @@ describe('InstallKitController', () => {
       const req = createMockRequest({ accept: 'text/html' });
       const resHandle = createMockResponse();
 
-      await controller.handleInstallLink(
-        'revoked-tok',
-        req,
-        resHandle.res,
-      );
+      await controller.handleInstallLink('revoked-tok', req, resHandle.res);
 
       expect(resHandle.statusCode).toBe(HttpStatus.GONE);
-      expect(String(resHandle.body)).toContain('revocado');
+      expect(resHandle.body as string).toContain('revocado');
     });
 
     it('returns 404 Not Found HTML page when token is unknown', async () => {
@@ -227,14 +226,10 @@ describe('InstallKitController', () => {
       const req = createMockRequest({ accept: 'text/html' });
       const resHandle = createMockResponse();
 
-      await controller.handleInstallLink(
-        'unknown-tok',
-        req,
-        resHandle.res,
-      );
+      await controller.handleInstallLink('unknown-tok', req, resHandle.res);
 
       expect(resHandle.statusCode).toBe(HttpStatus.NOT_FOUND);
-      expect(String(resHandle.body)).toContain('no válido');
+      expect(resHandle.body as string).toContain('no válido');
     });
 
     it('enforces per-IP rate limiting with 429 Too Many Requests', async () => {
@@ -248,7 +243,10 @@ describe('InstallKitController', () => {
       );
       mockService.validateActiveToken.mockResolvedValue({ id: 'tok-id' });
 
-      const req = createMockRequest({ ip: '198.51.100.77', accept: 'text/html' });
+      const req = createMockRequest({
+        ip: '198.51.100.77',
+        accept: 'text/html',
+      });
 
       await limitedController.handleInstallLink(
         'tok1',
