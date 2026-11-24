@@ -12,6 +12,7 @@ import {
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { DERIVED, IMAGE_VARIANTS, variantName } from "./web-images.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE = path.join(ROOT, "design/nhilos-web-foundation");
@@ -222,6 +223,24 @@ for (const page of PAGES) {
         relativeRefs.map((m) => m[1]).join(", "),
     );
   }
+  // Una imagen publicada se sirve con AVIF y WebP a los anchos que de verdad se
+  // pintan; el <img> sigue siendo el fallback y conserva sus atributos. El
+  // <picture> no debe crear caja propia: `display:contents` en site.css lo aplana.
+  html = html.replace(/<img\b([^>]*?)\/?>/g, (tag, attrs) => {
+    const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
+    if (!src || !src.startsWith("/media/")) return tag;
+    const file = path.basename(src);
+    const variant = IMAGE_VARIANTS[file];
+    if (!variant) return tag;
+    const srcset = (ext) =>
+      variant.widths.map((width) => `/${DERIVED}/${variantName(file, width, ext)} ${width}w`).join(", ");
+    const sources = [];
+    if (!variant.alpha) {
+      sources.push(`<source type="image/avif" srcset="${srcset("avif")}" sizes="${variant.sizes}">`);
+    }
+    sources.push(`<source type="image/webp" srcset="${srcset("webp")}" sizes="${variant.sizes}">`);
+    return `<picture>${sources.join("")}${tag}</picture>`;
+  });
   writeFileSync(target, html);
 }
 copyFileSync(path.join(SOURCE, NOT_FOUND), path.join(OUTPUT, NOT_FOUND));
@@ -252,7 +271,10 @@ let publishedAssets = 0;
 for (const rel of [...referenced].sort()) {
   const from = path.join(SOURCE, rel);
   if (!existsSync(from)) {
-    fail(`a page references an asset that does not exist: ${rel}`);
+    const hint = rel.startsWith(`${DERIVED}/`)
+      ? ` Ejecuta \`node scripts/web-images.mjs\` para generarlas.`
+      : "";
+    fail(`a page references an asset that does not exist: ${rel}.${hint}`);
   }
   const to = path.join(OUTPUT, rel);
   mkdirSync(path.dirname(to), { recursive: true });
@@ -286,6 +308,18 @@ writeFileSync(
 writeFileSync(
   path.join(OUTPUT, "_redirects"),
   "/04-sintesis-hibrida.html / 301\n",
+);
+
+// RFC 9116: canal para reportar vulnerabilidades sin que el reporte se pierda en
+// el WhatsApp comercial. Expira a un año; renovar en el mismo build.
+mkdirSync(path.join(OUTPUT, ".well-known"), { recursive: true });
+writeFileSync(
+  path.join(OUTPUT, ".well-known", "security.txt"),
+  `Contact: mailto:soporte@nhilospos.com
+Expires: 2027-11-23T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://nhilospos.com/.well-known/security.txt
+`,
 );
 // Headers de seguridad: no se pueden poner a mano en cada HTML, así que viven
 // aquí, junto al build, y se reescriben en cada publicación. El CSP no usa
