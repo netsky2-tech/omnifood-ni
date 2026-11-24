@@ -25,6 +25,15 @@ import { ActivationFollowUp } from '../entities/activation-follow-up.entity';
 import { DevicePrincipal, SupportOverrideAction } from '../dto/activation.dto';
 import { ActivationFollowUpStatus } from '../entities/activation-follow-up.entity';
 import { Invoice } from '../../sales/entities/invoice.entity';
+import {
+  DeviceSyncCredential,
+  DeviceSyncCredentialStatus,
+} from '../../identity/entities/device-sync-credential.entity';
+import {
+  ReactivationChallengeStatus,
+  TerminalReactivationChallenge,
+} from '../entities/terminal-reactivation-challenge.entity';
+import { TerminalRecoveryCode } from '../entities/terminal-recovery-code.entity';
 
 describe('ActivationService — ONB1.7A StartActivation', () => {
   let service: ActivationService;
@@ -734,9 +743,7 @@ describe('ActivationService — ONB1.7A StartActivation', () => {
         ) =>
           buildV2Checks(8).map((chk) => {
             const override = overrides[chk.checkCode];
-            return override
-              ? { ...chk, detailsSanitizedJson: override }
-              : chk;
+            return override ? { ...chk, detailsSanitizedJson: override } : chk;
           });
 
         it.each(['MOCK', 'mock', '  Mock  '])(
@@ -2022,18 +2029,6 @@ describe('ActivationService — Issue #566 lifecycle protection & recovery code'
   const challengeId = '66666666-6666-4666-8666-666666666666';
 
   const setup = () => {
-    const {
-      DeviceSyncCredential,
-      DeviceSyncCredentialStatus,
-    } = require('../../identity/entities/device-sync-credential.entity') as typeof import('../../identity/entities/device-sync-credential.entity');
-    const {
-      ReactivationChallengeStatus,
-      TerminalReactivationChallenge,
-    } = require('../entities/terminal-reactivation-challenge.entity') as typeof import('../entities/terminal-reactivation-challenge.entity');
-    const {
-      TerminalRecoveryCode,
-    } = require('../entities/terminal-recovery-code.entity') as typeof import('../entities/terminal-recovery-code.entity');
-
     const attemptRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
@@ -2049,17 +2044,23 @@ describe('ActivationService — Issue #566 lifecycle protection & recovery code'
       findOne: jest.fn(),
       find: jest.fn().mockResolvedValue([]),
       create: jest.fn((dto: Record<string, unknown>) => dto),
-      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+      save: jest.fn((entity: Record<string, unknown>) =>
+        Promise.resolve(entity),
+      ),
     };
     const followUpRepo = {
       findOne: jest.fn(),
       find: jest.fn(),
       create: jest.fn((dto: Record<string, unknown>) => dto),
-      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+      save: jest.fn((entity: Record<string, unknown>) =>
+        Promise.resolve(entity),
+      ),
     };
     const sessionRepo = {
       findOne: jest.fn(),
-      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+      save: jest.fn((entity: Record<string, unknown>) =>
+        Promise.resolve(entity),
+      ),
     };
     const invoiceRepo = {
       findOne: jest.fn(),
@@ -2076,7 +2077,9 @@ describe('ActivationService — Issue #566 lifecycle protection & recovery code'
         id: 'rc-566-1',
         ...dto,
       })),
-      save: jest.fn((entity: Record<string, unknown>) => Promise.resolve(entity)),
+      save: jest.fn((entity: Record<string, unknown>) =>
+        Promise.resolve(entity),
+      ),
     };
 
     const manager = {
