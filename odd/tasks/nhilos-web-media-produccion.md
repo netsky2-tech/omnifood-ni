@@ -37,11 +37,13 @@ Cada bloque es una unidad de trabajo cerrada: se produce, se audita, se usa y se
 **Desbloquea:** el bloque de reconocimiento de `/restaurantes/` (que hoy promete comidería sin mostrarla), la tarjeta de segmentos del home, `/demo/` y `/precios/`.
 **Hecho cuando:** cuatro capturas auditadas, con `seed` reproducible y etiqueta de demostración.
 
-### U2. Pulpería / miscelánea (capturas de inquilino)
-**Qué cambia:** muestra el otro modo — reventa pura, sin recetas, cobro rápido.
-**Piezas:** catálogo por unidad con precios de mostrador · venta de varios ítems con vuelto · reporte del turno.
-**Desbloquea:** el segundo modo del home ("vendes lo que compras"), el hub y `/precios/`. **El sitio ya dice "pulpería" y no tiene una sola imagen que la muestre.**
-**Hecho cuando:** tres capturas auditadas + seed.
+### U2. Pulpería / miscelánea (capturas de inquilino) — **HECHO (2026-11-24)**
+**Seed reproducible:** `npm run seed:prospect-demo -- --name "Pulpería La Esquina" --vertical retail --slug demo-pulperia-la-esquina --plan ESENCIAL --invoices 24` (`RETAIL_MINIMARKET`, `FOODPARK_QSR`, 12 productos de reventa pura sin recetas).
+**Piezas producidas y auditadas (1068×2310, WebP, `design/nhilos-web-foundation/media/`):**
+1. `pos_pulperia_01_catalogo.webp` (79 KB) — **Qué se ve:** catálogo POS de reventa pura (Agua 1L C$25, Arroz 5lb C$120, Azúcar 2lb C$45, Aceite 1L C$95, Café Molido 250g C$110, Frijoles 1lb C$55, Galletas Oreo C$25, Coca Cola 500ml C$35, Hielo 5lb C$40) con nube sincronizada. **Qué prueba:** operación de mostrador/pulpería sin recetas. **Qué no prueba:** escáner de código de barras ni impresión externa. **En uso en:** `/software-pos/` (tarjeta "Vendes lo que compras: reventa y mostrador sin recetas").
+2. `pos_pulperia_02_cobro_vuelto.webp` (74 KB) — **Qué se ve:** pantalla de Cobro y Facturación por C$ 305.00 en efectivo (NIO), monto recibido C$ 500.00 con botones de billete rápido y cálculo automático de `Vuelto: C$ 195.00` (`$5.32 USD`). **Qué prueba:** cobro rápido en córdobas con cálculo de vuelto y equivalencia en dólares. **Qué no prueba:** pago con tarjeta ni emisión impresa.
+3. `pos_pulperia_03_reporte_turno.webp` (94 KB) — **Qué se ve:** Lectura Parcial (Corte X) del turno activo de `Propietario Pulpería La Esquina` con Fondo Inicial C$ 2,000.00 / $ 20.00 y Esperado en Gaveta C$ 2,305.00 / $ 20.00 tras la venta. **Qué prueba:** control bimoneda de caja en turno abierto sin cerrarlo. **Qué no prueba:** Corte Z final ni conciliación multi-terminal.
+**Hecho cuando:** tres capturas auditadas + seed + primera pieza cableada en `/software-pos/`.
 
 ### U3. Food park con dos puestos (capturas de inquilino)
 **Qué cambia:** prueba lo que `/food-parks/` hoy **declara que no prueba**: *"esta grabación no muestra varios puestos ni dos terminales cobrando en simultáneo"*.

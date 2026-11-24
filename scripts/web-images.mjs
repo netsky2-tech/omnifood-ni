@@ -49,6 +49,7 @@ export const IMAGE_VARIANTS = {
   },
   "pos_06_pantalla_cobro.webp": { widths: [220, 440], sizes: "220px" },
   "pos_03_catalogo_soho.webp": { widths: [282, 564, 974], sizes: "(max-width: 640px) 282px, 487px" },
+  "pos_pulperia_01_catalogo.webp": { widths: [282, 564, 974], sizes: "(max-width: 640px) 282px, 487px" },
   "dsh_16_recetas_bom.webp": { widths: [282, 564, 974], sizes: "(max-width: 640px) 282px, 487px" },
   "dsh_02_kpis_ventas.webp": { widths: [348, 696, 1014], sizes: "(max-width: 640px) 348px, 507px" },
   "dsh_15_inventario.webp": { widths: [324, 648, 1158], sizes: "(max-width: 640px) 324px, 1158px" },
