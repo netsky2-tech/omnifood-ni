@@ -12,7 +12,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Observable } from 'rxjs';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
-import { DataSource } from 'typeorm';
 import { TenantInterceptor } from '../../src/core/database/rls.interceptor';
 import { InventoryMovementController } from '../../src/modules/inventory/inventory-movement.controller';
 import { CountSessionService } from '../../src/modules/inventory/count-session.service';
@@ -33,11 +32,12 @@ import {
 } from '../support/identity-jwt-test.fixture';
 import {
   closeEntitlementsFixture,
+  ENTITLEMENTS_TEST_DATA_SOURCE,
+  entitlementsServiceProvider,
   openEntitlementsFixture,
   seedActiveSubscription,
   type EntitlementsFixture,
 } from '../support/entitlements-fixture';
-import { EntitlementsService } from '../../src/modules/entitlements/entitlements.service';
 
 const TEST_TENANT_ID = 'tenant-production-close';
 
@@ -164,8 +164,11 @@ describe('Production close route (integration)', () => {
     // PREMIUM route (@RequireCapability('inventory.cooking')) resolved by
     // the REAL CapabilitiesGuard, so the device tenant must really resolve
     // as entitled (PRO) against the fixture's real contract tables. The
-    // suite has no DataSource of its own, so the fixture's real connection
-    // serves the `DataSource` token directly.
+    // suite carries no business data of its own, so the resolver reads the
+    // fixture: the real `EntitlementsService` reaches the dedicated
+    // `ENTITLEMENTS_TEST_DATA_SOURCE` token instead of binding the fixture's
+    // real connection to the generic `DataSource` token (same dedicated-token
+    // pattern as every other entitlements-backed e2e suite).
     entitlementsFixture = await openEntitlementsFixture();
     await seedActiveSubscription(
       entitlementsFixture.dataSource,
@@ -211,8 +214,11 @@ describe('Production close route (integration)', () => {
         JwtService,
         createIdentityJwtTestConfigProvider(),
         createIdentityJwtConfigProvider(),
-        { provide: DataSource, useValue: entitlementsFixture.dataSource },
-        EntitlementsService,
+        {
+          provide: ENTITLEMENTS_TEST_DATA_SOURCE,
+          useValue: entitlementsFixture.dataSource,
+        },
+        entitlementsServiceProvider(),
       ],
     })
       // Device transport routes (movements/sync, shrinkage,

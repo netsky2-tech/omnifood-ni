@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule } from '@nestjs/jwt';
 import { PlanCapability } from './entities/plan-capability.entity';
 import { TenantSubscription } from './entities/tenant-subscription.entity';
 import { TenantEntitlementOverride } from './entities/tenant-entitlement-override.entity';
@@ -9,14 +8,7 @@ import { EntitlementsController } from './entitlements.controller';
 import { EntitlementOverridesService } from './entitlement-overrides.service';
 import { EntitlementsService } from './entitlements.service';
 import { TenantQuotaService } from './tenant-quota.service';
-import { CurrentUserAuthorizationService } from '../identity/services/current-user-authorization.service';
-import { AuthGuard } from '../identity/guards/auth.guard';
-import { AuthoritativeCurrentUserGuard } from '../identity/guards/authoritative-current-user.guard';
-import {
-  IDENTITY_JWT_CONFIG,
-  IdentityJwtConfigModule,
-  type IdentityJwtConfig,
-} from '../identity/config/identity-jwt.config';
+import { IdentityGuardsModule } from '../identity/guards/identity-guards.module';
 import { TenantSubscriptionService } from './tenant-subscription.service';
 
 /**
@@ -43,14 +35,11 @@ import { TenantSubscriptionService } from './tenant-subscription.service';
  *
  * The controller is guarded by `@UseGuards(AuthGuard,
  * AuthoritativeCurrentUserGuard)`, so this module must resolve what those
- * guards inject — exactly the wiring `IdentityModule` uses, never a local
- * copy of the secret: `IdentityJwtConfigModule` provides `IDENTITY_JWT_CONFIG`
- * and `JwtModule.registerAsync` derives the signer options from it with the
- * same factory shape (secret/algorithm/TTL/issuer/audience).
- * `CurrentUserAuthorizationService` backs the authoritative guard; like the
- * other two services it only needs the global `DataSource`, so providing it
- * here is the same object graph `IdentityModule` builds — and guards are
- * resolved in the declaring controller's module, so they must be listed here.
+ * guards inject. R3-004: that wiring (the `IDENTITY_JWT_CONFIG` module, the
+ * `JwtModule.registerAsync` derivation from it, both guards and
+ * `CurrentUserAuthorizationService`) lives ONLY in `IdentityGuardsModule`,
+ * which `IdentityModule` also uses — exactly one factory, never a local
+ * copy of the secret.
  */
 @Module({
   imports: [
@@ -60,20 +49,7 @@ import { TenantSubscriptionService } from './tenant-subscription.service';
       TenantEntitlementOverride,
       TenantEntitlementChangeHistory,
     ]),
-    IdentityJwtConfigModule,
-    JwtModule.registerAsync({
-      imports: [IdentityJwtConfigModule],
-      inject: [IDENTITY_JWT_CONFIG],
-      useFactory: (config: IdentityJwtConfig) => ({
-        secret: config.secret,
-        signOptions: {
-          algorithm: config.algorithm,
-          expiresIn: config.accessTokenTtlSeconds,
-          issuer: config.issuer,
-          audience: config.audience,
-        },
-      }),
-    }),
+    IdentityGuardsModule,
   ],
   controllers: [EntitlementsController],
   providers: [
@@ -81,11 +57,6 @@ import { TenantSubscriptionService } from './tenant-subscription.service';
     TenantQuotaService,
     EntitlementOverridesService,
     TenantSubscriptionService,
-    // The guard chain of EntitlementsController (AuthGuard →
-    // AuthoritativeCurrentUserGuard), resolved in THIS module's context.
-    AuthGuard,
-    AuthoritativeCurrentUserGuard,
-    CurrentUserAuthorizationService,
   ],
   exports: [
     EntitlementsService,
