@@ -697,4 +697,56 @@ export const TRANSPORT_DECLARATIONS: TransportDeclaration[] = [
   // anchor factors). Read by the owner dashboard's insumo form under a human
   // session; it is not a device transport.
   { controller: 'UomCatalogController', transport: 'human' },
+  // POS Install Kit (issue #958): the QR / App Link entry point is scanned by
+  // a phone camera before any credential exists; the single-use install token
+  // material in the URL is the authority (mirrors DeviceLinkingController),
+  // and `GET /.well-known/assetlinks.json` is the Android App Links statement.
+  {
+    controller: 'InstallKitController',
+    transport: 'public',
+    reason:
+      'QR/App Link install page (GET /i/:token) and Android Digital Asset Links statement; no credential exists yet, authority is the single-use install token in the URL, per-IP rate limited',
+  },
+  // Install Kit token management (issue #958): owner-dashboard CRUD under a
+  // human session JWT with ONBOARDING_ACTIVATION_MANAGE.
+  { controller: 'InstallTokensController', transport: 'human' },
+  // Issue #566: terminal reactivation pre-auth seams (device-lookup and the
+  // challenge status/complete/confirm round-trip) run before any credential
+  // exists: they are hardened by hardware-fingerprint binding, dual-key rate
+  // limiting, and a mandatory human approval (dashboard or one-time recovery
+  // code) consumed inside the flow. The dashboard-facing challenge and
+  // reactivation seams stay human-authenticated.
+  {
+    controller: 'TerminalReactivationController',
+    transport: 'public',
+    reason:
+      'pre-auth reactivation challenge seams (device-lookup, status, complete, confirm): authority is the hardware fingerprint + challenge material, rate limited, and completion requires a mandatory human approval step recorded in the flow',
+    overrides: [
+      {
+        httpMethod: 'GET',
+        handlerPath: 'reactivation-challenges',
+        transport: 'human',
+      },
+      {
+        httpMethod: 'POST',
+        handlerPath: 'reactivation-challenges/:id/approve',
+        transport: 'human',
+      },
+      {
+        httpMethod: 'POST',
+        handlerPath: 'reactivation-challenges/:id/cancel',
+        transport: 'human',
+      },
+      {
+        httpMethod: 'POST',
+        handlerPath: 'terminals/:terminalId/reactivate',
+        transport: 'human',
+      },
+      {
+        httpMethod: 'POST',
+        handlerPath: 'terminals/:terminalId/recovery-code',
+        transport: 'human',
+      },
+    ],
+  },
 ];
