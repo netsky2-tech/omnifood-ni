@@ -349,7 +349,7 @@ const FAQ_QUESTIONS = [
   "¿La administración del patio ve mis ventas?",
   "¿Un puesto que revende y una cocina pueden usar el mismo sistema?",
   "¿Qué pasa con la facturación de cada puesto?",
-  "¿Funciona sin internet?",
+  "¿Sigue cobrando mi puesto si se cae el wifi del food park?",
   "¿Cuánto cuesta para un puesto en un food park?",
 ];
 test("G16 (S9): 6 FAQ questions verbatim, stall-owner framing, in order", () => {

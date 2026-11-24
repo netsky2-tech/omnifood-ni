@@ -42,14 +42,22 @@ function opensWithCountry(answer) {
   return /^en\s+nicaragua\b/i.test(t);
 }
 
-function loadAnswers(file) {
+function loadFaq(file) {
   const src = fs.readFileSync(path.join(ROOT, "design/nhilos-web-foundation", `${file}.html`), "utf8");
   const ld = JSON.parse(src.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1]);
   const faq = ld["@graph"].find((n) => n["@type"] === "FAQPage").mainEntity;
   const body = src.split("<body>")[1];
   const vis = body.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<!--[\s\S]*?-->/g, "");
-  const cells = [...vis.matchAll(/<div class="faq-cell"[^>]*>\s*<h3>[\s\S]*?<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map((m) => m[1]);
-  return { jsonld: faq.map((q) => q.acceptedAnswer.text), visible: cells.map(normalize) };
+  const cells = [...vis.matchAll(/<div class="faq-cell"[^>]*>\s*<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map((m) => ({
+    q: normalize(m[1]),
+    a: normalize(m[2]),
+  }));
+  return {
+    jsonldQuestions: faq.map((q) => normalize(q.name)),
+    visibleQuestions: cells.map((c) => c.q),
+    jsonld: faq.map((q) => q.acceptedAnswer.text),
+    visible: cells.map((c) => c.a),
+  };
 }
 
 function checkOpenings(source, answers) {
@@ -67,7 +75,7 @@ function checkOpenings(source, answers) {
 
 for (const page of PAGES) {
   test(`FAQ openings on /${page.replace(/^\d+-/, "")}/: no repeated two-word opening, at most one country opening`, () => {
-    const { jsonld, visible } = loadAnswers(page);
+    const { jsonld, visible } = loadFaq(page);
     assert.ok(jsonld.length > 0, "page must declare a FAQPage");
     assert.equal(visible.length, jsonld.length, "visible FAQ cells and JSON-LD answers must match in count");
     for (const [source, answers] of [["JSON-LD", jsonld], ["visible", visible]]) {
@@ -77,3 +85,33 @@ for (const page of PAGES) {
     }
   });
 }
+
+// Site-wide SEO anti-cannibalization: no two pages may declare the same
+// FAQPage Question.name (normalized), and no FAQ question may be a bare
+// context-free pricing prompt ("¿Cuánto cuesta?" / "¿Cuánto cuesta al mes?").
+test("FAQ cross-page uniqueness: zero duplicate Question.name across all 9 pages", () => {
+  const seen = new Map();
+  const dups = [];
+  for (const page of PAGES) {
+    const { jsonldQuestions, visibleQuestions } = loadFaq(page);
+    assert.deepEqual(visibleQuestions, jsonldQuestions, `visible vs JSON-LD questions mismatch on ${page}`);
+    for (const q of jsonldQuestions) {
+      const key = q.toLowerCase().replace(/[¿?¡!.,:;]/g, "").replace(/\s+/g, " ").trim();
+      if (seen.has(key)) dups.push(`"${q}" duplicated on ${seen.get(key)} and ${page}`);
+      else seen.set(key, page);
+    }
+  }
+  assert.deepEqual(dups, [], `Duplicate FAQ questions across pages:\n${dups.join("\n")}`);
+});
+
+test("FAQ question specificity: no bare context-free pricing question", () => {
+  const bare = [];
+  const bareRe = /^¿?\s*cu[aá]nto\s+cuesta(\s+al\s+mes)?\s*\??$/i;
+  for (const page of PAGES) {
+    const { jsonldQuestions } = loadFaq(page);
+    for (const q of jsonldQuestions) {
+      if (bareRe.test(q)) bare.push(`${page}: "${q}"`);
+    }
+  }
+  assert.deepEqual(bare, [], `Bare context-free pricing FAQ questions:\n${bare.join("\n")}`);
+});

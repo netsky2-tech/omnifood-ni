@@ -239,9 +239,9 @@ test("G13 (S9): 7 FAQ questions match S9 verbatim and in order", () => {
     "¿Cada plato descuenta sus ingredientes de verdad?",
     "¿Qué pasa si cambia el precio de un insumo?",
     "¿Y si se cae el internet en hora pico?",
-    "¿Sirve para la DGI?",
+    "¿Cómo factura un restaurante ante la DGI con NHILOS POS?",
     "¿Mis muchachos lo aprenden rápido?",
-    "¿Cuánto cuesta al mes?",
+    "¿Cuánto cuesta NHILOS POS para un restaurante al mes?",
   ];
   assert.deepEqual(cells.map((c) => c[0]), expected);
 });

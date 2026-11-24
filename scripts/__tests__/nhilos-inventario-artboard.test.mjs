@@ -234,7 +234,7 @@ test("G12 (S10): all 7 FAQ questions are present verbatim and in order", () => {
     "¿Puedo cambiar de método de valuación en el sistema?",
     "¿Qué es la merma teórica vs física?",
     "¿Sirve si no tengo recetas?",
-    "¿Cuánto cuesta?",
+    "¿Cuánto cuesta el control de inventario con kardex en NHILOS POS?",
   ];
   assert.deepEqual(
     cells.map((c) => c[0]),
