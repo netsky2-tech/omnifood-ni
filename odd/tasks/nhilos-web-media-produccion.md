@@ -31,11 +31,14 @@ El mostrador pequeño, la terminal en la mano, dos terminales cobrando a la vez.
 
 Cada bloque es una unidad de trabajo cerrada: se produce, se audita, se usa y se cierra. No se abre la siguiente sin cerrar la anterior.
 
-### U1. Comidería / fritanga (capturas de inquilino)
-**Qué cambia:** el catálogo deja de ser de cafetería.
-**Piezas:** catálogo con platos del día · venta con modificadores ("sin cebolla", "con tajadas extra") · cobro en córdobas con vuelto · historial del turno.
-**Desbloquea:** el bloque de reconocimiento de `/restaurantes/` (que hoy promete comidería sin mostrarla), la tarjeta de segmentos del home, `/demo/` y `/precios/`.
-**Hecho cuando:** cuatro capturas auditadas, con `seed` reproducible y etiqueta de demostración.
+### U1. Comidería / fritanga (capturas de inquilino) — **HECHO (2026-11-24)**
+**Seed reproducible:** `npm run seed:prospect-demo -- --name "Comidería Doña Rosa" --vertical restaurante --mode RESTAURANT --slug demo-comideria-dona-rosa --plan PRO --invoices 24` (`BAR_RESTAURANTE`, 12 platos típicos nicaragüenses, 26 insumos).
+**Piezas producidas y auditadas (1080×2316, WebP, `design/nhilos-web-foundation/media/`):**
+1. `pos_comideria_01_catalogo.webp` (79 KB) — **Qué se ve:** catálogo POS de `Comidería Doña Rosa` (Hamburguesa con Papas C$220, Cerveza Toña C$65, Desayuno Nica Completo C$150, Tacos Nicas 3u C$140, Pollo Asado con Ensalada C$285, Quesillo con Tortilla C$90, Gallopinto C$85, Refresco Natural 12oz C$60) con nube verde sincronizada. **Qué prueba:** menú real de comidería nicaragüense fuera de la cafetería. **Qué no prueba:** modificadores abiertos ni impresión externa.
+2. `pos_comideria_02_pedido.webp` (69 KB) — **Qué se ve:** carrito con 4 platos típicos (Pollo Asado C$285, Tacos Nicas 3u C$140, Quesillo con Tortilla C$90, Refresco Natural C$60; `TOTAL C$ 575.00`). **Qué prueba:** armado rápido de comanda multi-ítem en mostrador. **Qué no prueba:** despacho a cocina (KDS) ni envío por mesa.
+3. `pos_comideria_03_cobro_vuelto.webp` (71 KB) — **Qué se ve:** Cobro y Facturación por C$ 580.00 en efectivo (NIO), monto recibido C$ 1,000.00 con botones de billete rápido y `Vuelto: C$ 420.00` (`$11.47 USD`). **Qué prueba:** cobro en córdobas con cálculo automático de vuelto y equivalencia en dólares. **Qué no prueba:** cobro con tarjeta ni ticket impreso.
+4. `pos_comideria_04_historial.webp` (65 KB) — **Qué se ve:** Historial de Ventas del turno de `Comidería Doña Rosa` con 2 facturas consecutivas (`A00000001` C$575.00, `A00000002` C$580.00; `Total: C$ 1155.00`; `Anuladas: 0`). **Qué prueba:** correlativo consecutivo y resumen del turno en la terminal. **Qué no prueba:** cierre Z ni libros DGI exportados.
+**Hecho cuando:** cuatro capturas reales auditadas + seed reproducible.
 
 ### U2. Pulpería / miscelánea (capturas de inquilino) — **HECHO (2026-11-24)**
 **Seed reproducible:** `npm run seed:prospect-demo -- --name "Pulpería La Esquina" --vertical retail --slug demo-pulperia-la-esquina --plan ESENCIAL --invoices 24` (`RETAIL_MINIMARKET`, `FOODPARK_QSR`, 12 productos de reventa pura sin recetas).
@@ -45,17 +48,16 @@ Cada bloque es una unidad de trabajo cerrada: se produce, se audita, se usa y se
 3. `pos_pulperia_03_reporte_turno.webp` (94 KB) — **Qué se ve:** Lectura Parcial (Corte X) del turno activo de `Propietario Pulpería La Esquina` con Fondo Inicial C$ 2,000.00 / $ 20.00 y Esperado en Gaveta C$ 2,305.00 / $ 20.00 tras la venta. **Qué prueba:** control bimoneda de caja en turno abierto sin cerrarlo. **Qué no prueba:** Corte Z final ni conciliación multi-terminal.
 **Hecho cuando:** tres capturas auditadas + seed + primera pieza cableada en `/software-pos/`.
 
-### U3. Food park con dos puestos (capturas de inquilino)
-**Qué cambia:** prueba lo que `/food-parks/` hoy **declara que no prueba**: *"esta grabación no muestra varios puestos ni dos terminales cobrando en simultáneo"*.
-**Piezas:** dos secciones de catálogo claramente distintas · el panel con ventas de las dos · una captura de la organización por categorías.
-**Desbloquea:** `/food-parks/` (retirar el límite declarado cuando exista la prueba), el H3 de puestos del home.
-**Hecho cuando:** tres capturas auditadas + seed con dos categorías.
+### U3. Food park con dos puestos (capturas de inquilino) — **HECHO (2026-11-24)**
+**Seed reproducible:** `npm run seed:prospect-demo -- --name "Patio Central" --vertical foodpark --slug demo-foodpark-patio-central --plan OPERACION --invoices 24` (`BAR_RESTAURANTE`, `FOODPARK_QSR`, productos agrupados en categorías `Puesto Parrilla` y `Puesto Bebidas`).
+**Piezas producidas y auditadas (1440×900, WebP, `design/nhilos-web-foundation/media/`):**
+1. `dsh_foodpark_01_productos_modos.webp` — **Qué se ve:** pantalla Productos de `Patio Central` con pestañas `Simple` (Agua Purificada C$20, Flan Casero C$80, Gaseosa C$35), `Compuesto (con receta)` y `Padre de Variantes` coexistiendo en el mismo negocio. **Qué prueba:** convivencia de reventa simple y cocina con receta dentro de un mismo catálogo de puesto. **Qué no prueba:** varias cuentas independientes consolidadas ni dos terminales cobrando en simultáneo.
+2. `dsh_foodpark_02_dashboard_ventas.webp` — **Qué se ve:** Dashboard de `Propietario Patio Central` con `VENTAS NETAS C$4,780.00`, `24 tickets`, `Ticket Promedio C$199.17`, evolución de ventas y ventas por hora. **Qué prueba:** panel propio del dueño del puesto en régimen Cuota Fija. **Qué no prueba:** vista consolidada multi-marca del parque (prohibida por #994 y §6.0).
+3. `dsh_foodpark_03_ventas_resumen.webp` — **Qué se ve:** vista Ventas de `Patio Central` con `VENTAS BRUTAS C$850.00`, `4 facturas` y desglose por método de pago (`Efectivo NIO C$340`, `Tarjeta NIO C$240`, `Otros C$270`). **Qué prueba:** control de ventas y medios de pago por turno en el panel. **Qué no prueba:** sincronización entre cajas por red local.
+**Hecho cuando:** tres capturas reales del panel auditadas + seed reproducible.
 
-### U4. Control de Mesas con mesa ocupada (captura de inquilino)
-**Qué cambia:** la operación de mesa deja de estar solo en el código.
-**Piezas:** una captura del Control de Mesas con una mesa OCUPADA, su pedido abierto y su total.
-**Desbloquea:** el `media-slot` de `/restaurantes/` (S12 del ODD) y el H3 "Mesa y mostrador".
-**Hecho cuando:** una captura auditada; el alt dice mesa ocupada y total, sin prometer reservas.
+### U4. Control de Mesas con mesa ocupada (captura de inquilino) — **BLOQUEADO POR SYNC DE TOPOLOGÍA EN APK**
+**Hallazgo real (2026-11-24):** con `Comidería Doña Rosa` sembrado en modo `RESTAURANT` y 10 mesas en `tenant_topology_revisions` (`Salón Principal` + `Terraza`), la pantalla `Control de Mesas y Áreas` del APK instalado (`com.nhilos.pos_app`) permanece vacía (`"No hay áreas ni mesas configuradas"`) porque `TableLayoutViewModel` lee solo SQLite local y el sync delta entrante no hidrató `restaurant_areas`/`restaurant_tables` en este build. No se simula ni se maquilla; queda abierto hasta que el POS hidrate áreas/mesas desde la topología.
 
 ### U5. El mostrador pequeño real (rodaje físico)
 **Qué cambia:** es el único recurso que muestra **el lugar**.
