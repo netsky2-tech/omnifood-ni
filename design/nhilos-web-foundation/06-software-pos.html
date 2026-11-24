@@ -221,12 +221,13 @@
     /* Captura real enmarcada (marco sobrio; sin bezel de navegador del home) */
     .capture-frame { margin: var(--space-5) 0 0; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); overflow: hidden; }
     .capture-frame img { width: 100%; height: auto; display: block; }
-    /* Capturas desparejas (teléfono vertical vs escritorio amplio): cada medio vive en una caja de
-       proporción fija, la misma caja para las dos, con object-fit: contain — peso visual igual sin
-       recortar la captura real y sin que una tarjeta estire a la otra. */
-    .capture-media { aspect-ratio: 1 / 1; }
-    .capture-media img { height: 100%; object-fit: contain; }
-    @media (max-width: 900px) { .capture-media { aspect-ratio: 3 / 4; } }
+    /* Capturas desparejas (teléfono vertical vs panel amplio): cada figura mide su propio ratio
+       nativo, que vive en los atributos width/height de su imagen. La auditoría (6.3) midió la
+       caja única 1/1: un panel 16:10 quedaba con ~183 px de blanco y el texto interno a ~5 px;
+       el teléfono se dibujaba al 47 % del ancho. Nada de ratios por regla global: el teléfono
+       lleva su clase de acote a ancho de lectura y el panel amplio usa toda su columna. La
+       evidencia completa, sin recortes ni blancos forzados. */
+    .capture-frame--phone { max-width: 280px; margin-inline: auto; }
 
     /* Rejilla editorial asimétrica para la educación de categoría */
     .edu-grid { display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: var(--space-10); align-items: start; margin-top: var(--space-6); }
@@ -423,8 +424,11 @@
             <span class="tag">Mostrador y reventa</span>
             <h3>Vendes lo que compras: reventa y mostrador sin recetas</h3>
             <p>Alta de producto con costo y precio, control de stock, arqueos y métricas del turno. Es la operación de mostrador y reventa pura: botanas, bebidas embotelladas, vender sin preparar nada.</p>
-            <figure class="capture-frame capture-media">
-              <img src="/media/pos_03_catalogo_soho.webp" alt="Captura real de la terminal NHILOS POS: catálogo de productos de reventa con sus precios, datos de demostración" loading="lazy" title="NHILOS POS: catálogo en modo simple">
+            <figure class="capture-frame capture-frame--phone">
+              <a class="shot capture-shot" href="media/pos_03_catalogo_soho.webp" data-shot="Terminal · catálogo en modo simple" aria-label="Ampliar captura: catálogo en modo simple" title="Captura real de la terminal · datos de demostración">
+                <img src="/media/pos_03_catalogo_soho.webp" width="1080" height="2316" style="aspect-ratio: 1080 / 2316;" alt="Captura real de la terminal NHILOS POS: catálogo de productos de reventa con sus precios, datos de demostración" loading="lazy" title="NHILOS POS: catálogo en modo simple">
+                <span class="shot-cta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7"/></svg>Ampliar captura: catálogo en modo simple</span>
+              </a>
             </figure>
             <p class="demo-tag">Captura real de la terminal · datos de demostración</p>
           </div>
@@ -433,8 +437,11 @@
             <span class="tag">Lo que se cocina</span>
             <h3>Lo que se cocina: recetas, insumos y costo por plato</h3>
             <p>Receta por plato con sus insumos: cada venta descuenta lo que consumió y deja el costo por plato calculado.</p>
-            <figure class="capture-frame capture-media">
-              <img src="/media/dsh_16_recetas_bom.webp" alt="Captura real del panel de administración de NHILOS POS: recetas BOM con sus insumos, datos de demostración" loading="lazy" title="NHILOS POS: recetas e insumos">
+            <figure class="capture-frame">
+              <a class="shot capture-shot" href="media/dsh_16_recetas_bom.webp" data-shot="Panel · recetas e insumos" aria-label="Ampliar captura: recetas e insumos" title="Captura real del panel de administración · datos de demostración">
+                <img src="/media/dsh_16_recetas_bom.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: recetas BOM con sus insumos, datos de demostración" loading="lazy" title="NHILOS POS: recetas e insumos">
+                <span class="shot-cta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7"/></svg>Ampliar captura: recetas e insumos</span>
+              </a>
             </figure>
             <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
           </div>
@@ -473,7 +480,10 @@
           </div>
           <div class="edu-aside reveal">
             <figure class="capture-frame">
-              <img src="/media/dsh_02_kpis_ventas.webp" alt="Captura real del panel de administración de NHILOS POS: indicadores de ventas del negocio, datos de demostración" loading="lazy" title="NHILOS POS: la operación convertida en datos">
+              <a class="shot capture-shot" href="media/dsh_02_kpis_ventas.webp" data-shot="Panel · indicadores de ventas" aria-label="Ampliar captura: indicadores de ventas" title="Captura real del panel de administración · datos de demostración">
+                <img src="/media/dsh_02_kpis_ventas.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: indicadores de ventas del negocio, datos de demostración" loading="lazy" title="NHILOS POS: la operación convertida en datos">
+                <span class="shot-cta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7"/></svg>Ampliar captura: indicadores de ventas</span>
+              </a>
             </figure>
             <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
           </div>
@@ -597,7 +607,10 @@
               </div>
               <div class="ledger-media">
                 <figure class="capture-frame">
-                  <img src="media/dsh_06_fiscal.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: módulo Fiscal con el resumen mensual, las facturas emitidas y las pestañas de anulaciones y auditoría de secuencia, datos de demostración" loading="lazy" title="NHILOS POS: módulo Fiscal">
+                  <a class="shot capture-shot" href="media/dsh_06_fiscal.webp" data-shot="Panel · módulo Fiscal" aria-label="Ampliar captura: módulo Fiscal" title="Captura real del panel de administración · datos de demostración">
+                    <img src="media/dsh_06_fiscal.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: módulo Fiscal con el resumen mensual, las facturas emitidas y las pestañas de anulaciones y auditoría de secuencia, datos de demostración" loading="lazy" title="NHILOS POS: módulo Fiscal">
+                    <span class="shot-cta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7"/></svg>Ampliar captura: módulo Fiscal</span>
+                  </a>
                 </figure>
                 <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
               </div>
@@ -615,7 +628,10 @@
               </div>
               <div class="ledger-media">
                 <figure class="capture-frame">
-                  <img src="media/dsh_15_inventario.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: inventario con la valoración de existencias, el stock por insumo con su costo y las pestañas de kardex y alertas, datos de demostración" loading="lazy" title="NHILOS POS: inventario y valoración">
+                  <a class="shot capture-shot" href="media/dsh_15_inventario.webp" data-shot="Panel · inventario y valoración" aria-label="Ampliar captura: inventario y valoración" title="Captura real del panel de administración · datos de demostración">
+                    <img src="media/dsh_15_inventario.webp" width="1440" height="900" style="aspect-ratio: 1440 / 900;" alt="Captura real del panel de administración de NHILOS POS: inventario con la valoración de existencias, el stock por insumo con su costo y las pestañas de kardex y alertas, datos de demostración" loading="lazy" title="NHILOS POS: inventario y valoración">
+                    <span class="shot-cta"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 3H3v6M15 21h6v-6M3 3l7 7M21 21l-7-7"/></svg>Ampliar captura: inventario y valoración</span>
+                  </a>
                 </figure>
                 <p class="demo-tag">Captura real del panel de administración · datos de demostración</p>
               </div>

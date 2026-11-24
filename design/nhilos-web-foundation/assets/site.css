@@ -249,6 +249,15 @@
     @keyframes shotIn { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: none; } }
     html.shot-open, html.shot-open body { overflow: hidden; }
 
+    /* Captura ampliable en tarjetas de evidencia (06, 08, 09, 11, 13): el enlace envuelve la
+       imagen y apunta al archivo, así que sin JavaScript abre la captura a tamaño completo en
+       el visor del navegador; con JavaScript el mismo enlace dispara el lightbox <dialog> de
+       arriba. La etiqueta es visible y honesta: nombra la captura concreta que va a abrir. */
+    .shot.capture-shot { border-radius: var(--radius-md); }
+    .shot .shot-cta { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 14px; border-top: 1px solid var(--web-border-hairline); background: #FFFFFF; color: var(--web-emerald-700); font-family: var(--font-subheading); font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.02em; text-align: center; }
+    .shot .shot-cta svg { flex: none; }
+    .shot.capture-shot:hover .shot-cta, .shot.capture-shot:focus-visible .shot-cta { text-decoration: underline; }
+
     .chip { position: absolute; z-index: 3; display: inline-flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-card); padding: 10px 14px; font-size: var(--text-body-sm); font-weight: 600; color: var(--web-text-primary); }
     .chip .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 700; }
     .chip-ok::before { content: ""; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--web-status-ok); }
