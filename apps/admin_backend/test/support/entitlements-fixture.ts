@@ -101,9 +101,33 @@ export interface EntitlementsFixture {
 export async function openEntitlementsFixture(
   schemaName: string = `ent_e2e_${randomUUID().replace(/-/g, '')}`,
 ): Promise<EntitlementsFixture> {
+  const description = `${postgresConnection.host}:${postgresConnection.port}/${postgresConnection.database}`;
+
+  // R3-003: an unreachable or misconfigured PostgreSQL must fail with an
+  // actionable error, never TypeORM's raw driver message — an e2e suite that
+  // dies on `connect ECONNREFUSED` gives the runner no path to fix it.
+  const diagnose = (error: unknown): Error =>
+    new Error(
+      `entitlements e2e fixture: cannot connect to PostgreSQL at ${description}. ` +
+        'Verify the database is reachable and that DB_HOST, DB_PORT, ' +
+        'DB_USERNAME, DB_PASSWORD and DB_DATABASE are set for the e2e run. ' +
+        `Original error: ${
+          error instanceof Error ? error.message : JSON.stringify(error)
+        }`,
+    );
+
   const bootstrap = new DataSource({ type: 'postgres', ...postgresConnection });
-  await bootstrap.initialize();
-  await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+  try {
+    await bootstrap.initialize();
+    await bootstrap.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
+  } catch (error) {
+    // Never leave half-open pools behind when the fixture cannot even reach
+    // the server.
+    if (bootstrap.isInitialized) {
+      await bootstrap.destroy().catch(() => undefined);
+    }
+    throw diagnose(error);
+  }
   await bootstrap.destroy();
 
   const dataSource = new DataSource({
@@ -114,7 +138,11 @@ export async function openEntitlementsFixture(
       options: `-c search_path=${schemaName},public`,
     },
   });
-  await dataSource.initialize();
+  try {
+    await dataSource.initialize();
+  } catch (error) {
+    throw diagnose(error);
+  }
   for (const ddl of ENTITLEMENTS_TABLE_DDL) {
     await dataSource.query(ddl);
   }

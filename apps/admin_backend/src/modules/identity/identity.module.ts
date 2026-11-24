@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule } from '@nestjs/jwt';
 import { User } from './entities/user.entity';
 import { AuditLog } from './entities/audit-log.entity';
 import { SecurityProfile } from './entities/security-profile.entity';
@@ -18,17 +17,9 @@ import { AuthController } from './controllers/auth.controller';
 import { AuditController } from './controllers/audit.controller';
 import { UsersController } from './controllers/users.controller';
 import { CapabilityController } from './controllers/capability.controller';
-import { AuthGuard } from './guards/auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { PermissionsGuard } from './guards/permissions.guard';
-import { AuthoritativeCurrentUserGuard } from './guards/authoritative-current-user.guard';
-import { CurrentUserAuthorizationService } from './services/current-user-authorization.service';
 import { TenantCapabilityService } from './services/tenant-capability.service';
-import {
-  IDENTITY_JWT_CONFIG,
-  IdentityJwtConfig,
-  IdentityJwtConfigModule,
-} from './config/identity-jwt.config';
 import { HumanAuthorizationPepperStartupGuard } from './config/human-authorization-pepper.config';
 import { HumanAuthorizationRecoveryTokenController } from './human-authorization/controllers/recovery-token.controller';
 import { RecoveryTokenService } from './human-authorization/services/recovery-token.service';
@@ -45,6 +36,15 @@ import { OhacTenantTransaction } from './human-authorization/rls/ohac-tenant-tra
 // device secret always comes from DEVICE_SYNC_JWT_CONFIG.
 import { DeviceSyncJwtConfigModule } from './config/device-sync-jwt.config';
 import { SyncTransportGuard } from './guards/sync-transport.guard';
+// R3-004: the JwtModule.registerAsync factory and the auth-guard surface
+// (AuthGuard, AuthoritativeCurrentUserGuard, CurrentUserAuthorizationService)
+// used to be duplicated here and in EntitlementsModule with the same factory
+// shape — a license for the two copies to drift. IdentityGuardsModule is the
+// single home of that wiring; importing it here keeps this module's exported
+// surface identical (JwtModule, IdentityJwtConfigModule, both guards and
+// CurrentUserAuthorizationService re-export through it), so consumers see the
+// same tokens as before.
+import { IdentityGuardsModule } from './guards/identity-guards.module';
 // ENT-03b (issue #984): the owner-account quota counts active OWNER users —
 // a count that blocks creating or promoting another OWNER only, never login,
 // sync or any sale path. The two stateless services are provided DIRECTLY
@@ -65,20 +65,7 @@ import { TenantQuotaService } from '../entitlements/tenant-quota.service';
       AuditIntegrityAlert,
       TenantCapabilityEvent,
     ]),
-    JwtModule.registerAsync({
-      imports: [IdentityJwtConfigModule],
-      inject: [IDENTITY_JWT_CONFIG],
-      useFactory: (config: IdentityJwtConfig) => ({
-        secret: config.secret,
-        signOptions: {
-          algorithm: config.algorithm,
-          expiresIn: config.accessTokenTtlSeconds,
-          issuer: config.issuer,
-          audience: config.audience,
-        },
-      }),
-    }),
-    IdentityJwtConfigModule,
+    IdentityGuardsModule,
     DeviceSyncJwtConfigModule,
   ],
   controllers: [
@@ -97,13 +84,10 @@ import { TenantQuotaService } from '../entitlements/tenant-quota.service';
     AuditTrailService,
     AuditMetricsService,
     AuditVerificationService,
-    AuthGuard,
-    AuthoritativeCurrentUserGuard,
     RolesGuard,
     PermissionsGuard,
     // D-18: resolve the device transport guard for the audit push route.
     SyncTransportGuard,
-    CurrentUserAuthorizationService,
     TenantCapabilityService,
     // OHAC recovery lifecycle (design §9): the human routes live here where
     // the human-session guards are registered; the device redeem route in the
@@ -118,8 +102,11 @@ import { TenantQuotaService } from '../entitlements/tenant-quota.service';
     TenantQuotaService,
   ],
   exports: [
-    JwtModule,
-    IdentityJwtConfigModule,
+    // R3-004: re-exports JwtModule, IdentityJwtConfigModule, AuthGuard,
+    // AuthoritativeCurrentUserGuard and CurrentUserAuthorizationService —
+    // exactly the identity surface this module exported before the guard
+    // wiring moved into IdentityGuardsModule.
+    IdentityGuardsModule,
     AuthService,
     UserService,
     AuditIntegrityService,
@@ -127,11 +114,8 @@ import { TenantQuotaService } from '../entitlements/tenant-quota.service';
     AuditTrailService,
     AuditMetricsService,
     AuditVerificationService,
-    AuthGuard,
-    AuthoritativeCurrentUserGuard,
     RolesGuard,
     PermissionsGuard,
-    CurrentUserAuthorizationService,
     TenantCapabilityService,
     RecoveryTokenService,
     HumanAuthorizationMetricsService,
