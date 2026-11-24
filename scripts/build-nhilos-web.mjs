@@ -385,9 +385,14 @@ writeFileSync(
 // cuando se publican, y cada una entra al sitemap con su URL canónica.
 // Sello del build: hash de las piezas con nombre hasheado más la fecha del día, para
 // comparar lo publicado con dist/ de un vistazo.
+// El sello cubre el contenido de las páginas, no solo los nombres hasheados de los
+// assets: una edición de copy no cambia ningún asset, y sin esto el sello se quedaba
+// igual después de publicar texto distinto.
 const buildId = createHash("sha256")
   .update([...hashedAssets.values()].sort().join("|"))
-  .update(new Date().toISOString().slice(0, 10))
+  .update(
+    PAGES.map((page) => readFileSync(path.join(OUTPUT, page.out), "utf8")).join("\u0000"),
+  )
   .digest("hex")
   .slice(0, 12);
 for (const page of PAGES) {
