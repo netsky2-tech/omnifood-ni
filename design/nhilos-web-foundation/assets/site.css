@@ -223,9 +223,9 @@
     .device::after { content: ""; position: absolute; top: 22px; left: 50%; transform: translateX(-50%); width: 84px; height: 8px; border-radius: var(--radius-full); background: rgba(255,255,255,0.12); z-index: 2; }
     .device video, .device img { width: 100%; height: 100%; object-fit: contain; border-radius: 27px; background: var(--web-navy-950); display: block; }
 
-    /* Hero media: terminal en mano con fondo transparente (flota sobre el canvas, como la referencia) */
-    .hero-media { margin: 0 auto; position: relative; width: min(340px, 80vw); }
-    .hero-media img { display: block; width: 100%; height: auto; filter: drop-shadow(0 18px 24px rgba(0, 24, 41, 0.14)); }
+    /* Hero media: composición editorial de mostrador con captura real de NHILOS POS */
+    .hero-media { margin: 0 auto; position: relative; width: min(380px, 84vw); }
+    .hero-media img { display: block; width: 100%; height: auto; border-radius: 20px; box-shadow: 0 24px 48px -14px rgba(0, 24, 41, 0.24), 0 2px 6px rgba(0, 24, 41, 0.08); }
 
     /* Capturas abribles: la miniatura conserva el marco del dispositivo y el clic
        abre la captura completa en un <dialog> (site.js). Sin JS el mismo href abre
@@ -377,8 +377,8 @@
     @media (max-width: 720px) { .plan-grid { grid-template-columns: 1fr; } .pack-grid { grid-template-columns: 1fr; } }
 
     /* ===== FAQ unificado (estilo taste: un contenedor, celdas con hairlines internas) ===== */
-    .faq-wrap { margin: var(--space-8) auto 0; max-width: 1080px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
-    .faq-cells { display: grid; grid-template-columns: 1fr 1fr; }
+    .faq-wrap, .faq-grid { margin: var(--space-8) auto 0; max-width: 1080px; background: #FFFFFF; border: 1px solid var(--web-border-hairline); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+    .faq-cells, .faq-grid { display: grid; grid-template-columns: 1fr 1fr; }
     .faq-cell { padding: var(--space-5) var(--space-5); border-top: 1px solid var(--web-border-hairline); }
     @media (max-width: 640px) { .faq-cell { padding: var(--space-4) var(--space-4); } }
     .faq-cell:nth-child(-n+2) { border-top: 0; }
@@ -387,10 +387,24 @@
     .faq-cell p { font-size: var(--text-body-md); color: var(--web-text-muted); max-width: 60ch; }
     .faq-cell p a { color: var(--web-emerald-700); font-weight: 600; }
     @media (max-width: 900px) {
-      .faq-cells { grid-template-columns: 1fr; }
+      .faq-cells, .faq-grid { grid-template-columns: 1fr; }
       .faq-cell:nth-child(odd) { border-right: 0; }
       .faq-cell:nth-child(-n+2) { border-top: 1px solid var(--web-border-hairline); }
       .faq-cell:first-child { border-top: 0; }
+    }
+
+    /* Acordeón de FAQ donde la retícula se apila (≤900px). Lo monta site.js con
+       la clase .faq-accordion; sin JS la retícula queda abierta y el texto de la
+       respuesta sigue en el DOM. El botón vive dentro del h3: el heading no se
+       pierde y el objetivo táctil mide 44px. */
+    @media (max-width: 900px) {
+      .faq-accordion .faq-cell h3 { margin-bottom: 0; }
+      .faq-accordion .faq-cell.is-open h3 { margin-bottom: var(--space-3); }
+      .faq-accordion .faq-q { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); width: 100%; min-height: 44px; padding: 0; background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+      .faq-accordion .faq-q::after { content: ""; flex: 0 0 auto; width: 8px; height: 8px; margin-top: .5em; border-right: 2px solid var(--web-text-muted); border-bottom: 2px solid var(--web-text-muted); transform: rotate(45deg); transition: transform var(--motion-fast) var(--ease-out); }
+      .faq-accordion .faq-cell.is-open .faq-q::after { transform: rotate(-135deg); }
+      .faq-accordion .faq-cell p { display: none; }
+      .faq-accordion .faq-cell.is-open p { display: block; }
     }
 
     /* ===== Spine: índice tipo libro (navegación + ubicación) ===== */

@@ -65,6 +65,10 @@ Cada bloque es una unidad de trabajo cerrada: se produce, se audita, se usa y se
 **Desbloquea:** el hero (camino B), el bloque de reconocimiento de `/restaurantes/`, y la portada social.
 **Necesita:** el fundador, el local y el equipo. No se puede adelantar en casa.
 
+**Pieza editorial compuesta promovida (2026-11-25):** `design/nhilos-web-foundation/media/pos_comideria_05_mostrador_mano.webp` (`896×1200`, 98 KB, WebP).
+- **Naturaleza (transparencia obligatoria):** composición por capas — fotografía base editorial de mostrador de madera + mano sujetando smartphone Android, con captura real vía ADB de `Comidería Doña Rosa` (`1080×2316`, sin deformación de textos) integrada mediante homografía de 4 esquinas y bisel/vidrio óptico. Se etiqueta siempre como `"datos de demostración"` y **nunca** como `"grabación real"` ni `"foto real en local"`. El rodaje físico real de U5 (con impresora térmica / video loop 6–10 s) queda abierto como upgrade futuro.
+- **Auditoría:** **Qué se ve:** mano sosteniendo un smartphone Android sobre un mostrador de madera en comidería con luz natural difusa; en pantalla se ve el catálogo POS real de `Comidería Doña Rosa` (precios en córdobas `C$ 60`–`C$ 285`, ícono de mesa, testigo offline naranja) y la barra de carrito activa (`2 productos agregados · Total: C$ 200.00 · VER CARRITO`). **Qué prueba:** legibilidad real de la interfaz de ventas en córdobas con carrito activo y modo offline en un celular Android común en contexto de mostrador. **Qué no prueba:** rodaje físico en local real, impresión térmica ni video en movimiento.
+
 ## 3. Reglas de la fase (heredadas, no negociables)
 
 1. **Auténtico.** Captura de la app real con datos reales de un negocio sembrado. Cero mockup, cero pantalla renderizada, cero pieza generada presentada como producto.

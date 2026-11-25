@@ -32,6 +32,10 @@ export const IMAGE_VARIANTS = {
     sizes: "(max-width: 640px) 312px, 340px",
     alpha: true,
   },
+  "pos_comideria_05_mostrador_mano.webp": {
+    widths: [380, 760, 896],
+    sizes: "(max-width: 640px) 84vw, 380px",
+  },
   "pos_04_carrito_barra.webp": { widths: [268, 536], sizes: "(max-width: 900px) 268px, 258px" },
   "pos_10_historial_ventas.webp": { widths: [268, 536], sizes: "(max-width: 900px) 268px, 258px" },
   "pos_07_cobro_efectivo_vuelto.webp": {
