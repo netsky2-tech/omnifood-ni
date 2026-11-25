@@ -494,31 +494,45 @@
     }
 
     /* ===== Motion system (staged entrances, stagger grids, hilo draw) ===== */
-    .reveal { opacity: 0; transform: translate3d(0, 22px, 0); transition: opacity var(--motion-scene) var(--ease-out), transform var(--motion-scene) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 70ms); will-change: opacity, transform; }
-    .reveal.is-visible { opacity: 1; transform: none; }
+    /* Todo el motion está gateado por `html.js`: sin la clase (o si site.js no
+       llegó a inicializar) el contenido se sirve visible. Antes, un fallo
+       parcial de site.js dejaba `.reveal` en opacity 0 para siempre. */
+    html.js .reveal { opacity: 0; transform: translate3d(0, 22px, 0); transition: opacity var(--motion-scene) var(--ease-out), transform var(--motion-scene) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 70ms); will-change: opacity, transform; }
+    html.js .reveal.is-visible { opacity: 1; transform: none; }
 
     /* Grid children cascade: parents get .stagger, children computed by JS (--stagger-i) */
     .stagger { }
-    .stagger > * { opacity: 0; transform: translate3d(0, 18px, 0); transition: opacity var(--motion-scene) var(--ease-out), transform var(--motion-scene) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 70ms); }
-    .stagger.is-visible > * { opacity: 1; transform: none; }
+    html.js .stagger > * { opacity: 0; transform: translate3d(0, 18px, 0); transition: opacity var(--motion-scene) var(--ease-out), transform var(--motion-scene) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 70ms); }
+    html.js .stagger.is-visible > * { opacity: 1; transform: none; }
 
     /* Hero entrance: sequenced on load (badge/eyebrow -> h1 -> lead -> ctas -> proof) */
-    .hero .hero-in { opacity: 0; transform: translate3d(0, 14px, 0); }
+    html.js .hero .hero-in { opacity: 0; transform: translate3d(0, 14px, 0); }
     html.hero-ready .hero .hero-in { animation: heroMetaIn 520ms var(--ease-out) both; animation-delay: var(--hero-delay, 0ms); }
     @keyframes heroMetaIn { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
-    .hero .device-wrap { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.988); }
+    html.js .hero .device-wrap { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.988); }
     html.hero-ready .hero .device-wrap { animation: bezelEnter 640ms var(--ease-out) 320ms both; }
     @keyframes bezelEnter { from { opacity: 0; transform: translate3d(0, 20px, 0) scale(0.988); } to { opacity: 1; transform: none; } }
-    .hero .chip { opacity: 0; }
+    html.js .hero .chip { opacity: 0; }
     html.hero-ready .hero .chip { animation: chipIn 480ms var(--ease-out) both; }
     html.hero-ready .hero .chip-a { animation-delay: 980ms; }
     html.hero-ready .hero .chip-b { animation-delay: 1120ms; }
     @keyframes chipIn { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
 
+    /* Red de seguridad: si site.js no marca revealReady antes de
+       DOMContentLoaded, el inline del <head> añade esta clase y se muestra todo. */
+    html.reveal-fallback .reveal,
+    html.reveal-fallback .stagger > *,
+    html.reveal-fallback .hero .hero-in,
+    html.reveal-fallback .hero .device-wrap,
+    html.reveal-fallback .hero .chip,
+    html.reveal-fallback .hilo .hilo-num { opacity: 1 !important; transform: none !important; animation: none !important; transition: none !important; }
+    html.reveal-fallback .hilo::before { transform: scaleX(1) !important; }
+
     /* Hilo: the emerald thread draws itself when the section enters (the +1 gesture) */
     .hilo::before { transform: scaleX(0); transform-origin: left center; transition: transform 960ms var(--ease-in-out) 160ms; }
     .hilo.is-drawn::before { transform: scaleX(1); }
-    .hilo .hilo-num { opacity: 0; transform: scale(0.85); transition: opacity var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 120ms + 200ms); }
+    .hilo .hilo-num { opacity: 1; transform: none; transition: opacity var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out); transition-delay: calc(var(--stagger-i, 0) * 120ms + 200ms); }
+    html.js .hilo .hilo-num { opacity: 0; transform: scale(0.85); }
     .hilo.is-drawn .hilo-num { opacity: 1; transform: none; }
     .hilo .hilo-step { transition: none; }
 

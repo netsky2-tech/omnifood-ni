@@ -3,9 +3,12 @@
   "private": true,
   "packageManager": "pnpm@11.22.0",
   "scripts": {
-    "build:web": "node scripts/build-nhilos-web.mjs"
+    "build:web": "node scripts/build-nhilos-web.mjs",
+    "images:web": "node scripts/web-images.mjs",
+    "deploy:web": "wrangler pages deploy dist/nhilos-web --project-name nhilos-web --branch main --commit-dirty=true"
   },
   "devDependencies": {
-    "ts-jest": "^29.4.9"
+    "ts-jest": "^29.4.9",
+    "wrangler": "4.166.0"
   }
 }

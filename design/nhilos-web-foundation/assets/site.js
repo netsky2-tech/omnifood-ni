@@ -88,6 +88,10 @@
         }, { threshold: 0, rootMargin: '0px 0px -8% 0px' }); // threshold 0: un ratio fijo nunca se alcanza en elementos más altos que el viewport (p. ej. el FAQ en móvil); revela al entrar, una sola vez
         revealables.forEach(function (el) { io.observe(el); });
       }
+      // La coreografía llegó al punto en que el contenido ya se revela solo.
+      // Si site.js falla antes de esta línea, el inline del <head> añade
+      // `reveal-fallback` en DOMContentLoaded y muestra todo sin animación.
+      docEl.classList.add("reveal-ready");
 
       /* ---- Videos: máximo uno activo en toda la página, arranque por intersección ----
          Con preload="none" nada se descarga hasta que el video entra al viewport

@@ -832,3 +832,34 @@ El plan asumía basura acumulada. Al medirla, no la hay.
 Conclusión: el objetivo real del item —que el dominio público no cargue material de trabajo— ya lo cumple el filtro de referencias del build. Borrar archivos rompería tests y documentación sin ahorrar un byte en producción.
 
 La única limpieza que tendría sentido es sacar del repositorio los 17,8 MB de video a un almacenamiento externo. Eso es una decisión de infraestructura, no de código, y queda pendiente del owner.
+
+---
+
+## 20. Robustez y cadena de build (2026-11-25)
+
+### Gate de motion
+
+El registro de la auditoría (L6) dejaba una debilidad: con JS activo, si `site.js` fallaba a mitad, `.reveal` se quedaba en `opacity: 0` y el contenido no aparecía. El `<noscript>` cubría solo el caso de JS deshabilitado.
+
+Ahora el build inyecta en el `<head>` un inline mínimo que:
+
+1. Añade `js` a `<html>` antes del primer paint.
+2. En `DOMContentLoaded`, si `site.js` no marcó `reveal-ready`, añade `reveal-fallback`.
+
+El CSS gatea todos los estados ocultos con `html.js` (reveal, stagger, hero, chips, número del hilo) y `reveal-fallback` fuerza `opacity: 1`. Sin JS, nada se oculta. El hash del inline lo calcula el propio build, así que la CSP no se debilita.
+
+Verificado con Playwright en cuatro escenarios: normal (20/20 reveals ocultos hasta el scroll, hero visible), sin JS (0 ocultos), `site.js` abortado (fallback, 0 ocultos) y `site.js` lanzando al inicio (fallback, 0 ocultos). Cero errores de consola.
+
+### Cadena de deploy
+
+- `wrangler@4.166.0` fijado en `devDependencies`: el deploy ya no depende de lo que resuelva `npx` (la 4.167.0 rompió el comando).
+- `pnpm images:web` regenera las variantes; `pnpm build:web` construye; `pnpm deploy:web` publica.
+
+### Nota de coordinación
+
+El test `scripts/__tests__/nhilos-web-auditoria-2026-11-20.test.mjs` entró al repositorio desde otra sesión de trabajo y pasa 16/16 con el estado actual. No se duplicó ni se reescribió desde esta pasada.
+
+### Pendiente para el cierre (no desplegado desde esta pasada)
+
+- El `dist` local incluye este gate, pero **no** las siete capturas nuevas (`dsh_foodpark_*`, `pos_comideria_*`) que la otra sesión commiteó después: hay que reconstruir antes de publicar.
+- `/facturacion-dgi/` e `/inventario/` sirven hoy **dos `btn-primary`** en el hero ("Solicitar una demo" a `/demo/` y "Revisar mi caso con un especialista" a WhatsApp). Es un cruce de dos decisiones, no una jerarquía: uno de los dos debe bajar a `btn-secondary`.

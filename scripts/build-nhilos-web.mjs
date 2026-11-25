@@ -208,7 +208,15 @@ for (const page of PAGES) {
 
   // Identificador de build: permite comparar producción con dist/ sin adivinar si el
   // borde sirvió la versión anterior.
-  html = html.replace(/<\/head>/i, '  <meta name="build" content="__NHILOS_BUILD__">\n</head>');
+  // Gate de motion: la clase `js` se pone antes del primer paint y el fallback
+  // cubre el caso en que site.js no termine de inicializar. Sin JS, el CSS deja
+  // todo visible. El hash de este inline lo calcula el propio build más abajo.
+  html = html.replace(
+    /<\/head>/i,
+    '  <meta name="build" content="__NHILOS_BUILD__">\n' +
+      '  <script>document.documentElement.classList.add("js");document.addEventListener("DOMContentLoaded",function(){if(!document.documentElement.classList.contains("reveal-ready"))document.documentElement.classList.add("reveal-fallback")});</script>\n' +
+      "</head>",
+  );
   const target = path.join(OUTPUT, page.out);
   mkdirSync(path.dirname(target), { recursive: true });
   // Guardia de clase: una página publicada no puede dejar NINGUNA referencia
