@@ -112,6 +112,20 @@ It is a containment and evidence plan, not a substitute for the code work. Three
 
 Land those and this document gets shorter. Until then, **P1–P5 are prerequisites for opening day, not follow-ups.**
 
+## F. Operator Encrypted Backup/Restore & Scenario A Rehearsal Log (#526 B3/B5/B6)
+
+1. **Daily Backup (DT 09-2007 SEGUNDO 1.4 — no `adb`, no engineer):**
+   - Sign in as **Propietario (`OWNER`)** or **Gerente (`MANAGER`)**, open **Configuración → Identidad de Terminal → Respaldo y Restauración de Terminal (DGI)**, tap **Exportar respaldo cifrado**, and enter a passphrase (≥ 8 characters).
+   - NHILOS POS produces a consistent SQLite snapshot via `VACUUM INTO`, encrypts it with AES-256-CBC + HMAC-SHA256 (PBKDF2-HMAC-SHA256, 100,000 iterations), verifies the `audit_logs` hash chain, and writes `nhilos_backup_<YYYYMMDD_HHMMSS>.nhilosbak`. Copy the `.nhilosbak` file off the device (USB / cloud drive) daily.
+2. **Replacement Restore (Scenario A — dead/re-imaged terminal):**
+   - On the replacement terminal, open **Respaldo y Restauración de Terminal (DGI)** → **Restaurar desde respaldo**, pick the `.nhilosbak` file, and enter the passphrase.
+   - The app verifies HMAC-SHA256, SHA-256, `PRAGMA integrity_check`, schema version, `audit_logs` hash-chain contiguity, and the **B5 replay tripwire** (refuses in Spanish with *"No facture y contacte a soporte"* if the backup cursor is `≤` the cloud highest sequence, without modifying the DB).
+   - Close and reopen NHILOS POS; `applyPendingRestoreIfPresent()` swaps `app_database.db` atomically before Floor opens and records the restore and audit-chain status in `local_configs['last_database_restore_json']`.
+3. **Real Hardware Rehearsal Evidence (`#526` AC-9):**
+   - **Device:** Samsung Galaxy S23 (`SM_S918B`, `R5CWB2LQJDJ`, ARM64, Android, package `com.nhilos.pos_app`).
+   - **Runner:** `apps/pos_app/integration_test/terminal_backup_s23_hardware_e2e_test.dart`.
+   - **Observed Result:** **5/5 `ALL_TESTS_PASSED`** — `[1/5]` encrypted `.nhilosbak` exported (`49,747 bytes`, 7 invoices, cursor `8`, `chain=INTACT`); `[2/5]` dead-terminal DB wipe + atomic restore preserved 7 invoices, cursor `8` (`> 7`), and `INTACT` chain; `[3/5]` B5 replay tripwire refused cursor `8 <= cloud 12` in Spanish with zero writes; `[4/5]` double-boot monotonic cursor remained `8`; `[5/5]` wrong passphrase rejected fail-closed with zero writes.
+
 ## Sources
 
 Primary:
