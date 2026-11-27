@@ -122,14 +122,14 @@ export class Insumo {
     length: 24,
     default: InsumoCatalogKind.RAW_MATERIAL,
   })
-  catalogKind: InsumoCatalogKind;
+  catalogKind?: InsumoCatalogKind;
 
   @Column({
     name: 'managed_product_id',
     type: 'uuid',
     nullable: true,
   })
-  managedProductId: string | null;
+  managedProductId?: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

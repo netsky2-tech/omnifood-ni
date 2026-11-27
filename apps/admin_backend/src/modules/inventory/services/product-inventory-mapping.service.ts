@@ -59,8 +59,9 @@ export class ProductInventoryMappingService {
   ): Promise<ProductInventoryMappingVersion> {
     const run = async (
       manager: EntityManager,
+      runQuery: (sql: string, parameters?: unknown[]) => Promise<unknown>,
     ): Promise<ProductInventoryMappingVersion> => {
-      await manager.query(
+      await runQuery(
         'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
         [command.tenantId, command.productId],
       );
@@ -100,7 +101,9 @@ export class ProductInventoryMappingService {
     };
 
     if (externalManager) {
-      return run(externalManager);
+      return run(externalManager, (sql, params) =>
+        externalManager.query(sql, params),
+      );
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -108,7 +111,9 @@ export class ProductInventoryMappingService {
     await queryRunner.startTransaction();
     try {
       await bindTenantContext(queryRunner, command.tenantId);
-      const saved = await run(queryRunner.manager);
+      const saved = await run(queryRunner.manager, (sql, params) =>
+        queryRunner.query(sql, params),
+      );
       await queryRunner.commitTransaction();
       return saved;
     } catch (error) {

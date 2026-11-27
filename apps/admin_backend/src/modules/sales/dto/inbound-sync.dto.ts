@@ -96,7 +96,7 @@ export interface InboundSyncProductDto {
   category: string | null;
   warehouseId?: string | null;
   productType?: string;
-  inventoryPolicy: ProductInventoryPolicy;
+  inventoryPolicy?: ProductInventoryPolicy;
   mappingVersionId?: string | null;
   insumoId?: string | null;
   createdAt: Date;

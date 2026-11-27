@@ -58,7 +58,7 @@ export class Product {
     length: 24,
     default: ProductInventoryPolicy.NOT_TRACKED,
   })
-  inventory_policy: ProductInventoryPolicy;
+  inventory_policy?: ProductInventoryPolicy;
 
   @Column({ nullable: true })
   category_code: string;
