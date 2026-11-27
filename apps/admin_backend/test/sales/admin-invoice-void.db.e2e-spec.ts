@@ -212,9 +212,10 @@ describe('Admin invoice void & DGI sequence closure (Real PostgreSQL DB, migrati
 
   it('S1: voids a regular invoice from the Backoffice, reverts stock in Kardex and logs SHA-256 audit entry under RLS', async () => {
     const invoiceId = randomUUID();
+    const issuedAt = new Date();
     let movementId = '';
 
-    // Seed Invoice and Sale Movement in Tenant A
+    // Seed Invoice and Sale Movement in Tenant A (same-day per DT 09-2007 3.4.b)
     await runInTenantTransaction(runtime, tenantAId, async (manager) => {
       const invRepo = manager.getRepository(Invoice);
       await invRepo.save(
@@ -222,7 +223,7 @@ describe('Admin invoice void & DGI sequence closure (Real PostgreSQL DB, migrati
           id: invoiceId,
           tenant_id: tenantAId,
           number: '001-001-01-00000010',
-          created_at: new Date('2026-11-01T12:00:00Z'),
+          created_at: issuedAt,
           userId: userAId,
           subtotal: 90.0,
           totalTax: 13.5,
@@ -251,7 +252,7 @@ describe('Admin invoice void & DGI sequence closure (Real PostgreSQL DB, migrati
           sourceDeviceId: 'POS-01',
           sourceDocumentId: `invoice:${invoiceId}`,
           sourceDocumentType: MovementType.SALE,
-          timestamp: new Date('2026-11-01T12:00:00Z'),
+          timestamp: issuedAt,
           user_id: userAId,
         }),
       );
