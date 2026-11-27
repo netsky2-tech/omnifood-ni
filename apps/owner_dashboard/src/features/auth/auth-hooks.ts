@@ -26,8 +26,12 @@ export function useLogin() {
         { ...rest, email: cleanEmail, pass: password, tenantSlug: cleanTenantSlug },
         { auth: false },
       );
+      const rawTenantId =
+        raw.user.tenantId ??
+        (raw.user as { tenant_id?: string }).tenant_id ??
+        "";
       const resolvedTenant: LoginResponse["tenant"] = raw.tenant ?? {
-        id: raw.user.tenantId ?? "",
+        id: rawTenantId,
         name: cleanTenantSlug ?? "",
         slug: cleanTenantSlug ?? "",
         ruc: "",
