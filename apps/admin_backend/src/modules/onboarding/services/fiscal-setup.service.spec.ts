@@ -1478,4 +1478,148 @@ describe('FiscalSetupService (Unit & Triangulation)', () => {
       expect(result.checkoutFxMode).toBeNull();
     });
   });
+
+  describe('CONTROL_INTERNO regime (issue #1049, S1)', () => {
+    it('configures CONTROL_INTERNO without RUC (stores null on tenant.ruc, forces TAX_RATE_IVA = 0)', async () => {
+      mockManager.findOne.mockResolvedValueOnce({ ...mockTenant });
+      mockManager.find.mockResolvedValue([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CONTROL_INTERNO,
+        businessName: 'Pulpería La Bendición',
+        ruc: null,
+        commercialFxSpread: 36.5,
+        pricesIncludeTax: true,
+        operationMode: TenantOperationMode.FOODPARK_QSR,
+        checkoutFxMode: CheckoutFxMode.COMMERCIAL,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(result).toMatchObject({
+        tenantId,
+        businessName: 'Pulpería La Bendición',
+        ruc: null,
+        regime: FiscalRegime.CONTROL_INTERNO,
+        taxRateIva: 0.0,
+      });
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Tenant,
+        expect.objectContaining({ ruc: null }),
+      );
+      expect(mockManager.save).toHaveBeenCalledWith(
+        SystemParametersConfig,
+        expect.objectContaining({
+          paramKey: 'FISCAL_REGIME',
+          paramValue: FiscalRegime.CONTROL_INTERNO,
+        }),
+      );
+      expect(mockManager.save).toHaveBeenCalledWith(
+        SystemParametersConfig,
+        expect.objectContaining({
+          paramKey: 'TAX_RATE_IVA',
+          paramValue: 0.0,
+        }),
+      );
+    });
+
+    it('configures CONTROL_INTERNO with whitespace-only RUC as null on tenant.ruc', async () => {
+      mockManager.findOne.mockResolvedValueOnce({
+        ...mockTenant,
+        ruc: 'J0310000055555',
+      });
+      mockManager.find.mockResolvedValue([]);
+
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CONTROL_INTERNO,
+        businessName: 'Pulpería La Bendición',
+        ruc: '   ',
+        commercialFxSpread: 36.5,
+        pricesIncludeTax: true,
+      };
+
+      const result = await service.configureFiscalSetup(tenantId, dto, userId);
+
+      expect(result.ruc).toBeNull();
+      expect(mockManager.save).toHaveBeenCalledWith(
+        Tenant,
+        expect.objectContaining({ ruc: null }),
+      );
+    });
+
+    it('rejects CONTROL_INTERNO when a non-empty invalid RUC is provided', async () => {
+      const dto: FiscalSetupDto = {
+        regime: FiscalRegime.CONTROL_INTERNO,
+        businessName: 'Pulpería La Bendición',
+        ruc: 'CF-12345',
+        commercialFxSpread: 36.5,
+        pricesIncludeTax: true,
+      };
+
+      await expect(
+        service.configureFiscalSetup(tenantId, dto, userId),
+      ).rejects.toThrow(BadRequestException);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+
+    it('reads CONTROL_INTERNO and taxRateIva = 0 in getFiscalSetup', async () => {
+      tenantRepo.findOne.mockResolvedValueOnce({
+        ...mockTenant,
+        name: 'Pulpería La Bendición',
+        ruc: null,
+      });
+      mockManager.find.mockResolvedValueOnce([
+        {
+          id: '1',
+          tenant_id: tenantId,
+          tenant: mockTenant,
+          paramKey: 'FISCAL_REGIME',
+          paramValue: FiscalRegime.CONTROL_INTERNO,
+          version: 1,
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+          isActive: true,
+          createdBy: userId,
+          createdAt: new Date(),
+        },
+        {
+          id: '2',
+          tenant_id: tenantId,
+          tenant: mockTenant,
+          paramKey: 'TAX_RATE_IVA',
+          paramValue: 0,
+          version: 1,
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+          isActive: true,
+          createdBy: userId,
+          createdAt: new Date(),
+        },
+      ]);
+
+      const result = await service.getFiscalSetup(tenantId);
+
+      expect(result.regime).toBe(FiscalRegime.CONTROL_INTERNO);
+      expect(result.taxRateIva).toBe(0);
+      expect(result.ruc).toBeNull();
+    });
+
+    it.each([FiscalRegime.CUOTA_FIJA, FiscalRegime.REGIMEN_GENERAL])(
+      'still rejects %s without RUC',
+      async (regime) => {
+        const dto: FiscalSetupDto = {
+          regime,
+          businessName: 'Negocio Formal',
+          ruc: null,
+          commercialFxSpread: 36.5,
+          pricesIncludeTax: true,
+        };
+
+        await expect(
+          service.configureFiscalSetup(tenantId, dto, userId),
+        ).rejects.toThrow(BadRequestException);
+        expect(dataSource.transaction).not.toHaveBeenCalled();
+      },
+    );
+  });
 });

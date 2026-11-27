@@ -3,6 +3,7 @@ import {
   FiscalReadinessPort,
   FiscalReadinessResult,
 } from '../ports/fiscal-readiness.port';
+import { FiscalRegime } from '../dto/fiscal-setup.dto';
 import { FiscalSetupService } from '../services/fiscal-setup.service';
 import { isValidRuc } from '../utils/nicaragua-fiscal.validator';
 
@@ -17,11 +18,12 @@ export class FiscalReadinessAdapter implements FiscalReadinessPort {
   ): Promise<FiscalReadinessResult> {
     try {
       const config = await this.fiscalSetupService.getFiscalSetup(tenantId);
+      const rucValid =
+        config?.regime === FiscalRegime.CONTROL_INTERNO
+          ? !config.ruc?.trim() || isValidRuc(config.ruc)
+          : isValidRuc(config?.ruc);
       const minimumConfigurationValid = Boolean(
-        config &&
-        config.businessName?.trim() &&
-        config.regime &&
-        isValidRuc(config.ruc),
+        config && config.businessName?.trim() && config.regime && rucValid,
       );
 
       return {

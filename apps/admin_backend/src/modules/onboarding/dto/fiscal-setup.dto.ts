@@ -15,6 +15,7 @@ import {
   MinLength,
   IsPositive,
   Validate,
+  ValidateIf,
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
@@ -23,6 +24,7 @@ import { FiscalConfigVersion } from './fiscal-config-version.dto';
 import { IsValidNicaraguaFiscalId } from '../validators/is-valid-nicaragua-fiscal-id.validator';
 
 export enum FiscalRegime {
+  CONTROL_INTERNO = 'CONTROL_INTERNO',
   CUOTA_FIJA = 'CUOTA_FIJA',
   REGIMEN_GENERAL = 'REGIMEN_GENERAL',
 }
@@ -131,7 +133,7 @@ const blankStringToNull = ({ value }: { value: unknown }): unknown =>
 
 export class FiscalSetupDto {
   @IsEnum(FiscalRegime, {
-    message: 'regime must be either CUOTA_FIJA or REGIMEN_GENERAL',
+    message: 'regime must be CONTROL_INTERNO, CUOTA_FIJA or REGIMEN_GENERAL',
   })
   regime: FiscalRegime;
 
@@ -139,13 +141,33 @@ export class FiscalSetupDto {
   @MinLength(1, { message: 'businessName must not be empty' })
   businessName: string;
 
+  @Transform(
+    ({
+      value,
+      obj,
+    }: {
+      value: unknown;
+      obj?: Record<string, unknown>;
+    }): unknown => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (obj?.regime === FiscalRegime.CONTROL_INTERNO && trimmed === '') {
+          return null;
+        }
+        return trimmed;
+      }
+      return value;
+    },
+  )
+  @ValidateIf(
+    (o: FiscalSetupDto, value: unknown) =>
+      o.regime !== FiscalRegime.CONTROL_INTERNO ||
+      (value !== undefined && value !== null && value !== ''),
+  )
   @IsDefined()
   @IsString()
-  @Transform(({ value }: { value: unknown }): unknown =>
-    typeof value === 'string' ? value.trim() : value,
-  )
   @IsValidNicaraguaFiscalId()
-  ruc: string;
+  ruc?: string | null;
 
   @IsNumber()
   // Issue #75: the commercial FX spread is a C$ per USD exchange rate, not a

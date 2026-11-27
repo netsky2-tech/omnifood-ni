@@ -58,6 +58,7 @@ export const FISCAL_PARAM_KEYS = {
 } as const;
 
 export const DGI_NICARAGUA_TAX_RATES = {
+  CONTROL_INTERNO: 0.0,
   CUOTA_FIJA: 0.0,
   REGIMEN_GENERAL: 0.15,
 } as const;
@@ -145,15 +146,19 @@ export class FiscalSetupService {
     const regime =
       rawRegime === FiscalRegime.REGIMEN_GENERAL
         ? FiscalRegime.REGIMEN_GENERAL
-        : FiscalRegime.CUOTA_FIJA;
+        : rawRegime === FiscalRegime.CONTROL_INTERNO
+          ? FiscalRegime.CONTROL_INTERNO
+          : FiscalRegime.CUOTA_FIJA;
 
     const rawTaxRate = paramMap.get(FISCAL_PARAM_KEYS.TAX_RATE_IVA);
     const taxRateIva =
-      typeof rawTaxRate === 'number'
-        ? rawTaxRate
-        : regime === FiscalRegime.REGIMEN_GENERAL
-          ? DGI_NICARAGUA_TAX_RATES.REGIMEN_GENERAL
-          : DGI_NICARAGUA_TAX_RATES.CUOTA_FIJA;
+      regime === FiscalRegime.CONTROL_INTERNO
+        ? DGI_NICARAGUA_TAX_RATES.CONTROL_INTERNO
+        : typeof rawTaxRate === 'number'
+          ? rawTaxRate
+          : regime === FiscalRegime.REGIMEN_GENERAL
+            ? DGI_NICARAGUA_TAX_RATES.REGIMEN_GENERAL
+            : DGI_NICARAGUA_TAX_RATES.CUOTA_FIJA;
 
     const rawPricesIncludeTax = paramMap.get(
       FISCAL_PARAM_KEYS.PRICES_INCLUDE_TAX,
@@ -274,18 +279,25 @@ export class FiscalSetupService {
     }
 
     // Defense-in-depth (FR-1): never silently persist a blank/invalid RUC as
-    // NULL. The ValidationPipe normally rejects it at the HTTP boundary; a
-    // directly-constructed DTO reaching this service must be rejected here
-    // too, before any mutation — the prior tenant RUC stays untouched.
+    // NULL for formal regimes (CUOTA_FIJA / REGIMEN_GENERAL). Under
+    // CONTROL_INTERNO (#1049), RUC is optional (blank/null -> persisted as
+    // null), but a non-empty RUC must still pass isValidRuc.
     const trimmedRuc = dto.ruc?.trim() ?? '';
-    if (!isValidRuc(trimmedRuc)) {
+    const isControlInterno = dto.regime === FiscalRegime.CONTROL_INTERNO;
+    if (isControlInterno) {
+      if (trimmedRuc !== '' && !isValidRuc(trimmedRuc)) {
+        throw new BadRequestException(NICARAGUA_FISCAL_ID_REQUIRED_MESSAGE);
+      }
+    } else if (!isValidRuc(trimmedRuc)) {
       throw new BadRequestException(NICARAGUA_FISCAL_ID_REQUIRED_MESSAGE);
     }
 
     const targetTaxRate =
       dto.regime === FiscalRegime.REGIMEN_GENERAL
         ? DGI_NICARAGUA_TAX_RATES.REGIMEN_GENERAL
-        : DGI_NICARAGUA_TAX_RATES.CUOTA_FIJA;
+        : isControlInterno
+          ? DGI_NICARAGUA_TAX_RATES.CONTROL_INTERNO
+          : DGI_NICARAGUA_TAX_RATES.CUOTA_FIJA;
 
     const configuredAt = new Date();
 
@@ -304,7 +316,7 @@ export class FiscalSetupService {
         }
 
         tenant.name = dto.businessName.trim();
-        tenant.ruc = trimmedRuc;
+        tenant.ruc = trimmedRuc === '' ? null : trimmedRuc;
         // Company identity parity P1: the contact identity fields were
         // declared in the DTO but silently dropped before P1. Same
         // optionality contract as the mode params (D-16 spirit): undefined
