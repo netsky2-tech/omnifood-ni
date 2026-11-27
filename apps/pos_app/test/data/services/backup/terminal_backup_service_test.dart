@@ -278,5 +278,61 @@ void main() {
       expect(exported.auditChainReport.statusCode, 'BROKEN_STREAMS_DETECTED');
       expect(exported.auditChainReport.issues.single.reason, 'prev_hash_mismatch');
     });
+
+    test('AC-4/AC-5/AC-6: replacement terminal after wipe resumes strictly > max and cursor stays monotonic across double boot', () async {
+      final workDir = await Directory.systemTemp.createTemp('nhilos_526_ac46_');
+      addTearDown(() async {
+        if (await workDir.exists()) await workDir.delete(recursive: true);
+      });
+
+      final originalDbPath = '${workDir.path}/dead_tablet.db';
+      final backupPath = '${workDir.path}/dead_tablet.nhilosbak';
+      final replacementDbPath = '${workDir.path}/replacement_tablet.db';
+
+      // Original tablet issued 7 invoices (next cursor = 8) before dying.
+      final originalDb = await _createSeededFiscalDb(
+        originalDbPath,
+        invoiceCount: 7,
+        dgiCurrentNumber: 8,
+      );
+      final service = TerminalBackupService(databaseFactory: databaseFactoryFfi);
+      await service.exportEncryptedBackup(
+        sourceDb: originalDb,
+        destinationPath: backupPath,
+        passphrase: 'ClaveSegura2026!',
+      );
+      await originalDb.close();
+      await File(originalDbPath).delete(); // Simulate dead/wiped tablet.
+
+      // Replacement tablet stages and applies restore (cloud highest = 7).
+      await service.stageRestoreFromBackup(
+        backupFilePath: backupPath,
+        passphrase: 'ClaveSegura2026!',
+        targetDatabasePath: replacementDbPath,
+        currentSchemaVersion: 86,
+        cloudHighestSequence: 7,
+      );
+      await TerminalBackupService.applyPendingRestoreIfPresent(
+        databasePath: replacementDbPath,
+      );
+
+      // Boot #1: cursor is 8 (> 7) and untouched.
+      final boot1 = await databaseFactoryFfi.openDatabase(replacementDbPath);
+      final cursorBoot1 = (await boot1.rawQuery(
+        "SELECT value FROM local_configs WHERE key = 'dgi_current_number'",
+      ))
+          .first['value'];
+      expect(cursorBoot1, '8');
+      await boot1.close();
+
+      // Boot #2 (double-boot regression guard AC-6): cursor stays 8, never resets to 1.
+      final boot2 = await databaseFactoryFfi.openDatabase(replacementDbPath);
+      final cursorBoot2 = (await boot2.rawQuery(
+        "SELECT value FROM local_configs WHERE key = 'dgi_current_number'",
+      ))
+          .first['value'];
+      expect(cursorBoot2, '8');
+      await boot2.close();
+    });
   });
 }
