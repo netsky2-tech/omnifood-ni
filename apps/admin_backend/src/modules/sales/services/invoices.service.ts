@@ -7,7 +7,14 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  Not,
+  Repository,
+} from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
 import { LoyaltyLedgerService } from '../../loyalty/services/loyalty-ledger.service';
 import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
@@ -280,6 +287,7 @@ export class InvoicesService {
       );
       this.assertCreditNoteReasonAndAuthorization(dto);
       await this.assertCreditNoteAuthorizingActor(tenantId, dto, manager);
+      await this.assertContingencyManualReferenceValid(tenantId, dto, manager);
       await this.validateInvoiceRecipeVersions(tenantId, dto);
       const handledDuplicate = await this.skipMatchingCreditNoteReplay(
         tenantId,
@@ -841,10 +849,99 @@ export class InvoicesService {
     };
   }
 
-  async findAll(tenantId: string): Promise<Invoice[]> {
+  private async assertContingencyManualReferenceValid(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager: EntityManager,
+  ): Promise<void> {
+    const rawSeries = dto.contingencyManualSeries;
+    const rawNumber = dto.contingencyManualNumber;
+    const rawIssuedAt = dto.contingencyManualIssuedAt;
+
+    const anyProvided =
+      (rawSeries !== undefined && rawSeries !== null) ||
+      (rawNumber !== undefined && rawNumber !== null) ||
+      (rawIssuedAt !== undefined && rawIssuedAt !== null);
+
+    if (!anyProvided) {
+      return;
+    }
+
+    const series = typeof rawSeries === 'string' ? rawSeries.trim() : '';
+    const manualNumber = typeof rawNumber === 'string' ? rawNumber.trim() : '';
+    const issuedAt = typeof rawIssuedAt === 'string' ? rawIssuedAt.trim() : '';
+
+    if (!series || !manualNumber || !issuedAt) {
+      throw new BadRequestException(
+        'CONTINGENCY_REF_INCOMPLETE: contingencyManualSeries, contingencyManualNumber, and contingencyManualIssuedAt must all be non-blank when any contingency reference field is provided.',
+      );
+    }
+
+    if (!isValidLocalDateKey(issuedAt)) {
+      throw new BadRequestException(
+        'CONTINGENCY_REF_INCOMPLETE: contingencyManualIssuedAt must be a valid YYYY-MM-DD date.',
+      );
+    }
+
+    const invoiceNumber = (dto.number ?? '').trim();
+    const lastDash = invoiceNumber.lastIndexOf('-');
+    const invoicePrefix =
+      lastDash > 0 ? invoiceNumber.slice(0, lastDash).trim() : null;
+
+    if (
+      (invoicePrefix &&
+        series.toUpperCase() === invoicePrefix.toUpperCase()) ||
+      manualNumber.toUpperCase() === invoiceNumber.toUpperCase() ||
+      `${series}-${manualNumber}`.toUpperCase() === invoiceNumber.toUpperCase()
+    ) {
+      throw new BadRequestException(
+        'CONTINGENCY_SERIES_COLLISION: Manual contingency series/number must be distinct from the computerized DGI invoice series and number (DT 09-2007 3.3.a).',
+      );
+    }
+
+    const paramRepo = manager.getRepository(SystemParametersConfigActiveView);
+    if (paramRepo && typeof paramRepo.findOne === 'function') {
+      const dgiPrefixParam = await paramRepo.findOne({
+        where: {
+          tenant_id: tenantId,
+          paramKey: In(['dgi_prefix', 'DGI_PREFIX']),
+        },
+      });
+      const rawParamValue = dgiPrefixParam?.paramValue;
+      let configuredPrefix: string | null = null;
+      if (typeof rawParamValue === 'string') {
+        configuredPrefix = rawParamValue.trim();
+      } else if (
+        rawParamValue &&
+        typeof rawParamValue === 'object' &&
+        !Array.isArray(rawParamValue)
+      ) {
+        const obj = rawParamValue as Record<string, unknown>;
+        const candidate = obj.prefix ?? obj.value ?? obj.dgi_prefix;
+        if (typeof candidate === 'string') {
+          configuredPrefix = candidate.trim();
+        }
+      }
+      if (
+        configuredPrefix &&
+        series.toUpperCase() === configuredPrefix.toUpperCase()
+      ) {
+        throw new BadRequestException(
+          'CONTINGENCY_SERIES_COLLISION: Manual contingency series cannot match the tenant configured DGI prefix (DT 09-2007 3.3.a).',
+        );
+      }
+    }
+  }
+
+  async findAll(
+    tenantId: string,
+    options?: { contingencyOnly?: boolean },
+  ): Promise<Invoice[]> {
     return this.withTenantBoundTransaction(tenantId, async (manager) =>
       this.invoiceRepoFor(manager).find({
-        where: { tenant_id: tenantId },
+        where: options?.contingencyOnly
+          ? { tenant_id: tenantId, contingencyManualSeries: Not(IsNull()) }
+          : { tenant_id: tenantId },
         relations: ['items', 'items.modifiers', 'payments'],
         order: { created_at: 'DESC' },
       }),
@@ -1922,6 +2019,80 @@ export class InvoicesService {
             code: 'CROSS_DAY_VOID_PROHIBITED',
             retryable: false,
             message,
+          }),
+        };
+      }
+      if (
+        error instanceof BadRequestException &&
+        message.includes('CONTINGENCY_REF_INCOMPLETE')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_REF_INCOMPLETE',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof BadRequestException &&
+        message.includes('CONTINGENCY_SERIES_COLLISION')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_SERIES_COLLISION',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        dbErr?.code === '23505' &&
+        (dbErr?.constraint === 'uq_invoices_tenant_contingency_manual_ref' ||
+          message.includes('uq_invoices_tenant_contingency_manual_ref'))
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_MANUAL_REF_DUPLICATE',
+            retryable: false,
+            message:
+              'Manual contingency invoice reference has already been back-entered for this tenant.',
+          }),
+        };
+      }
+      if (
+        dbErr?.code === '23514' &&
+        (dbErr?.constraint ===
+          'chk_invoices_contingency_not_same_as_system_number' ||
+          message.includes(
+            'chk_invoices_contingency_not_same_as_system_number',
+          ))
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_SERIES_COLLISION',
+            retryable: false,
+            message:
+              'Manual contingency reference collides with computerized invoice number.',
+          }),
+        };
+      }
+      if (
+        dbErr?.code === '23514' &&
+        (dbErr?.constraint === 'chk_invoices_contingency_manual_ref_complete' ||
+          message.includes('chk_invoices_contingency_manual_ref_complete'))
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_REF_INCOMPLETE',
+            retryable: false,
+            message:
+              'Manual contingency reference fields must all be non-blank.',
           }),
         };
       }

@@ -197,6 +197,30 @@ export class Invoice {
   })
   tipEligibleBaseNio?: number | null;
 
+  // #539 S3 (DT 09-2007 3.3.a/3.3.b): manual contingency invoice back-entry reference.
+  @Column({
+    name: 'contingency_manual_series',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  contingencyManualSeries?: string | null;
+
+  @Column({
+    name: 'contingency_manual_number',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  contingencyManualNumber?: string | null;
+
+  @Column({
+    name: 'contingency_manual_issued_at',
+    type: 'date',
+    nullable: true,
+  })
+  contingencyManualIssuedAt?: string | null;
+
   @UpdateDateColumn({ type: 'timestamptz' })
   updated_at: Date;
 }

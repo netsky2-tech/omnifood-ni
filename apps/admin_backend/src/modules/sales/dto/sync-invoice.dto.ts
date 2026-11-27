@@ -11,6 +11,8 @@ import {
   IsArray,
   IsInt,
   IsPositive,
+  Matches,
+  MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -588,4 +590,39 @@ export class SyncInvoiceDto {
   @IsNumber()
   @IsOptional()
   tipEligibleBaseNio?: number;
+
+  // #539 S3 (DT 09-2007 3.3.a/3.3.b): optional manual contingency invoice
+  // back-entry reference. Absent on legacy/regular sales so payload hashes
+  // stay identical.
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  })
+  @IsString()
+  @MaxLength(32)
+  @IsOptional()
+  contingencyManualSeries?: string | null;
+
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  })
+  @IsString()
+  @MaxLength(32)
+  @IsOptional()
+  contingencyManualNumber?: string | null;
+
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'contingencyManualIssuedAt must be a YYYY-MM-DD date string',
+  })
+  @IsDateString()
+  @IsOptional()
+  contingencyManualIssuedAt?: string | null;
 }

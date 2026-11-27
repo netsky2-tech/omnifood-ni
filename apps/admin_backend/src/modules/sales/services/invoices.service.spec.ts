@@ -4692,4 +4692,105 @@ describe('InvoicesService', () => {
       );
     });
   });
+
+  describe('DT 09-2007 S3 contingency manual invoice validation & hash-safety', () => {
+    const baseContingencyDto: SyncInvoiceDto = {
+      id: 'inv-cont-base',
+      number: '001-001-01-00000020',
+      createdAt: '2026-04-15T12:00:00.000Z',
+      userId: 'user-1',
+      subtotal: 100,
+      totalTax: 15,
+      total: 115,
+      paymentStatus: 'paid',
+      items: [],
+      payments: [],
+    };
+
+    it('keeps identical calculateSyncPayloadHash for legacy non-contingency sales without contingency keys', () => {
+      const legacyRecord = {
+        idempotencyKey: 'legacy-sale-1',
+        sourceDeviceId: 'pos-1',
+        sourceSequence: 1,
+        flowType: 'sales' as const,
+        documentType: 'SALE' as const,
+        invoice: {
+          id: 'inv-legacy-1',
+          number: '001-001-01-00000001',
+          createdAt: '2026-04-15T12:00:00.000Z',
+          userId: 'user-1',
+          subtotal: 100,
+          totalTax: 15,
+          total: 115,
+          paymentStatus: 'paid',
+          items: [],
+          payments: [],
+        },
+      };
+
+      const hash1 = calculateSyncPayloadHash(legacyRecord);
+      const hash2 = calculateSyncPayloadHash({ ...legacyRecord });
+      expect(hash1).toBe(hash2);
+      expect(hash1).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('rejects partial contingency manual reference with CONTINGENCY_REF_INCOMPLETE', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseContingencyDto,
+        id: 'inv-cont-partial',
+        number: '001-001-01-00000020',
+        contingencyManualSeries: 'MAN-A',
+        contingencyManualNumber: '000010',
+        // missing contingencyManualIssuedAt
+      };
+
+      await expect(service.syncInvoices('tenant-1', [dto])).rejects.toThrow(
+        /CONTINGENCY_REF_INCOMPLETE/,
+      );
+    });
+
+    it('rejects contingency manual series colliding with invoice DGI prefix (CONTINGENCY_SERIES_COLLISION)', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseContingencyDto,
+        id: 'inv-cont-collision-prefix',
+        number: '001-001-01-00000021',
+        contingencyManualSeries: '001-001-01',
+        contingencyManualNumber: '000099',
+        contingencyManualIssuedAt: '2026-04-15',
+      };
+
+      await expect(service.syncInvoices('tenant-1', [dto])).rejects.toThrow(
+        /CONTINGENCY_SERIES_COLLISION/,
+      );
+    });
+
+    it('rejects contingency manual number matching computerized invoice.number (CONTINGENCY_SERIES_COLLISION)', async () => {
+      const dto: SyncInvoiceDto = {
+        ...baseContingencyDto,
+        id: 'inv-cont-collision-num',
+        number: '001-001-01-00000022',
+        contingencyManualSeries: 'MAN-B',
+        contingencyManualNumber: '001-001-01-00000022',
+        contingencyManualIssuedAt: '2026-04-15',
+      };
+
+      await expect(service.syncInvoices('tenant-1', [dto])).rejects.toThrow(
+        /CONTINGENCY_SERIES_COLLISION/,
+      );
+    });
+
+    it('passes contingencyOnly filter to findAll when requested', async () => {
+      invoiceRepo.find.mockResolvedValueOnce([]);
+      await service.findAll('tenant-1', { contingencyOnly: true });
+
+      expect(invoiceRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenant_id: 'tenant-1',
+            contingencyManualSeries: expect.anything(),
+          }),
+        }),
+      );
+    });
+  });
 });

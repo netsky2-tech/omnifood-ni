@@ -600,4 +600,69 @@ describe('SyncBatchEnvelopeDto', () => {
     };
     expect(validateStrict([unknownField]).length).toBeGreaterThan(0);
   });
+
+  it('whitelists and validates optional contingency manual reference fields (DT 09-2007 3.3.a/b)', () => {
+    const validateStrict = (records: unknown[]) => {
+      const dto = plainToInstance(SyncBatchEnvelopeDto, { records });
+      const errors = validateSync(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        forbidUnknownValues: false,
+      });
+      return { dto, errors };
+    };
+
+    const baseSale = {
+      idempotencyKey: 'sale-cont-1',
+      sourceDeviceId: 'terminal-1',
+      sourceSequence: 10,
+      flowType: 'sales',
+      documentType: 'SALE',
+      invoice: {
+        id: 'inv-cont-1',
+        number: '001-001-01-00000010',
+        createdAt: '2026-04-15T14:00:00.000Z',
+        userId: 'user-1',
+        subtotal: 100,
+        totalTax: 15,
+        total: 115,
+        paymentStatus: 'paid',
+        items: [],
+        payments: [],
+        contingencyManualSeries: ' MAN-A ',
+        contingencyManualNumber: ' 000042 ',
+        contingencyManualIssuedAt: '2026-04-15',
+      },
+    };
+
+    const valid = validateStrict([baseSale]);
+    expect(valid.errors).toHaveLength(0);
+    expect(valid.dto.records[0].invoice).toMatchObject({
+      contingencyManualSeries: 'MAN-A',
+      contingencyManualNumber: '000042',
+      contingencyManualIssuedAt: '2026-04-15',
+    });
+
+    const badDate = validateStrict([
+      {
+        ...baseSale,
+        invoice: {
+          ...baseSale.invoice,
+          contingencyManualIssuedAt: '15/04/2026',
+        },
+      },
+    ]);
+    expect(badDate.errors.length).toBeGreaterThan(0);
+
+    const tooLongSeries = validateStrict([
+      {
+        ...baseSale,
+        invoice: {
+          ...baseSale.invoice,
+          contingencyManualSeries: 'S'.repeat(33),
+        },
+      },
+    ]);
+    expect(tooLongSeries.errors.length).toBeGreaterThan(0);
+  });
 });

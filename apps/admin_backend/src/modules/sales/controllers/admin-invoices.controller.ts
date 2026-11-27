@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -106,9 +107,19 @@ export class AdminInvoicesController {
   @Get('invoices')
   @Roles(UserRole.OWNER, UserRole.MANAGER)
   @RequirePermissions(AppPermission.SALES_ISSUE_CREDIT_NOTE)
-  async listInvoices(@Req() request: AdminRequest) {
+  async listInvoices(
+    @Req() request: AdminRequest,
+    @Query('contingencyOnly') contingencyOnly?: string,
+  ) {
     const tenantId = this.requireTenantId(request.user);
-    return serializeAdminInvoices(await this.invoicesService.findAll(tenantId));
+    const onlyContingency =
+      contingencyOnly === 'true' || contingencyOnly === '1';
+    const invoices = onlyContingency
+      ? await this.invoicesService.findAll(tenantId, {
+          contingencyOnly: true,
+        })
+      : await this.invoicesService.findAll(tenantId);
+    return serializeAdminInvoices(invoices);
   }
 
   /**
