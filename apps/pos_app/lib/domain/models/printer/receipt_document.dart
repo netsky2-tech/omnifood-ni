@@ -258,6 +258,8 @@ class ReceiptDocument {
   final double totalUsd;
 
   final List<ReceiptPayment> payments;
+  /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+  final String paymentCondition;
   final String? footerMessage;
   final List<int>? logoRasterBytes;
   final bool isTaxExempt;
@@ -334,6 +336,7 @@ class ReceiptDocument {
     this.bcnOfficialRate = 36.6241,
     required this.totalUsd,
     this.payments = const [],
+    this.paymentCondition = 'CONTADO',
     this.footerMessage,
     this.logoRasterBytes,
     this.isTaxExempt = false,
@@ -398,6 +401,7 @@ class ReceiptDocument {
         bcnOfficialRate: bcnOfficialRate,
         totalUsd: totalUsd,
         payments: payments,
+        paymentCondition: paymentCondition,
         footerMessage: footerMessage,
         logoRasterBytes: logoBytes,
         isTaxExempt: isTaxExempt,
@@ -583,6 +587,7 @@ class ReceiptDocument {
       bcnOfficialRate: invoice.bcnOfficialRate > 0 ? invoice.bcnOfficialRate : 36.6241,
       totalUsd: totalUsdCalc,
       payments: payments.map(ReceiptPayment.fromPayment).toList(),
+      paymentCondition: invoice.paymentCondition,
       footerMessage: footerMessage,
       logoRasterBytes: logoRasterBytes,
       isTaxExempt: taxRegime.isRegimenGeneral &&

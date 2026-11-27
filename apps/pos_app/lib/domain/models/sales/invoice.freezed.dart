@@ -32,6 +32,10 @@ mixin _$Invoice {
   String? get voidReason => throw _privateConstructorUsedError;
   SyncStatus get syncStatus => throw _privateConstructorUsedError;
   PaymentStatus get paymentStatus => throw _privateConstructorUsedError;
+
+  /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+  /// Persisted at issuance so every invoice explicitly states its condition.
+  String get paymentCondition => throw _privateConstructorUsedError;
   InvoiceType get type => throw _privateConstructorUsedError;
   String? get customerId => throw _privateConstructorUsedError;
 
@@ -106,6 +110,7 @@ abstract class $InvoiceCopyWith<$Res> {
       String? voidReason,
       SyncStatus syncStatus,
       PaymentStatus paymentStatus,
+      String paymentCondition,
       InvoiceType type,
       String? customerId,
       String? customerName,
@@ -159,6 +164,7 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? voidReason = freezed,
     Object? syncStatus = null,
     Object? paymentStatus = null,
+    Object? paymentCondition = null,
     Object? type = null,
     Object? customerId = freezed,
     Object? customerName = freezed,
@@ -232,6 +238,10 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.paymentStatus
           : paymentStatus // ignore: cast_nullable_to_non_nullable
               as PaymentStatus,
+      paymentCondition: null == paymentCondition
+          ? _value.paymentCondition
+          : paymentCondition // ignore: cast_nullable_to_non_nullable
+              as String,
       type: null == type
           ? _value.type
           : type // ignore: cast_nullable_to_non_nullable
@@ -363,6 +373,7 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       String? voidReason,
       SyncStatus syncStatus,
       PaymentStatus paymentStatus,
+      String paymentCondition,
       InvoiceType type,
       String? customerId,
       String? customerName,
@@ -414,6 +425,7 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? voidReason = freezed,
     Object? syncStatus = null,
     Object? paymentStatus = null,
+    Object? paymentCondition = null,
     Object? type = null,
     Object? customerId = freezed,
     Object? customerName = freezed,
@@ -487,6 +499,10 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.paymentStatus
           : paymentStatus // ignore: cast_nullable_to_non_nullable
               as PaymentStatus,
+      paymentCondition: null == paymentCondition
+          ? _value.paymentCondition
+          : paymentCondition // ignore: cast_nullable_to_non_nullable
+              as String,
       type: null == type
           ? _value.type
           : type // ignore: cast_nullable_to_non_nullable
@@ -614,6 +630,7 @@ class _$InvoiceImpl implements _Invoice {
       this.voidReason,
       this.syncStatus = SyncStatus.pending,
       this.paymentStatus = PaymentStatus.pending,
+      this.paymentCondition = 'CONTADO',
       this.type = InvoiceType.regular,
       this.customerId,
       this.customerName,
@@ -672,6 +689,12 @@ class _$InvoiceImpl implements _Invoice {
   @override
   @JsonKey()
   final PaymentStatus paymentStatus;
+
+  /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+  /// Persisted at issuance so every invoice explicitly states its condition.
+  @override
+  @JsonKey()
+  final String paymentCondition;
   @override
   @JsonKey()
   final InvoiceType type;
@@ -758,7 +781,7 @@ class _$InvoiceImpl implements _Invoice {
 
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, type: $type, customerId: $customerId, customerName: $customerName, customerTaxId: $customerTaxId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, paymentCondition: $paymentCondition, type: $type, customerId: $customerId, customerName: $customerName, customerTaxId: $customerTaxId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
   }
 
   @override
@@ -784,6 +807,8 @@ class _$InvoiceImpl implements _Invoice {
                 other.syncStatus == syncStatus) &&
             (identical(other.paymentStatus, paymentStatus) ||
                 other.paymentStatus == paymentStatus) &&
+            (identical(other.paymentCondition, paymentCondition) ||
+                other.paymentCondition == paymentCondition) &&
             (identical(other.type, type) || other.type == type) &&
             (identical(other.customerId, customerId) ||
                 other.customerId == customerId) &&
@@ -853,6 +878,7 @@ class _$InvoiceImpl implements _Invoice {
         voidReason,
         syncStatus,
         paymentStatus,
+        paymentCondition,
         type,
         customerId,
         customerName,
@@ -909,6 +935,7 @@ abstract class _Invoice implements Invoice {
       final String? voidReason,
       final SyncStatus syncStatus,
       final PaymentStatus paymentStatus,
+      final String paymentCondition,
       final InvoiceType type,
       final String? customerId,
       final String? customerName,
@@ -961,6 +988,11 @@ abstract class _Invoice implements Invoice {
   SyncStatus get syncStatus;
   @override
   PaymentStatus get paymentStatus;
+  @override
+
+  /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+  /// Persisted at issuance so every invoice explicitly states its condition.
+  String get paymentCondition;
   @override
   InvoiceType get type;
   @override

@@ -1069,6 +1069,33 @@ class FiscalInboxHandler {
     final emailMatches = await identityMirrorMatches(
         'email', FiscalProjectionKeys.businessEmail);
 
+    // 6b. #539 S1 (DT 09-2007 QUINTO): DGI authorization mirrors are
+    // project-if-present (never delete locally entered values when cloud
+    // omits them). When cloud asserts a non-blank value, local must match
+    // so replay repairs drift.
+    Future<bool> dgiAuthorizationMirrorMatches(
+      String payloadField,
+      String localKey,
+    ) async {
+      final expected = rawEnvelope[payloadField]?.toString().trim() ?? '';
+      if (expected.isEmpty) return true;
+      final local = await _database.localConfigDao.getConfigByKey(localKey);
+      return local != null && local.value.trim() == expected;
+    }
+
+    final dgiAuthCodeMatches = await dgiAuthorizationMirrorMatches(
+      'dgiAuthorizationCode',
+      FiscalProjectionKeys.dgiAuthorizationCode,
+    );
+    final dgiAuthIssuedAtMatches = await dgiAuthorizationMirrorMatches(
+      'dgiAuthorizationIssuedAt',
+      FiscalProjectionKeys.dgiAuthorizationIssuedAt,
+    );
+    final dgiAuthExpiresAtMatches = await dgiAuthorizationMirrorMatches(
+      'dgiAuthorizationExpiresAt',
+      FiscalProjectionKeys.dgiAuthorizationExpiresAt,
+    );
+
     // 7. commercial_exchange_rate is OPTIONAL:
     // If present in payload -> local must exist and match.
     // If absent in payload -> local MUST NOT exist (stale key check).
@@ -1162,6 +1189,9 @@ class FiscalInboxHandler {
         addressMatches &&
         phoneMatches &&
         emailMatches &&
+        dgiAuthCodeMatches &&
+        dgiAuthIssuedAtMatches &&
+        dgiAuthExpiresAtMatches &&
         fxMatches &&
         amountCapMatches &&
         percentCapMatches &&

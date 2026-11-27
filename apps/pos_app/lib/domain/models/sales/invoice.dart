@@ -24,6 +24,9 @@ class Invoice with _$Invoice {
     String? voidReason,
     @Default(SyncStatus.pending) SyncStatus syncStatus,
     @Default(PaymentStatus.pending) PaymentStatus paymentStatus,
+    /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+    /// Persisted at issuance so every invoice explicitly states its condition.
+    @Default('CONTADO') String paymentCondition,
     @Default(InvoiceType.regular) InvoiceType type,
     String? customerId,
 

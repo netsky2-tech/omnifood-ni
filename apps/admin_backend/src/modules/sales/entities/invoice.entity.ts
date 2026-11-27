@@ -53,6 +53,15 @@ export class Invoice {
   @Column({ name: 'payment_status', default: 'pending' })
   paymentStatus: string;
 
+  // #539 S4 (DT 09-2007 1.7/1.8): persisted fiscal payment condition.
+  @Column({
+    name: 'payment_condition',
+    type: 'varchar',
+    length: 16,
+    default: 'CONTADO',
+  })
+  paymentCondition: 'CONTADO' | 'CREDITO';
+
   @Column({ nullable: true, name: 'customer_id' })
   customerId: string;
 

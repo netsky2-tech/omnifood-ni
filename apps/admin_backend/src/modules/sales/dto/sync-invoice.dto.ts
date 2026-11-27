@@ -448,6 +448,13 @@ export class SyncInvoiceDto {
   @IsString()
   paymentStatus: string;
 
+  // #539 S4 (DT 09-2007 1.7/1.8): persisted fiscal payment condition.
+  // Optional on the wire so legacy CONTADO payloads keep identical hashes;
+  // DB column defaults to 'CONTADO'.
+  @IsOptional()
+  @IsIn(['CONTADO', 'CREDITO'])
+  paymentCondition?: 'CONTADO' | 'CREDITO';
+
   @IsString()
   @IsOptional()
   customerId?: string;

@@ -2049,4 +2049,103 @@ void main() {
       }
     });
   });
+
+  group('DT 09-2007 compliance (#539 S1 & S4)', () {
+    test(
+      'S1 QUINTO: fiscalAuthorizationLines right-aligns every line even when wrapped on 58mm paper',
+      () {
+        final f58 = ReceiptLayoutFormatter.format58mm();
+        final f80 = ReceiptLayoutFormatter.format80mm();
+
+        // Short code fits on one line (32 cols)
+        final shortLines = f58.fiscalAuthorizationLines('AUT-123');
+        expect(shortLines, hasLength(1));
+        expect(shortLines.single.length, 32);
+        expect(shortLines.single.endsWith('Autorización DGI: AUT-123'), isTrue);
+
+        // Long CAFD exceeds 32 cols on 58mm: every wrapped line MUST stay right-aligned
+        final longLines58 = f58.fiscalAuthorizationLines('DGI-AUT-2026-00012345');
+        expect(longLines58.length, greaterThanOrEqualTo(2));
+        for (final line in longLines58) {
+          expect(
+            line.length,
+            32,
+            reason: 'Every wrapped 58mm auth line must be padded to 32 cols right-aligned: "$line"',
+          );
+          expect(
+            line.startsWith(' '),
+            isTrue,
+            reason: 'Wrapped 58mm auth line must be right-aligned (leading spaces), got: "$line"',
+          );
+        }
+        expect(longLines58.last.trim(), 'DGI-AUT-2026-00012345');
+
+        // Triangulation: 80mm (40 cols) with a code that fits on one line
+        final fits80 = f80.fiscalAuthorizationLines('DGI-AUT-2026-00012345');
+        expect(fits80, hasLength(1));
+        expect(fits80.single.length, 40);
+        expect(fits80.single.endsWith('DGI-AUT-2026-00012345'), isTrue);
+
+        // Blank/null still renders nothing (never fabricates placeholder)
+        expect(f58.fiscalAuthorizationLines(null), isEmpty);
+        expect(f58.fiscalAuthorizationLines('   '), isEmpty);
+      },
+    );
+
+    test(
+      'S4 1.7/1.8: always prints Condicion: Contado or Credito even when payments are present',
+      () {
+        final f58 = ReceiptLayoutFormatter.format58mm();
+        final baseInvoice = Invoice(
+          id: 'inv-cond-1',
+          number: '001-001-01-00000100',
+          createdAt: DateTime(2026, 11, 27, 10, 30),
+          userId: 'user-1',
+          subtotal: 100.0,
+          totalTax: 0.0,
+          total: 100.0,
+          paymentCondition: 'CONTADO',
+        );
+        final cashPayment = Payment(
+          id: 'pay-1',
+          invoiceId: 'inv-cond-1',
+          method: PaymentMethod.cash,
+          amount: 100.0,
+          currency: 'NIO',
+        );
+
+        final contadoDoc = ReceiptDocument.fromInvoice(
+          baseInvoice,
+          items: const [],
+          payments: [cashPayment],
+          taxRegime: TaxRegime.cuotaFija,
+        );
+        final contadoText = f58.formatReceiptDocumentText(contadoDoc);
+        final contadoEscPos = String.fromCharCodes(
+          f58.formatReceiptDocumentEscPos(contadoDoc),
+        );
+        expect(contadoText, contains('Condicion:'));
+        expect(contadoText, contains('Contado'));
+        expect(contadoEscPos, contains('Condicion:'));
+        expect(contadoEscPos, contains('Contado'));
+
+        // Triangulation: CREDITO invoice prints Condicion: Credito
+        final creditInvoice = baseInvoice.copyWith(paymentCondition: 'CREDITO');
+        final creditDoc = ReceiptDocument.fromInvoice(
+          creditInvoice,
+          items: const [],
+          payments: const [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+        final creditText = f58.formatReceiptDocumentText(creditDoc);
+        final creditEscPos = String.fromCharCodes(
+          f58.formatReceiptDocumentEscPos(creditDoc),
+        );
+        expect(creditText, contains('Condicion:'));
+        expect(creditText, contains('Credito'));
+        expect(creditEscPos, contains('Condicion:'));
+        expect(creditEscPos, contains('Credito'));
+      },
+    );
+  });
 }

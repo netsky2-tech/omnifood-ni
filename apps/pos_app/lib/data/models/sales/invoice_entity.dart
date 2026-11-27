@@ -57,6 +57,10 @@ class InvoiceEntity {
   final String syncStatus;
   @ColumnInfo(name: 'payment_status')
   final String paymentStatus;
+
+  /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+  @ColumnInfo(name: 'payment_condition')
+  final String paymentCondition;
   @ColumnInfo(name: 'customer_id')
   final String? customerId;
   @ColumnInfo(name: 'customer_name')
@@ -192,6 +196,7 @@ class InvoiceEntity {
     this.voidReason,
     this.syncStatus = 'pending',
     this.paymentStatus = 'pending',
+    this.paymentCondition = 'CONTADO',
     this.customerId,
     this.customerName,
     this.customerTaxId,

@@ -23,6 +23,7 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       paymentStatus:
           $enumDecodeNullable(_$PaymentStatusEnumMap, json['paymentStatus']) ??
               PaymentStatus.pending,
+      paymentCondition: json['paymentCondition'] as String? ?? 'CONTADO',
       type: $enumDecodeNullable(_$InvoiceTypeEnumMap, json['type']) ??
           InvoiceType.regular,
       customerId: json['customerId'] as String?,
@@ -66,6 +67,7 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'voidReason': instance.voidReason,
       'syncStatus': _$SyncStatusEnumMap[instance.syncStatus]!,
       'paymentStatus': _$PaymentStatusEnumMap[instance.paymentStatus]!,
+      'paymentCondition': instance.paymentCondition,
       'type': _$InvoiceTypeEnumMap[instance.type]!,
       'customerId': instance.customerId,
       'customerName': instance.customerName,

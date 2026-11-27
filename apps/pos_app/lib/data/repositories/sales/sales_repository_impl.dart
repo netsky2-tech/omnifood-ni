@@ -641,6 +641,7 @@ class SalesRepositoryImpl implements SalesRepository {
       voidReason: voidReason ?? entity.voidReason,
       syncStatus: syncStatus ?? entity.syncStatus,
       paymentStatus: entity.paymentStatus,
+      paymentCondition: entity.paymentCondition,
       type: entity.type,
       customerId: entity.customerId,
       customerName: entity.customerName,

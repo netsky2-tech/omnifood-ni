@@ -3673,6 +3673,24 @@ final migration83_84 = Migration(83, 84, (database) async {
     );
   }
 });
+
+/// #539 S4 (DT 09-2007 1.7/1.8): persist fiscal payment condition
+/// ('CONTADO' | 'CREDITO') on invoices so every ticket states its condition.
+final migration84_85 = Migration(84, 85, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('payment_condition')) {
+    await database.execute(
+      "ALTER TABLE invoices ADD COLUMN payment_condition TEXT NOT NULL DEFAULT 'CONTADO'",
+    );
+  }
+});
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3748,6 +3766,7 @@ final allMigrations = [
   migration81_82,
   migration82_83,
   migration83_84,
+  migration84_85,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

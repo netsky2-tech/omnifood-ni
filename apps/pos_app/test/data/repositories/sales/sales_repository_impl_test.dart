@@ -2500,6 +2500,7 @@ void main() {
       'void_reason': 'seed-void-reason',
       'sync_status': 'synced',
       'payment_status': 'paid',
+      'payment_condition': 'CREDITO',
       'customer_id': 'cust-777',
       'customer_name': 'Cliente Preservado',
       'customer_tax_id': 'J0310000001234',

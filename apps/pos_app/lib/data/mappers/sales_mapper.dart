@@ -325,6 +325,9 @@ class SalesMapper {
         (e) => e.name == entity.paymentStatus,
         orElse: () => PaymentStatus.pending,
       ),
+      paymentCondition: entity.paymentCondition.trim().toUpperCase() == 'CREDITO'
+          ? 'CREDITO'
+          : 'CONTADO',
       type: InvoiceType.values.firstWhere(
         (e) => e.name == entity.type,
         orElse: () => InvoiceType.regular,
@@ -371,6 +374,9 @@ class SalesMapper {
       voidReason: domain.voidReason,
       syncStatus: domain.syncStatus.name,
       paymentStatus: domain.paymentStatus.name,
+      paymentCondition: domain.paymentCondition.trim().toUpperCase() == 'CREDITO'
+          ? 'CREDITO'
+          : 'CONTADO',
       type: domain.type.name,
       customerId: domain.customerId,
       customerName: domain.customerName,
@@ -685,6 +691,12 @@ class SalesMapper {
       'voidReason': invoice.voidReason,
       'syncStatus': invoice.syncStatus.name,
       'paymentStatus': invoice.paymentStatus.name,
+      // #539 S4 (DT 09-2007 1.7/1.8): emit paymentCondition only when non-default
+      // ('CREDITO') so pre-existing CONTADO outbox payload hashes stay byte-identical
+      // (same hash-safety contract as customerName/customerTaxId). Backend defaults
+      // omitted paymentCondition to 'CONTADO'.
+      if (invoice.paymentCondition.trim().toUpperCase() == 'CREDITO')
+        'paymentCondition': 'CREDITO',
       'type': invoice.type.name,
       'customerId': invoice.customerId,
       // odd/factura-con-nombre: the customer snapshot keys are emitted ONLY
