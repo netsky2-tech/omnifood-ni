@@ -53,7 +53,7 @@ Cada dato exigido por DT 09-2007 se verifica contra cuatro pruebas:
 | **a** | Número de autorización DGI *(QUINTO)* | ✅ `local_configs['dgi_authorization_code']` + `tenants.dgi_authorization_code` | ✅ `business_profile_view.dart` + Owner Dashboard | ✅ Reboot + `FiscalInboxHandler` (`dgiAuthorizationCode`) | ✅ Parte inferior derecha 58mm/80mm (`ReceiptLayoutFormatter.fiscalAuthorizationLines`) | **PASS (0 fallos)** |
 | **b** | Prefijo / Serie | ✅ `dgi_prefix` (`dgi_numbering_service_impl.dart`) | ✅ `business_profile_view.dart` | ✅ Sin sobrescritura en arranque (`main.dart:442-447`, `#520`) | ✅ Integrado en `No. <serie><consecutivo>` | **PASS (0 fallos)** |
 | **c** | Inicio de rango | ✅ `dgi_range_start` (`dgi_numbering_service_impl.dart`) | ✅ `business_profile_view.dart` | ✅ Sin sobrescritura en arranque (`#520`) | N/A (metadato de control) | **PASS (0 fallos)** |
-| **d** | Fin de rango | ✅ `dgi_range_end` (`dgi_numbering_service_impl.dart`) | ✅ `business_profile_view.dart` | ✅ Sin sobrescritura en arranque (`#520`) | N/A (metadato de control) | **PASS (0 fallos)** |
+| **d** | Fin de rango (`dgi_range_end`) | **RETIRADO (`#554` / D-21)** — los sistemas computarizados usan numeración consecutiva continua sin tope de talonario; `business_profile_view_model.dart:56` descarta la clave al guardar | N/A (retirado) | ✅ Nunca se inventa ni sobrescribe | N/A | **RETIRADO (conforme D-21)** |
 | **e** | Cursor de secuencia | ✅ `dgi_current_number` (`dgi_numbering_service_impl.dart`) | ✅ `business_profile_view.dart` | ✅ Falla cerrado (`FiscalSequenceUnconfiguredError`) si falta; nunca reinicia en `1` silenciosamente (`#520`). *(Recuperación tras pérdida de tablet en `#526`)* | ✅ Dentro del número fiscal | **PASS (0 fallos en vivo)** |
 | **f** | Régimen fiscal | ✅ `tax_regime.dart` (`REGIMEN_GENERAL` / `CUOTA_FIJA`) | ✅ `business_profile_view.dart` | ✅ `local_configs` + `FiscalInboxHandler` | ✅ Encabezado de régimen + IVA derivado (`0%` en Cuota Fija) | **PASS (0 fallos)** |
 | **g** | Nombre del negocio | ✅ `business_name` (`business_profile_view_model.dart`) | ✅ `business_profile_view.dart` | ✅ `local_configs` + `FiscalInboxHandler` | ✅ Encabezado centrado; **sin fallback `'OMNIFOOD NI'`** (`#540` AC-3) | **PASS (0 fallos)** |
@@ -72,7 +72,21 @@ Cada dato exigido por DT 09-2007 se verifica contra cuatro pruebas:
 
 ---
 
-## 4. Preguntas Abiertas para Contadora (**NUESTRA DECISIÓN**: no inventar ley)
+## 4. Práctica Operativa vs. Nuestra Decisión de Arquitectura
+
+### PRÁCTICA (recomendación operativa, no exigencia literal de norma)
+- **Pie de cortesía no fiscal:** imprimir `*** GRACIAS POR SU COMPRA ***` únicamente cuando el cliente no configuró `legal_footer` en su perfil.
+- **Referencia en USD:** mostrar tipo de cambio comercial/BCN y equivalente en USD como ayuda comercial al cliente, manteniendo siempre Córdobas (`NIO`) como denominación fiscal primaria (`DGI-11`).
+- **Verificación de autorización previa a ferias Sin IVA:** confirmar la inscripción vigente en la VET antes de activar `global_tax_override` y capturar el número de Acuerdo Ministerial en `tax_exemption_reason`.
+
+### NUESTRA DECISIÓN (reglas de ingeniería del producto)
+- **Cero literales fiscales hardcodeados (`#540` AC-3/AC-4):** ningún formato de impresión ni servicio de numeración inventa prefijos, rangos, marcas (`'OMNIFOOD NI'`) ni caracterizaciones legales no verificadas (`'POLITICA TEMPORAL'`).
+- **Offline-first y fallo cerrado:** si falta `dgi_current_number`, el POS falla cerrado (`FiscalSequenceUnconfiguredError`) antes de inventar el consecutivo `1`.
+- **Automatización por ventanas y reporte VET:** delegados al issue `#1042` (Etapa 1) para separar la programación por fechas de la base normativa.
+
+---
+
+## 5. Preguntas Abiertas para Contadora (**NUESTRA DECISIÓN**: no inventar ley)
 
 Mantener trazabilidad en `docs/operations/tratamiento-normativo-539.md` y `#535`:
 1. **`#535` Q3c:** Confirmación escrita de si un contribuyente Cuota Fija o venta exenta en Régimen General requiere texto legal específico adicional en el ticket.

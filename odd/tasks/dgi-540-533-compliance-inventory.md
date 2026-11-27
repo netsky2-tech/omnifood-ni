@@ -18,11 +18,11 @@
   Add editable `tax_exemption_reason` (`local_configs['tax_exemption_reason']`, Business Profile UI → `PrinterConfig.taxExemptionReason` → `PrinterPort` / adapters → `SaleViewModel` → `ReceiptDocument.taxExemptionReason` → `ReceiptLayoutFormatter` 58mm/80mm text & ESC/POS on exempt Régimen General receipts; blank omits line, never fabricates `'POLITICA TEMPORAL'`). Document MHCP–INTUR–DGI agreements (`AVISO-148-08-2025` / `dgi.gob.ni/getDoc/1050`) in `docs/DGI/dgi_marco_normativo_dt09_2007.md` and open a Stage 1 GitHub issue for date-scheduled automatic VAT-free windows + VET exportable report in Owner Dashboard.
 
 ## Tasks
-- [x] **T1** (`S1, S3`) Remove `'** VENTA EXENTA DE IVA - POLITICA TEMPORAL **'` and `'OMNIFOOD NI'` fiscal fallbacks with TDD (RED→GREEN) — route: inline — commit: pending
-- [x] **T2** (`S2`) Wire `legal_footer` end-to-end (`local_configs` → `PrinterConfig` → `PrinterPort` → adapters → `SaleViewModel` → `ReceiptDocument`) and pass `customerRuc` explicitly with TDD — route: inline — commit: pending
-- [x] **T3** (`S4`) Author `docs/DGI/dgi_marco_normativo_dt09_2007.md` (with re-verified `#540` T1–T4 table and `#533` primary sources) and update `AGENTS.md` article-level citations — route: inline — commit: pending
-- [ ] **T4** (`S5`) Wire configurable `tax_exemption_reason` (T1–T4) for MHCP–INTUR–DGI holiday VAT exonerations + open Stage 1 GitHub issue for scheduled windows & VET report — route: inline — commit: pending
-- [ ] **T5** (`S1-S5`) Run targeted Flutter test suites + independent `gentle-ai-verify` + open PR closing `#540` and `#533` — route: verify — commit: pending
+- [x] **T1** (`S1, S3`) Remove `'** VENTA EXENTA DE IVA - POLITICA TEMPORAL **'` and `'OMNIFOOD NI'` fiscal fallbacks with TDD (RED→GREEN) — route: inline — commit: `ae8bd0c3`
+- [x] **T2** (`S2`) Wire `legal_footer` end-to-end (`local_configs` → `PrinterConfig` → `PrinterPort` → adapters → `SaleViewModel` → `ReceiptDocument`) and pass `customerRuc` explicitly with TDD — route: inline — commit: `ae8bd0c3`
+- [x] **T3** (`S4`) Author `docs/DGI/dgi_marco_normativo_dt09_2007.md` (with re-verified `#540` T1–T4 table and `#533` primary sources) and update `AGENTS.md` article-level citations — route: inline — commit: `ae8bd0c3`
+- [x] **T4** (`S5`) Wire configurable `tax_exemption_reason` (T1–T4) for MHCP–INTUR–DGI holiday VAT exonerations + open Stage 1 GitHub issue (`#1042`) for scheduled windows & VET report — route: inline — commit: `ae8bd0c3`
+- [x] **T5** (`S1-S5`) Run targeted Flutter test suites (140/140 + 15/15 independent probes + `flutter analyze` clean) + independent `gentle-ai-verify` + open PR closing `#540` and `#533` — route: verify — commit: `pending`
 
 ## Log
 - **L1 (user):** "· #540 (inventario de campos DGI) · #533 (fuentes primarias DGI)"
