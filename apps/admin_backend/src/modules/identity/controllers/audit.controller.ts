@@ -97,15 +97,31 @@ export class AuditController {
       throw new BadRequestException('Missing userId');
     }
 
-    const latest = await this.auditRepository.findOne({
-      where: {
-        tenant_id: tenantId,
-        device_id: targetDeviceId,
-        user_id: targetUserId,
-        forensic_status: 'ACTIVE',
-      },
-      order: { sequence_no: 'DESC' },
-    });
+    const latest =
+      this.dataSource && typeof this.dataSource.transaction === 'function'
+        ? await runInTenantTransaction(
+            this.dataSource,
+            tenantId,
+            async (bound) =>
+              bound.getRepository(AuditLog).findOne({
+                where: {
+                  tenant_id: tenantId,
+                  device_id: targetDeviceId,
+                  user_id: targetUserId,
+                  forensic_status: 'ACTIVE',
+                },
+                order: { sequence_no: 'DESC' },
+              }),
+          )
+        : await this.auditRepository.findOne({
+            where: {
+              tenant_id: tenantId,
+              device_id: targetDeviceId,
+              user_id: targetUserId,
+              forensic_status: 'ACTIVE',
+            },
+            order: { sequence_no: 'DESC' },
+          });
 
     const sequenceNo = latest ? latest.sequence_no : 0;
     const entryHash = latest ? latest.entry_hash : 'GENESIS';
@@ -215,6 +231,9 @@ export class AuditController {
     await queryRunner.startTransaction();
 
     try {
+      await queryRunner.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
       const continuityCache = new Map<
         string,
         { sequence_no: number; entry_hash: string }
