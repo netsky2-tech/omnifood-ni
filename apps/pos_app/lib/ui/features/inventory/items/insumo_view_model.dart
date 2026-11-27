@@ -13,11 +13,17 @@ import '../../../../domain/services/alerts/alert_service.dart';
 
 const highValueAlterationThresholdNio = 1500.0;
 
-/// Catalog code used to mark a sales product as prepared (carries a recipe/BOM
-/// and deducts insumo stock on sale). The opposite code (`REVENTA`) means
-/// direct resale. Both codes are tenant-administrable values in the
-/// `SALES_PRODUCT_TYPE` catalog; this constant only maps the prepared flag
-/// persisted on the (still bool-based) Product entity to its catalog code.
+/// Catalog code used to mark a sales product as prepared.
+///
+/// DEC-8 inventory rules:
+/// - `PREPARADO` descuenta ingredientes vía receta (BOM).
+/// - `SIMPLE` (incluyendo `REVENTA`) con 'Controlar existencias'
+///   (`DIRECT_STOCK`) descuenta 1:1 automáticamente; sin ese control
+///   (`NOT_TRACKED`) no descuenta existencias.
+///
+/// Both codes are tenant-administrable values in the `SALES_PRODUCT_TYPE`
+/// catalog; this constant only maps the prepared flag persisted on the
+/// (still bool-based) Product entity to its catalog code.
 const preparedProductTypeCode = 'PREPARADO';
 
 class InsumoViewModel with ChangeNotifier {

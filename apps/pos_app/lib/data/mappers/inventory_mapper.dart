@@ -325,19 +325,38 @@ class InventoryMapper {
     );
   }
 
+  /// Normalizes backend or legacy `inventoryPolicy` strings (`DIRECT_STOCK`,
+  /// `NOT_TRACKED`, `RECIPE_BOM`, or enum `.name` camelCase) into the canonical
+  /// `InventoryPolicy.name` string stored on `ProductEntity.inventoryPolicy`.
+  static String? normalizeInventoryPolicyStorage(String? raw) {
+    return _parseInventoryPolicy(raw)?.name;
+  }
+
   static InventoryPolicy? _parseInventoryPolicy(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      return InventoryPolicy.values.byName(raw);
-    } catch (_) {
-      // M6 (Batch 3): the fallback keeps unprovisioned/legacy rows working
-      // offline, but the unexpected path must be observable.
-      developer.log(
-        'Unknown inventory policy "$raw"; falling back to null.',
-        name: 'InventoryMapper',
-        level: 900, // WARNING
-      );
-      return null;
+    switch (raw.trim().toUpperCase()) {
+      case 'DIRECT_STOCK':
+      case 'DIRECTSTOCK':
+        return InventoryPolicy.directStock;
+      case 'NOT_TRACKED':
+      case 'NOTTRACKED':
+        return InventoryPolicy.notTracked;
+      case 'RECIPE_BOM':
+      case 'RECIPEBOM':
+        return InventoryPolicy.recipeBom;
+      default:
+        try {
+          return InventoryPolicy.values.byName(raw.trim());
+        } catch (_) {
+          // M6 (Batch 3): the fallback keeps unprovisioned/legacy rows working
+          // offline, but the unexpected path must be observable.
+          developer.log(
+            'Unknown inventory policy "$raw"; falling back to null.',
+            name: 'InventoryMapper',
+            level: 900, // WARNING
+          );
+          return null;
+        }
     }
   }
 

@@ -22,6 +22,7 @@ import '../../domain/services/inventory/authority_hydration_status.dart';
 import '../../domain/services/entitlements/entitlement_snapshot_service.dart';
 import '../../domain/services/sync/sync_failure_classification.dart';
 import '../database/app_database.dart';
+import '../mappers/inventory_mapper.dart';
 import '../models/inventory/product_entity.dart';
 import '../models/catalog/catalog_value_entity.dart';
 import '../models/inventory/authority_projection_entities.dart';
@@ -4144,7 +4145,11 @@ class SyncService {
               tenantId: map['tenantId'] as String? ?? existing?.tenantId,
               taxRate: asDouble(map['taxRate']) ?? 0.0,
               isTaxExempt: map['isTaxExempt'] as bool? ?? false,
-              inventoryPolicy: map['inventoryPolicy'] as String? ?? existing?.inventoryPolicy,
+              inventoryPolicy:
+                  InventoryMapper.normalizeInventoryPolicyStorage(
+                    map['inventoryPolicy'] as String?,
+                  ) ??
+                  existing?.inventoryPolicy,
               directStockInsumoId: map['directStockInsumoId'] as String? ?? existing?.directStockInsumoId,
               imageUrl: map['imageUrl'] as String? ?? existing?.imageUrl,
             ),
