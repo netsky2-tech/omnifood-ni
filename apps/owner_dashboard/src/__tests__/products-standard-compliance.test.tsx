@@ -13,6 +13,7 @@ const mockProducts: Product[] = [
     name: "Café Espresso Doble",
     uom: "taza",
     product_type: "SIMPLE",
+    inventory_policy: "DIRECT_STOCK",
     category_code: "BEBIDAS",
     warehouse_id: null,
     is_perishable: false,
