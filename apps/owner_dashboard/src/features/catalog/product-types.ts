@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export type ProductType = "SIMPLE" | "COMPOUND" | "VARIANT_PARENT";
 
+export type InventoryPolicy = "NOT_TRACKED" | "DIRECT_STOCK";
+
 /**
  * Values that may arrive stored in the database. The backend enum also has
  * `PREPARED` (behaviourally identical to `COMPOUND` for consumption), which is
@@ -37,6 +39,7 @@ export interface Product {
   name: string;
   uom: string;
   product_type: StoredProductType;
+  inventory_policy?: InventoryPolicy;
   category_code: string | null;
   warehouse_id: string | null;
   is_perishable: boolean;
@@ -53,6 +56,7 @@ export interface CreateProductInput {
   name: string;
   uom: string;
   product_type: ProductType;
+  inventory_policy?: InventoryPolicy;
   category_code?: string;
   warehouse_id?: string;
   is_perishable?: boolean;
@@ -67,6 +71,7 @@ export interface UpdateProductInput {
   name?: string;
   uom?: string;
   product_type?: StoredProductType;
+  inventory_policy?: InventoryPolicy;
   category_code?: string;
   warehouse_id?: string;
   is_perishable?: boolean;

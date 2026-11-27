@@ -244,6 +244,20 @@ async function pickUom(
 }
 
 describe("InsumosTab", () => {
+  it("queries GET /insumos without includeResale=true so kitchen raw materials remain clean", async () => {
+    await renderLoadedTab();
+
+    expect(api.get).toHaveBeenCalledWith(
+      "/insumos?includeInactive=true",
+      expect.any(Object),
+    );
+    for (const call of vi.mocked(api.get).mock.calls) {
+      expect(String(call[0])).not.toContain("includeResale=true");
+      expect(String(call[0])).not.toContain("PRODUCT_RESALE");
+      expect(String(call[0])).not.toContain("catalogKind=ALL");
+    }
+  });
+
   it("renders the insumos list with conversion and FIFO properties", async () => {
     await renderLoadedTab();
 

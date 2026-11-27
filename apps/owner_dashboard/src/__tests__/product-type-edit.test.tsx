@@ -317,4 +317,78 @@ describe("Product type edit (issue #615)", () => {
     const payload = mocks.updateMutateAsync.mock.calls[0]![0];
     expect(payload.input.product_type).toBe("PREPARED");
   });
+
+  it("shows 'Sin control' for SIMPLE NOT_TRACKED and mirrored stock for SIMPLE DIRECT_STOCK in the table", async () => {
+    vi.mocked(useProducts).mockReturnValue({
+      data: [
+        makeProduct({
+          id: "p-untracked",
+          name: "Servicio Delivery",
+          product_type: "SIMPLE",
+          inventory_policy: "NOT_TRACKED",
+          stock: 0,
+        }),
+        makeProduct({
+          id: "p-tracked",
+          name: "Coca-Cola 355ml",
+          product_type: "SIMPLE",
+          inventory_policy: "DIRECT_STOCK",
+          stock: 24,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as any);
+
+    renderProductsPage();
+    await screen.findByText("Servicio Delivery");
+
+    expect(screen.getByText("Sin control")).toBeInTheDocument();
+    expect(screen.getByText("24.00")).toBeInTheDocument();
+  });
+
+  it("shows and updates the direct stock toggle when editing a SIMPLE product, and hides it for COMPOUND/VARIANT_PARENT", async () => {
+    vi.mocked(useProducts).mockReturnValue({
+      data: [
+        makeProduct({
+          id: "p-simple",
+          name: "Agua 500ml",
+          product_type: "SIMPLE",
+          inventory_policy: "NOT_TRACKED",
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as any);
+
+    const user = await openEditDialog("Agua 500ml");
+
+    const toggle = screen.getByLabelText("Controlar existencias en este producto");
+    expect(toggle).not.toBeChecked();
+    expect(screen.queryByLabelText(/insumo/i)).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+
+    // Switching to VARIANT_PARENT hides the toggle.
+    await user.selectOptions(
+      screen.getByLabelText("Tipo de Producto"),
+      "VARIANT_PARENT",
+    );
+    expect(
+      screen.queryByLabelText("Controlar existencias en este producto"),
+    ).not.toBeInTheDocument();
+
+    // Switch back to SIMPLE and save DIRECT_STOCK.
+    await user.selectOptions(screen.getByLabelText("Tipo de Producto"), "SIMPLE");
+    await user.click(screen.getByText("Guardar"));
+
+    await waitFor(() => {
+      expect(mocks.updateMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.updateMutateAsync.mock.calls[0]![0].input).toMatchObject({
+      product_type: "SIMPLE",
+      inventory_policy: "DIRECT_STOCK",
+    });
+  });
 });

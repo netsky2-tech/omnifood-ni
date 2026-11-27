@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useTenantId } from "@/lib/tenant";
 import { useInsumos } from "@/features/recipes/use-recipes";
 import {
   useSuppliers,
   useCreateSupplier,
   useCreateManualPurchase,
 } from "./use-inventory-reports";
-import { fetchPurchasePreview } from "./inventory-api";
+import { fetchPurchasePreview, fetchResaleInsumos } from "./inventory-api";
 import type { ManualPurchaseInput, PurchasePreviewResult } from "./types";
 import { getApiErrorMessage } from "@/lib/api-error";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,8 @@ import { toast } from "@/hooks/use-toast";
 import { cn, formatFactor } from "@/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, Plus, ShieldCheck } from "lucide-react";
+
+type PurchaseItemKind = "RAW_MATERIAL" | "PRODUCT_RESALE";
 
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -83,7 +87,15 @@ export function PurchasesForm({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const tenantId = useTenantId();
   const { data: insumos, isLoading: insumosLoading } = useInsumos();
+  const [itemKind, setItemKind] = useState<PurchaseItemKind>("RAW_MATERIAL");
+  const { data: resaleInsumos, isLoading: resaleInsumosLoading } = useQuery({
+    queryKey: ["inventory", tenantId, "resale-insumos"],
+    queryFn: ({ signal }) => fetchResaleInsumos({ signal }),
+    enabled: open && itemKind === "PRODUCT_RESALE",
+    staleTime: 5 * 60 * 1000,
+  });
   const { data: suppliers, isLoading: suppliersLoading } = useSuppliers();
   const createSupplier = useCreateSupplier();
   const createPurchase = useCreateManualPurchase();
@@ -100,7 +112,10 @@ export function PurchasesForm({
   const previewSeqRef = useRef(0);
 
   const supplierList = suppliers ?? [];
-  const insumoList = insumos ?? [];
+  const insumoList =
+    itemKind === "PRODUCT_RESALE" ? (resaleInsumos ?? []) : (insumos ?? []);
+  const activeItemsLoading =
+    itemKind === "PRODUCT_RESALE" ? resaleInsumosLoading : insumosLoading;
   const selectedInsumo = insumoList.find((i) => i.id === form.insumoId);
   const isPerishable = Boolean(selectedInsumo?.is_perishable);
   // #938: the backend owns the rule (perishable OR already tracked by lot) and
@@ -280,6 +295,7 @@ export function PurchasesForm({
       if (mode === "close") {
         closeDialog(false);
       } else {
+        setItemKind("RAW_MATERIAL");
         setForm(defaultForm());
         setPreview(null);
         setPreviewError(null);
@@ -320,6 +336,7 @@ export function PurchasesForm({
   const closeDialog = (next: boolean) => {
     if (!next) {
       setFormError(null);
+      setItemKind("RAW_MATERIAL");
       setForm(defaultForm());
       setPreview(null);
       setPreviewError(null);
@@ -458,48 +475,118 @@ export function PurchasesForm({
               )}
             </div>
 
-            {/* Insumo */}
-            <div className="space-y-1">
-              <Label htmlFor="purchase_insumo" className="text-xs">
-                Insumo *
-              </Label>
-              <Select
-                value={form.insumoId}
-                onValueChange={(value) => {
-                  // See the supplier select: ignore Radix's synthetic "".
-                  if (!value) return;
-                  setForm((prev) => ({ ...prev, insumoId: value }));
-                }}
+            {/* Tipo de ítem + Insumo / Producto de Reventa */}
+            <div className="space-y-2">
+              <div
+                role="radiogroup"
+                aria-label="Tipo de ítem a comprar"
+                className="grid grid-cols-2 gap-2 rounded-md border border-border bg-muted/30 p-1"
               >
-                <SelectTrigger
-                  id="purchase_insumo"
-                  data-testid="purchases-form-insumo"
-                  className="text-xs h-9"
-                  aria-label="Insumo comprado"
+                <label
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium cursor-pointer transition-colors",
+                    itemKind === "RAW_MATERIAL"
+                      ? "bg-background text-foreground shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
                 >
-                  <SelectValue
-                    placeholder={
-                      insumosLoading
-                        ? "Cargando insumos..."
-                        : "Seleccione insumo"
-                    }
+                  <input
+                    type="radio"
+                    name="purchase_item_kind"
+                    value="RAW_MATERIAL"
+                    checked={itemKind === "RAW_MATERIAL"}
+                    onChange={() => {
+                      setItemKind("RAW_MATERIAL");
+                      setForm((prev) => ({ ...prev, insumoId: "" }));
+                      setFormError(null);
+                    }}
+                    className="sr-only"
                   />
-                </SelectTrigger>
-                <SelectContent>
-                  {insumoList.map((i) => (
-                    <SelectItem key={i.id} value={i.id} className="text-xs">
-                      {i.name}
-                      {i.purchaseUom ? ` (${i.purchaseUom})` : ""}
-                      {i.is_perishable ? " (perecedero)" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  <span>Materia Prima (Insumo)</span>
+                </label>
+                <label
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium cursor-pointer transition-colors",
+                    itemKind === "PRODUCT_RESALE"
+                      ? "bg-background text-foreground shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="purchase_item_kind"
+                    value="PRODUCT_RESALE"
+                    checked={itemKind === "PRODUCT_RESALE"}
+                    onChange={() => {
+                      setItemKind("PRODUCT_RESALE");
+                      setForm((prev) => ({ ...prev, insumoId: "" }));
+                      setFormError(null);
+                    }}
+                    className="sr-only"
+                  />
+                  <span>Producto de Reventa</span>
+                </label>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="purchase_insumo" className="text-xs">
+                  {itemKind === "PRODUCT_RESALE"
+                    ? "Producto de Reventa *"
+                    : "Insumo *"}
+                </Label>
+                <Select
+                  value={form.insumoId}
+                  onValueChange={(value) => {
+                    // See the supplier select: ignore Radix's synthetic "".
+                    if (!value) return;
+                    setForm((prev) => ({ ...prev, insumoId: value }));
+                  }}
+                >
+                  <SelectTrigger
+                    id="purchase_insumo"
+                    data-testid="purchases-form-insumo"
+                    className="text-xs h-9"
+                    aria-label={
+                      itemKind === "PRODUCT_RESALE"
+                        ? "Producto de reventa comprado"
+                        : "Insumo comprado"
+                    }
+                  >
+                    <SelectValue
+                      placeholder={
+                        activeItemsLoading
+                          ? itemKind === "PRODUCT_RESALE"
+                            ? "Cargando productos de reventa..."
+                            : "Cargando insumos..."
+                          : itemKind === "PRODUCT_RESALE"
+                            ? "Seleccione producto de reventa"
+                            : "Seleccione insumo"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {insumoList.map((i) => (
+                      <SelectItem key={i.id} value={i.id} className="text-xs">
+                        {i.name}
+                        {i.purchaseUom ? ` (${i.purchaseUom})` : ""}
+                        {i.is_perishable ? " (perecedero)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {itemKind === "PRODUCT_RESALE" &&
+                  !resaleInsumosLoading &&
+                  insumoList.length === 0 && (
+                    <p
+                      className="text-[11px] text-muted-foreground"
+                      data-testid="purchases-form-resale-empty-hint"
+                    >
+                      Activá 'Controlar existencias' en un producto simple en
+                      Catálogo para registrar sus compras aquí.
+                    </p>
+                  )}
+              </div>
               {selectedInsumo?.purchaseUom && (
-                // The unit of measure is the piece of information the operator
-                // most often lacks: the quantity and the unit cost are typed
-                // in the PURCHASE unit, while the stock and the CPP the
-                // system keeps are expressed in the CONSUMPTION unit.
                 <p
                   className="text-[10px] text-muted-foreground"
                   data-testid="purchases-form-uom-hint"
@@ -509,7 +596,8 @@ export function PurchasesForm({
                     {selectedInsumo.purchaseUom}
                   </span>
                   {selectedInsumo.consumptionUom &&
-                    selectedInsumo.consumptionUom !== selectedInsumo.purchaseUom && (
+                    selectedInsumo.consumptionUom !==
+                      selectedInsumo.purchaseUom && (
                       <>
                         {" "}
                         · 1 {selectedInsumo.purchaseUom} ={" "}
