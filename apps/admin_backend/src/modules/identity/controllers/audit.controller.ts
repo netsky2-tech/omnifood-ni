@@ -231,10 +231,9 @@ export class AuditController {
     await queryRunner.startTransaction();
 
     try {
-      await queryRunner.query(
-        `SELECT set_config('app.tenant_id', $1, true)`,
-        [tenantId],
-      );
+      await queryRunner.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
       const continuityCache = new Map<
         string,
         { sequence_no: number; entry_hash: string }

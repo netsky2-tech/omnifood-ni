@@ -104,7 +104,9 @@ describe('EnforceCashierSessionsRls1811300000000 (#512 Real PG NOSUPERUSER NOBYP
 
       // 2) Bound as Tenant A under NOSUPERUSER NOBYPASSRLS.
       await qr.query(`SET ROLE "${role}"`);
-      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [tenantA]);
+      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [
+        tenantA,
+      ]);
 
       const aRows = (await qr.query(
         `SELECT id, tenant_id FROM cashier_sessions`,
@@ -146,7 +148,9 @@ describe('EnforceCashierSessionsRls1811300000000 (#512 Real PG NOSUPERUSER NOBYP
       await qr.query(`RESET ROLE`).catch(() => undefined);
       await qr.query(`RESET app.tenant_id`).catch(() => undefined);
       await qr.query(`SET search_path TO public`).catch(() => undefined);
-      await qr.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined);
+      await qr
+        .query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+        .catch(() => undefined);
       await qr.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => undefined);
       await qr.release();
     }

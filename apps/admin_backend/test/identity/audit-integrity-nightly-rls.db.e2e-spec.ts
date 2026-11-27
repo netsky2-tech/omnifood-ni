@@ -89,13 +89,7 @@ describe('AuditIntegrityService.runNightly per-tenant scan under FORCE RLS (#512
       ...postgresConnection,
       username: fixture.runtimeRoleName,
       password: fixture.runtimeRolePassword,
-      entities: [
-        AuditLog,
-        AuditIntegrityAlert,
-        User,
-        SecurityProfile,
-        Tenant,
-      ],
+      entities: [AuditLog, AuditIntegrityAlert, User, SecurityProfile, Tenant],
       synchronize: false,
       extra: { max: 2, allowExitOnIdle: true },
     });
@@ -115,7 +109,9 @@ describe('AuditIntegrityService.runNightly per-tenant scan under FORCE RLS (#512
   });
 
   it('sees nothing unbound (FORCE RLS) on audit_logs and audit_integrity_alerts', async () => {
-    const logs = await runtime.query('SELECT count(*)::int AS c FROM audit_logs');
+    const logs = await runtime.query(
+      'SELECT count(*)::int AS c FROM audit_logs',
+    );
     const alerts = await runtime.query(
       'SELECT count(*)::int AS c FROM audit_integrity_alerts',
     );
@@ -141,7 +137,9 @@ describe('AuditIntegrityService.runNightly per-tenant scan under FORCE RLS (#512
       const qr = runtime.createQueryRunner();
       await qr.connect();
       await qr.startTransaction();
-      await qr.query(`SELECT set_config('app.tenant_id', $1, true)`, [tenantId]);
+      await qr.query(`SELECT set_config('app.tenant_id', $1, true)`, [
+        tenantId,
+      ]);
       const own = await qr.query(
         'SELECT tenant_id FROM audit_integrity_alerts',
       );

@@ -250,7 +250,11 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
     );
 
     expect(facts).toEqual([
-      { relname: 'audit_integrity_alerts', rls_enabled: true, rls_forced: true },
+      {
+        relname: 'audit_integrity_alerts',
+        rls_enabled: true,
+        rls_forced: true,
+      },
       { relname: 'audit_logs', rls_enabled: true, rls_forced: true },
     ]);
   });

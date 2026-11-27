@@ -56,9 +56,12 @@ export class AuditIntegrityService {
     // each tenant's audit_logs gap scan + audit_integrity_alerts upsert inside
     // its own tenant-bound RLS transaction (`runInTenantTransaction`).
     if (this.dataSource && typeof this.dataSource.transaction === 'function') {
-      const tenantRows = (await this.dataSource.query(
+      const tenantRowsRaw: unknown = await this.dataSource.query(
         `SELECT id FROM tenants ORDER BY id`,
-      )) as Array<{ id: string }>;
+      );
+      const tenantRows = Array.isArray(tenantRowsRaw)
+        ? (tenantRowsRaw as Array<{ id: string }>)
+        : [];
 
       let totalGaps = 0;
       let newAlerts = 0;

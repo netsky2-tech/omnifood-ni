@@ -55,7 +55,8 @@ describe('EnforceAuditLogsAndIntegrityAlertsRls1811200000000 (#512 Real PG NOSUP
         )
       `);
 
-      const migration = new EnforceAuditLogsAndIntegrityAlertsRls1811200000000();
+      const migration =
+        new EnforceAuditLogsAndIntegrityAlertsRls1811200000000();
       // Idempotent double-run (scenario-2 replay contract).
       await migration.up(qr);
       await migration.up(qr);
@@ -70,7 +71,9 @@ describe('EnforceAuditLogsAndIntegrityAlertsRls1811200000000 (#512 Real PG NOSUP
       const alertA = randomUUID();
       const alertB = randomUUID();
 
-      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [tenantA]);
+      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [
+        tenantA,
+      ]);
       await qr.query(
         `INSERT INTO audit_logs (id, tenant_id, action) VALUES ($1, $2, 'LOGIN')`,
         [logA, tenantA],
@@ -80,7 +83,9 @@ describe('EnforceAuditLogsAndIntegrityAlertsRls1811200000000 (#512 Real PG NOSUP
         [alertA, tenantA],
       );
 
-      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [tenantB]);
+      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [
+        tenantB,
+      ]);
       await qr.query(
         `INSERT INTO audit_logs (id, tenant_id, action) VALUES ($1, $2, 'LOGIN')`,
         [logB, tenantB],
@@ -126,7 +131,9 @@ describe('EnforceAuditLogsAndIntegrityAlertsRls1811200000000 (#512 Real PG NOSUP
       }
 
       // 2) Bound to Tenant A: sees only Tenant A rows.
-      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [tenantA]);
+      await qr.query(`SELECT set_config('app.tenant_id', $1, false)`, [
+        tenantA,
+      ]);
       const aLogs = (await qr.query(`SELECT id FROM audit_logs`)) as Array<{
         id: string;
       }>;
@@ -188,7 +195,9 @@ describe('EnforceAuditLogsAndIntegrityAlertsRls1811200000000 (#512 Real PG NOSUP
       await qr.query(`RESET ROLE`).catch(() => undefined);
       await qr.query(`RESET app.tenant_id`).catch(() => undefined);
       await qr.query(`SET search_path TO public`).catch(() => undefined);
-      await qr.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined);
+      await qr
+        .query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`)
+        .catch(() => undefined);
       await qr.query(`DROP ROLE IF EXISTS "${role}"`).catch(() => undefined);
       await qr.release();
     }
