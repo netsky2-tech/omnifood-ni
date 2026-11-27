@@ -238,14 +238,9 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
     if (fixture) await fixture.close();
   });
 
-  it('documents the isolation reality: audit_logs and audit_integrity_alerts carry NO row level security in the migrated schema', async () => {
-    // RLS debt (scripts/schema-rls-coverage-manifest.txt): the cross-tenant
-    // guarantees proven below come from the service's explicit tenant
-    // predicate inside the bound transaction, NOT from a policy. If a future
-    // slice promotes these tables to direct RLS, this expectation must be
-    // flipped WITH that slice — the manifest gate will force the moment.
+  it('enforces ENABLE + FORCE row level security on audit_logs and audit_integrity_alerts in the migrated schema (#512)', async () => {
     const facts = await admin.query(
-      `SELECT c.relname, c.relrowsecurity AS rls_enabled
+      `SELECT c.relname, c.relrowsecurity AS rls_enabled, c.relforcerowsecurity AS rls_forced
          FROM pg_class c
          JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = $1
@@ -255,8 +250,8 @@ describe('AuditLogsService POS forensic ledger reads (Real PostgreSQL DB, migrat
     );
 
     expect(facts).toEqual([
-      { relname: 'audit_integrity_alerts', rls_enabled: false },
-      { relname: 'audit_logs', rls_enabled: false },
+      { relname: 'audit_integrity_alerts', rls_enabled: true, rls_forced: true },
+      { relname: 'audit_logs', rls_enabled: true, rls_forced: true },
     ]);
   });
 

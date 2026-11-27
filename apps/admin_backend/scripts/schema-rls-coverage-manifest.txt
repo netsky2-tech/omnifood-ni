@@ -194,30 +194,15 @@ plan_capability|global
 credit_note_provenance_rls_baseline|global
 
 # ---------------------------------------------------------------------------
-# debt — explicit temporary tenant isolation debt. Each entry must be
-# promoted to direct (or reclassified with a reviewed reason) by its domain
-# slice in T2/T3; a fully protected debt entry fails as stale. (3)
+# debt — explicit temporary tenant isolation debt. (0 — #512 closed!)
+# All 3 final debt tables were promoted:
+# - audit_integrity_alerts|direct:SIU (1811200000000 + per-tenant nightly scan)
+# - audit_logs|direct:SI (1811200000000 + AuditController/nightly bindings, append-only)
+# - cashier_sessions|direct:SIUD (1811300000000 + CashierSession entity & backfill)
 # ---------------------------------------------------------------------------
-# audit_integrity_alerts stays in debt (issue #512 T3 slice 7, founder
-# decision): its single writer is the pooled multi-tenant nightly integrity
-# cron, which iterates every tenant's rows on one unbound connection. Its
-# writes become bindable only when the cron gains per-tenant iteration (one
-# tenant-bound transaction per tenant); promoting it before that would
-# deny-all the nightly scan.
-audit_integrity_alerts|debt
-# audit_logs stays in debt (issue #512 T3 slice 7, founder decision): the
-# table is append-only behind an immutability trigger, the POS bulk pushLogs
-# contract depends on its current write shape, and 3 of its 5 write sites
-# still run unbound. It becomes direct only when its write surface is bound
-# to the tenant transaction as a unit.
-audit_logs|debt
-# cashier_sessions stays in debt (issue #512 T3 slice 5, founder decision):
-# it has no TypeORM entity, and the schema-build gate fails any built-schema
-# base table whose tenant_id is uuid while no entity declares it — adding
-# tenant_id uuid there would create exactly the state the gate forbids. It
-# becomes direct only when the POS cash-session sync receiver and its entity
-# actually land.
-cashier_sessions|debt
+audit_integrity_alerts|direct:SIU
+audit_logs|direct:SI
+cashier_sessions|direct:SIUD
 # users is direct (issue #556 stage 12d): the identity isolation boundary is
 # fully armed. ENABLE + FORCE RLS and the four per-command policies
 # (users_tenant_{select,insert,update,delete}) landed with migration
