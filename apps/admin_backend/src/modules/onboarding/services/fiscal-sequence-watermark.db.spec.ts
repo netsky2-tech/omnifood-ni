@@ -25,53 +25,47 @@ describe('readHighestInvoiceSequence (#526 B1/B2 prefix-scoped watermark, Real P
   });
 
   it('scopes MAX sequence to (tenant_id, prefix) when prefix is provided and stays tenant-wide when omitted', async () => {
-    const tenantId = randomUUID();
-    const userId = randomUUID();
+    const schema = `wm_test_${randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const tenantA = randomUUID();
+    const tenantB = randomUUID();
     const qr = ds.createQueryRunner();
     await qr.connect();
-    await qr.startTransaction();
 
     try {
-      await qr.query(
-        `INSERT INTO tenants (id, name, slug, ruc, is_active)
-         VALUES ($1, $2, $3, $4, true)`,
-        [
-          tenantId,
-          `Watermark Test ${tenantId.slice(0, 8)}`,
-          `wm-${tenantId.slice(0, 8)}`,
-          `J031-${tenantId.slice(0, 8)}`,
-        ],
-      );
-      await qr.query(
-        `INSERT INTO users (id, tenant_id, email, password_hash, name, role)
-         VALUES ($1, $2, $3, 'hash', 'Owner', 'OWNER')`,
-        [userId, tenantId, `wm-${tenantId.slice(0, 8)}@test.ni`],
-      );
-      await qr.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
+      await qr.query(`CREATE SCHEMA "${schema}"`);
+      await qr.query(`SET search_path TO "${schema}"`);
+      await qr.query(`
+        CREATE TABLE invoices (
+          id uuid PRIMARY KEY,
+          tenant_id uuid NOT NULL,
+          invoice_number text NOT NULL
+        )
+      `);
 
-      const insertInv = async (num: string) => {
+      const insertInv = async (tenantId: string, num: string) => {
         await qr.query(
-          `INSERT INTO invoices (id, tenant_id, invoice_number, created_at, user_id, subtotal, total_tax, total, is_canceled, payment_status, global_tax_override, type)
-           VALUES ($1, $2, $3, NOW(), $4, 100, 15, 115, false, 'paid', false, 'regular')`,
-          [randomUUID(), tenantId, num, userId],
+          `INSERT INTO invoices (id, tenant_id, invoice_number) VALUES ($1, $2, $3)`,
+          [randomUUID(), tenantId, num],
         );
       };
 
-      await insertInv('001-001-01-00000012');
-      await insertInv('001-001-01-00000015');
-      await insertInv('001-001-02-00000040');
+      await insertInv(tenantA, '001-001-01-00000012');
+      await insertInv(tenantA, '001-001-01-00000015');
+      await insertInv(tenantA, '001-001-02-00000040');
+      await insertInv(tenantB, '001-001-01-00000099');
 
-      const series1Max = await readHighestInvoiceSequence(qr.manager, tenantId, '001-001-01-');
-      const series2Max = await readHighestInvoiceSequence(qr.manager, tenantId, '001-001-02-');
-      const series3Max = await readHighestInvoiceSequence(qr.manager, tenantId, '001-001-99-');
-      const tenantWideMax = await readHighestInvoiceSequence(qr.manager, tenantId);
+      const series1Max = await readHighestInvoiceSequence(qr.manager, tenantA, '001-001-01-');
+      const series2Max = await readHighestInvoiceSequence(qr.manager, tenantA, '001-001-02-');
+      const series3Max = await readHighestInvoiceSequence(qr.manager, tenantA, '001-001-99-');
+      const tenantWideMax = await readHighestInvoiceSequence(qr.manager, tenantA);
 
       expect(series1Max).toBe(15);
       expect(series2Max).toBe(40);
       expect(series3Max).toBe(0);
       expect(tenantWideMax).toBe(40);
     } finally {
-      await qr.rollbackTransaction();
+      await qr.query(`SET search_path TO public`).catch(() => undefined);
+      await qr.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => undefined);
       await qr.release();
     }
   });
