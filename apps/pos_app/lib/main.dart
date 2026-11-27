@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:pos_app/data/services/backup/terminal_backup_service.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 import 'package:pos_app/domain/services/alerts/alert_service.dart';
@@ -232,12 +235,32 @@ void main() async {
   const String buildTimeApiUrl = String.fromEnvironment('API_URL');
   const String provisionedDeviceId = String.fromEnvironment('DEVICE_ID');
 
+  // #526 B3/B6: Apply any validated pending terminal backup restore atomically
+  // BEFORE Floor opens `app_database.db` (zero stale sqflite handles).
+  final dbDirectory = await sqflite.getDatabasesPath();
+  final appliedRestore = await TerminalBackupService.applyPendingRestoreIfPresent(
+    databasePath: '$dbDirectory/app_database.db',
+  );
+
   // Initialize Database
   final database = await $FloorAppDatabase
       .databaseBuilder('app_database.db')
       .addMigrations(allMigrations)
       .addCallback(inventoryMovementAppendOnlyCallback)
       .build();
+
+  if (appliedRestore != null) {
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(
+        key: 'last_database_restore_json',
+        value: jsonEncode({
+          'restoredAtIso': appliedRestore.restoredAtIso,
+          'manifest': appliedRestore.manifest.toJson(),
+          'auditChainReport': appliedRestore.auditChainReport,
+        }),
+      ),
+    );
+  }
 
   // Populate seed test data if not present
   await DatabaseSeeder.seedAll(database);
