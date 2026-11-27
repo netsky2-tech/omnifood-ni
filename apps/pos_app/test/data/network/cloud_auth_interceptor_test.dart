@@ -41,6 +41,7 @@ void main() {
       coordinator: coordinator,
       refreshDio: refreshDio,
       clientDio: clientDio,
+      tenantSlugResolver: () async => 'test-tenant',
       onReauthenticationRequired: () => reauthEmitted = true,
     );
 

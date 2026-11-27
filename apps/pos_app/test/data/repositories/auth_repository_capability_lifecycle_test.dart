@@ -66,10 +66,18 @@ void main() {
     when(() => f.dio.get('/identity/staff', options: any(named: 'options')))
         .thenAnswer((_) async => Response(requestOptions: RequestOptions(path: '/identity/staff'), data: []));
 
-    final first = await f.repository.loginOnline('a@example.com', 'pin');
+    final first = await f.repository.loginOnline(
+      'a@example.com',
+      'pin',
+      tenantSlug: 'test-tenant',
+    );
     expect(first?.tenantId, 'tenant-a');
     expect(f.cache.hasFreshAuthority('tenant-a'), isTrue);
-    final second = await f.repository.loginOnline('b@example.com', 'pin');
+    final second = await f.repository.loginOnline(
+      'b@example.com',
+      'pin',
+      tenantSlug: 'test-tenant',
+    );
     expect(second?.tenantId, 'tenant-b');
     expect(f.cache.hasFreshAuthority('tenant-a'), isFalse);
     expect(f.cache.hasFreshAuthority('tenant-b'), isTrue);

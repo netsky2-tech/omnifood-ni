@@ -212,7 +212,11 @@ void main() {
     test(
       '2. first OWNER login calls derived endpoint once, commits candidate to ACTIVE, no attemptId used',
       () async {
-        final user = await authRepository.loginOnline('owner@omnifood.ni', 'secret123');
+        final user = await authRepository.loginOnline(
+          'owner@omnifood.ni',
+          'secret123',
+          tenantSlug: 'test-tenant',
+        );
 
         expect(user, isNotNull);
         expect(user!.role, equals(UserRole.owner));
@@ -252,11 +256,19 @@ void main() {
 
     test('3. second OWNER login is an active no-op without any server calls to activation', () async {
       // First login provisions and activates
-      await authRepository.loginOnline('owner@omnifood.ni', 'secret123');
+      await authRepository.loginOnline(
+        'owner@omnifood.ni',
+        'secret123',
+        tenantSlug: 'test-tenant',
+      );
       recordedHumanRequests.clear();
 
       // Second login
-      final secondUser = await authRepository.loginOnline('owner@omnifood.ni', 'secret123');
+      final secondUser = await authRepository.loginOnline(
+        'owner@omnifood.ni',
+        'secret123',
+        tenantSlug: 'test-tenant',
+      );
       expect(secondUser, isNotNull);
 
       // Verify no requests made to device-sync-credential
@@ -273,7 +285,11 @@ void main() {
     });
 
     test('4. non-owner (cashier) login does NOT call bootstrap endpoint', () async {
-      final cashier = await authRepository.loginOnline('cashier@omnifood.ni', 'cashier123');
+      final cashier = await authRepository.loginOnline(
+        'cashier@omnifood.ni',
+        'cashier123',
+        tenantSlug: 'test-tenant',
+      );
 
       expect(cashier, isNotNull);
       expect(cashier!.role, equals(UserRole.cashier));
@@ -343,7 +359,11 @@ void main() {
         );
 
         // Human login succeeds despite bootstrap failure
-        final user = await authRepository.loginOnline('owner@omnifood.ni', 'secret123');
+        final user = await authRepository.loginOnline(
+          'owner@omnifood.ni',
+          'secret123',
+          tenantSlug: 'test-tenant',
+        );
         expect(user, isNotNull);
         expect(user!.email, equals('owner@omnifood.ni'));
 

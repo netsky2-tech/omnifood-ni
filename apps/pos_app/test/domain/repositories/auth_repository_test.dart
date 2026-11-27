@@ -56,7 +56,11 @@ void main() {
     when(() => userDao.findAllUsers()).thenAnswer((_) async => []);
     when(() => userDao.findUserByEmail(any())).thenAnswer((_) async => null);
 
-    final user = await repository.loginOnline('cajero@omnifood.ni', 'secret');
+    final user = await repository.loginOnline(
+      'cajero@omnifood.ni',
+      'secret',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(user, isNull);
     expect(repository.lastAuthError,
@@ -75,7 +79,11 @@ void main() {
       ),
     );
 
-    final user = await repository.loginOnline('cajero@omnifood.ni', 'secret');
+    final user = await repository.loginOnline(
+      'cajero@omnifood.ni',
+      'secret',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(user, isNull);
     expect(repository.lastAuthError,
@@ -109,7 +117,11 @@ void main() {
       ),
     );
 
-    final user = await repository.loginOnline('cajero@omnifood.ni', '1234');
+    final user = await repository.loginOnline(
+      'cajero@omnifood.ni',
+      '1234',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(user?.id, 'local-cashier-1');
     expect(repository.lastAuthError,

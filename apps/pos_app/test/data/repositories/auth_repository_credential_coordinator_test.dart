@@ -129,6 +129,7 @@ void main() {
       final user = await repository.loginOnline(
         'cajero@omnifood.ni',
         'pass123',
+        tenantSlug: 'test-tenant',
       );
 
       expect(user, isNotNull);
@@ -258,7 +259,11 @@ void main() {
         ),
       );
 
-      final user = await ownerRepo.loginOnline('owner@omnifood.ni', 'pass123');
+      final user = await ownerRepo.loginOnline(
+        'owner@omnifood.ni',
+        'pass123',
+        tenantSlug: 'test-tenant',
+      );
 
       expect(user, isNotNull);
       verify(() => mockBootstrap.bootstrap(user: any(named: 'user'))).called(1);
@@ -310,6 +315,7 @@ void main() {
       final user = await cashierRepo.loginOnline(
         'cashier@omnifood.ni',
         'pass123',
+        tenantSlug: 'test-tenant',
       );
 
       expect(user, isNotNull);

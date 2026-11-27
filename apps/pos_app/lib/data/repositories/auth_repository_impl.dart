@@ -170,15 +170,21 @@ class AuthRepositoryImpl implements AuthRepository {
     _capabilityCache?.clear();
     _lastAuthError = null;
     _isReauthenticationRequired = false;
+    final cleanTenantSlug = tenantSlug?.trim() ?? '';
+    if (cleanTenantSlug.isEmpty) {
+      _lastAuthError =
+          'Terminal no vinculada a un negocio. Vincule la terminal antes de iniciar sesión.';
+      debugPrint(
+        '[AuthRepository] Online login aborted: missing tenantSlug (fail-closed).',
+      );
+      return null;
+    }
     debugPrint('[AuthRepository] POST /identity/login with email: $email');
     try {
-      // Legacy/absent slug -> omit the key entirely so the wire contract for
-      // unprovisioned installs is unchanged (issue #556).
-      final cleanTenantSlug = tenantSlug?.trim() ?? '';
       final loginPayload = <String, dynamic>{
         'email': email,
         'pass': password,
-        if (cleanTenantSlug.isNotEmpty) 'tenantSlug': cleanTenantSlug,
+        'tenantSlug': cleanTenantSlug,
       };
       final response = await _dio.post(
         '/identity/login',

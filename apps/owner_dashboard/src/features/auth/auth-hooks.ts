@@ -16,16 +16,28 @@ export function useLogin() {
       const { password, ...rest } = credentials;
       const cleanEmail = credentials.email.trim().toLowerCase();
       const cleanTenantSlug = rest.tenantSlug?.trim();
-      const raw = await api.post<{ access_token: string; refresh_token: string; user: LoginResponse["user"]; tenant: LoginResponse["tenant"] }>(
+      const raw = await api.post<{
+        access_token: string;
+        refresh_token: string;
+        user: LoginResponse["user"];
+        tenant?: LoginResponse["tenant"];
+      }>(
         "/identity/login",
         { ...rest, email: cleanEmail, pass: password, tenantSlug: cleanTenantSlug },
         { auth: false },
       );
+      const resolvedTenant: LoginResponse["tenant"] = raw.tenant ?? {
+        id: raw.user.tenantId ?? "",
+        name: cleanTenantSlug ?? "",
+        slug: cleanTenantSlug ?? "",
+        ruc: "",
+        active: true,
+      };
       const response: LoginResponse = {
         accessToken: raw.access_token,
         refreshToken: raw.refresh_token,
         user: raw.user,
-        tenant: raw.tenant,
+        tenant: resolvedTenant,
       };
       setTokens(
         {

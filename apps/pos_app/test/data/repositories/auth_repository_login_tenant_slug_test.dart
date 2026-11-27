@@ -19,9 +19,9 @@ class _MockLocalAuthService extends Mock implements LocalAuthService {}
 
 class _MockTotpSeedKeyProvider extends Mock implements TotpSeedKeyProvider {}
 
-/// Verifies the POST /identity/login wire contract for the optional
-/// `tenantSlug` field: it is sent only when a non-empty slug is provided,
-/// and omitted entirely for legacy/unprovisioned installs (issue #556).
+/// Verifies the POST /identity/login wire contract for the required
+/// `tenantSlug` field: it is sent (trimmed) when non-empty, and null/blank
+/// slugs fail closed locally with zero HTTP requests (issue #556 stage 3).
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -113,22 +113,32 @@ void main() {
     expect(capturedLoginBodies.single['pass'], 'secret');
   });
 
-  test('loginOnline omits the tenantSlug key entirely when no slug is provided', () async {
-    await repository.loginOnline('cajero@omnifood.ni', 'secret');
+  test('loginOnline fails closed with zero HTTP requests when no slug is provided', () async {
+    final user = await repository.loginOnline('cajero@omnifood.ni', 'secret');
 
-    expect(capturedLoginBodies, hasLength(1));
-    expect(capturedLoginBodies.single.containsKey('tenantSlug'), isFalse);
+    expect(user, isNull);
+    expect(capturedLoginBodies, isEmpty);
+    verifyNever(() => dio.post(any(), data: any(named: 'data')));
+    expect(
+      repository.lastAuthError,
+      'Terminal no vinculada a un negocio. Vincule la terminal antes de iniciar sesión.',
+    );
   });
 
-  test('loginOnline omits the tenantSlug key when the slug is blank', () async {
-    await repository.loginOnline(
+  test('loginOnline fails closed with zero HTTP requests when the slug is blank', () async {
+    final user = await repository.loginOnline(
       'cajero@omnifood.ni',
       'secret',
       tenantSlug: '   ',
     );
 
-    expect(capturedLoginBodies, hasLength(1));
-    expect(capturedLoginBodies.single.containsKey('tenantSlug'), isFalse);
+    expect(user, isNull);
+    expect(capturedLoginBodies, isEmpty);
+    verifyNever(() => dio.post(any(), data: any(named: 'data')));
+    expect(
+      repository.lastAuthError,
+      'Terminal no vinculada a un negocio. Vincule la terminal antes de iniciar sesión.',
+    );
   });
 
   test('loginOnline trims surrounding whitespace from the provided slug', () async {
