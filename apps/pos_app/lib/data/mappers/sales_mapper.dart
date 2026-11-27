@@ -358,6 +358,9 @@ class SalesMapper {
       tipAmountUsd: entity.tipAmountUsd,
       tipPercentage: entity.tipPercentage,
       tipEligibleBaseNio: entity.tipEligibleBaseNio,
+      contingencyManualSeries: entity.contingencyManualSeries,
+      contingencyManualNumber: entity.contingencyManualNumber,
+      contingencyManualIssuedAt: entity.contingencyManualIssuedAt,
     );
   }
 
@@ -404,6 +407,9 @@ class SalesMapper {
       tipAmountUsd: domain.tipAmountUsd,
       tipPercentage: domain.tipPercentage,
       tipEligibleBaseNio: domain.tipEligibleBaseNio,
+      contingencyManualSeries: domain.contingencyManualSeries,
+      contingencyManualNumber: domain.contingencyManualNumber,
+      contingencyManualIssuedAt: domain.contingencyManualIssuedAt,
     );
   }
 
@@ -744,6 +750,15 @@ class SalesMapper {
         'authorizedByUserId': invoice.authorizedByUserId,
       if (invoice.authorizedByRole?.isNotEmpty ?? false)
         'authorizedByRole': invoice.authorizedByRole,
+      // #539 S3 (DT 09-2007 3.3.a/3.3.b): emit contingency manual fields
+      // ONLY when non-null/non-blank so non-contingency sales keep
+      // byte-identical payload hashes.
+      if (invoice.contingencyManualSeries?.trim().isNotEmpty ?? false)
+        'contingencyManualSeries': invoice.contingencyManualSeries!.trim(),
+      if (invoice.contingencyManualNumber?.trim().isNotEmpty ?? false)
+        'contingencyManualNumber': invoice.contingencyManualNumber!.trim(),
+      if (invoice.contingencyManualIssuedAt?.trim().isNotEmpty ?? false)
+        'contingencyManualIssuedAt': invoice.contingencyManualIssuedAt!.trim(),
       'terminalId': invoice.terminalId ?? 'term-main',
       'documentType': invoice.type == InvoiceType.creditNote
           ? 'CREDIT_NOTE'

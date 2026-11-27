@@ -27,6 +27,7 @@ import '../../../../data/mappers/sales_mapper.dart';
 import '../../../../data/mappers/customer_mapper.dart';
 import '../../../../data/models/customer/customer_entity.dart';
 import '../../../../domain/models/config/printer_config.dart';
+import '../../../../domain/models/printer/receipt_document.dart';
 import 'package:pos_app/domain/services/sales/table_order_service.dart';
 import 'package:pos_app/domain/services/sales/promotions_engine.dart';
 import 'package:pos_app/domain/services/sales/loyalty_service.dart';
@@ -657,6 +658,36 @@ class SaleViewModel extends ChangeNotifier {
     _buzzerNumber = (number != null && number.trim().isNotEmpty)
         ? number.trim()
         : null;
+    notifyListeners();
+  }
+
+  String? _contingencyManualSeries;
+  String? _contingencyManualNumber;
+  String? _contingencyManualIssuedAt;
+
+  String? get contingencyManualSeries => _contingencyManualSeries;
+  String? get contingencyManualNumber => _contingencyManualNumber;
+  String? get contingencyManualIssuedAt => _contingencyManualIssuedAt;
+  bool get hasContingencyManualReference =>
+      (_contingencyManualSeries?.trim().isNotEmpty ?? false) &&
+      (_contingencyManualNumber?.trim().isNotEmpty ?? false) &&
+      (_contingencyManualIssuedAt?.trim().isNotEmpty ?? false);
+
+  void setContingencyManualReference({
+    required String series,
+    required String number,
+    required String issuedAt,
+  }) {
+    _contingencyManualSeries = series.trim();
+    _contingencyManualNumber = number.trim();
+    _contingencyManualIssuedAt = issuedAt.trim();
+    notifyListeners();
+  }
+
+  void clearContingencyManualReference() {
+    _contingencyManualSeries = null;
+    _contingencyManualNumber = null;
+    _contingencyManualIssuedAt = null;
     notifyListeners();
   }
 
@@ -2033,6 +2064,9 @@ class SaleViewModel extends ChangeNotifier {
     _tipType = TipType.none;
     _customTipPercentage = 0.0;
     _fixedTipAmount = 0.0;
+    _contingencyManualSeries = null;
+    _contingencyManualNumber = null;
+    _contingencyManualIssuedAt = null;
     notifyListeners();
   }
 
@@ -2278,6 +2312,15 @@ class SaleViewModel extends ChangeNotifier {
       tipAmountUsd: hasTip ? tip.tipAmountUsd : null,
       tipPercentage: hasTip ? tip.effectivePercentage : null,
       tipEligibleBaseNio: hasTip ? tip.subtotalNio : null,
+      contingencyManualSeries: hasContingencyManualReference
+          ? _contingencyManualSeries!.trim()
+          : null,
+      contingencyManualNumber: hasContingencyManualReference
+          ? _contingencyManualNumber!.trim()
+          : null,
+      contingencyManualIssuedAt: hasContingencyManualReference
+          ? _contingencyManualIssuedAt!.trim()
+          : null,
     );
 
     final payments = customPayments != null && customPayments.isNotEmpty
@@ -2584,27 +2627,67 @@ class SaleViewModel extends ChangeNotifier {
           } else {
             _fiscalConfigWarning = null;
           }
-          final printResult = await activePrinterPort.printInvoice(
-            invoiceToPrint,
-            items: items,
-            payments: payments,
-            businessName: printerConfig.headerBusinessName,
-            legalName: printerConfig.headerLegalName,
-            ruc: printerConfig.fiscalRuc,
-            address: printerConfig.headerAddress,
-            phone: printerConfig.headerPhone,
-            cashierName: user.name,
-            logoRasterBytes: logoRasterBytes,
-            taxRegime: _companyTaxRegime!,
-            isTaxExempt: _isGlobalTaxExempt,
-            paperWidthMm: printerConfig.paperWidthMm,
-            loyaltyFeedback: _lastPostPaidFeedback,
-            fiscalAuthorizationNumber: checkoutAuthNumber,
-          );
+          final isContingencyBackEntry =
+              (invoiceToPrint.contingencyManualSeries?.trim().isNotEmpty ??
+                  false) &&
+              (invoiceToPrint.contingencyManualNumber?.trim().isNotEmpty ??
+                  false);
 
-          if (!printResult.isSuccess) {
-            _lastPrintError =
-                printResult.message ?? 'Error de impresión en hardware';
+          if (isContingencyBackEntry) {
+            // #539 S3 (DT 09-2007 3.3.b): print ORIGINAL and COPIA automatically.
+            for (final copyLabel in const [
+              'ORIGINAL',
+              'COPIA - ADJUNTAR COPIA MANUAL',
+            ]) {
+              final doc = ReceiptDocument.fromInvoice(
+                invoiceToPrint,
+                items: items,
+                payments: payments,
+                businessName: printerConfig.headerBusinessName,
+                legalName: printerConfig.headerLegalName,
+                ruc: printerConfig.fiscalRuc,
+                address: printerConfig.headerAddress,
+                phone: printerConfig.headerPhone,
+                cashierName: user.name,
+                logoRasterBytes: logoRasterBytes,
+                taxRegime: _companyTaxRegime!,
+                isTaxExempt: _isGlobalTaxExempt,
+                loyaltyFeedback: _lastPostPaidFeedback,
+                fiscalAuthorizationNumber: checkoutAuthNumber,
+                copyLabel: copyLabel,
+              );
+              final copyResult = await activePrinterPort.printReceiptDocument(
+                doc,
+                paperWidthMm: printerConfig.paperWidthMm,
+              );
+              if (!copyResult.isSuccess) {
+                _lastPrintError =
+                    copyResult.message ?? 'Error de impresión en hardware';
+              }
+            }
+          } else {
+            final printResult = await activePrinterPort.printInvoice(
+              invoiceToPrint,
+              items: items,
+              payments: payments,
+              businessName: printerConfig.headerBusinessName,
+              legalName: printerConfig.headerLegalName,
+              ruc: printerConfig.fiscalRuc,
+              address: printerConfig.headerAddress,
+              phone: printerConfig.headerPhone,
+              cashierName: user.name,
+              logoRasterBytes: logoRasterBytes,
+              taxRegime: _companyTaxRegime!,
+              isTaxExempt: _isGlobalTaxExempt,
+              paperWidthMm: printerConfig.paperWidthMm,
+              loyaltyFeedback: _lastPostPaidFeedback,
+              fiscalAuthorizationNumber: checkoutAuthNumber,
+            );
+
+            if (!printResult.isSuccess) {
+              _lastPrintError =
+                  printResult.message ?? 'Error de impresión en hardware';
+            }
           }
         }
 
@@ -2679,6 +2762,10 @@ class SaleViewModel extends ChangeNotifier {
                 'No se pudo autorizar el inventario para la venta. Verificá la configuración del producto o avisá al encargado.';
             break;
         }
+      } else if (e is ArgumentError &&
+          e.message is String &&
+          (e.message as String).trim().isNotEmpty) {
+        _errorMessage = (e.message as String).trim();
       } else {
         // Go-live fix (NHILOS §4.1): user-facing copy never carries raw
         // errors, UUIDs or English data-layer text. The repository's

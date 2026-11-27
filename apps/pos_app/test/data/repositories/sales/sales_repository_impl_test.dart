@@ -2532,6 +2532,9 @@ void main() {
       'tip_amount_usd': 0.42,
       'tip_percentage': 10.0,
       'tip_eligible_base_nio': 100.5,
+      'contingency_manual_series': 'MAN-001',
+      'contingency_manual_number': '000042',
+      'contingency_manual_issued_at': '2026-09-22',
     };
 
     late AppDatabase preservationDatabase;
@@ -3224,6 +3227,204 @@ void main() {
 
       expect(withModifiers.payloadHash, isNotNull);
       expect(withModifiers.payloadHash, withoutModifiers.payloadHash);
+    });
+  });
+
+  group('#539 S3: contingency manual invoice back-entry & anti-collision', () {
+    late AppDatabase realDb;
+    late SalesRepositoryImpl realRepo;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      realDb = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      await realDb.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: '001-001-01'),
+      );
+      await realDb.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '500'),
+      );
+      await realDb.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_end_number', value: '1000'),
+      );
+      when(
+        mockNumberingService.getNextNumber(),
+      ).thenAnswer((_) async => '001-001-01-00000501');
+      when(
+        mockInventoryRepository.getProductById(any),
+      ).thenAnswer((_) async => null);
+      when(
+        mockProcessInventoryUseCase.execute(any),
+      ).thenAnswer((_) async => []);
+      when(
+        mockAuditRepository.log(any, metadata: anyNamed('metadata')),
+      ).thenAnswer((_) async {});
+
+      realRepo = SalesRepositoryImpl(
+        database: realDb,
+        invoiceDao: realDb.invoiceDao,
+        itemDao: realDb.invoiceItemDao,
+        paymentDao: realDb.paymentDao,
+        transactionDao: realDb.salesTransactionDao,
+        numberingService: mockNumberingService,
+        movementEngine: mockMovementEngine,
+        auditRepository: mockAuditRepository,
+        processInventoryUseCase: mockProcessInventoryUseCase,
+        reverseInventoryUseCase: mockReverseInventoryUseCase,
+        inventoryRepository: mockInventoryRepository,
+      );
+    });
+
+    tearDown(() async {
+      await realDb.close();
+    });
+
+    Invoice buildContInvoice(
+      String id, {
+      String? series,
+      String? number,
+      String? issuedAt,
+    }) =>
+        Invoice(
+          id: id,
+          number: 'PENDING',
+          createdAt: DateTime.utc(2026, 11, 28, 12),
+          userId: 'cashier-1',
+          subtotal: 100.0,
+          totalTax: 15.0,
+          total: 115.0,
+          terminalId: 'term-1',
+          contingencyManualSeries: series,
+          contingencyManualNumber: number,
+          contingencyManualIssuedAt: issuedAt,
+        );
+
+    test('persists all 3 contingency fields and reads them back via getInvoiceById',
+        () async {
+      final inv = buildContInvoice(
+        'cont-ok-1',
+        series: 'MAN-001',
+        number: '000042',
+        issuedAt: '2026-11-27',
+      );
+      await realRepo.saveSale(
+        invoice: inv,
+        items: const [],
+        payments: [
+          Payment(
+            id: 'pay-cont-1',
+            invoiceId: 'cont-ok-1',
+            method: PaymentMethod.cash,
+            amount: 115.0,
+            currency: 'NIO',
+          ),
+        ],
+      );
+
+      final loaded = await realRepo.getInvoiceById('cont-ok-1');
+      expect(loaded, isNotNull);
+      expect(loaded!.contingencyManualSeries, 'MAN-001');
+      expect(loaded.contingencyManualNumber, '000042');
+      expect(loaded.contingencyManualIssuedAt, '2026-11-27');
+    });
+
+    test('rejects partial/incomplete contingency fields or invalid date format',
+        () async {
+      await expectLater(
+        () => realRepo.saveSale(
+          invoice: buildContInvoice(
+            'cont-partial-1',
+            series: 'MAN-001',
+            number: null,
+            issuedAt: '2026-11-27',
+          ),
+          items: const [],
+          payments: const [],
+        ),
+        throwsArgumentError,
+      );
+
+      await expectLater(
+        () => realRepo.saveSale(
+          invoice: buildContInvoice(
+            'cont-bad-date-1',
+            series: 'MAN-001',
+            number: '000042',
+            issuedAt: '27/11/2026',
+          ),
+          items: const [],
+          payments: const [],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('3.3.a anti-collision: rejects manual series matching dgi_prefix (case-insensitive)',
+        () async {
+      await expectLater(
+        () => realRepo.saveSale(
+          invoice: buildContInvoice(
+            'cont-col-series',
+            series: ' 001-001-01 ',
+            number: '000042',
+            issuedAt: '2026-11-27',
+          ),
+          items: const [],
+          payments: const [],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('3.3.a anti-collision: rejects manual number/series-number matching computerized invoice number',
+        () async {
+      await expectLater(
+        () => realRepo.saveSale(
+          invoice: buildContInvoice(
+            'cont-col-num',
+            series: 'MAN-001',
+            number: '001-001-01-00000501',
+            issuedAt: '2026-11-27',
+          ),
+          items: const [],
+          payments: const [],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('toSyncJson omits contingency keys when null/blank (hash-safe) and emits them when populated',
+        () {
+      final base = buildContInvoice('sync-1');
+      final nonContJson = SalesMapper.toSyncJson(base, const [], const []);
+      expect(nonContJson.containsKey('contingencyManualSeries'), isFalse);
+      expect(nonContJson.containsKey('contingencyManualNumber'), isFalse);
+      expect(nonContJson.containsKey('contingencyManualIssuedAt'), isFalse);
+
+      final blankCont = buildContInvoice(
+        'sync-2',
+        series: '  ',
+        number: '',
+        issuedAt: '  ',
+      );
+      final blankJson = SalesMapper.toSyncJson(blankCont, const [], const []);
+      expect(blankJson.containsKey('contingencyManualSeries'), isFalse);
+      expect(blankJson.containsKey('contingencyManualNumber'), isFalse);
+      expect(blankJson.containsKey('contingencyManualIssuedAt'), isFalse);
+
+      final withCont = buildContInvoice(
+        'sync-3',
+        series: 'MAN-001',
+        number: '000042',
+        issuedAt: '2026-11-27',
+      );
+      final contJson = SalesMapper.toSyncJson(withCont, const [], const []);
+      expect(contJson['contingencyManualSeries'], 'MAN-001');
+      expect(contJson['contingencyManualNumber'], '000042');
+      expect(contJson['contingencyManualIssuedAt'], '2026-11-27');
     });
   });
 }

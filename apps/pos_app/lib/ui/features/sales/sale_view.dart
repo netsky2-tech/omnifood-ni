@@ -2716,6 +2716,37 @@ class CartSummary extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 6),
+          if (viewModel.hasContingencyManualReference)
+            SizedBox(
+              width: double.infinity,
+              child: InputChip(
+                key: const Key('btn_contingency_cart'),
+                avatar: const Icon(
+                  Icons.assignment_late_outlined,
+                  size: 16,
+                  color: Colors.deepOrange,
+                ),
+                label: Text(
+                  'CONTINGENCIA: ${viewModel.contingencyManualSeries}-${viewModel.contingencyManualNumber}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                backgroundColor: Colors.orange.shade50,
+                onDeleted: () => viewModel.clearContingencyManualReference(),
+                deleteIconColor: Colors.red.shade700,
+                onPressed: () => _showContingencyManualDialog(context),
+              ),
+            )
+          else
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const Key('btn_contingency_cart'),
+                icon: const Icon(Icons.assignment_late_outlined, size: 18),
+                onPressed: () => _showContingencyManualDialog(context),
+                label: const Text('CONTINGENCIA MANUAL'),
+              ),
+            ),
+          const SizedBox(height: 6),
         ],
         if ((viewModel.businessModeEvaluator != null && viewModel.businessModeEvaluator.isSplitBillAllowed) && viewModel.cart.isNotEmpty) ...[
           SizedBox(
@@ -2795,6 +2826,113 @@ class CartSummary extends StatelessWidget {
     showDialog(
       context: context,
       builder: (context) => const MultiCurrencyCheckoutDialog(),
+    );
+  }
+
+  Future<void> _showContingencyManualDialog(BuildContext context) async {
+    final vm = context.read<SaleViewModel>();
+    final now = DateTime.now();
+    final todayIso =
+        '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final seriesController = TextEditingController(
+      text: vm.contingencyManualSeries ?? '',
+    );
+    final numberController = TextEditingController(
+      text: vm.contingencyManualNumber ?? '',
+    );
+    final dateController = TextEditingController(
+      text: vm.contingencyManualIssuedAt ?? todayIso,
+    );
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Ingreso de Factura Manual (Contingencia)'),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'DT 09-2007 3.3: Registre la serie, número y fecha de la factura preimpresa emitida durante la contingencia.',
+                  style: TextStyle(fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  key: const Key('contingency_series_field'),
+                  controller: seriesController,
+                  decoration: const InputDecoration(
+                    labelText: 'Serie Manual (ej. MAN-001)',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Ingrese la serie manual'
+                      : null,
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  key: const Key('contingency_number_field'),
+                  controller: numberController,
+                  decoration: const InputDecoration(
+                    labelText: 'Número Manual (ej. 000042)',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => (v == null || v.trim().isNotEmpty)
+                      ? null
+                      : 'Ingrese el número manual',
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  key: const Key('contingency_date_field'),
+                  controller: dateController,
+                  decoration: const InputDecoration(
+                    labelText: 'Fecha de Emisión Manual (YYYY-MM-DD)',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) {
+                    final trimmed = v?.trim() ?? '';
+                    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(trimmed) ||
+                        DateTime.tryParse(trimmed) == null) {
+                      return 'Use formato YYYY-MM-DD';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (vm.hasContingencyManualReference)
+            TextButton(
+              onPressed: () {
+                vm.clearContingencyManualReference();
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('QUITAR'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('CANCELAR'),
+          ),
+          ElevatedButton(
+            key: const Key('contingency_save_btn'),
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                vm.setContingencyManualReference(
+                  series: seriesController.text,
+                  number: numberController.text,
+                  issuedAt: dateController.text,
+                );
+                Navigator.of(dialogContext).pop();
+              }
+            },
+            child: const Text('APLICAR'),
+          ),
+        ],
+      ),
     );
   }
 

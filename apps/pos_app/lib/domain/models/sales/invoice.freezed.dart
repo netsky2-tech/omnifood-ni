@@ -88,6 +88,12 @@ mixin _$Invoice {
   double get commercialRate => throw _privateConstructorUsedError;
   double get totalUsd => throw _privateConstructorUsedError;
 
+  /// #539 S3 (DT 09-2007 3.3.a/3.3.b): manual contingency invoice back-entry
+  /// cross-reference fields (series, number, ISO YYYY-MM-DD issue date).
+  String? get contingencyManualSeries => throw _privateConstructorUsedError;
+  String? get contingencyManualNumber => throw _privateConstructorUsedError;
+  String? get contingencyManualIssuedAt => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $InvoiceCopyWith<Invoice> get copyWith => throw _privateConstructorUsedError;
@@ -137,7 +143,10 @@ abstract class $InvoiceCopyWith<$Res> {
       String? inventoryOutcomeReason,
       double bcnOfficialRate,
       double commercialRate,
-      double totalUsd});
+      double totalUsd,
+      String? contingencyManualSeries,
+      String? contingencyManualNumber,
+      String? contingencyManualIssuedAt});
 }
 
 /// @nodoc
@@ -192,6 +201,9 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
     Object? bcnOfficialRate = null,
     Object? commercialRate = null,
     Object? totalUsd = null,
+    Object? contingencyManualSeries = freezed,
+    Object? contingencyManualNumber = freezed,
+    Object? contingencyManualIssuedAt = freezed,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -350,6 +362,18 @@ class _$InvoiceCopyWithImpl<$Res, $Val extends Invoice>
           ? _value.totalUsd
           : totalUsd // ignore: cast_nullable_to_non_nullable
               as double,
+      contingencyManualSeries: freezed == contingencyManualSeries
+          ? _value.contingencyManualSeries
+          : contingencyManualSeries // ignore: cast_nullable_to_non_nullable
+              as String?,
+      contingencyManualNumber: freezed == contingencyManualNumber
+          ? _value.contingencyManualNumber
+          : contingencyManualNumber // ignore: cast_nullable_to_non_nullable
+              as String?,
+      contingencyManualIssuedAt: freezed == contingencyManualIssuedAt
+          ? _value.contingencyManualIssuedAt
+          : contingencyManualIssuedAt // ignore: cast_nullable_to_non_nullable
+              as String?,
     ) as $Val);
   }
 }
@@ -400,7 +424,10 @@ abstract class _$$InvoiceImplCopyWith<$Res> implements $InvoiceCopyWith<$Res> {
       String? inventoryOutcomeReason,
       double bcnOfficialRate,
       double commercialRate,
-      double totalUsd});
+      double totalUsd,
+      String? contingencyManualSeries,
+      String? contingencyManualNumber,
+      String? contingencyManualIssuedAt});
 }
 
 /// @nodoc
@@ -453,6 +480,9 @@ class __$$InvoiceImplCopyWithImpl<$Res>
     Object? bcnOfficialRate = null,
     Object? commercialRate = null,
     Object? totalUsd = null,
+    Object? contingencyManualSeries = freezed,
+    Object? contingencyManualNumber = freezed,
+    Object? contingencyManualIssuedAt = freezed,
   }) {
     return _then(_$InvoiceImpl(
       id: null == id
@@ -611,6 +641,18 @@ class __$$InvoiceImplCopyWithImpl<$Res>
           ? _value.totalUsd
           : totalUsd // ignore: cast_nullable_to_non_nullable
               as double,
+      contingencyManualSeries: freezed == contingencyManualSeries
+          ? _value.contingencyManualSeries
+          : contingencyManualSeries // ignore: cast_nullable_to_non_nullable
+              as String?,
+      contingencyManualNumber: freezed == contingencyManualNumber
+          ? _value.contingencyManualNumber
+          : contingencyManualNumber // ignore: cast_nullable_to_non_nullable
+              as String?,
+      contingencyManualIssuedAt: freezed == contingencyManualIssuedAt
+          ? _value.contingencyManualIssuedAt
+          : contingencyManualIssuedAt // ignore: cast_nullable_to_non_nullable
+              as String?,
     ));
   }
 }
@@ -657,7 +699,10 @@ class _$InvoiceImpl implements _Invoice {
       this.inventoryOutcomeReason,
       this.bcnOfficialRate = 36.6241,
       this.commercialRate = 36.50,
-      this.totalUsd = 0.0});
+      this.totalUsd = 0.0,
+      this.contingencyManualSeries,
+      this.contingencyManualNumber,
+      this.contingencyManualIssuedAt});
 
   factory _$InvoiceImpl.fromJson(Map<String, dynamic> json) =>
       _$$InvoiceImplFromJson(json);
@@ -779,9 +824,18 @@ class _$InvoiceImpl implements _Invoice {
   @JsonKey()
   final double totalUsd;
 
+  /// #539 S3 (DT 09-2007 3.3.a/3.3.b): manual contingency invoice back-entry
+  /// cross-reference fields (series, number, ISO YYYY-MM-DD issue date).
+  @override
+  final String? contingencyManualSeries;
+  @override
+  final String? contingencyManualNumber;
+  @override
+  final String? contingencyManualIssuedAt;
+
   @override
   String toString() {
-    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, paymentCondition: $paymentCondition, type: $type, customerId: $customerId, customerName: $customerName, customerTaxId: $customerTaxId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd)';
+    return 'Invoice(id: $id, number: $number, createdAt: $createdAt, userId: $userId, subtotal: $subtotal, totalTax: $totalTax, total: $total, isCanceled: $isCanceled, voidReason: $voidReason, syncStatus: $syncStatus, paymentStatus: $paymentStatus, paymentCondition: $paymentCondition, type: $type, customerId: $customerId, customerName: $customerName, customerTaxId: $customerTaxId, globalTaxOverride: $globalTaxOverride, relatedInvoiceId: $relatedInvoiceId, originInvoiceId: $originInvoiceId, refundReasonPolicy: $refundReasonPolicy, refundReasonCode: $refundReasonCode, authorizedByUserId: $authorizedByUserId, authorizedByRole: $authorizedByRole, terminalId: $terminalId, shiftId: $shiftId, localIssueDate: $localIssueDate, tipAmountNio: $tipAmountNio, tipAmountUsd: $tipAmountUsd, tipPercentage: $tipPercentage, tipEligibleBaseNio: $tipEligibleBaseNio, sourceSequence: $sourceSequence, idempotencyKey: $idempotencyKey, payloadHash: $payloadHash, inventoryPolicyVersion: $inventoryPolicyVersion, inventoryOutcome: $inventoryOutcome, inventoryOutcomeReason: $inventoryOutcomeReason, bcnOfficialRate: $bcnOfficialRate, commercialRate: $commercialRate, totalUsd: $totalUsd, contingencyManualSeries: $contingencyManualSeries, contingencyManualNumber: $contingencyManualNumber, contingencyManualIssuedAt: $contingencyManualIssuedAt)';
   }
 
   @override
@@ -860,7 +914,16 @@ class _$InvoiceImpl implements _Invoice {
             (identical(other.commercialRate, commercialRate) ||
                 other.commercialRate == commercialRate) &&
             (identical(other.totalUsd, totalUsd) ||
-                other.totalUsd == totalUsd));
+                other.totalUsd == totalUsd) &&
+            (identical(
+                    other.contingencyManualSeries, contingencyManualSeries) ||
+                other.contingencyManualSeries == contingencyManualSeries) &&
+            (identical(
+                    other.contingencyManualNumber, contingencyManualNumber) ||
+                other.contingencyManualNumber == contingencyManualNumber) &&
+            (identical(other.contingencyManualIssuedAt,
+                    contingencyManualIssuedAt) ||
+                other.contingencyManualIssuedAt == contingencyManualIssuedAt));
   }
 
   @JsonKey(ignore: true)
@@ -905,7 +968,10 @@ class _$InvoiceImpl implements _Invoice {
         inventoryOutcomeReason,
         bcnOfficialRate,
         commercialRate,
-        totalUsd
+        totalUsd,
+        contingencyManualSeries,
+        contingencyManualNumber,
+        contingencyManualIssuedAt
       ]);
 
   @JsonKey(ignore: true)
@@ -962,7 +1028,10 @@ abstract class _Invoice implements Invoice {
       final String? inventoryOutcomeReason,
       final double bcnOfficialRate,
       final double commercialRate,
-      final double totalUsd}) = _$InvoiceImpl;
+      final double totalUsd,
+      final String? contingencyManualSeries,
+      final String? contingencyManualNumber,
+      final String? contingencyManualIssuedAt}) = _$InvoiceImpl;
 
   factory _Invoice.fromJson(Map<String, dynamic> json) = _$InvoiceImpl.fromJson;
 
@@ -1070,6 +1139,15 @@ abstract class _Invoice implements Invoice {
   double get commercialRate;
   @override
   double get totalUsd;
+  @override
+
+  /// #539 S3 (DT 09-2007 3.3.a/3.3.b): manual contingency invoice back-entry
+  /// cross-reference fields (series, number, ISO YYYY-MM-DD issue date).
+  String? get contingencyManualSeries;
+  @override
+  String? get contingencyManualNumber;
+  @override
+  String? get contingencyManualIssuedAt;
   @override
   @JsonKey(ignore: true)
   _$$InvoiceImplCopyWith<_$InvoiceImpl> get copyWith =>

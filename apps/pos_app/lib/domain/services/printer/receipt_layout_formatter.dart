@@ -546,6 +546,12 @@ class ReceiptLayoutFormatter {
         buffer.writeln(l);
       }
     }
+    if (doc.copyLabel != null && doc.copyLabel!.trim().isNotEmpty) {
+      buffer.writeln(doubleDivider());
+      for (final l in centerLines('*** ${doc.copyLabel!.trim()} ***')) {
+        buffer.writeln(l);
+      }
+    }
     buffer.writeln(doubleDivider());
     buffer.writeln(center(doc.documentTitle));
     buffer.writeln(center('No. ${doc.documentNumber}'));
@@ -641,6 +647,26 @@ class ReceiptLayoutFormatter {
     if (!doc.isCanceled && creditNoteReason != null) {
       for (final l in formatKeyValue('Motivo:', creditNoteReason)) {
         buffer.writeln(l);
+      }
+    }
+
+    if (doc.hasContingencyReference) {
+      for (final l in centerLines('INGRESO POR CONTINGENCIA')) {
+        buffer.writeln(l);
+      }
+      final ref =
+          '${doc.contingencyManualSeries!.trim()}-${doc.contingencyManualNumber!.trim()}';
+      for (final l in formatKeyValue('Ref. Factura Manual:', ref)) {
+        buffer.writeln(l);
+      }
+      if (doc.contingencyManualIssuedAt != null &&
+          doc.contingencyManualIssuedAt!.trim().isNotEmpty) {
+        for (final l in formatKeyValue(
+          'Fecha Manual:',
+          doc.contingencyManualIssuedAt!.trim(),
+        )) {
+          buffer.writeln(l);
+        }
       }
     }
 
@@ -1205,6 +1231,17 @@ class ReceiptLayoutFormatter {
           )
           .align(EscPosAlign.left);
     }
+    if (doc.copyLabel != null && doc.copyLabel!.trim().isNotEmpty) {
+      builder
+          .align(EscPosAlign.center)
+          .bold(true);
+      for (final l in centerLines('*** ${doc.copyLabel!.trim()} ***')) {
+        marginTextLine(builder, l);
+      }
+      builder
+          .bold(false)
+          .align(EscPosAlign.left);
+    }
     builder
         .textLine(marginLine(doubleDivider()))
         .bold(true)
@@ -1273,6 +1310,26 @@ class ReceiptLayoutFormatter {
     if (!doc.isCanceled && creditNoteReason != null) {
       for (final l in formatKeyValue('Motivo:', creditNoteReason)) {
         marginTextLine(builder, l);
+      }
+    }
+
+    if (doc.hasContingencyReference) {
+      for (final l in centerLines('INGRESO POR CONTINGENCIA')) {
+        marginTextLine(builder, l);
+      }
+      final ref =
+          '${doc.contingencyManualSeries!.trim()}-${doc.contingencyManualNumber!.trim()}';
+      for (final l in formatKeyValue('Ref. Factura Manual:', ref)) {
+        marginTextLine(builder, l);
+      }
+      if (doc.contingencyManualIssuedAt != null &&
+          doc.contingencyManualIssuedAt!.trim().isNotEmpty) {
+        for (final l in formatKeyValue(
+          'Fecha Manual:',
+          doc.contingencyManualIssuedAt!.trim(),
+        )) {
+          marginTextLine(builder, l);
+        }
       }
     }
 

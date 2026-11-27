@@ -2147,5 +2147,91 @@ void main() {
         expect(creditEscPos, contains('Credito'));
       },
     );
+
+    test(
+      'S3 3.3.b: renders contingency cross-reference note and ORIGINAL / COPIA banners within maxCols on 58mm and 80mm',
+      () {
+        final f58 = ReceiptLayoutFormatter.format58mm();
+        final f80 = ReceiptLayoutFormatter.format80mm();
+
+        final contingencyInvoice = Invoice(
+          id: 'inv-cont-1',
+          number: '001-001-01-00000150',
+          createdAt: DateTime(2026, 11, 28, 9, 15),
+          userId: 'user-1',
+          subtotal: 250.0,
+          totalTax: 37.5,
+          total: 287.5,
+          contingencyManualSeries: 'MAN-001',
+          contingencyManualNumber: '000042',
+          contingencyManualIssuedAt: '2026-11-27',
+        );
+
+        for (final copyLabel in [
+          'ORIGINAL',
+          'COPIA - ADJUNTAR COPIA MANUAL',
+        ]) {
+          final doc = ReceiptDocument.fromInvoice(
+            contingencyInvoice,
+            items: const [],
+            payments: const [],
+            taxRegime: TaxRegime.regimenGeneral,
+            copyLabel: copyLabel,
+          );
+          expect(doc.hasContingencyReference, isTrue);
+
+          for (final formatter in [f58, f80]) {
+            final text = formatter.formatReceiptDocumentText(doc);
+            final escPos = String.fromCharCodes(
+              formatter.formatReceiptDocumentEscPos(doc),
+            );
+
+            for (final rendered in [text, escPos]) {
+              final normalized = rendered.replaceAll(RegExp(r'\s+'), ' ');
+              expect(rendered, contains('INGRESO POR CONTINGENCIA'));
+              expect(rendered, contains('Ref. Factura Manual:'));
+              expect(rendered, contains('MAN-001-000042'));
+              expect(rendered, contains('Fecha Manual:'));
+              expect(rendered, contains('2026-11-27'));
+              expect(
+                normalized,
+                contains(
+                  copyLabel == 'ORIGINAL'
+                      ? '*** ORIGINAL ***'
+                      : '*** COPIA - ADJUNTAR COPIA MANUAL ***',
+                ),
+              );
+            }
+
+            for (final line in text.split('\n')) {
+              expect(
+                line.length,
+                lessThanOrEqualTo(formatter.maxCols),
+                reason:
+                    'Line exceeds ${formatter.maxCols} cols for $copyLabel: "$line"',
+              );
+            }
+          }
+        }
+
+        // Non-contingency receipt omits contingency note and copy banner
+        final regularInvoice = contingencyInvoice.copyWith(
+          contingencyManualSeries: null,
+          contingencyManualNumber: null,
+          contingencyManualIssuedAt: null,
+        );
+        final regularDoc = ReceiptDocument.fromInvoice(
+          regularInvoice,
+          items: const [],
+          payments: const [],
+          taxRegime: TaxRegime.regimenGeneral,
+        );
+        expect(regularDoc.hasContingencyReference, isFalse);
+        final regularText = f58.formatReceiptDocumentText(regularDoc);
+        expect(regularText, isNot(contains('INGRESO POR CONTINGENCIA')));
+        expect(regularText, isNot(contains('Ref. Factura Manual:')));
+        expect(regularText, isNot(contains('*** ORIGINAL ***')));
+      },
+    );
   });
 }

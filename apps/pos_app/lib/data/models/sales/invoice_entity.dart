@@ -184,6 +184,15 @@ class InvoiceEntity {
   @ColumnInfo(name: 'fiscal_header_snapshot')
   String? fiscalHeaderSnapshot;
 
+  /// #539 S3 (DT 09-2007 3.3.a/3.3.b): manual contingency invoice back-entry
+  /// cross-reference columns.
+  @ColumnInfo(name: 'contingency_manual_series')
+  final String? contingencyManualSeries;
+  @ColumnInfo(name: 'contingency_manual_number')
+  final String? contingencyManualNumber;
+  @ColumnInfo(name: 'contingency_manual_issued_at')
+  final String? contingencyManualIssuedAt;
+
   InvoiceEntity({
     required this.id,
     required this.number,
@@ -226,5 +235,8 @@ class InvoiceEntity {
     this.tipAmountUsd,
     this.tipPercentage,
     this.tipEligibleBaseNio,
+    this.contingencyManualSeries,
+    this.contingencyManualNumber,
+    this.contingencyManualIssuedAt,
   });
 }

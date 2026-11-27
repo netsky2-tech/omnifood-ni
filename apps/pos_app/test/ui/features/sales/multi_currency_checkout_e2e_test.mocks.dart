@@ -129,6 +129,28 @@ class _FakeTerminalLinking_4 extends _i1.SmartFake
         );
 }
 
+class _FakeDeviceReactivationLookupResult_5 extends _i1.SmartFake
+    implements _i5.DeviceReactivationLookupResult {
+  _FakeDeviceReactivationLookupResult_5(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeCompletedReactivationResult_6 extends _i1.SmartFake
+    implements _i5.CompletedReactivationResult {
+  _FakeCompletedReactivationResult_6(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
 /// A class which mocks [AuditRepository].
 ///
 /// See the documentation for Mockito's code generation for more information.
@@ -1927,9 +1949,9 @@ class MockAuthRepository extends _i1.Mock implements _i42.AuthRepository {
   @override
   _i7.Future<_i5.TerminalLinking> claimLinkingCode(
     String? code,
-    String? deviceId,
-    {String? hardwareFingerprint,}
-  ) =>
+    String? deviceId, {
+    String? hardwareFingerprint,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #claimLinkingCode,
@@ -1937,6 +1959,7 @@ class MockAuthRepository extends _i1.Mock implements _i42.AuthRepository {
             code,
             deviceId,
           ],
+          {#hardwareFingerprint: hardwareFingerprint},
         ),
         returnValue:
             _i7.Future<_i5.TerminalLinking>.value(_FakeTerminalLinking_4(
@@ -1947,9 +1970,81 @@ class MockAuthRepository extends _i1.Mock implements _i42.AuthRepository {
               code,
               deviceId,
             ],
+            {#hardwareFingerprint: hardwareFingerprint},
           ),
         )),
       ) as _i7.Future<_i5.TerminalLinking>);
+
+  @override
+  _i7.Future<_i5.DeviceReactivationLookupResult> lookupReactivationDevice(
+          String? hardwareFingerprint) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #lookupReactivationDevice,
+          [hardwareFingerprint],
+        ),
+        returnValue: _i7.Future<_i5.DeviceReactivationLookupResult>.value(
+            _FakeDeviceReactivationLookupResult_5(
+          this,
+          Invocation.method(
+            #lookupReactivationDevice,
+            [hardwareFingerprint],
+          ),
+        )),
+      ) as _i7.Future<_i5.DeviceReactivationLookupResult>);
+
+  @override
+  _i7.Future<_i5.CompletedReactivationResult> completeReactivation({
+    required String? challengeId,
+    required String? hardwareFingerprint,
+    String? recoveryCode,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #completeReactivation,
+          [],
+          {
+            #challengeId: challengeId,
+            #hardwareFingerprint: hardwareFingerprint,
+            #recoveryCode: recoveryCode,
+          },
+        ),
+        returnValue: _i7.Future<_i5.CompletedReactivationResult>.value(
+            _FakeCompletedReactivationResult_6(
+          this,
+          Invocation.method(
+            #completeReactivation,
+            [],
+            {
+              #challengeId: challengeId,
+              #hardwareFingerprint: hardwareFingerprint,
+              #recoveryCode: recoveryCode,
+            },
+          ),
+        )),
+      ) as _i7.Future<_i5.CompletedReactivationResult>);
+
+  @override
+  _i7.Future<void> confirmReactivationCredential({
+    required String? challengeId,
+    required String? credentialId,
+    required int? version,
+    required String? renewalSecret,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #confirmReactivationCredential,
+          [],
+          {
+            #challengeId: challengeId,
+            #credentialId: credentialId,
+            #version: version,
+            #renewalSecret: renewalSecret,
+          },
+        ),
+        returnValue: _i7.Future<void>.value(),
+        returnValueForMissingStub: _i7.Future<void>.value(),
+      ) as _i7.Future<void>);
 
   @override
   _i7.Future<void> syncStaff() => (super.noSuchMethod(

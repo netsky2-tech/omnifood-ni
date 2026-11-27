@@ -78,6 +78,12 @@ class Invoice with _$Invoice {
     @Default(36.6241) double bcnOfficialRate,
     @Default(36.50) double commercialRate,
     @Default(0.0) double totalUsd,
+
+    /// #539 S3 (DT 09-2007 3.3.a/3.3.b): manual contingency invoice back-entry
+    /// cross-reference fields (series, number, ISO YYYY-MM-DD issue date).
+    String? contingencyManualSeries,
+    String? contingencyManualNumber,
+    String? contingencyManualIssuedAt,
   }) = _Invoice;
 
   factory Invoice.fromJson(Map<String, dynamic> json) =>

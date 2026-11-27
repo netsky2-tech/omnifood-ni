@@ -160,8 +160,9 @@ class _FakeTerminalLinking_2 extends _i1.SmartFake
         );
 }
 
-class _FakeUserDao_3 extends _i1.SmartFake implements _i5.UserDao {
-  _FakeUserDao_3(
+class _FakeDeviceReactivationLookupResult_3 extends _i1.SmartFake
+    implements _i4.DeviceReactivationLookupResult {
+  _FakeDeviceReactivationLookupResult_3(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -170,9 +171,30 @@ class _FakeUserDao_3 extends _i1.SmartFake implements _i5.UserDao {
         );
 }
 
-class _FakeSecurityProfileDao_4 extends _i1.SmartFake
+class _FakeCompletedReactivationResult_4 extends _i1.SmartFake
+    implements _i4.CompletedReactivationResult {
+  _FakeCompletedReactivationResult_4(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeUserDao_5 extends _i1.SmartFake implements _i5.UserDao {
+  _FakeUserDao_5(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeSecurityProfileDao_6 extends _i1.SmartFake
     implements _i6.SecurityProfileDao {
-  _FakeSecurityProfileDao_4(
+  _FakeSecurityProfileDao_6(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -181,8 +203,8 @@ class _FakeSecurityProfileDao_4 extends _i1.SmartFake
         );
 }
 
-class _FakeAuditDao_5 extends _i1.SmartFake implements _i7.AuditDao {
-  _FakeAuditDao_5(
+class _FakeAuditDao_7 extends _i1.SmartFake implements _i7.AuditDao {
+  _FakeAuditDao_7(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -191,9 +213,9 @@ class _FakeAuditDao_5 extends _i1.SmartFake implements _i7.AuditDao {
         );
 }
 
-class _FakeLocalConfigDao_6 extends _i1.SmartFake
+class _FakeLocalConfigDao_8 extends _i1.SmartFake
     implements _i8.LocalConfigDao {
-  _FakeLocalConfigDao_6(
+  _FakeLocalConfigDao_8(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -202,8 +224,8 @@ class _FakeLocalConfigDao_6 extends _i1.SmartFake
         );
 }
 
-class _FakeInsumoDao_7 extends _i1.SmartFake implements _i9.InsumoDao {
-  _FakeInsumoDao_7(
+class _FakeInsumoDao_9 extends _i1.SmartFake implements _i9.InsumoDao {
+  _FakeInsumoDao_9(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -212,8 +234,8 @@ class _FakeInsumoDao_7 extends _i1.SmartFake implements _i9.InsumoDao {
         );
 }
 
-class _FakeProductDao_8 extends _i1.SmartFake implements _i10.ProductDao {
-  _FakeProductDao_8(
+class _FakeProductDao_10 extends _i1.SmartFake implements _i10.ProductDao {
+  _FakeProductDao_10(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -222,8 +244,8 @@ class _FakeProductDao_8 extends _i1.SmartFake implements _i10.ProductDao {
         );
 }
 
-class _FakeRecipeDao_9 extends _i1.SmartFake implements _i10.RecipeDao {
-  _FakeRecipeDao_9(
+class _FakeRecipeDao_11 extends _i1.SmartFake implements _i10.RecipeDao {
+  _FakeRecipeDao_11(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -232,9 +254,9 @@ class _FakeRecipeDao_9 extends _i1.SmartFake implements _i10.RecipeDao {
         );
 }
 
-class _FakeRecipeVersionDocumentDao_10 extends _i1.SmartFake
+class _FakeRecipeVersionDocumentDao_12 extends _i1.SmartFake
     implements _i11.RecipeVersionDocumentDao {
-  _FakeRecipeVersionDocumentDao_10(
+  _FakeRecipeVersionDocumentDao_12(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -243,9 +265,9 @@ class _FakeRecipeVersionDocumentDao_10 extends _i1.SmartFake
         );
 }
 
-class _FakeCountSessionDao_11 extends _i1.SmartFake
+class _FakeCountSessionDao_13 extends _i1.SmartFake
     implements _i12.CountSessionDao {
-  _FakeCountSessionDao_11(
+  _FakeCountSessionDao_13(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -254,8 +276,8 @@ class _FakeCountSessionDao_11 extends _i1.SmartFake
         );
 }
 
-class _FakeCountLineDao_12 extends _i1.SmartFake implements _i13.CountLineDao {
-  _FakeCountLineDao_12(
+class _FakeCountLineDao_14 extends _i1.SmartFake implements _i13.CountLineDao {
+  _FakeCountLineDao_14(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -264,9 +286,9 @@ class _FakeCountLineDao_12 extends _i1.SmartFake implements _i13.CountLineDao {
         );
 }
 
-class _FakeForensicAlertDao_13 extends _i1.SmartFake
+class _FakeForensicAlertDao_15 extends _i1.SmartFake
     implements _i14.ForensicAlertDao {
-  _FakeForensicAlertDao_13(
+  _FakeForensicAlertDao_15(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -275,8 +297,8 @@ class _FakeForensicAlertDao_13 extends _i1.SmartFake
         );
 }
 
-class _FakeMovementDao_14 extends _i1.SmartFake implements _i15.MovementDao {
-  _FakeMovementDao_14(
+class _FakeMovementDao_16 extends _i1.SmartFake implements _i15.MovementDao {
+  _FakeMovementDao_16(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -285,9 +307,9 @@ class _FakeMovementDao_14 extends _i1.SmartFake implements _i15.MovementDao {
         );
 }
 
-class _FakeMovementSyncStateDao_15 extends _i1.SmartFake
+class _FakeMovementSyncStateDao_17 extends _i1.SmartFake
     implements _i16.MovementSyncStateDao {
-  _FakeMovementSyncStateDao_15(
+  _FakeMovementSyncStateDao_17(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -296,9 +318,9 @@ class _FakeMovementSyncStateDao_15 extends _i1.SmartFake
         );
 }
 
-class _FakeKardexRecalculateQueueDao_16 extends _i1.SmartFake
+class _FakeKardexRecalculateQueueDao_18 extends _i1.SmartFake
     implements _i17.KardexRecalculateQueueDao {
-  _FakeKardexRecalculateQueueDao_16(
+  _FakeKardexRecalculateQueueDao_18(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -307,9 +329,9 @@ class _FakeKardexRecalculateQueueDao_16 extends _i1.SmartFake
         );
 }
 
-class _FakeKardexCorrectionDao_17 extends _i1.SmartFake
+class _FakeKardexCorrectionDao_19 extends _i1.SmartFake
     implements _i18.KardexCorrectionDao {
-  _FakeKardexCorrectionDao_17(
+  _FakeKardexCorrectionDao_19(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -318,8 +340,8 @@ class _FakeKardexCorrectionDao_17 extends _i1.SmartFake
         );
 }
 
-class _FakeInventoryDao_18 extends _i1.SmartFake implements _i19.InventoryDao {
-  _FakeInventoryDao_18(
+class _FakeInventoryDao_20 extends _i1.SmartFake implements _i19.InventoryDao {
+  _FakeInventoryDao_20(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -328,8 +350,8 @@ class _FakeInventoryDao_18 extends _i1.SmartFake implements _i19.InventoryDao {
         );
 }
 
-class _FakeSupplierDao_19 extends _i1.SmartFake implements _i20.SupplierDao {
-  _FakeSupplierDao_19(
+class _FakeSupplierDao_21 extends _i1.SmartFake implements _i20.SupplierDao {
+  _FakeSupplierDao_21(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -338,8 +360,8 @@ class _FakeSupplierDao_19 extends _i1.SmartFake implements _i20.SupplierDao {
         );
 }
 
-class _FakeWarehouseDao_20 extends _i1.SmartFake implements _i21.WarehouseDao {
-  _FakeWarehouseDao_20(
+class _FakeWarehouseDao_22 extends _i1.SmartFake implements _i21.WarehouseDao {
+  _FakeWarehouseDao_22(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -348,8 +370,8 @@ class _FakeWarehouseDao_20 extends _i1.SmartFake implements _i21.WarehouseDao {
         );
 }
 
-class _FakePurchaseDao_21 extends _i1.SmartFake implements _i22.PurchaseDao {
-  _FakePurchaseDao_21(
+class _FakePurchaseDao_23 extends _i1.SmartFake implements _i22.PurchaseDao {
+  _FakePurchaseDao_23(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -358,9 +380,9 @@ class _FakePurchaseDao_21 extends _i1.SmartFake implements _i22.PurchaseDao {
         );
 }
 
-class _FakeProductionOrderDocumentDao_22 extends _i1.SmartFake
+class _FakeProductionOrderDocumentDao_24 extends _i1.SmartFake
     implements _i23.ProductionOrderDocumentDao {
-  _FakeProductionOrderDocumentDao_22(
+  _FakeProductionOrderDocumentDao_24(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -369,9 +391,9 @@ class _FakeProductionOrderDocumentDao_22 extends _i1.SmartFake
         );
 }
 
-class _FakeProductionTransactionDao_23 extends _i1.SmartFake
+class _FakeProductionTransactionDao_25 extends _i1.SmartFake
     implements _i24.ProductionTransactionDao {
-  _FakeProductionTransactionDao_23(
+  _FakeProductionTransactionDao_25(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -380,9 +402,9 @@ class _FakeProductionTransactionDao_23 extends _i1.SmartFake
         );
 }
 
-class _FakeUomConversionDao_24 extends _i1.SmartFake
+class _FakeUomConversionDao_26 extends _i1.SmartFake
     implements _i25.UomConversionDao {
-  _FakeUomConversionDao_24(
+  _FakeUomConversionDao_26(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -391,8 +413,8 @@ class _FakeUomConversionDao_24 extends _i1.SmartFake
         );
 }
 
-class _FakeBatchDao_25 extends _i1.SmartFake implements _i26.BatchDao {
-  _FakeBatchDao_25(
+class _FakeBatchDao_27 extends _i1.SmartFake implements _i26.BatchDao {
+  _FakeBatchDao_27(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -401,9 +423,9 @@ class _FakeBatchDao_25 extends _i1.SmartFake implements _i26.BatchDao {
         );
 }
 
-class _FakeCatalogValueDao_26 extends _i1.SmartFake
+class _FakeCatalogValueDao_28 extends _i1.SmartFake
     implements _i27.CatalogValueDao {
-  _FakeCatalogValueDao_26(
+  _FakeCatalogValueDao_28(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -412,8 +434,8 @@ class _FakeCatalogValueDao_26 extends _i1.SmartFake
         );
 }
 
-class _FakeInvoiceDao_27 extends _i1.SmartFake implements _i28.InvoiceDao {
-  _FakeInvoiceDao_27(
+class _FakeInvoiceDao_29 extends _i1.SmartFake implements _i28.InvoiceDao {
+  _FakeInvoiceDao_29(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -422,9 +444,9 @@ class _FakeInvoiceDao_27 extends _i1.SmartFake implements _i28.InvoiceDao {
         );
 }
 
-class _FakeInvoiceItemDao_28 extends _i1.SmartFake
+class _FakeInvoiceItemDao_30 extends _i1.SmartFake
     implements _i29.InvoiceItemDao {
-  _FakeInvoiceItemDao_28(
+  _FakeInvoiceItemDao_30(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -433,8 +455,8 @@ class _FakeInvoiceItemDao_28 extends _i1.SmartFake
         );
 }
 
-class _FakePaymentDao_29 extends _i1.SmartFake implements _i30.PaymentDao {
-  _FakePaymentDao_29(
+class _FakePaymentDao_31 extends _i1.SmartFake implements _i30.PaymentDao {
+  _FakePaymentDao_31(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -443,8 +465,8 @@ class _FakePaymentDao_29 extends _i1.SmartFake implements _i30.PaymentDao {
         );
 }
 
-class _FakeTaxConfigDao_30 extends _i1.SmartFake implements _i31.TaxConfigDao {
-  _FakeTaxConfigDao_30(
+class _FakeTaxConfigDao_32 extends _i1.SmartFake implements _i31.TaxConfigDao {
+  _FakeTaxConfigDao_32(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -453,9 +475,9 @@ class _FakeTaxConfigDao_30 extends _i1.SmartFake implements _i31.TaxConfigDao {
         );
 }
 
-class _FakeSalesTransactionDao_31 extends _i1.SmartFake
+class _FakeSalesTransactionDao_33 extends _i1.SmartFake
     implements _i32.SalesTransactionDao {
-  _FakeSalesTransactionDao_31(
+  _FakeSalesTransactionDao_33(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -464,9 +486,9 @@ class _FakeSalesTransactionDao_31 extends _i1.SmartFake
         );
 }
 
-class _FakeCashierSessionDao_32 extends _i1.SmartFake
+class _FakeCashierSessionDao_34 extends _i1.SmartFake
     implements _i33.CashierSessionDao {
-  _FakeCashierSessionDao_32(
+  _FakeCashierSessionDao_34(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -475,9 +497,9 @@ class _FakeCashierSessionDao_32 extends _i1.SmartFake
         );
 }
 
-class _FakeCashMovementDao_33 extends _i1.SmartFake
+class _FakeCashMovementDao_35 extends _i1.SmartFake
     implements _i34.CashMovementDao {
-  _FakeCashMovementDao_33(
+  _FakeCashMovementDao_35(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -486,9 +508,9 @@ class _FakeCashMovementDao_33 extends _i1.SmartFake
         );
 }
 
-class _FakeHoldTicketDao_34 extends _i1.SmartFake
+class _FakeHoldTicketDao_36 extends _i1.SmartFake
     implements _i35.HoldTicketDao {
-  _FakeHoldTicketDao_34(
+  _FakeHoldTicketDao_36(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -497,8 +519,8 @@ class _FakeHoldTicketDao_34 extends _i1.SmartFake
         );
 }
 
-class _FakePromotionDao_35 extends _i1.SmartFake implements _i36.PromotionDao {
-  _FakePromotionDao_35(
+class _FakePromotionDao_37 extends _i1.SmartFake implements _i36.PromotionDao {
+  _FakePromotionDao_37(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -507,8 +529,8 @@ class _FakePromotionDao_35 extends _i1.SmartFake implements _i36.PromotionDao {
         );
 }
 
-class _FakeModifierDao_36 extends _i1.SmartFake implements _i37.ModifierDao {
-  _FakeModifierDao_36(
+class _FakeModifierDao_38 extends _i1.SmartFake implements _i37.ModifierDao {
+  _FakeModifierDao_38(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -517,9 +539,9 @@ class _FakeModifierDao_36 extends _i1.SmartFake implements _i37.ModifierDao {
         );
 }
 
-class _FakeRestaurantAreaDao_37 extends _i1.SmartFake
+class _FakeRestaurantAreaDao_39 extends _i1.SmartFake
     implements _i38.RestaurantAreaDao {
-  _FakeRestaurantAreaDao_37(
+  _FakeRestaurantAreaDao_39(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -528,9 +550,9 @@ class _FakeRestaurantAreaDao_37 extends _i1.SmartFake
         );
 }
 
-class _FakeRestaurantTableDao_38 extends _i1.SmartFake
+class _FakeRestaurantTableDao_40 extends _i1.SmartFake
     implements _i39.RestaurantTableDao {
-  _FakeRestaurantTableDao_38(
+  _FakeRestaurantTableDao_40(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -539,9 +561,9 @@ class _FakeRestaurantTableDao_38 extends _i1.SmartFake
         );
 }
 
-class _FakeKitchenOrderDao_39 extends _i1.SmartFake
+class _FakeKitchenOrderDao_41 extends _i1.SmartFake
     implements _i40.KitchenOrderDao {
-  _FakeKitchenOrderDao_39(
+  _FakeKitchenOrderDao_41(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -550,8 +572,8 @@ class _FakeKitchenOrderDao_39 extends _i1.SmartFake
         );
 }
 
-class _FakeCustomerDao_40 extends _i1.SmartFake implements _i41.CustomerDao {
-  _FakeCustomerDao_40(
+class _FakeCustomerDao_42 extends _i1.SmartFake implements _i41.CustomerDao {
+  _FakeCustomerDao_42(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -560,9 +582,9 @@ class _FakeCustomerDao_40 extends _i1.SmartFake implements _i41.CustomerDao {
         );
 }
 
-class _FakeCustomerPointTransactionDao_41 extends _i1.SmartFake
+class _FakeCustomerPointTransactionDao_43 extends _i1.SmartFake
     implements _i42.CustomerPointTransactionDao {
-  _FakeCustomerPointTransactionDao_41(
+  _FakeCustomerPointTransactionDao_43(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -571,9 +593,9 @@ class _FakeCustomerPointTransactionDao_41 extends _i1.SmartFake
         );
 }
 
-class _FakeLoyaltyProgramDao_42 extends _i1.SmartFake
+class _FakeLoyaltyProgramDao_44 extends _i1.SmartFake
     implements _i43.LoyaltyProgramDao {
-  _FakeLoyaltyProgramDao_42(
+  _FakeLoyaltyProgramDao_44(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -582,9 +604,9 @@ class _FakeLoyaltyProgramDao_42 extends _i1.SmartFake
         );
 }
 
-class _FakeLoyaltyRewardDao_43 extends _i1.SmartFake
+class _FakeLoyaltyRewardDao_45 extends _i1.SmartFake
     implements _i44.LoyaltyRewardDao {
-  _FakeLoyaltyRewardDao_43(
+  _FakeLoyaltyRewardDao_45(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -593,9 +615,9 @@ class _FakeLoyaltyRewardDao_43 extends _i1.SmartFake
         );
 }
 
-class _FakeFiscalConfigLocalDao_44 extends _i1.SmartFake
+class _FakeFiscalConfigLocalDao_46 extends _i1.SmartFake
     implements _i45.FiscalConfigLocalDao {
-  _FakeFiscalConfigLocalDao_44(
+  _FakeFiscalConfigLocalDao_46(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -604,9 +626,9 @@ class _FakeFiscalConfigLocalDao_44 extends _i1.SmartFake
         );
 }
 
-class _FakeActivationAttemptLocalDao_45 extends _i1.SmartFake
+class _FakeActivationAttemptLocalDao_47 extends _i1.SmartFake
     implements _i46.ActivationAttemptLocalDao {
-  _FakeActivationAttemptLocalDao_45(
+  _FakeActivationAttemptLocalDao_47(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -615,9 +637,9 @@ class _FakeActivationAttemptLocalDao_45 extends _i1.SmartFake
         );
 }
 
-class _FakeActivationCheckResultLocalDao_46 extends _i1.SmartFake
+class _FakeActivationCheckResultLocalDao_48 extends _i1.SmartFake
     implements _i47.ActivationCheckResultLocalDao {
-  _FakeActivationCheckResultLocalDao_46(
+  _FakeActivationCheckResultLocalDao_48(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -626,9 +648,9 @@ class _FakeActivationCheckResultLocalDao_46 extends _i1.SmartFake
         );
 }
 
-class _FakeFirstSuccessfulSaleClaimDao_47 extends _i1.SmartFake
+class _FakeFirstSuccessfulSaleClaimDao_49 extends _i1.SmartFake
     implements _i48.FirstSuccessfulSaleClaimDao {
-  _FakeFirstSuccessfulSaleClaimDao_47(
+  _FakeFirstSuccessfulSaleClaimDao_49(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -637,9 +659,9 @@ class _FakeFirstSuccessfulSaleClaimDao_47 extends _i1.SmartFake
         );
 }
 
-class _FakeFirstCustomerSaleObservationDao_48 extends _i1.SmartFake
+class _FakeFirstCustomerSaleObservationDao_50 extends _i1.SmartFake
     implements _i49.FirstCustomerSaleObservationDao {
-  _FakeFirstCustomerSaleObservationDao_48(
+  _FakeFirstCustomerSaleObservationDao_50(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -648,9 +670,9 @@ class _FakeFirstCustomerSaleObservationDao_48 extends _i1.SmartFake
         );
 }
 
-class _FakeActivationOutboxDao_49 extends _i1.SmartFake
+class _FakeActivationOutboxDao_51 extends _i1.SmartFake
     implements _i50.ActivationOutboxDao {
-  _FakeActivationOutboxDao_49(
+  _FakeActivationOutboxDao_51(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -659,9 +681,9 @@ class _FakeActivationOutboxDao_49 extends _i1.SmartFake
         );
 }
 
-class _FakeAuthorityProjectionDao_50 extends _i1.SmartFake
+class _FakeAuthorityProjectionDao_52 extends _i1.SmartFake
     implements _i51.AuthorityProjectionDao {
-  _FakeAuthorityProjectionDao_50(
+  _FakeAuthorityProjectionDao_52(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -670,9 +692,9 @@ class _FakeAuthorityProjectionDao_50 extends _i1.SmartFake
         );
 }
 
-class _FakeAuthorityIngestionVerdictDao_51 extends _i1.SmartFake
+class _FakeAuthorityIngestionVerdictDao_53 extends _i1.SmartFake
     implements _i52.AuthorityIngestionVerdictDao {
-  _FakeAuthorityIngestionVerdictDao_51(
+  _FakeAuthorityIngestionVerdictDao_53(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -681,9 +703,9 @@ class _FakeAuthorityIngestionVerdictDao_51 extends _i1.SmartFake
         );
 }
 
-class _FakeFulfillmentTopologyDao_52 extends _i1.SmartFake
+class _FakeFulfillmentTopologyDao_54 extends _i1.SmartFake
     implements _i53.FulfillmentTopologyDao {
-  _FakeFulfillmentTopologyDao_52(
+  _FakeFulfillmentTopologyDao_54(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -692,9 +714,9 @@ class _FakeFulfillmentTopologyDao_52 extends _i1.SmartFake
         );
 }
 
-class _FakeFulfillmentPersistenceDao_53 extends _i1.SmartFake
+class _FakeFulfillmentPersistenceDao_55 extends _i1.SmartFake
     implements _i54.FulfillmentPersistenceDao {
-  _FakeFulfillmentPersistenceDao_53(
+  _FakeFulfillmentPersistenceDao_55(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -703,9 +725,9 @@ class _FakeFulfillmentPersistenceDao_53 extends _i1.SmartFake
         );
 }
 
-class _FakeOhacDeliveryDao_54 extends _i1.SmartFake
+class _FakeOhacDeliveryDao_56 extends _i1.SmartFake
     implements _i55.OhacDeliveryDao {
-  _FakeOhacDeliveryDao_54(
+  _FakeOhacDeliveryDao_56(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -714,9 +736,9 @@ class _FakeOhacDeliveryDao_54 extends _i1.SmartFake
         );
 }
 
-class _FakeStreamController_55<T> extends _i1.SmartFake
+class _FakeStreamController_57<T> extends _i1.SmartFake
     implements _i56.StreamController<T> {
-  _FakeStreamController_55(
+  _FakeStreamController_57(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -725,9 +747,9 @@ class _FakeStreamController_55<T> extends _i1.SmartFake
         );
 }
 
-class _FakeDatabaseExecutor_56 extends _i1.SmartFake
+class _FakeDatabaseExecutor_58 extends _i1.SmartFake
     implements _i57.DatabaseExecutor {
-  _FakeDatabaseExecutor_56(
+  _FakeDatabaseExecutor_58(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -736,9 +758,9 @@ class _FakeDatabaseExecutor_56 extends _i1.SmartFake
         );
 }
 
-class _FakePrinterConfig_57 extends _i1.SmartFake
+class _FakePrinterConfig_59 extends _i1.SmartFake
     implements _i58.PrinterConfig {
-  _FakePrinterConfig_57(
+  _FakePrinterConfig_59(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -1909,9 +1931,9 @@ class MockAuthRepository extends _i1.Mock implements _i83.AuthRepository {
   @override
   _i56.Future<_i4.TerminalLinking> claimLinkingCode(
     String? code,
-    String? deviceId,
-    {String? hardwareFingerprint,}
-  ) =>
+    String? deviceId, {
+    String? hardwareFingerprint,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #claimLinkingCode,
@@ -1919,6 +1941,7 @@ class MockAuthRepository extends _i1.Mock implements _i83.AuthRepository {
             code,
             deviceId,
           ],
+          {#hardwareFingerprint: hardwareFingerprint},
         ),
         returnValue:
             _i56.Future<_i4.TerminalLinking>.value(_FakeTerminalLinking_2(
@@ -1929,6 +1952,7 @@ class MockAuthRepository extends _i1.Mock implements _i83.AuthRepository {
               code,
               deviceId,
             ],
+            {#hardwareFingerprint: hardwareFingerprint},
           ),
         )),
         returnValueForMissingStub:
@@ -1940,9 +1964,104 @@ class MockAuthRepository extends _i1.Mock implements _i83.AuthRepository {
               code,
               deviceId,
             ],
+            {#hardwareFingerprint: hardwareFingerprint},
           ),
         )),
       ) as _i56.Future<_i4.TerminalLinking>);
+
+  @override
+  _i56.Future<_i4.DeviceReactivationLookupResult> lookupReactivationDevice(
+          String? hardwareFingerprint) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #lookupReactivationDevice,
+          [hardwareFingerprint],
+        ),
+        returnValue: _i56.Future<_i4.DeviceReactivationLookupResult>.value(
+            _FakeDeviceReactivationLookupResult_3(
+          this,
+          Invocation.method(
+            #lookupReactivationDevice,
+            [hardwareFingerprint],
+          ),
+        )),
+        returnValueForMissingStub:
+            _i56.Future<_i4.DeviceReactivationLookupResult>.value(
+                _FakeDeviceReactivationLookupResult_3(
+          this,
+          Invocation.method(
+            #lookupReactivationDevice,
+            [hardwareFingerprint],
+          ),
+        )),
+      ) as _i56.Future<_i4.DeviceReactivationLookupResult>);
+
+  @override
+  _i56.Future<_i4.CompletedReactivationResult> completeReactivation({
+    required String? challengeId,
+    required String? hardwareFingerprint,
+    String? recoveryCode,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #completeReactivation,
+          [],
+          {
+            #challengeId: challengeId,
+            #hardwareFingerprint: hardwareFingerprint,
+            #recoveryCode: recoveryCode,
+          },
+        ),
+        returnValue: _i56.Future<_i4.CompletedReactivationResult>.value(
+            _FakeCompletedReactivationResult_4(
+          this,
+          Invocation.method(
+            #completeReactivation,
+            [],
+            {
+              #challengeId: challengeId,
+              #hardwareFingerprint: hardwareFingerprint,
+              #recoveryCode: recoveryCode,
+            },
+          ),
+        )),
+        returnValueForMissingStub:
+            _i56.Future<_i4.CompletedReactivationResult>.value(
+                _FakeCompletedReactivationResult_4(
+          this,
+          Invocation.method(
+            #completeReactivation,
+            [],
+            {
+              #challengeId: challengeId,
+              #hardwareFingerprint: hardwareFingerprint,
+              #recoveryCode: recoveryCode,
+            },
+          ),
+        )),
+      ) as _i56.Future<_i4.CompletedReactivationResult>);
+
+  @override
+  _i56.Future<void> confirmReactivationCredential({
+    required String? challengeId,
+    required String? credentialId,
+    required int? version,
+    required String? renewalSecret,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #confirmReactivationCredential,
+          [],
+          {
+            #challengeId: challengeId,
+            #credentialId: credentialId,
+            #version: version,
+            #renewalSecret: renewalSecret,
+          },
+        ),
+        returnValue: _i56.Future<void>.value(),
+        returnValueForMissingStub: _i56.Future<void>.value(),
+      ) as _i56.Future<void>);
 
   @override
   _i56.Future<void> syncStaff() => (super.noSuchMethod(
@@ -2088,11 +2207,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i5.UserDao get userDao => (super.noSuchMethod(
         Invocation.getter(#userDao),
-        returnValue: _FakeUserDao_3(
+        returnValue: _FakeUserDao_5(
           this,
           Invocation.getter(#userDao),
         ),
-        returnValueForMissingStub: _FakeUserDao_3(
+        returnValueForMissingStub: _FakeUserDao_5(
           this,
           Invocation.getter(#userDao),
         ),
@@ -2101,11 +2220,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i6.SecurityProfileDao get securityProfileDao => (super.noSuchMethod(
         Invocation.getter(#securityProfileDao),
-        returnValue: _FakeSecurityProfileDao_4(
+        returnValue: _FakeSecurityProfileDao_6(
           this,
           Invocation.getter(#securityProfileDao),
         ),
-        returnValueForMissingStub: _FakeSecurityProfileDao_4(
+        returnValueForMissingStub: _FakeSecurityProfileDao_6(
           this,
           Invocation.getter(#securityProfileDao),
         ),
@@ -2114,11 +2233,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i7.AuditDao get auditDao => (super.noSuchMethod(
         Invocation.getter(#auditDao),
-        returnValue: _FakeAuditDao_5(
+        returnValue: _FakeAuditDao_7(
           this,
           Invocation.getter(#auditDao),
         ),
-        returnValueForMissingStub: _FakeAuditDao_5(
+        returnValueForMissingStub: _FakeAuditDao_7(
           this,
           Invocation.getter(#auditDao),
         ),
@@ -2127,11 +2246,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i8.LocalConfigDao get localConfigDao => (super.noSuchMethod(
         Invocation.getter(#localConfigDao),
-        returnValue: _FakeLocalConfigDao_6(
+        returnValue: _FakeLocalConfigDao_8(
           this,
           Invocation.getter(#localConfigDao),
         ),
-        returnValueForMissingStub: _FakeLocalConfigDao_6(
+        returnValueForMissingStub: _FakeLocalConfigDao_8(
           this,
           Invocation.getter(#localConfigDao),
         ),
@@ -2140,11 +2259,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i9.InsumoDao get insumoDao => (super.noSuchMethod(
         Invocation.getter(#insumoDao),
-        returnValue: _FakeInsumoDao_7(
+        returnValue: _FakeInsumoDao_9(
           this,
           Invocation.getter(#insumoDao),
         ),
-        returnValueForMissingStub: _FakeInsumoDao_7(
+        returnValueForMissingStub: _FakeInsumoDao_9(
           this,
           Invocation.getter(#insumoDao),
         ),
@@ -2153,11 +2272,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i10.ProductDao get productDao => (super.noSuchMethod(
         Invocation.getter(#productDao),
-        returnValue: _FakeProductDao_8(
+        returnValue: _FakeProductDao_10(
           this,
           Invocation.getter(#productDao),
         ),
-        returnValueForMissingStub: _FakeProductDao_8(
+        returnValueForMissingStub: _FakeProductDao_10(
           this,
           Invocation.getter(#productDao),
         ),
@@ -2166,11 +2285,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i10.RecipeDao get recipeDao => (super.noSuchMethod(
         Invocation.getter(#recipeDao),
-        returnValue: _FakeRecipeDao_9(
+        returnValue: _FakeRecipeDao_11(
           this,
           Invocation.getter(#recipeDao),
         ),
-        returnValueForMissingStub: _FakeRecipeDao_9(
+        returnValueForMissingStub: _FakeRecipeDao_11(
           this,
           Invocation.getter(#recipeDao),
         ),
@@ -2180,11 +2299,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i11.RecipeVersionDocumentDao get recipeVersionDocumentDao =>
       (super.noSuchMethod(
         Invocation.getter(#recipeVersionDocumentDao),
-        returnValue: _FakeRecipeVersionDocumentDao_10(
+        returnValue: _FakeRecipeVersionDocumentDao_12(
           this,
           Invocation.getter(#recipeVersionDocumentDao),
         ),
-        returnValueForMissingStub: _FakeRecipeVersionDocumentDao_10(
+        returnValueForMissingStub: _FakeRecipeVersionDocumentDao_12(
           this,
           Invocation.getter(#recipeVersionDocumentDao),
         ),
@@ -2193,11 +2312,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i12.CountSessionDao get countSessionDao => (super.noSuchMethod(
         Invocation.getter(#countSessionDao),
-        returnValue: _FakeCountSessionDao_11(
+        returnValue: _FakeCountSessionDao_13(
           this,
           Invocation.getter(#countSessionDao),
         ),
-        returnValueForMissingStub: _FakeCountSessionDao_11(
+        returnValueForMissingStub: _FakeCountSessionDao_13(
           this,
           Invocation.getter(#countSessionDao),
         ),
@@ -2206,11 +2325,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i13.CountLineDao get countLineDao => (super.noSuchMethod(
         Invocation.getter(#countLineDao),
-        returnValue: _FakeCountLineDao_12(
+        returnValue: _FakeCountLineDao_14(
           this,
           Invocation.getter(#countLineDao),
         ),
-        returnValueForMissingStub: _FakeCountLineDao_12(
+        returnValueForMissingStub: _FakeCountLineDao_14(
           this,
           Invocation.getter(#countLineDao),
         ),
@@ -2219,11 +2338,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i14.ForensicAlertDao get forensicAlertDao => (super.noSuchMethod(
         Invocation.getter(#forensicAlertDao),
-        returnValue: _FakeForensicAlertDao_13(
+        returnValue: _FakeForensicAlertDao_15(
           this,
           Invocation.getter(#forensicAlertDao),
         ),
-        returnValueForMissingStub: _FakeForensicAlertDao_13(
+        returnValueForMissingStub: _FakeForensicAlertDao_15(
           this,
           Invocation.getter(#forensicAlertDao),
         ),
@@ -2232,11 +2351,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i15.MovementDao get movementDao => (super.noSuchMethod(
         Invocation.getter(#movementDao),
-        returnValue: _FakeMovementDao_14(
+        returnValue: _FakeMovementDao_16(
           this,
           Invocation.getter(#movementDao),
         ),
-        returnValueForMissingStub: _FakeMovementDao_14(
+        returnValueForMissingStub: _FakeMovementDao_16(
           this,
           Invocation.getter(#movementDao),
         ),
@@ -2245,11 +2364,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i16.MovementSyncStateDao get movementSyncStateDao => (super.noSuchMethod(
         Invocation.getter(#movementSyncStateDao),
-        returnValue: _FakeMovementSyncStateDao_15(
+        returnValue: _FakeMovementSyncStateDao_17(
           this,
           Invocation.getter(#movementSyncStateDao),
         ),
-        returnValueForMissingStub: _FakeMovementSyncStateDao_15(
+        returnValueForMissingStub: _FakeMovementSyncStateDao_17(
           this,
           Invocation.getter(#movementSyncStateDao),
         ),
@@ -2259,11 +2378,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i17.KardexRecalculateQueueDao get kardexRecalculateQueueDao =>
       (super.noSuchMethod(
         Invocation.getter(#kardexRecalculateQueueDao),
-        returnValue: _FakeKardexRecalculateQueueDao_16(
+        returnValue: _FakeKardexRecalculateQueueDao_18(
           this,
           Invocation.getter(#kardexRecalculateQueueDao),
         ),
-        returnValueForMissingStub: _FakeKardexRecalculateQueueDao_16(
+        returnValueForMissingStub: _FakeKardexRecalculateQueueDao_18(
           this,
           Invocation.getter(#kardexRecalculateQueueDao),
         ),
@@ -2272,11 +2391,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i18.KardexCorrectionDao get kardexCorrectionDao => (super.noSuchMethod(
         Invocation.getter(#kardexCorrectionDao),
-        returnValue: _FakeKardexCorrectionDao_17(
+        returnValue: _FakeKardexCorrectionDao_19(
           this,
           Invocation.getter(#kardexCorrectionDao),
         ),
-        returnValueForMissingStub: _FakeKardexCorrectionDao_17(
+        returnValueForMissingStub: _FakeKardexCorrectionDao_19(
           this,
           Invocation.getter(#kardexCorrectionDao),
         ),
@@ -2285,11 +2404,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i19.InventoryDao get inventoryDao => (super.noSuchMethod(
         Invocation.getter(#inventoryDao),
-        returnValue: _FakeInventoryDao_18(
+        returnValue: _FakeInventoryDao_20(
           this,
           Invocation.getter(#inventoryDao),
         ),
-        returnValueForMissingStub: _FakeInventoryDao_18(
+        returnValueForMissingStub: _FakeInventoryDao_20(
           this,
           Invocation.getter(#inventoryDao),
         ),
@@ -2298,11 +2417,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i20.SupplierDao get supplierDao => (super.noSuchMethod(
         Invocation.getter(#supplierDao),
-        returnValue: _FakeSupplierDao_19(
+        returnValue: _FakeSupplierDao_21(
           this,
           Invocation.getter(#supplierDao),
         ),
-        returnValueForMissingStub: _FakeSupplierDao_19(
+        returnValueForMissingStub: _FakeSupplierDao_21(
           this,
           Invocation.getter(#supplierDao),
         ),
@@ -2311,11 +2430,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i21.WarehouseDao get warehouseDao => (super.noSuchMethod(
         Invocation.getter(#warehouseDao),
-        returnValue: _FakeWarehouseDao_20(
+        returnValue: _FakeWarehouseDao_22(
           this,
           Invocation.getter(#warehouseDao),
         ),
-        returnValueForMissingStub: _FakeWarehouseDao_20(
+        returnValueForMissingStub: _FakeWarehouseDao_22(
           this,
           Invocation.getter(#warehouseDao),
         ),
@@ -2324,11 +2443,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i22.PurchaseDao get purchaseDao => (super.noSuchMethod(
         Invocation.getter(#purchaseDao),
-        returnValue: _FakePurchaseDao_21(
+        returnValue: _FakePurchaseDao_23(
           this,
           Invocation.getter(#purchaseDao),
         ),
-        returnValueForMissingStub: _FakePurchaseDao_21(
+        returnValueForMissingStub: _FakePurchaseDao_23(
           this,
           Invocation.getter(#purchaseDao),
         ),
@@ -2338,11 +2457,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i23.ProductionOrderDocumentDao get productionOrderDocumentDao =>
       (super.noSuchMethod(
         Invocation.getter(#productionOrderDocumentDao),
-        returnValue: _FakeProductionOrderDocumentDao_22(
+        returnValue: _FakeProductionOrderDocumentDao_24(
           this,
           Invocation.getter(#productionOrderDocumentDao),
         ),
-        returnValueForMissingStub: _FakeProductionOrderDocumentDao_22(
+        returnValueForMissingStub: _FakeProductionOrderDocumentDao_24(
           this,
           Invocation.getter(#productionOrderDocumentDao),
         ),
@@ -2352,11 +2471,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i24.ProductionTransactionDao get productionTransactionDao =>
       (super.noSuchMethod(
         Invocation.getter(#productionTransactionDao),
-        returnValue: _FakeProductionTransactionDao_23(
+        returnValue: _FakeProductionTransactionDao_25(
           this,
           Invocation.getter(#productionTransactionDao),
         ),
-        returnValueForMissingStub: _FakeProductionTransactionDao_23(
+        returnValueForMissingStub: _FakeProductionTransactionDao_25(
           this,
           Invocation.getter(#productionTransactionDao),
         ),
@@ -2365,11 +2484,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i25.UomConversionDao get uomConversionDao => (super.noSuchMethod(
         Invocation.getter(#uomConversionDao),
-        returnValue: _FakeUomConversionDao_24(
+        returnValue: _FakeUomConversionDao_26(
           this,
           Invocation.getter(#uomConversionDao),
         ),
-        returnValueForMissingStub: _FakeUomConversionDao_24(
+        returnValueForMissingStub: _FakeUomConversionDao_26(
           this,
           Invocation.getter(#uomConversionDao),
         ),
@@ -2378,11 +2497,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i26.BatchDao get batchDao => (super.noSuchMethod(
         Invocation.getter(#batchDao),
-        returnValue: _FakeBatchDao_25(
+        returnValue: _FakeBatchDao_27(
           this,
           Invocation.getter(#batchDao),
         ),
-        returnValueForMissingStub: _FakeBatchDao_25(
+        returnValueForMissingStub: _FakeBatchDao_27(
           this,
           Invocation.getter(#batchDao),
         ),
@@ -2391,11 +2510,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i27.CatalogValueDao get catalogValueDao => (super.noSuchMethod(
         Invocation.getter(#catalogValueDao),
-        returnValue: _FakeCatalogValueDao_26(
+        returnValue: _FakeCatalogValueDao_28(
           this,
           Invocation.getter(#catalogValueDao),
         ),
-        returnValueForMissingStub: _FakeCatalogValueDao_26(
+        returnValueForMissingStub: _FakeCatalogValueDao_28(
           this,
           Invocation.getter(#catalogValueDao),
         ),
@@ -2404,11 +2523,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i28.InvoiceDao get invoiceDao => (super.noSuchMethod(
         Invocation.getter(#invoiceDao),
-        returnValue: _FakeInvoiceDao_27(
+        returnValue: _FakeInvoiceDao_29(
           this,
           Invocation.getter(#invoiceDao),
         ),
-        returnValueForMissingStub: _FakeInvoiceDao_27(
+        returnValueForMissingStub: _FakeInvoiceDao_29(
           this,
           Invocation.getter(#invoiceDao),
         ),
@@ -2417,11 +2536,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i29.InvoiceItemDao get invoiceItemDao => (super.noSuchMethod(
         Invocation.getter(#invoiceItemDao),
-        returnValue: _FakeInvoiceItemDao_28(
+        returnValue: _FakeInvoiceItemDao_30(
           this,
           Invocation.getter(#invoiceItemDao),
         ),
-        returnValueForMissingStub: _FakeInvoiceItemDao_28(
+        returnValueForMissingStub: _FakeInvoiceItemDao_30(
           this,
           Invocation.getter(#invoiceItemDao),
         ),
@@ -2430,11 +2549,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i30.PaymentDao get paymentDao => (super.noSuchMethod(
         Invocation.getter(#paymentDao),
-        returnValue: _FakePaymentDao_29(
+        returnValue: _FakePaymentDao_31(
           this,
           Invocation.getter(#paymentDao),
         ),
-        returnValueForMissingStub: _FakePaymentDao_29(
+        returnValueForMissingStub: _FakePaymentDao_31(
           this,
           Invocation.getter(#paymentDao),
         ),
@@ -2443,11 +2562,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i31.TaxConfigDao get taxConfigDao => (super.noSuchMethod(
         Invocation.getter(#taxConfigDao),
-        returnValue: _FakeTaxConfigDao_30(
+        returnValue: _FakeTaxConfigDao_32(
           this,
           Invocation.getter(#taxConfigDao),
         ),
-        returnValueForMissingStub: _FakeTaxConfigDao_30(
+        returnValueForMissingStub: _FakeTaxConfigDao_32(
           this,
           Invocation.getter(#taxConfigDao),
         ),
@@ -2456,11 +2575,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i32.SalesTransactionDao get salesTransactionDao => (super.noSuchMethod(
         Invocation.getter(#salesTransactionDao),
-        returnValue: _FakeSalesTransactionDao_31(
+        returnValue: _FakeSalesTransactionDao_33(
           this,
           Invocation.getter(#salesTransactionDao),
         ),
-        returnValueForMissingStub: _FakeSalesTransactionDao_31(
+        returnValueForMissingStub: _FakeSalesTransactionDao_33(
           this,
           Invocation.getter(#salesTransactionDao),
         ),
@@ -2469,11 +2588,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i33.CashierSessionDao get cashierSessionDao => (super.noSuchMethod(
         Invocation.getter(#cashierSessionDao),
-        returnValue: _FakeCashierSessionDao_32(
+        returnValue: _FakeCashierSessionDao_34(
           this,
           Invocation.getter(#cashierSessionDao),
         ),
-        returnValueForMissingStub: _FakeCashierSessionDao_32(
+        returnValueForMissingStub: _FakeCashierSessionDao_34(
           this,
           Invocation.getter(#cashierSessionDao),
         ),
@@ -2482,11 +2601,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i34.CashMovementDao get cashMovementDao => (super.noSuchMethod(
         Invocation.getter(#cashMovementDao),
-        returnValue: _FakeCashMovementDao_33(
+        returnValue: _FakeCashMovementDao_35(
           this,
           Invocation.getter(#cashMovementDao),
         ),
-        returnValueForMissingStub: _FakeCashMovementDao_33(
+        returnValueForMissingStub: _FakeCashMovementDao_35(
           this,
           Invocation.getter(#cashMovementDao),
         ),
@@ -2495,11 +2614,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i35.HoldTicketDao get holdTicketDao => (super.noSuchMethod(
         Invocation.getter(#holdTicketDao),
-        returnValue: _FakeHoldTicketDao_34(
+        returnValue: _FakeHoldTicketDao_36(
           this,
           Invocation.getter(#holdTicketDao),
         ),
-        returnValueForMissingStub: _FakeHoldTicketDao_34(
+        returnValueForMissingStub: _FakeHoldTicketDao_36(
           this,
           Invocation.getter(#holdTicketDao),
         ),
@@ -2508,11 +2627,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i36.PromotionDao get promotionDao => (super.noSuchMethod(
         Invocation.getter(#promotionDao),
-        returnValue: _FakePromotionDao_35(
+        returnValue: _FakePromotionDao_37(
           this,
           Invocation.getter(#promotionDao),
         ),
-        returnValueForMissingStub: _FakePromotionDao_35(
+        returnValueForMissingStub: _FakePromotionDao_37(
           this,
           Invocation.getter(#promotionDao),
         ),
@@ -2521,11 +2640,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i37.ModifierDao get modifierDao => (super.noSuchMethod(
         Invocation.getter(#modifierDao),
-        returnValue: _FakeModifierDao_36(
+        returnValue: _FakeModifierDao_38(
           this,
           Invocation.getter(#modifierDao),
         ),
-        returnValueForMissingStub: _FakeModifierDao_36(
+        returnValueForMissingStub: _FakeModifierDao_38(
           this,
           Invocation.getter(#modifierDao),
         ),
@@ -2534,11 +2653,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i38.RestaurantAreaDao get restaurantAreaDao => (super.noSuchMethod(
         Invocation.getter(#restaurantAreaDao),
-        returnValue: _FakeRestaurantAreaDao_37(
+        returnValue: _FakeRestaurantAreaDao_39(
           this,
           Invocation.getter(#restaurantAreaDao),
         ),
-        returnValueForMissingStub: _FakeRestaurantAreaDao_37(
+        returnValueForMissingStub: _FakeRestaurantAreaDao_39(
           this,
           Invocation.getter(#restaurantAreaDao),
         ),
@@ -2547,11 +2666,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i39.RestaurantTableDao get restaurantTableDao => (super.noSuchMethod(
         Invocation.getter(#restaurantTableDao),
-        returnValue: _FakeRestaurantTableDao_38(
+        returnValue: _FakeRestaurantTableDao_40(
           this,
           Invocation.getter(#restaurantTableDao),
         ),
-        returnValueForMissingStub: _FakeRestaurantTableDao_38(
+        returnValueForMissingStub: _FakeRestaurantTableDao_40(
           this,
           Invocation.getter(#restaurantTableDao),
         ),
@@ -2560,11 +2679,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i40.KitchenOrderDao get kitchenOrderDao => (super.noSuchMethod(
         Invocation.getter(#kitchenOrderDao),
-        returnValue: _FakeKitchenOrderDao_39(
+        returnValue: _FakeKitchenOrderDao_41(
           this,
           Invocation.getter(#kitchenOrderDao),
         ),
-        returnValueForMissingStub: _FakeKitchenOrderDao_39(
+        returnValueForMissingStub: _FakeKitchenOrderDao_41(
           this,
           Invocation.getter(#kitchenOrderDao),
         ),
@@ -2573,11 +2692,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i41.CustomerDao get customerDao => (super.noSuchMethod(
         Invocation.getter(#customerDao),
-        returnValue: _FakeCustomerDao_40(
+        returnValue: _FakeCustomerDao_42(
           this,
           Invocation.getter(#customerDao),
         ),
-        returnValueForMissingStub: _FakeCustomerDao_40(
+        returnValueForMissingStub: _FakeCustomerDao_42(
           this,
           Invocation.getter(#customerDao),
         ),
@@ -2587,11 +2706,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i42.CustomerPointTransactionDao get customerPointTransactionDao =>
       (super.noSuchMethod(
         Invocation.getter(#customerPointTransactionDao),
-        returnValue: _FakeCustomerPointTransactionDao_41(
+        returnValue: _FakeCustomerPointTransactionDao_43(
           this,
           Invocation.getter(#customerPointTransactionDao),
         ),
-        returnValueForMissingStub: _FakeCustomerPointTransactionDao_41(
+        returnValueForMissingStub: _FakeCustomerPointTransactionDao_43(
           this,
           Invocation.getter(#customerPointTransactionDao),
         ),
@@ -2600,11 +2719,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i43.LoyaltyProgramDao get loyaltyProgramDao => (super.noSuchMethod(
         Invocation.getter(#loyaltyProgramDao),
-        returnValue: _FakeLoyaltyProgramDao_42(
+        returnValue: _FakeLoyaltyProgramDao_44(
           this,
           Invocation.getter(#loyaltyProgramDao),
         ),
-        returnValueForMissingStub: _FakeLoyaltyProgramDao_42(
+        returnValueForMissingStub: _FakeLoyaltyProgramDao_44(
           this,
           Invocation.getter(#loyaltyProgramDao),
         ),
@@ -2613,11 +2732,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i44.LoyaltyRewardDao get loyaltyRewardDao => (super.noSuchMethod(
         Invocation.getter(#loyaltyRewardDao),
-        returnValue: _FakeLoyaltyRewardDao_43(
+        returnValue: _FakeLoyaltyRewardDao_45(
           this,
           Invocation.getter(#loyaltyRewardDao),
         ),
-        returnValueForMissingStub: _FakeLoyaltyRewardDao_43(
+        returnValueForMissingStub: _FakeLoyaltyRewardDao_45(
           this,
           Invocation.getter(#loyaltyRewardDao),
         ),
@@ -2626,11 +2745,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i45.FiscalConfigLocalDao get fiscalConfigLocalDao => (super.noSuchMethod(
         Invocation.getter(#fiscalConfigLocalDao),
-        returnValue: _FakeFiscalConfigLocalDao_44(
+        returnValue: _FakeFiscalConfigLocalDao_46(
           this,
           Invocation.getter(#fiscalConfigLocalDao),
         ),
-        returnValueForMissingStub: _FakeFiscalConfigLocalDao_44(
+        returnValueForMissingStub: _FakeFiscalConfigLocalDao_46(
           this,
           Invocation.getter(#fiscalConfigLocalDao),
         ),
@@ -2640,11 +2759,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i46.ActivationAttemptLocalDao get activationAttemptLocalDao =>
       (super.noSuchMethod(
         Invocation.getter(#activationAttemptLocalDao),
-        returnValue: _FakeActivationAttemptLocalDao_45(
+        returnValue: _FakeActivationAttemptLocalDao_47(
           this,
           Invocation.getter(#activationAttemptLocalDao),
         ),
-        returnValueForMissingStub: _FakeActivationAttemptLocalDao_45(
+        returnValueForMissingStub: _FakeActivationAttemptLocalDao_47(
           this,
           Invocation.getter(#activationAttemptLocalDao),
         ),
@@ -2654,11 +2773,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i47.ActivationCheckResultLocalDao get activationCheckResultLocalDao =>
       (super.noSuchMethod(
         Invocation.getter(#activationCheckResultLocalDao),
-        returnValue: _FakeActivationCheckResultLocalDao_46(
+        returnValue: _FakeActivationCheckResultLocalDao_48(
           this,
           Invocation.getter(#activationCheckResultLocalDao),
         ),
-        returnValueForMissingStub: _FakeActivationCheckResultLocalDao_46(
+        returnValueForMissingStub: _FakeActivationCheckResultLocalDao_48(
           this,
           Invocation.getter(#activationCheckResultLocalDao),
         ),
@@ -2668,11 +2787,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i48.FirstSuccessfulSaleClaimDao get firstSuccessfulSaleClaimDao =>
       (super.noSuchMethod(
         Invocation.getter(#firstSuccessfulSaleClaimDao),
-        returnValue: _FakeFirstSuccessfulSaleClaimDao_47(
+        returnValue: _FakeFirstSuccessfulSaleClaimDao_49(
           this,
           Invocation.getter(#firstSuccessfulSaleClaimDao),
         ),
-        returnValueForMissingStub: _FakeFirstSuccessfulSaleClaimDao_47(
+        returnValueForMissingStub: _FakeFirstSuccessfulSaleClaimDao_49(
           this,
           Invocation.getter(#firstSuccessfulSaleClaimDao),
         ),
@@ -2682,11 +2801,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i49.FirstCustomerSaleObservationDao get firstCustomerSaleObservationDao =>
       (super.noSuchMethod(
         Invocation.getter(#firstCustomerSaleObservationDao),
-        returnValue: _FakeFirstCustomerSaleObservationDao_48(
+        returnValue: _FakeFirstCustomerSaleObservationDao_50(
           this,
           Invocation.getter(#firstCustomerSaleObservationDao),
         ),
-        returnValueForMissingStub: _FakeFirstCustomerSaleObservationDao_48(
+        returnValueForMissingStub: _FakeFirstCustomerSaleObservationDao_50(
           this,
           Invocation.getter(#firstCustomerSaleObservationDao),
         ),
@@ -2695,11 +2814,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i50.ActivationOutboxDao get activationOutboxDao => (super.noSuchMethod(
         Invocation.getter(#activationOutboxDao),
-        returnValue: _FakeActivationOutboxDao_49(
+        returnValue: _FakeActivationOutboxDao_51(
           this,
           Invocation.getter(#activationOutboxDao),
         ),
-        returnValueForMissingStub: _FakeActivationOutboxDao_49(
+        returnValueForMissingStub: _FakeActivationOutboxDao_51(
           this,
           Invocation.getter(#activationOutboxDao),
         ),
@@ -2708,11 +2827,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i51.AuthorityProjectionDao get authorityProjectionDao => (super.noSuchMethod(
         Invocation.getter(#authorityProjectionDao),
-        returnValue: _FakeAuthorityProjectionDao_50(
+        returnValue: _FakeAuthorityProjectionDao_52(
           this,
           Invocation.getter(#authorityProjectionDao),
         ),
-        returnValueForMissingStub: _FakeAuthorityProjectionDao_50(
+        returnValueForMissingStub: _FakeAuthorityProjectionDao_52(
           this,
           Invocation.getter(#authorityProjectionDao),
         ),
@@ -2722,11 +2841,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i52.AuthorityIngestionVerdictDao get authorityIngestionVerdictDao =>
       (super.noSuchMethod(
         Invocation.getter(#authorityIngestionVerdictDao),
-        returnValue: _FakeAuthorityIngestionVerdictDao_51(
+        returnValue: _FakeAuthorityIngestionVerdictDao_53(
           this,
           Invocation.getter(#authorityIngestionVerdictDao),
         ),
-        returnValueForMissingStub: _FakeAuthorityIngestionVerdictDao_51(
+        returnValueForMissingStub: _FakeAuthorityIngestionVerdictDao_53(
           this,
           Invocation.getter(#authorityIngestionVerdictDao),
         ),
@@ -2735,11 +2854,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i53.FulfillmentTopologyDao get fulfillmentTopologyDao => (super.noSuchMethod(
         Invocation.getter(#fulfillmentTopologyDao),
-        returnValue: _FakeFulfillmentTopologyDao_52(
+        returnValue: _FakeFulfillmentTopologyDao_54(
           this,
           Invocation.getter(#fulfillmentTopologyDao),
         ),
-        returnValueForMissingStub: _FakeFulfillmentTopologyDao_52(
+        returnValueForMissingStub: _FakeFulfillmentTopologyDao_54(
           this,
           Invocation.getter(#fulfillmentTopologyDao),
         ),
@@ -2749,11 +2868,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   _i54.FulfillmentPersistenceDao get fulfillmentPersistenceDao =>
       (super.noSuchMethod(
         Invocation.getter(#fulfillmentPersistenceDao),
-        returnValue: _FakeFulfillmentPersistenceDao_53(
+        returnValue: _FakeFulfillmentPersistenceDao_55(
           this,
           Invocation.getter(#fulfillmentPersistenceDao),
         ),
-        returnValueForMissingStub: _FakeFulfillmentPersistenceDao_53(
+        returnValueForMissingStub: _FakeFulfillmentPersistenceDao_55(
           this,
           Invocation.getter(#fulfillmentPersistenceDao),
         ),
@@ -2762,11 +2881,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i55.OhacDeliveryDao get ohacDeliveryDao => (super.noSuchMethod(
         Invocation.getter(#ohacDeliveryDao),
-        returnValue: _FakeOhacDeliveryDao_54(
+        returnValue: _FakeOhacDeliveryDao_56(
           this,
           Invocation.getter(#ohacDeliveryDao),
         ),
-        returnValueForMissingStub: _FakeOhacDeliveryDao_54(
+        returnValueForMissingStub: _FakeOhacDeliveryDao_56(
           this,
           Invocation.getter(#ohacDeliveryDao),
         ),
@@ -2775,11 +2894,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i56.StreamController<String> get changeListener => (super.noSuchMethod(
         Invocation.getter(#changeListener),
-        returnValue: _FakeStreamController_55<String>(
+        returnValue: _FakeStreamController_57<String>(
           this,
           Invocation.getter(#changeListener),
         ),
-        returnValueForMissingStub: _FakeStreamController_55<String>(
+        returnValueForMissingStub: _FakeStreamController_57<String>(
           this,
           Invocation.getter(#changeListener),
         ),
@@ -2798,11 +2917,11 @@ class MockAppDatabase extends _i1.Mock implements _i3.AppDatabase {
   @override
   _i57.DatabaseExecutor get database => (super.noSuchMethod(
         Invocation.getter(#database),
-        returnValue: _FakeDatabaseExecutor_56(
+        returnValue: _FakeDatabaseExecutor_58(
           this,
           Invocation.getter(#database),
         ),
-        returnValueForMissingStub: _FakeDatabaseExecutor_56(
+        returnValueForMissingStub: _FakeDatabaseExecutor_58(
           this,
           Invocation.getter(#database),
         ),
@@ -2895,7 +3014,7 @@ class MockPrinterConfigService extends _i1.Mock
           [],
         ),
         returnValue:
-            _i56.Future<_i58.PrinterConfig>.value(_FakePrinterConfig_57(
+            _i56.Future<_i58.PrinterConfig>.value(_FakePrinterConfig_59(
           this,
           Invocation.method(
             #getPrinterConfig,
@@ -2903,7 +3022,7 @@ class MockPrinterConfigService extends _i1.Mock
           ),
         )),
         returnValueForMissingStub:
-            _i56.Future<_i58.PrinterConfig>.value(_FakePrinterConfig_57(
+            _i56.Future<_i58.PrinterConfig>.value(_FakePrinterConfig_59(
           this,
           Invocation.method(
             #getPrinterConfig,

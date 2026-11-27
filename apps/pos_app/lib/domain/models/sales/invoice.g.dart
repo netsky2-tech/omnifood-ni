@@ -52,6 +52,9 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       bcnOfficialRate: (json['bcnOfficialRate'] as num?)?.toDouble() ?? 36.6241,
       commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.50,
       totalUsd: (json['totalUsd'] as num?)?.toDouble() ?? 0.0,
+      contingencyManualSeries: json['contingencyManualSeries'] as String?,
+      contingencyManualNumber: json['contingencyManualNumber'] as String?,
+      contingencyManualIssuedAt: json['contingencyManualIssuedAt'] as String?,
     );
 
 Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
@@ -95,6 +98,9 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'bcnOfficialRate': instance.bcnOfficialRate,
       'commercialRate': instance.commercialRate,
       'totalUsd': instance.totalUsd,
+      'contingencyManualSeries': instance.contingencyManualSeries,
+      'contingencyManualNumber': instance.contingencyManualNumber,
+      'contingencyManualIssuedAt': instance.contingencyManualIssuedAt,
     };
 
 const _$SyncStatusEnumMap = {

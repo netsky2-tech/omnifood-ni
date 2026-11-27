@@ -126,9 +126,31 @@ class _FakeTerminalLinking_6 extends _i1.SmartFake
         );
 }
 
-class _FakeAuditSyncOutcome_7 extends _i1.SmartFake
+class _FakeDeviceReactivationLookupResult_7 extends _i1.SmartFake
+    implements _i8.DeviceReactivationLookupResult {
+  _FakeDeviceReactivationLookupResult_7(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeCompletedReactivationResult_8 extends _i1.SmartFake
+    implements _i8.CompletedReactivationResult {
+  _FakeCompletedReactivationResult_8(
+    Object parent,
+    Invocation parentInvocation,
+  ) : super(
+          parent,
+          parentInvocation,
+        );
+}
+
+class _FakeAuditSyncOutcome_9 extends _i1.SmartFake
     implements _i9.AuditSyncOutcome {
-  _FakeAuditSyncOutcome_7(
+  _FakeAuditSyncOutcome_9(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -137,8 +159,8 @@ class _FakeAuditSyncOutcome_7 extends _i1.SmartFake
         );
 }
 
-class _FakeDuration_8 extends _i1.SmartFake implements Duration {
-  _FakeDuration_8(
+class _FakeDuration_10 extends _i1.SmartFake implements Duration {
+  _FakeDuration_10(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -147,9 +169,9 @@ class _FakeDuration_8 extends _i1.SmartFake implements Duration {
         );
 }
 
-class _FakeSyncRunOutcome_9 extends _i1.SmartFake
+class _FakeSyncRunOutcome_11 extends _i1.SmartFake
     implements _i10.SyncRunOutcome {
-  _FakeSyncRunOutcome_9(
+  _FakeSyncRunOutcome_11(
     Object parent,
     Invocation parentInvocation,
   ) : super(
@@ -1395,9 +1417,9 @@ class MockAuthRepository extends _i1.Mock implements _i24.AuthRepository {
   @override
   _i18.Future<_i8.TerminalLinking> claimLinkingCode(
     String? code,
-    String? deviceId,
-    {String? hardwareFingerprint,}
-  ) =>
+    String? deviceId, {
+    String? hardwareFingerprint,
+  }) =>
       (super.noSuchMethod(
         Invocation.method(
           #claimLinkingCode,
@@ -1405,6 +1427,7 @@ class MockAuthRepository extends _i1.Mock implements _i24.AuthRepository {
             code,
             deviceId,
           ],
+          {#hardwareFingerprint: hardwareFingerprint},
         ),
         returnValue:
             _i18.Future<_i8.TerminalLinking>.value(_FakeTerminalLinking_6(
@@ -1415,6 +1438,7 @@ class MockAuthRepository extends _i1.Mock implements _i24.AuthRepository {
               code,
               deviceId,
             ],
+            {#hardwareFingerprint: hardwareFingerprint},
           ),
         )),
         returnValueForMissingStub:
@@ -1426,9 +1450,104 @@ class MockAuthRepository extends _i1.Mock implements _i24.AuthRepository {
               code,
               deviceId,
             ],
+            {#hardwareFingerprint: hardwareFingerprint},
           ),
         )),
       ) as _i18.Future<_i8.TerminalLinking>);
+
+  @override
+  _i18.Future<_i8.DeviceReactivationLookupResult> lookupReactivationDevice(
+          String? hardwareFingerprint) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #lookupReactivationDevice,
+          [hardwareFingerprint],
+        ),
+        returnValue: _i18.Future<_i8.DeviceReactivationLookupResult>.value(
+            _FakeDeviceReactivationLookupResult_7(
+          this,
+          Invocation.method(
+            #lookupReactivationDevice,
+            [hardwareFingerprint],
+          ),
+        )),
+        returnValueForMissingStub:
+            _i18.Future<_i8.DeviceReactivationLookupResult>.value(
+                _FakeDeviceReactivationLookupResult_7(
+          this,
+          Invocation.method(
+            #lookupReactivationDevice,
+            [hardwareFingerprint],
+          ),
+        )),
+      ) as _i18.Future<_i8.DeviceReactivationLookupResult>);
+
+  @override
+  _i18.Future<_i8.CompletedReactivationResult> completeReactivation({
+    required String? challengeId,
+    required String? hardwareFingerprint,
+    String? recoveryCode,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #completeReactivation,
+          [],
+          {
+            #challengeId: challengeId,
+            #hardwareFingerprint: hardwareFingerprint,
+            #recoveryCode: recoveryCode,
+          },
+        ),
+        returnValue: _i18.Future<_i8.CompletedReactivationResult>.value(
+            _FakeCompletedReactivationResult_8(
+          this,
+          Invocation.method(
+            #completeReactivation,
+            [],
+            {
+              #challengeId: challengeId,
+              #hardwareFingerprint: hardwareFingerprint,
+              #recoveryCode: recoveryCode,
+            },
+          ),
+        )),
+        returnValueForMissingStub:
+            _i18.Future<_i8.CompletedReactivationResult>.value(
+                _FakeCompletedReactivationResult_8(
+          this,
+          Invocation.method(
+            #completeReactivation,
+            [],
+            {
+              #challengeId: challengeId,
+              #hardwareFingerprint: hardwareFingerprint,
+              #recoveryCode: recoveryCode,
+            },
+          ),
+        )),
+      ) as _i18.Future<_i8.CompletedReactivationResult>);
+
+  @override
+  _i18.Future<void> confirmReactivationCredential({
+    required String? challengeId,
+    required String? credentialId,
+    required int? version,
+    required String? renewalSecret,
+  }) =>
+      (super.noSuchMethod(
+        Invocation.method(
+          #confirmReactivationCredential,
+          [],
+          {
+            #challengeId: challengeId,
+            #credentialId: credentialId,
+            #version: version,
+            #renewalSecret: renewalSecret,
+          },
+        ),
+        returnValue: _i18.Future<void>.value(),
+        returnValueForMissingStub: _i18.Future<void>.value(),
+      ) as _i18.Future<void>);
 
   @override
   _i18.Future<void> syncStaff() => (super.noSuchMethod(
@@ -1648,7 +1767,7 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
           [],
         ),
         returnValue:
-            _i18.Future<_i9.AuditSyncOutcome>.value(_FakeAuditSyncOutcome_7(
+            _i18.Future<_i9.AuditSyncOutcome>.value(_FakeAuditSyncOutcome_9(
           this,
           Invocation.method(
             #syncLogs,
@@ -1656,7 +1775,7 @@ class MockAuditRepository extends _i1.Mock implements _i9.AuditRepository {
           ),
         )),
         returnValueForMissingStub:
-            _i18.Future<_i9.AuditSyncOutcome>.value(_FakeAuditSyncOutcome_7(
+            _i18.Future<_i9.AuditSyncOutcome>.value(_FakeAuditSyncOutcome_9(
           this,
           Invocation.method(
             #syncLogs,
@@ -1766,6 +1885,27 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
       ) as bool);
 
   @override
+  Set<String> get planBlockedCapabilities => (super.noSuchMethod(
+        Invocation.getter(#planBlockedCapabilities),
+        returnValue: <String>{},
+        returnValueForMissingStub: <String>{},
+      ) as Set<String>);
+
+  @override
+  Set<String> get planBlockedDomains => (super.noSuchMethod(
+        Invocation.getter(#planBlockedDomains),
+        returnValue: <String>{},
+        returnValueForMissingStub: <String>{},
+      ) as Set<String>);
+
+  @override
+  bool get isPlanBlocked => (super.noSuchMethod(
+        Invocation.getter(#isPlanBlocked),
+        returnValue: false,
+        returnValueForMissingStub: false,
+      ) as bool);
+
+  @override
   void start() => super.noSuchMethod(
         Invocation.method(
           #start,
@@ -1798,14 +1938,14 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
           #getNextBackoffDelay,
           [],
         ),
-        returnValue: _FakeDuration_8(
+        returnValue: _FakeDuration_10(
           this,
           Invocation.method(
             #getNextBackoffDelay,
             [],
           ),
         ),
-        returnValueForMissingStub: _FakeDuration_8(
+        returnValueForMissingStub: _FakeDuration_10(
           this,
           Invocation.method(
             #getNextBackoffDelay,
@@ -1873,7 +2013,7 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
           [],
         ),
         returnValue:
-            _i18.Future<_i10.SyncRunOutcome>.value(_FakeSyncRunOutcome_9(
+            _i18.Future<_i10.SyncRunOutcome>.value(_FakeSyncRunOutcome_11(
           this,
           Invocation.method(
             #triggerManualSync,
@@ -1881,7 +2021,7 @@ class MockSyncService extends _i1.Mock implements _i10.SyncService {
           ),
         )),
         returnValueForMissingStub:
-            _i18.Future<_i10.SyncRunOutcome>.value(_FakeSyncRunOutcome_9(
+            _i18.Future<_i10.SyncRunOutcome>.value(_FakeSyncRunOutcome_11(
           this,
           Invocation.method(
             #triggerManualSync,
