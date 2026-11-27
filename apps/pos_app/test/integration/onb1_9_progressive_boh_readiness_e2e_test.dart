@@ -262,7 +262,7 @@ void main() {
       // 3. Verify real thermal printer formatted output
       final printedText = printerAdapter.lastPrintedText;
       expect(printedText, isNotNull);
-      expect(printedText, contains('OMNIFOOD NI'));
+      expect(printedText, isNot(contains('OMNIFOOD NI')));
       expect(printedText, contains('Gaseosa Zero Stock BOH'));
       expect(printedText, contains('35.00'));
 

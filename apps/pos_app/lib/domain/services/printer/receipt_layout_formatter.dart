@@ -516,7 +516,9 @@ class ReceiptLayoutFormatter {
     final dateFormat = DateFormat('dd/MM/yyyy HH:mm');
 
     // 1. BUSINESS HEADER (Centered)
-    buffer.writeln(center(doc.businessName));
+    if (doc.businessName.trim().isNotEmpty) {
+      buffer.writeln(center(doc.businessName));
+    }
     if (doc.legalName != null && doc.legalName!.isNotEmpty) {
       buffer.writeln(center(doc.legalName!));
     }
@@ -841,10 +843,11 @@ class ReceiptLayoutFormatter {
               : formatTwoColumns('TOTAL CORDOBAS:', formatMoney(doc.total)),
         );
         buffer.writeln(doubleDivider());
-        for (final line in centerLines(
-          '** VENTA EXENTA DE IVA - POLITICA TEMPORAL **',
-        )) {
-          buffer.writeln(line);
+        final exemptionReason = doc.taxExemptionReason?.trim();
+        if (exemptionReason != null && exemptionReason.isNotEmpty) {
+          for (final line in centerLines(exemptionReason)) {
+            buffer.writeln(line);
+          }
         }
       } else {
         if (hasDiscount) {
@@ -1173,13 +1176,15 @@ class ReceiptLayoutFormatter {
     }
 
     // 2. Business Header
-    builder
-        .align(EscPosAlign.center)
-        .bold(true)
-        .fontSize(EscPosFontSize.doubleWidth)
-        .textLine(marginLine(doc.businessName))
-        .fontSize(EscPosFontSize.normal)
-        .bold(false);
+    builder.align(EscPosAlign.center);
+    if (doc.businessName.trim().isNotEmpty) {
+      builder
+          .bold(true)
+          .fontSize(EscPosFontSize.doubleWidth)
+          .textLine(marginLine(doc.businessName))
+          .fontSize(EscPosFontSize.normal)
+          .bold(false);
+    }
 
     if (doc.legalName != null && doc.legalName!.isNotEmpty) {
       marginTextLine(builder, doc.legalName!);
@@ -1543,12 +1548,13 @@ class ReceiptLayoutFormatter {
               ),
             )
             .bold(false)
-            .textLine(marginLine(doubleDivider()))
-            .align(EscPosAlign.center);
-        for (final line in centerLines(
-          '** VENTA EXENTA DE IVA - POLITICA TEMPORAL **',
-        )) {
-          marginTextLine(builder, line);
+            .textLine(marginLine(doubleDivider()));
+        final exemptionReasonEsc = doc.taxExemptionReason?.trim();
+        if (exemptionReasonEsc != null && exemptionReasonEsc.isNotEmpty) {
+          builder.align(EscPosAlign.center);
+          for (final line in centerLines(exemptionReasonEsc)) {
+            marginTextLine(builder, line);
+          }
         }
         builder.align(EscPosAlign.left);
       } else {

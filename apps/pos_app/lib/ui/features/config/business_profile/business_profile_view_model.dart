@@ -42,6 +42,7 @@ class BusinessProfileViewModel extends ChangeNotifier {
     'address': '',
     'phone': '',
     'legal_footer': '',
+    'tax_exemption_reason': '',
     'commercial_exchange_rate': '36.50',
     'bcn_official_exchange_rate': '36.6241',
     'checkout_fx_mode': 'COMMERCIAL',

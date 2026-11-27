@@ -316,6 +316,8 @@ class _RecordingPrinterPort implements PrinterPort {
     bool isReprint = false,
     DateTime? reprintAt,
     String? originDocumentReference,
+    String? footerMessage,
+    String? taxExemptionReason,
   }) async {
     printedReceipts.add('${invoice.id}|${invoice.number}|${invoice.total}');
     return PrinterResult.success();

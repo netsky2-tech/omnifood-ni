@@ -63,6 +63,8 @@ class UnavailablePrinterAdapter implements PrinterPort {
     bool isReprint = false,
     DateTime? reprintAt,
     String? originDocumentReference,
+    String? footerMessage,
+    String? taxExemptionReason,
   }) async {
     return PrinterResult.failure(
       PrinterStatus.error,

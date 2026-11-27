@@ -98,6 +98,14 @@ abstract class PrinterPort {
     /// printed on a fiscal document; do not repeat with this field the
     /// mistake this port previously made dropping customerRuc (#540 T4).
     String? originDocumentReference,
+
+    /// #540 AC-2/AC-5: optional configured legal/courtesy footer from
+    /// `local_configs['legal_footer']`. Null falls back to the courtesy footer.
+    String? footerMessage,
+
+    /// #540 AC-4: optional configured legal basis for temporary VAT exoneration
+    /// (e.g. MHCP-INTUR-DGI agreement for Fiestas Patrias / Semana Santa).
+    String? taxExemptionReason,
   });
 
   /// Prints a kitchen / KDS order ticket with buzzer / table identification.

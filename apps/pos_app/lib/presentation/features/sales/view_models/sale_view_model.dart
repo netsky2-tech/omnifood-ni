@@ -2649,11 +2649,14 @@ class SaleViewModel extends ChangeNotifier {
                 address: printerConfig.headerAddress,
                 phone: printerConfig.headerPhone,
                 cashierName: user.name,
+                customerRuc: invoiceToPrint.customerTaxId,
                 logoRasterBytes: logoRasterBytes,
                 taxRegime: _companyTaxRegime!,
                 isTaxExempt: _isGlobalTaxExempt,
                 loyaltyFeedback: _lastPostPaidFeedback,
                 fiscalAuthorizationNumber: checkoutAuthNumber,
+                footerMessage: printerConfig.legalFooter,
+                taxExemptionReason: printerConfig.taxExemptionReason,
                 copyLabel: copyLabel,
               );
               final copyResult = await activePrinterPort.printReceiptDocument(
@@ -2676,12 +2679,15 @@ class SaleViewModel extends ChangeNotifier {
               address: printerConfig.headerAddress,
               phone: printerConfig.headerPhone,
               cashierName: user.name,
+              customerRuc: invoiceToPrint.customerTaxId,
               logoRasterBytes: logoRasterBytes,
               taxRegime: _companyTaxRegime!,
               isTaxExempt: _isGlobalTaxExempt,
               paperWidthMm: printerConfig.paperWidthMm,
               loyaltyFeedback: _lastPostPaidFeedback,
               fiscalAuthorizationNumber: checkoutAuthNumber,
+              footerMessage: printerConfig.legalFooter,
+              taxExemptionReason: printerConfig.taxExemptionReason,
             );
 
             if (!printResult.isSuccess) {
@@ -2955,6 +2961,7 @@ class SaleViewModel extends ChangeNotifier {
         phone: fromSnapshot ? fiscalHeader['phone'] : config.headerPhone,
         cashierName: cashierName,
         cajaLabel: cajaLabel,
+        customerRuc: invoice.customerTaxId,
         logoRasterBytes: logoRasterBytes,
         taxRegime: effectiveRegime,
         isTaxExempt: invoice.globalTaxOverride,
@@ -2963,6 +2970,8 @@ class SaleViewModel extends ChangeNotifier {
         isReprint: isReprint,
         reprintAt: reprintAt,
         originDocumentReference: originDocumentReference,
+        footerMessage: config.legalFooter,
+        taxExemptionReason: config.taxExemptionReason,
       );
 
       if (!res.isSuccess) {

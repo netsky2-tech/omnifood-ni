@@ -66,6 +66,8 @@ class MockPrinterAdapter implements PrinterPort {
     bool isReprint = false,
     DateTime? reprintAt,
     String? originDocumentReference,
+    String? footerMessage,
+    String? taxExemptionReason,
   }) async {
     // Clear captures first so a failing call cannot leave stale argument values.
     lastPaperWidthMm = null;
@@ -111,6 +113,8 @@ class MockPrinterAdapter implements PrinterPort {
       isReprint: isReprint,
       reprintAt: reprintAt,
       originDocumentReference: originDocumentReference,
+      footerMessage: footerMessage,
+      taxExemptionReason: taxExemptionReason,
       loyaltyFeedback: loyaltyFeedback,
     );
     final text = layoutFormatter.formatReceiptDocumentText(document);

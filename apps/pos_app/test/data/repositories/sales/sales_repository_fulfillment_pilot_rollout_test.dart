@@ -54,6 +54,8 @@ class _FakePrinterPort implements PrinterPort {
     bool isReprint = false,
     DateTime? reprintAt,
     String? originDocumentReference,
+    String? footerMessage,
+    String? taxExemptionReason,
   }) async {
     if (failReceipt) {
       return PrinterResult.failure(PrinterStatus.error, 'Receipt failed');

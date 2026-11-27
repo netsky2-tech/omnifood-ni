@@ -38,6 +38,8 @@ class PrinterConfigService {
   /// `local_configs` and are simply ignored on read — no destructive
   /// migration, and nothing resurrects them.
   static const String dgiAuthorizationCodeKey = 'dgi_authorization_code';
+  static const String legalFooterKey = 'legal_footer';
+  static const String taxExemptionReasonKey = 'tax_exemption_reason';
   static const String headerAddressKey = 'printer_header_address';
   static const String headerPhoneKey = 'printer_header_phone';
   static const String logoBase64Key = 'printer_logo_base64';
@@ -178,6 +180,12 @@ class PrinterConfigService {
     final taxRegimeEntity = await _configDao.getConfigByKey(taxRegimeKey);
     final authCodeEntity =
         await _configDao.getConfigByKey(dgiAuthorizationCodeKey);
+    final legalFooterEntity =
+        await _configDao.getConfigByKey(legalFooterKey);
+    final trimmedLegalFooter = legalFooterEntity?.value.trim();
+    final taxExemptionReasonEntity =
+        await _configDao.getConfigByKey(taxExemptionReasonKey);
+    final trimmedExemptionReason = taxExemptionReasonEntity?.value.trim();
 
     return PrinterConfig(
       driverType: driverType,
@@ -188,13 +196,20 @@ class PrinterConfigService {
       networkIp: networkIpEntity?.value,
       networkPort: networkPort,
       copies: copies,
-      headerBusinessName: bizNameEntity?.value ?? 'OMNIFOOD NI',
+      headerBusinessName: bizNameEntity?.value.trim() ?? '',
       headerRuc: rucEntity?.value,
       fiscalRuc: fiscalRucEntity?.value,
       headerAddress: addressEntity?.value,
       headerPhone: phoneEntity?.value,
       taxRegime: taxRegimeEntity?.value,
       dgiAuthorizationCode: authCodeEntity?.value,
+      legalFooter: (trimmedLegalFooter != null && trimmedLegalFooter.isNotEmpty)
+          ? trimmedLegalFooter
+          : null,
+      taxExemptionReason:
+          (trimmedExemptionReason != null && trimmedExemptionReason.isNotEmpty)
+              ? trimmedExemptionReason
+              : null,
       logoBase64: logoBase64Entity?.value,
       logoWidth: logoWidth,
       logoHeight: logoHeight,
