@@ -59,11 +59,7 @@ export class AddContingencyManualRefToInvoices1811100000000 implements Migration
     `);
 
     await queryRunner.query(`
-      DROP INDEX IF EXISTS uq_invoices_tenant_contingency_manual_ref
-    `);
-
-    await queryRunner.query(`
-      CREATE UNIQUE INDEX uq_invoices_tenant_contingency_manual_ref
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_tenant_contingency_manual_ref
       ON invoices (
         tenant_id,
         upper(btrim(contingency_manual_series)),

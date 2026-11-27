@@ -67,19 +67,18 @@ void main() {
     test('BYTE-FOR-BYTE: unassigned output is frozen (same bytes as today)',
         () {
       // Golden hashes of the complete 80mm payload for this fixed fixture.
-      // A no-Caja, no-tip, no-loyalty sale is what production prints today;
-      // this locks that output so a layout tweak can never slip into a
-      // go-live unnoticed. If a change is intentional, update the hashes
-      // deliberately — never to "make the test pass".
+      // Updated deliberately for #539 S4 (DT 09-2007 1.7/1.8): every fiscal
+      // ticket now prints `Condicion: Contado` (+41 bytes) even when payments
+      // are present.
       final text = formatter.formatReceiptDocumentText(_doc());
       final bytes = formatter.formatReceiptDocumentEscPos(_doc());
 
-      expect(text.length, 1233);
-      expect(bytes.length, 1144);
+      expect(text.length, 1274);
+      expect(bytes.length, 1185);
       expect(sha256.convert(utf8.encode(text)).toString(),
-          '192b06c792a276a6fc02aafdcdf00c8820420e1cba338b28279559c423c9a369');
+          '8fe8eacb3f00fc4489a13ad08a63b54399c886115860a806915d6ccc3e04da4f');
       expect(sha256.convert(bytes).toString(),
-          '182f7d5a0bc1340418cca402ecd44b7e132e943a38173c0f0bfe694e5f301ab7');
+          'bd80530173938fba37cdfd53e49e5146070ed4f567b6985aa9708547492678a7');
     });
 
     test('an unassigned terminal prints NO Caja line', () {

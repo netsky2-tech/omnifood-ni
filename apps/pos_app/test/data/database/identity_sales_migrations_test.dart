@@ -986,6 +986,7 @@ void main() {
           'is_canceled': 0,
           'sync_status': 'synced',
           'payment_status': 'paid',
+          'payment_condition': 'CONTADO',
           'global_tax_override': 0,
           'type': 'regular',
           'terminal_id': 'pos-cashier-1',
