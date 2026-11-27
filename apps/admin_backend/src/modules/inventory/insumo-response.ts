@@ -1,4 +1,4 @@
-import { Insumo } from './entities/insumo.entity';
+import { Insumo, InsumoCatalogKind } from './entities/insumo.entity';
 
 /**
  * Postgres `numeric` columns reach Node as strings: node-postgres parses
@@ -39,6 +39,8 @@ export type InsumoResponse = Omit<
   minStock: number | null;
   maxStock: number | null;
   ivaRatePct: number | null;
+  catalogKind: InsumoCatalogKind;
+  managedProductId: string | null;
 };
 
 function toFiniteNumber(value: unknown): number {
@@ -62,6 +64,8 @@ export function serializeInsumo(insumo: Insumo): InsumoResponse {
     minStock: toFiniteNumberOrNull(insumo.minStock),
     ivaRatePct: toFiniteNumberOrNull(insumo.ivaRatePct),
     maxStock: toFiniteNumberOrNull(insumo.maxStock),
+    catalogKind: insumo.catalogKind ?? InsumoCatalogKind.RAW_MATERIAL,
+    managedProductId: insumo.managedProductId ?? null,
   };
 }
 

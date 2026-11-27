@@ -15,7 +15,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
 import { ProductInventoryMappingVersion } from '../../inventory/entities/product-inventory-mapping-version.entity';
 import { ForensicAlert } from '../../inventory/entities/forensic-alert.entity';
-import { Product } from '../../inventory/entities/product.entity';
+import {
+  Product,
+  ProductInventoryPolicy,
+} from '../../inventory/entities/product.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { CATALOG_TYPE } from '../../catalog/catalog-type';
@@ -754,6 +757,8 @@ export class InboundSyncService {
           : null,
         warehouseId: p.warehouse_id ?? null,
         productType: p.product_type,
+        inventoryPolicy:
+          p.inventory_policy ?? ProductInventoryPolicy.NOT_TRACKED,
         mappingVersionId: mapping ? mapping.id : null,
         insumoId: mapping ? mapping.insumo_id : null,
         createdAt: p.created_at,

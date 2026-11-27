@@ -12,6 +12,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
+import { mirrorManagedResaleProductStock } from './services/product-resale-stock-mirror';
 import { Product } from './entities/product.entity';
 import { Shrinkage } from './entities/shrinkage.entity';
 import {
@@ -113,6 +114,11 @@ export class ShrinkageService {
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
         const updatedInsumo = await manager.save(insumo);
+        await mirrorManagedResaleProductStock(
+          manager,
+          insumo.tenant_id,
+          updatedInsumo,
+        );
 
         // R13: the aggregate just left; the BATCH balances have to leave with
         // it, or FEFO keeps reading a balance that is no longer real.
@@ -285,6 +291,11 @@ export class ShrinkageService {
           insumo.stock = newStock;
           insumo.existenciaActual = newStock;
           await manager.save(insumo);
+          await mirrorManagedResaleProductStock(
+            manager,
+            insumo.tenant_id,
+            insumo,
+          );
 
           // Same contract per exploded component (R13).
           await drawBatchOutflow({

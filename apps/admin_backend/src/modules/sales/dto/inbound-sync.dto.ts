@@ -1,5 +1,6 @@
 import { IsOptional, IsString } from 'class-validator';
 import { FiscalConfigSnapshot } from '../../onboarding/dto/fiscal-config-version.dto';
+import { ProductInventoryPolicy } from '../../inventory/entities/product.entity';
 
 export class InboundSyncQueryDto {
   @IsOptional()
@@ -95,6 +96,7 @@ export interface InboundSyncProductDto {
   category: string | null;
   warehouseId?: string | null;
   productType?: string;
+  inventoryPolicy: ProductInventoryPolicy;
   mappingVersionId?: string | null;
   insumoId?: string | null;
   createdAt: Date;

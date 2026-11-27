@@ -4,10 +4,15 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DataSource, Repository } from 'typeorm';
-import { Product, ProductType } from './entities/product.entity';
-import { Insumo } from './entities/insumo.entity';
+import { DataSource, EntityManager, Repository } from 'typeorm';
+import {
+  Product,
+  ProductInventoryPolicy,
+  ProductType,
+} from './entities/product.entity';
+import { Insumo, InsumoCatalogKind } from './entities/insumo.entity';
 import { Recipe } from './entities/recipe.entity';
+import { RecipeVersion } from './entities/recipe-version.entity';
 import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 import { ProductInventoryMappingVersion } from './entities/product-inventory-mapping-version.entity';
 import { UpdateProductInventoryMappingDto } from './dto/update-product-inventory-mapping.dto';
@@ -64,7 +69,10 @@ export class ProductService {
 
   private async withTenantContext<T>(
     tenantId: string,
-    operation: (repo: Repository<Product>) => Promise<T>,
+    operation: (
+      repo: Repository<Product>,
+      manager: EntityManager,
+    ) => Promise<T>,
   ): Promise<T> {
     const normalizedTenantId = this.requireTenant(tenantId);
     const queryRunner = this.dataSource.createQueryRunner();
@@ -76,7 +84,7 @@ export class ProductService {
         normalizedTenantId,
       ]);
       const tenantRepo = queryRunner.manager.getRepository(Product);
-      const result = await operation(tenantRepo);
+      const result = await operation(tenantRepo, queryRunner.manager);
       await queryRunner.commitTransaction();
       return result;
     } catch (error) {
@@ -195,30 +203,122 @@ export class ProductService {
     });
   }
 
+  private async provisionOrSyncBackingResaleInsumo(
+    manager: EntityManager,
+    tenantId: string,
+    product: Product,
+  ): Promise<Insumo> {
+    const insumoRepo = manager.getRepository(Insumo);
+    let insumo = await insumoRepo.findOne({
+      where: {
+        tenant_id: tenantId,
+        managedProductId: product.id,
+      },
+    });
+
+    if (!insumo) {
+      insumo = insumoRepo.create({
+        tenant_id: tenantId,
+        managedProductId: product.id,
+        catalogKind: InsumoCatalogKind.PRODUCT_RESALE,
+        name: product.name,
+        purchaseUom: product.uom,
+        consumptionUom: product.uom,
+        conversionFactor: 1,
+        is_perishable: product.is_perishable,
+        warehouse_id: product.warehouse_id ?? null,
+        is_active: product.is_active,
+        stock: product.stock ?? 0,
+        existenciaActual: product.stock ?? 0,
+        averageCost: product.averageCost ?? 0,
+      });
+    } else {
+      insumo.catalogKind = InsumoCatalogKind.PRODUCT_RESALE;
+      insumo.name = product.name;
+      insumo.purchaseUom = product.uom;
+      insumo.consumptionUom = product.uom;
+      insumo.conversionFactor = 1;
+      insumo.is_perishable = product.is_perishable;
+      insumo.warehouse_id = product.warehouse_id ?? null;
+      insumo.is_active = product.is_active;
+    }
+
+    return insumoRepo.save(insumo);
+  }
+
   async create(
     tenantId: string,
     dto: CreateProductDto,
     user?: AuditUser,
   ): Promise<Product> {
-    const result = await this.withTenantContext(tenantId, async (repo) => {
-      const normalizedTenantId = this.requireTenant(tenantId);
+    const requestedPolicy =
+      dto.inventory_policy ??
+      dto.inventoryPolicy ??
+      ProductInventoryPolicy.NOT_TRACKED;
 
-      const row = repo.create({
-        tenant_id: normalizedTenantId,
-        name: dto.name.trim(),
-        uom: dto.uom.trim(),
-        product_type: dto.product_type,
-        category_code: dto.category_code?.trim() ?? null,
-        warehouse_id: dto.warehouse_id?.trim() ?? null,
-        is_perishable: dto.is_perishable ?? false,
-        stock: dto.stock ?? 0,
-        averageCost: dto.averageCost ?? 0,
-        sellPrice: dto.sellPrice ?? 0,
-        is_active: dto.is_active ?? true,
-        image_url: dto.image_url ?? null,
-      });
-      return repo.save(row);
-    });
+    if (
+      requestedPolicy === ProductInventoryPolicy.DIRECT_STOCK &&
+      dto.product_type !== ProductType.SIMPLE
+    ) {
+      throw new BadRequestException(
+        `inventory_policy DIRECT_STOCK is only allowed for SIMPLE products (received ${dto.product_type})`,
+      );
+    }
+
+    const result = await this.withTenantContext(
+      tenantId,
+      async (repo, manager) => {
+        const normalizedTenantId = this.requireTenant(tenantId);
+
+        const row = repo.create({
+          tenant_id: normalizedTenantId,
+          name: dto.name.trim(),
+          uom: dto.uom.trim(),
+          product_type: dto.product_type,
+          inventory_policy: requestedPolicy,
+          category_code: dto.category_code?.trim() ?? null,
+          warehouse_id: dto.warehouse_id?.trim() ?? null,
+          is_perishable: dto.is_perishable ?? false,
+          stock: dto.stock ?? 0,
+          averageCost: dto.averageCost ?? 0,
+          sellPrice: dto.sellPrice ?? 0,
+          is_active: dto.is_active ?? true,
+          image_url: dto.image_url ?? null,
+        });
+        let saved = await repo.save(row);
+
+        if (saved.inventory_policy === ProductInventoryPolicy.DIRECT_STOCK) {
+          const backingInsumo = await this.provisionOrSyncBackingResaleInsumo(
+            manager,
+            normalizedTenantId,
+            saved,
+          );
+          if (this.mappingService) {
+            await this.mappingService.supersede(
+              {
+                tenantId: normalizedTenantId,
+                productId: saved.id,
+                insumoId: backingInsumo.id,
+                effectiveAt: new Date(),
+              },
+              manager,
+            );
+          }
+          const mirroredStock = Number(backingInsumo.stock ?? 0);
+          const mirroredCost = Number(backingInsumo.averageCost ?? 0);
+          if (
+            Number(saved.stock ?? 0) !== mirroredStock ||
+            Number(saved.averageCost ?? 0) !== mirroredCost
+          ) {
+            saved.stock = mirroredStock;
+            saved.averageCost = mirroredCost;
+            saved = await repo.save(saved);
+          }
+        }
+
+        return saved;
+      },
+    );
 
     if (user) {
       await this.changeLogService.log({
@@ -245,66 +345,157 @@ export class ProductService {
     dto: UpdateProductDto,
     user?: AuditUser,
   ): Promise<Product> {
-    const result = await this.withTenantContext(tenantId, async (repo) => {
-      const row = await repo.findOne({
-        where: {
-          id,
-          tenant_id: this.requireTenant(tenantId),
-        },
-      });
-      if (!row) {
-        throw new NotFoundException(`Product ${id} not found`);
-      }
+    const result = await this.withTenantContext(
+      tenantId,
+      async (repo, manager) => {
+        const normalizedTenantId = this.requireTenant(tenantId);
+        const row = await repo.findOne({
+          where: {
+            id,
+            tenant_id: normalizedTenantId,
+          },
+        });
+        if (!row) {
+          throw new NotFoundException(`Product ${id} not found`);
+        }
 
-      const changes: Record<string, unknown> = {};
-      if (dto.name !== undefined) {
-        changes.name = { from: row.name, to: dto.name.trim() };
-        row.name = dto.name.trim();
-      }
-      if (dto.uom !== undefined) {
-        changes.uom = { from: row.uom, to: dto.uom.trim() };
-        row.uom = dto.uom.trim();
-      }
-      if (dto.product_type !== undefined) {
-        changes.product_type = { from: row.product_type, to: dto.product_type };
-        row.product_type = dto.product_type;
-      }
-      if (dto.category_code !== undefined) {
-        changes.category_code = {
-          from: row.category_code,
-          to: dto.category_code?.trim() ?? null,
-        };
-        row.category_code = dto.category_code?.trim() ?? null;
-      }
-      if (dto.warehouse_id !== undefined) {
-        changes.warehouse_id = {
-          from: row.warehouse_id,
-          to: dto.warehouse_id?.trim() ?? null,
-        };
-        row.warehouse_id = dto.warehouse_id?.trim() ?? null;
-      }
-      if (dto.is_perishable !== undefined) {
-        changes.is_perishable = {
-          from: row.is_perishable,
-          to: dto.is_perishable,
-        };
-        row.is_perishable = dto.is_perishable;
-      }
-      if (dto.sellPrice !== undefined) {
-        changes.sellPrice = { from: row.sellPrice, to: dto.sellPrice };
-        row.sellPrice = dto.sellPrice;
-      }
-      if (dto.is_active !== undefined) {
-        changes.is_active = { from: row.is_active, to: dto.is_active };
-        row.is_active = dto.is_active;
-      }
-      if (dto.image_url !== undefined) {
-        changes.image_url = { from: row.image_url, to: dto.image_url };
-        row.image_url = dto.image_url;
-      }
+        const previousPolicy =
+          row.inventory_policy ?? ProductInventoryPolicy.NOT_TRACKED;
+        const requestedPolicy = dto.inventory_policy ?? dto.inventoryPolicy;
+        const nextProductType = dto.product_type ?? row.product_type;
+        const nextPolicy = requestedPolicy ?? previousPolicy;
 
-      return { saved: await repo.save(row), changes };
-    });
+        if (nextPolicy === ProductInventoryPolicy.DIRECT_STOCK) {
+          if (nextProductType !== ProductType.SIMPLE) {
+            throw new BadRequestException(
+              `inventory_policy DIRECT_STOCK is only allowed for SIMPLE products (product ${id} is ${nextProductType})`,
+            );
+          }
+          const existingRecipe = await manager.getRepository(Recipe).findOne({
+            where: { productId: id, tenant_id: normalizedTenantId },
+          });
+          if (existingRecipe) {
+            throw new BadRequestException(
+              `Product ${id} already has an associated recipe; cannot use DIRECT_STOCK`,
+            );
+          }
+          const activeRecipeVersion = await manager
+            .getRepository(RecipeVersion)
+            .findOne({
+              where: {
+                product_id: id,
+                tenant_id: normalizedTenantId,
+                is_active: true,
+              },
+            });
+          if (activeRecipeVersion) {
+            throw new BadRequestException(
+              `Product ${id} already has an active recipe version; cannot use DIRECT_STOCK`,
+            );
+          }
+        }
+
+        const changes: Record<string, unknown> = {};
+        if (dto.name !== undefined) {
+          changes.name = { from: row.name, to: dto.name.trim() };
+          row.name = dto.name.trim();
+        }
+        if (dto.uom !== undefined) {
+          changes.uom = { from: row.uom, to: dto.uom.trim() };
+          row.uom = dto.uom.trim();
+        }
+        if (dto.product_type !== undefined) {
+          changes.product_type = {
+            from: row.product_type,
+            to: dto.product_type,
+          };
+          row.product_type = dto.product_type;
+        }
+        if (requestedPolicy !== undefined) {
+          changes.inventory_policy = {
+            from: previousPolicy,
+            to: requestedPolicy,
+          };
+          row.inventory_policy = requestedPolicy;
+        }
+        if (dto.category_code !== undefined) {
+          changes.category_code = {
+            from: row.category_code,
+            to: dto.category_code?.trim() ?? null,
+          };
+          row.category_code = dto.category_code?.trim() ?? null;
+        }
+        if (dto.warehouse_id !== undefined) {
+          changes.warehouse_id = {
+            from: row.warehouse_id,
+            to: dto.warehouse_id?.trim() ?? null,
+          };
+          row.warehouse_id = dto.warehouse_id?.trim() ?? null;
+        }
+        if (dto.is_perishable !== undefined) {
+          changes.is_perishable = {
+            from: row.is_perishable,
+            to: dto.is_perishable,
+          };
+          row.is_perishable = dto.is_perishable;
+        }
+        if (dto.sellPrice !== undefined) {
+          changes.sellPrice = { from: row.sellPrice, to: dto.sellPrice };
+          row.sellPrice = dto.sellPrice;
+        }
+        if (dto.is_active !== undefined) {
+          changes.is_active = { from: row.is_active, to: dto.is_active };
+          row.is_active = dto.is_active;
+        }
+        if (dto.image_url !== undefined) {
+          changes.image_url = { from: row.image_url, to: dto.image_url };
+          row.image_url = dto.image_url;
+        }
+
+        let saved = await repo.save(row);
+
+        if (saved.inventory_policy === ProductInventoryPolicy.DIRECT_STOCK) {
+          const backingInsumo = await this.provisionOrSyncBackingResaleInsumo(
+            manager,
+            normalizedTenantId,
+            saved,
+          );
+          if (this.mappingService) {
+            await this.mappingService.supersede(
+              {
+                tenantId: normalizedTenantId,
+                productId: saved.id,
+                insumoId: backingInsumo.id,
+                effectiveAt: new Date(),
+              },
+              manager,
+            );
+          }
+          const mirroredStock = Number(backingInsumo.stock ?? 0);
+          const mirroredCost = Number(backingInsumo.averageCost ?? 0);
+          if (
+            Number(saved.stock ?? 0) !== mirroredStock ||
+            Number(saved.averageCost ?? 0) !== mirroredCost
+          ) {
+            saved.stock = mirroredStock;
+            saved.averageCost = mirroredCost;
+            saved = await repo.save(saved);
+          }
+        } else if (
+          previousPolicy === ProductInventoryPolicy.DIRECT_STOCK &&
+          saved.inventory_policy === ProductInventoryPolicy.NOT_TRACKED &&
+          this.mappingService
+        ) {
+          await this.mappingService.deactivate(
+            normalizedTenantId,
+            saved.id,
+            manager,
+          );
+        }
+
+        return { saved, changes };
+      },
+    );
 
     if (user && Object.keys(result.changes).length > 0) {
       await this.changeLogService.log({
@@ -420,6 +611,11 @@ export class ProductService {
           throw new BadRequestException(
             'ProductInventoryMappingService is not available',
           );
+        }
+
+        if (product.inventory_policy !== ProductInventoryPolicy.DIRECT_STOCK) {
+          product.inventory_policy = ProductInventoryPolicy.DIRECT_STOCK;
+          await productRepo.save(product);
         }
 
         return await this.mappingService.supersede({

@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { ProductType } from '../entities/product.entity';
+import { ProductInventoryPolicy, ProductType } from '../entities/product.entity';
 
 export class CreateProductDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -30,6 +30,14 @@ export class CreateProductDto {
 
   @IsEnum(ProductType)
   product_type: ProductType;
+
+  @IsOptional()
+  @IsEnum(ProductInventoryPolicy)
+  inventory_policy?: ProductInventoryPolicy;
+
+  @IsOptional()
+  @IsEnum(ProductInventoryPolicy)
+  inventoryPolicy?: ProductInventoryPolicy;
 
   @IsOptional()
   @IsString()

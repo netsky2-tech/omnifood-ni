@@ -12,7 +12,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { Insumo } from './entities/insumo.entity';
+import { Insumo, InsumoCatalogKind } from './entities/insumo.entity';
 import {
   serializeInsumo,
   serializeInsumos,
@@ -144,6 +144,8 @@ export class InsumoController {
   @Get()
   async list(
     @Query('includeInactive') includeInactive?: string,
+    @Query('catalogKind') catalogKind?: string,
+    @Query('includeResale') includeResale?: string,
     @GetTenantId() tenantId?: string,
   ): Promise<InsumoResponse[]> {
     const normalizedTenantId = this.requireTenant(tenantId);
@@ -154,6 +156,24 @@ export class InsumoController {
 
     if (includeInactive !== 'true') {
       where.is_active = true;
+    }
+
+    const normalizedKind = catalogKind?.trim().toUpperCase();
+    if (includeResale === 'true' || normalizedKind === 'ALL') {
+      // No catalogKind filter: return both RAW_MATERIAL and PRODUCT_RESALE
+    } else if (
+      normalizedKind === (InsumoCatalogKind.PRODUCT_RESALE as string)
+    ) {
+      where.catalogKind = InsumoCatalogKind.PRODUCT_RESALE;
+    } else if (
+      normalizedKind &&
+      normalizedKind !== (InsumoCatalogKind.RAW_MATERIAL as string)
+    ) {
+      throw new BadRequestException(
+        `Invalid catalogKind '${catalogKind}'. Expected RAW_MATERIAL, PRODUCT_RESALE, or ALL.`,
+      );
+    } else {
+      where.catalogKind = InsumoCatalogKind.RAW_MATERIAL;
     }
 
     const insumos = await runInTenantTransaction(

@@ -13,6 +13,7 @@ import {
   shouldCreateHighValueInventoryAlert,
 } from './forensic-alert.service';
 import { Insumo } from './entities/insumo.entity';
+import { mirrorManagedResaleProductStock } from './services/product-resale-stock-mirror';
 import { Batch } from './entities/batch.entity';
 import { CountSession } from './entities/count-session.entity';
 import { CountSessionEntry } from './entities/count-session-entry.entity';
@@ -204,6 +205,7 @@ export class CountSessionService {
       insumo.existenciaActual = newStock;
       insumo.averageCost = previousAverageCostNio;
       await insumoRepo.save(insumo);
+      await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
       if (variance < 0) {
         // R13: a NEGATIVE variance is an outflow and must leave the batch
