@@ -102,7 +102,7 @@ class ReceiptLine {
     final double effectiveTaxableBase;
     final double effectiveExemptBase;
 
-    if (taxRegime.isCuotaFija) {
+    if (!taxRegime.collectsIva) {
       effectiveTaxRate = 0.0;
       effectiveTaxAmount = 0.0;
       effectiveTaxableBase = 0.0;
@@ -121,7 +121,7 @@ class ReceiptLine {
 
     final lineTotal = item.total > 0
         ? item.total
-        : (taxRegime.isCuotaFija ? lineSubtotal : (lineSubtotal + effectiveTaxAmount));
+        : (!taxRegime.collectsIva ? lineSubtotal : (lineSubtotal + effectiveTaxAmount));
 
     final modifierDisplays = item.selectedModifiers.map((m) => ReceiptModifierDisplay(
           name: m.name,
@@ -372,6 +372,7 @@ class ReceiptDocument {
     this.copyLabel,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
+  bool get isControlInterno => taxRegime.isControlInterno;
   bool get isCuotaFija => taxRegime.isCuotaFija;
   bool get isGlobalTaxExempt => isTaxExempt || globalTaxOverride;
 
@@ -550,7 +551,7 @@ class ReceiptDocument {
     final double effectiveTotalTax;
     final double effectiveTotal;
 
-    if (taxRegime.isCuotaFija) {
+    if (!taxRegime.collectsIva) {
       effectiveSubtotal = invoice.subtotal > 0 ? invoice.subtotal : computedSubtotal;
       effectiveTotalTax = 0.0;
       effectiveTotal = invoice.total > 0 ? invoice.total : effectiveSubtotal;
@@ -577,7 +578,9 @@ class ReceiptDocument {
       legalName: (legalName != null && legalName.trim().isNotEmpty && legalName.trim() != businessName?.trim())
           ? legalName.trim()
           : null,
-      ruc: (ruc != null && ruc.trim().isNotEmpty) ? ruc.trim() : null,
+      ruc: (!taxRegime.isControlInterno && ruc != null && ruc.trim().isNotEmpty)
+          ? ruc.trim()
+          : null,
       taxRegime: taxRegime,
       address: (address != null && address.trim().isNotEmpty) ? address.trim() : null,
       phone: (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null,
@@ -633,7 +636,9 @@ class ReceiptDocument {
       // D-17: trimmed and dropped when blank, so a blank-looking value can
       // never reach the paper (same honesty rule as the other header facts).
       fiscalAuthorizationNumber:
-          (fiscalAuthorizationNumber != null && fiscalAuthorizationNumber.trim().isNotEmpty)
+          (!taxRegime.isControlInterno &&
+                  fiscalAuthorizationNumber != null &&
+                  fiscalAuthorizationNumber.trim().isNotEmpty)
               ? fiscalAuthorizationNumber.trim()
               : null,
       isReprint: isReprint,
@@ -668,6 +673,6 @@ class ReceiptDocument {
 
   static String _resolveDocTitle(InvoiceType type, TaxRegime regime) {
     if (type == InvoiceType.creditNote) return 'NOTA DE CREDITO';
-    return regime.isCuotaFija ? 'COMPROBANTE DE VENTA' : 'FACTURA DE VENTA';
+    return regime.defaultReceiptTitle;
   }
 }

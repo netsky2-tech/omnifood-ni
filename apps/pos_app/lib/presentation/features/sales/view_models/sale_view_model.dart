@@ -2618,7 +2618,9 @@ class SaleViewModel extends ChangeNotifier {
         if (printerConfig.autoPrintInvoice) {
           // #539 S1.3 (AC-3): same configuration warning as the reprint path.
           final checkoutAuthNumber = printerConfig.dgiAuthorizationCode;
-          if (checkoutAuthNumber == null ||
+          if (_companyTaxRegime?.isControlInterno == true) {
+            _fiscalConfigWarning = null;
+          } else if (checkoutAuthNumber == null ||
               checkoutAuthNumber.trim().isEmpty) {
             _fiscalConfigWarning =
                 'Falta el Código / Resolución de Autorización DGI (CAFD). '
@@ -2936,7 +2938,9 @@ class SaleViewModel extends ChangeNotifier {
       final fiscalAuthorizationNumber = fromSnapshot
           ? fiscalHeader['fiscalAuthorizationNumber']?.toString()
           : config.dgiAuthorizationCode;
-      if (fiscalAuthorizationNumber == null ||
+      if (effectiveRegime.isControlInterno) {
+        _fiscalConfigWarning = null;
+      } else if (fiscalAuthorizationNumber == null ||
           fiscalAuthorizationNumber.trim().isEmpty) {
         _fiscalConfigWarning =
             'Falta el Código / Resolución de Autorización DGI (CAFD). '

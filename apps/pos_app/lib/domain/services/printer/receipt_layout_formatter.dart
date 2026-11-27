@@ -522,12 +522,17 @@ class ReceiptLayoutFormatter {
     if (doc.legalName != null && doc.legalName!.isNotEmpty) {
       buffer.writeln(center(doc.legalName!));
     }
-    if (doc.ruc != null && doc.ruc!.isNotEmpty) {
+    if (!doc.taxRegime.isControlInterno &&
+        doc.ruc != null &&
+        doc.ruc!.isNotEmpty) {
       buffer.writeln(center('RUC: ${doc.ruc!}'));
     }
 
     // Regime Identification from Canonical Company Settings
-    buffer.writeln(center(doc.taxRegime.receiptRegimeHeader));
+    if (!doc.taxRegime.isControlInterno &&
+        doc.taxRegime.receiptRegimeHeader.isNotEmpty) {
+      buffer.writeln(center(doc.taxRegime.receiptRegimeHeader));
+    }
 
     if (doc.address != null && doc.address!.isNotEmpty) {
       for (final line in wrap(doc.address!)) {
@@ -555,7 +560,11 @@ class ReceiptLayoutFormatter {
       }
     }
     buffer.writeln(doubleDivider());
-    buffer.writeln(center(doc.documentTitle));
+    buffer.writeln(center(
+      doc.taxRegime.isControlInterno
+          ? TaxRegime.controlInterno.defaultReceiptTitle
+          : doc.documentTitle,
+    ));
     buffer.writeln(center('No. ${doc.documentNumber}'));
     if (doc.isCanceled) {
       final reason = doc.voidReason?.trim().isNotEmpty == true
@@ -748,8 +757,8 @@ class ReceiptLayoutFormatter {
         ? doc.grossSubtotal
         : (hasDiscount ? (doc.subtotal + doc.discountTotal) : doc.subtotal);
 
-    if (doc.taxRegime.isCuotaFija) {
-      // Cuota Fija: Subtotal & Total. Never print an IVA line or VENTA EXENTA.
+    if (!doc.taxRegime.collectsIva) {
+      // Cuota Fija & Control Interno: Subtotal & Total. Never print an IVA line or VENTA EXENTA.
       if (hasDiscount) {
         if (metrics.is80mm) {
           buffer.writeln(
@@ -1000,9 +1009,11 @@ class ReceiptLayoutFormatter {
     buffer.writeln(doubleDivider());
 
     // D-17 fiscal authorization number: bottom-right of the document
-    // (DT 09-2007 QUINTO). Nothing prints when unconfigured.
-    for (final line in fiscalAuthorizationLines(doc.fiscalAuthorizationNumber)) {
-      buffer.writeln(line);
+    // (DT 09-2007 QUINTO). Nothing prints when unconfigured or CONTROL_INTERNO.
+    if (!doc.taxRegime.isControlInterno) {
+      for (final line in fiscalAuthorizationLines(doc.fiscalAuthorizationNumber)) {
+        buffer.writeln(line);
+      }
     }
 
     // Loyalty block — presentation only, inserted before the footer so the
@@ -1022,10 +1033,15 @@ class ReceiptLayoutFormatter {
       }
     }
 
-    // Cuota Fija Notice
+    // Cuota Fija / Control Interno Notice
     if (doc.taxRegime.isCuotaFija) {
       buffer.writeln(center('CONTRIBUYENTE DE CUOTA FIJA'));
       buffer.writeln(center('NO RECAUDA IVA'));
+      buffer.writeln('');
+    } else if (doc.taxRegime.isControlInterno) {
+      buffer.writeln(center('DOCUMENTO NO FISCAL'));
+      buffer.writeln(center('NO VALIDO COMO FACTURA'));
+      buffer.writeln(center('SOLO CONTROL INTERNO'));
       buffer.writeln('');
     }
 
@@ -1189,14 +1205,19 @@ class ReceiptLayoutFormatter {
     if (doc.legalName != null && doc.legalName!.isNotEmpty) {
       marginTextLine(builder, doc.legalName!);
     }
-    if (doc.ruc != null && doc.ruc!.isNotEmpty) {
+    if (!doc.taxRegime.isControlInterno &&
+        doc.ruc != null &&
+        doc.ruc!.isNotEmpty) {
       marginTextLine(builder, 'RUC: ${doc.ruc!}');
     }
 
-    builder
-        .bold(true)
-        .textLine(marginLine(doc.taxRegime.receiptRegimeHeader))
-        .bold(false);
+    if (!doc.taxRegime.isControlInterno &&
+        doc.taxRegime.receiptRegimeHeader.isNotEmpty) {
+      builder
+          .bold(true)
+          .textLine(marginLine(doc.taxRegime.receiptRegimeHeader))
+          .bold(false);
+    }
 
     if (doc.address != null && doc.address!.isNotEmpty) {
       for (final line in wrap(doc.address!)) {
@@ -1250,7 +1271,11 @@ class ReceiptLayoutFormatter {
     builder
         .textLine(marginLine(doubleDivider()))
         .bold(true)
-        .textLine(marginLine(doc.documentTitle))
+        .textLine(marginLine(
+          doc.taxRegime.isControlInterno
+              ? TaxRegime.controlInterno.defaultReceiptTitle
+              : doc.documentTitle,
+        ))
         .textLine(marginLine('No. ${doc.documentNumber}'))
         .bold(false)
         .align(EscPosAlign.left);
@@ -1421,7 +1446,7 @@ class ReceiptLayoutFormatter {
         ? doc.grossSubtotal
         : (hasDiscountEsc ? (doc.subtotal + doc.discountTotal) : doc.subtotal);
 
-    if (doc.taxRegime.isCuotaFija) {
+    if (!doc.taxRegime.collectsIva) {
       if (hasDiscountEsc) {
         if (metrics.is80mm) {
           marginTextLine(
@@ -1745,15 +1770,17 @@ class ReceiptLayoutFormatter {
     marginTextLine(builder, doubleDivider()).align(EscPosAlign.center);
 
     // D-17 fiscal authorization number: bottom-right of the document
-    // (DT 09-2007 QUINTO). Nothing prints when unconfigured.
-    final authorizationLines =
-        fiscalAuthorizationLines(doc.fiscalAuthorizationNumber);
-    if (authorizationLines.isNotEmpty) {
-      builder.align(EscPosAlign.right);
-      for (final line in authorizationLines) {
-        marginTextLine(builder, line.trim());
+    // (DT 09-2007 QUINTO). Nothing prints when unconfigured or CONTROL_INTERNO.
+    if (!doc.taxRegime.isControlInterno) {
+      final authorizationLines =
+          fiscalAuthorizationLines(doc.fiscalAuthorizationNumber);
+      if (authorizationLines.isNotEmpty) {
+        builder.align(EscPosAlign.right);
+        for (final line in authorizationLines) {
+          marginTextLine(builder, line.trim());
+        }
+        builder.align(EscPosAlign.left);
       }
-      builder.align(EscPosAlign.left);
     }
 
     // First issuance only — see the canonical text renderer for the decision
@@ -1769,6 +1796,11 @@ class ReceiptLayoutFormatter {
         builder,
         'CONTRIBUYENTE DE CUOTA FIJA',
       ).textLine(marginLine('NO RECAUDA IVA')).feedLines(1);
+    } else if (doc.taxRegime.isControlInterno) {
+      marginTextLine(builder, 'DOCUMENTO NO FISCAL')
+          .textLine(marginLine('NO VALIDO COMO FACTURA'))
+          .textLine(marginLine('SOLO CONTROL INTERNO'))
+          .feedLines(1);
     }
 
     final footerMsg = doc.footerMessage ?? '*** GRACIAS POR SU COMPRA ***';

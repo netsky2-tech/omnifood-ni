@@ -2234,4 +2234,104 @@ void main() {
       },
     );
   });
+
+  group('TaxRegime.controlInterno — Legally Safe Non-Fiscal Ticket (58mm & 80mm)', () {
+    for (final width in [58, 80]) {
+      test('${width}mm ticket prints NOTA DE VENTA + non-fiscal footer and omits all fiscal/DGI literals', () {
+        final formatter = ReceiptLayoutFormatter.fromPaperWidth(width);
+        final invoice = Invoice(
+          id: 'inv-ci-1',
+          number: 'NV-00000001',
+          createdAt: DateTime(2026, 12, 1, 10, 30),
+          userId: 'u1',
+          subtotal: 110.00,
+          totalTax: 0.00,
+          total: 110.00,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
+          totalUsd: 3.01,
+        );
+        final items = [
+          const InvoiceItem(
+            id: 'ii-1',
+            invoiceId: 'inv-ci-1',
+            productId: 'p1',
+            productName: 'Gaseosa 1L',
+            quantity: 2,
+            unitPrice: 45.00,
+            originalTaxRate: 0.15,
+            appliedTaxRate: 0.0,
+            taxAmount: 0.0,
+            total: 90.00,
+          ),
+          const InvoiceItem(
+            id: 'ii-2',
+            invoiceId: 'inv-ci-1',
+            productId: 'p2',
+            productName: 'Arroz 1lb',
+            quantity: 1,
+            unitPrice: 20.00,
+            originalTaxRate: 0.0,
+            appliedTaxRate: 0.0,
+            taxAmount: 0.0,
+            total: 20.00,
+          ),
+        ];
+        final payments = [
+          const Payment(
+            id: 'pay-1',
+            invoiceId: 'inv-ci-1',
+            method: PaymentMethod.cash,
+            currency: 'NIO',
+            amount: 110.00,
+          ),
+        ];
+
+        // Even if someone passes a RUC or fiscalAuthorizationNumber into fromInvoice,
+        // CONTROL_INTERNO must NEVER print them on the ticket.
+        final doc = ReceiptDocument.fromInvoice(
+          invoice,
+          items: items,
+          payments: payments,
+          businessName: 'Pulpería La Esquina',
+          ruc: 'J0310000000001',
+          address: 'Del árbol 2c al norte',
+          phone: '8888-9999',
+          cashierName: 'Ana',
+          taxRegime: TaxRegime.controlInterno,
+          fiscalAuthorizationNumber: 'DGI-FAKE-123',
+        );
+
+        final text = formatter.formatReceiptDocumentText(doc);
+        final escPosBytes = formatter.formatReceiptDocumentEscPos(doc);
+        final escPosAscii = String.fromCharCodes(
+          escPosBytes.where((b) => b == 10 || (b >= 32 && b <= 126)),
+        );
+
+        for (final rendered in [text, escPosAscii]) {
+          // Mandatory positive assertions
+          expect(rendered, contains('Pulper'));
+          expect(rendered, contains('NOTA DE VENTA'));
+          expect(rendered, contains('No. NV-00000001'));
+          expect(rendered, contains('DOCUMENTO NO FISCAL'));
+          expect(rendered, contains('NO VALIDO COMO FACTURA'));
+          expect(rendered, contains('SOLO CONTROL INTERNO'));
+          expect(rendered, contains('SUBTOTAL:'));
+          expect(rendered, contains('TOTAL CORDOBAS:'));
+
+          // Mandatory negative assertions (must NEVER appear)
+          expect(rendered, isNot(contains('FACTURA DE VENTA')));
+          expect(rendered, isNot(contains('COMPROBANTE DE VENTA')));
+          expect(rendered, isNot(contains('CONTRIBUYENTE')));
+          expect(rendered, isNot(contains('REGIMEN:')));
+          expect(rendered, isNot(contains('RUC:')));
+          expect(rendered, isNot(contains('IVA')));
+          expect(rendered, isNot(contains('VENTA EXENTA')));
+          expect(rendered, isNot(contains('Autorización DGI')));
+          expect(rendered, isNot(contains('Autorizacion DGI')));
+          expect(rendered, isNot(contains('DGI-FAKE-123')));
+        }
+      });
+    }
+  });
 }
