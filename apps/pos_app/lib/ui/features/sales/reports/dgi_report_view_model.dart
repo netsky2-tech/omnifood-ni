@@ -91,6 +91,7 @@ class DgiReportViewModel extends ChangeNotifier {
     try {
       _invoices = await _salesRepository.getInvoicesBySessionId(session.id);
       _payments = await _salesRepository.getPaymentsBySessionId(session.id);
+      await _loadTaxRegime();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -141,6 +142,9 @@ class DgiReportViewModel extends ChangeNotifier {
   TaxRegime? _taxRegime;
   TaxRegime? get taxRegime => _taxRegime;
 
+  String? _businessName;
+  String? get businessName => _businessName;
+
   Future<void> _loadTaxRegime() async {
     try {
       final configEntity = await _database.localConfigDao.getConfigByKey('tax_regime');
@@ -149,13 +153,23 @@ class DgiReportViewModel extends ChangeNotifier {
       // Fail open to the plain label; never fabricate a percentage literal.
       _taxRegime = null;
     }
+    try {
+      final nameEntity = await _database.localConfigDao.getConfigByKey('business_name');
+      final trimmed = nameEntity?.value.trim();
+      _businessName = (trimmed != null && trimmed.isNotEmpty) ? trimmed : null;
+    } catch (_) {
+      _businessName = null;
+    }
   }
 
   String generatePrintString() {
     if (_selectedSession == null) return "No hay sesión seleccionada";
     
     final buf = StringBuffer();
-    buf.writeln("      OMNIFOOD NI - REPORTE X/Z      ");
+    final headerTitle = _businessName != null
+        ? '${_businessName!.toUpperCase()} - REPORTE X/Z'
+        : 'REPORTE X/Z';
+    buf.writeln(headerTitle);
     buf.writeln("------------------------------------------");
     // D-14/#7: the printed report names the cashier — never the session id
     // or the device-observed user id.

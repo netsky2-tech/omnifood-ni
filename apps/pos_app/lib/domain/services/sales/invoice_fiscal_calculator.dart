@@ -492,7 +492,7 @@ class InvoiceFiscalCalculator {
     return ReceiptDocument(
       businessName: businessName?.trim().isNotEmpty == true
           ? businessName!.trim()
-          : 'OMNIFOOD NI',
+          : '',
       legalName: legalName,
       ruc: businessRuc,
       taxRegime: calculation.taxRegime!,

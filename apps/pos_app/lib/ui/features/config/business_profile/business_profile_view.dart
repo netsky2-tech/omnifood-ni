@@ -230,6 +230,19 @@ class _BusinessProfileViewState extends State<BusinessProfileView> with RouteAwa
                       ),
                       maxLines: 3,
                     ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      key: const Key('tax_exemption_reason_input'),
+                      controller: _controllers['tax_exemption_reason'],
+                      decoration: const InputDecoration(
+                        labelText: 'Base Legal / Motivo de Exoneración Temporal de IVA',
+                        hintText: 'Ej: Acuerdo MHCP-INTUR-DGI 01-2025 - Fiestas Patrias Sin IVA',
+                        helperText:
+                            'Se imprime en facturas exentas (Régimen General) cuando se activa venta sin IVA por ferias o vacaciones decretadas por la DGI.',
+                        helperMaxLines: 2,
+                      ),
+                      maxLines: 2,
+                    ),
                     const SizedBox(height: 32),
                     Text('TASAS DE CAMBIO Y MULTI-MONEDA', style: Theme.of(context).textTheme.labelLarge),
                     const SizedBox(height: 16),

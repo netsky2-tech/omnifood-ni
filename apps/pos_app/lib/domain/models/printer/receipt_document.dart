@@ -265,6 +265,12 @@ class ReceiptDocument {
   final bool isTaxExempt;
   final bool globalTaxOverride;
 
+  /// #540 AC-4 / LCT Art. 143.3: optional configured legal basis for temporary
+  /// VAT exoneration (e.g. MHCP-INTUR-DGI agreement for Fiestas Patrias /
+  /// Semana Santa / Navidad Sin IVA). Printed only when non-blank on exempt
+  /// Régimen General receipts; never fabricated as a hardcoded literal.
+  final String? taxExemptionReason;
+
   /// True when the source invoice was voided (anulada). Voided documents are
   /// never deleted (DGI DT 09-2007): they print with an ANULADO banner instead.
   final bool isCanceled;
@@ -349,6 +355,7 @@ class ReceiptDocument {
     this.logoRasterBytes,
     this.isTaxExempt = false,
     this.globalTaxOverride = false,
+    this.taxExemptionReason,
     this.isCanceled = false,
     this.voidReason,
     this.fiscalAuthorizationNumber,
@@ -423,6 +430,7 @@ class ReceiptDocument {
         logoRasterBytes: logoBytes,
         isTaxExempt: isTaxExempt,
         globalTaxOverride: globalTaxOverride,
+        taxExemptionReason: taxExemptionReason,
         isCanceled: isCanceled,
         voidReason: voidReason,
         fiscalAuthorizationNumber: fiscalAuthorizationNumber,
@@ -504,6 +512,7 @@ class ReceiptDocument {
     required TaxRegime taxRegime,
     bool isTaxExempt = false,
     String? footerMessage,
+    String? taxExemptionReason,
     List<int>? logoRasterBytes,
     String? fiscalAuthorizationNumber,
     bool isReprint = false,
@@ -564,7 +573,7 @@ class ReceiptDocument {
     final docTitle = _resolveDocTitle(invoice.type, taxRegime);
 
     return ReceiptDocument(
-      businessName: businessName?.trim().isNotEmpty == true ? businessName!.trim() : 'OMNIFOOD NI',
+      businessName: businessName?.trim().isNotEmpty == true ? businessName!.trim() : '',
       legalName: (legalName != null && legalName.trim().isNotEmpty && legalName.trim() != businessName?.trim())
           ? legalName.trim()
           : null,
@@ -615,6 +624,10 @@ class ReceiptDocument {
       isTaxExempt: taxRegime.isRegimenGeneral &&
           (isTaxExempt || invoice.globalTaxOverride || (computedExempt > 0 && computedTaxable == 0)),
       globalTaxOverride: invoice.globalTaxOverride,
+      taxExemptionReason:
+          (taxExemptionReason != null && taxExemptionReason.trim().isNotEmpty)
+              ? taxExemptionReason.trim()
+              : null,
       isCanceled: invoice.isCanceled,
       voidReason: invoice.voidReason,
       // D-17: trimmed and dropped when blank, so a blank-looking value can

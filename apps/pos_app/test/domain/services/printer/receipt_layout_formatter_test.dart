@@ -1060,7 +1060,7 @@ void main() {
         expect(ticket, contains('REGIMEN: GENERAL'));
         expect(ticket, contains('SUBTOTAL:'));
         expect(ticket, contains('VENTA EXENTA (IVA 0%):'));
-        expect(ticket, contains('VENTA EXENTA DE IVA'));
+        expect(ticket, isNot(contains('POLITICA TEMPORAL')));
         expect(ticket, contains('TOTAL CORDOBAS:'));
       },
     );

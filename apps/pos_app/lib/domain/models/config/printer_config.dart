@@ -25,7 +25,7 @@ class PrinterConfig with _$PrinterConfig {
     String? networkIp,
     @Default(9100) int networkPort,
     @Default(1) int copies,
-    @Default('OMNIFOOD NI') String headerBusinessName,
+    @Default('') String headerBusinessName,
     String? headerLegalName,
 
     /// Issuer fiscal RUC printed on fiscal documents (local_configs['ruc']).
@@ -43,6 +43,17 @@ class PrinterConfig with _$PrinterConfig {
     /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
     /// absence on paper is the honest state, never a blank-looking value.
     String? dgiAuthorizationCode,
+
+    /// #540 AC-2/AC-5: optional legal/courtesy footer configured in Business
+    /// Profile (`local_configs['legal_footer']`). Null when blank/unconfigured.
+    /// Never written by [PrinterConfigService.savePrinterConfig].
+    String? legalFooter,
+
+    /// #540 AC-4: optional configured legal basis for temporary VAT exoneration
+    /// (e.g. MHCP-INTUR-DGI interinstitutional agreement for Semana Santa,
+    /// Fiestas Patrias, or Navidad Sin IVA). Read from
+    /// `local_configs['tax_exemption_reason']`. Null when blank/unconfigured.
+    String? taxExemptionReason,
 
     /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
     String? headerRuc,

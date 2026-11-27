@@ -47,6 +47,17 @@ mixin _$PrinterConfig {
   /// absence on paper is the honest state, never a blank-looking value.
   String? get dgiAuthorizationCode => throw _privateConstructorUsedError;
 
+  /// #540 AC-2/AC-5: optional legal/courtesy footer configured in Business
+  /// Profile (`local_configs['legal_footer']`). Null when blank/unconfigured.
+  /// Never written by [PrinterConfigService.savePrinterConfig].
+  String? get legalFooter => throw _privateConstructorUsedError;
+
+  /// #540 AC-4: optional configured legal basis for temporary VAT exoneration
+  /// (e.g. MHCP-INTUR-DGI interinstitutional agreement for Semana Santa,
+  /// Fiestas Patrias, or Navidad Sin IVA). Read from
+  /// `local_configs['tax_exemption_reason']`. Null when blank/unconfigured.
+  String? get taxExemptionReason => throw _privateConstructorUsedError;
+
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   String? get headerRuc => throw _privateConstructorUsedError;
   String? get headerAddress => throw _privateConstructorUsedError;
@@ -82,6 +93,8 @@ abstract class $PrinterConfigCopyWith<$Res> {
       String? headerLegalName,
       String? fiscalRuc,
       String? dgiAuthorizationCode,
+      String? legalFooter,
+      String? taxExemptionReason,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -117,6 +130,8 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
     Object? headerLegalName = freezed,
     Object? fiscalRuc = freezed,
     Object? dgiAuthorizationCode = freezed,
+    Object? legalFooter = freezed,
+    Object? taxExemptionReason = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -175,6 +190,14 @@ class _$PrinterConfigCopyWithImpl<$Res, $Val extends PrinterConfig>
           ? _value.dgiAuthorizationCode
           : dgiAuthorizationCode // ignore: cast_nullable_to_non_nullable
               as String?,
+      legalFooter: freezed == legalFooter
+          ? _value.legalFooter
+          : legalFooter // ignore: cast_nullable_to_non_nullable
+              as String?,
+      taxExemptionReason: freezed == taxExemptionReason
+          ? _value.taxExemptionReason
+          : taxExemptionReason // ignore: cast_nullable_to_non_nullable
+              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -232,6 +255,8 @@ abstract class _$$PrinterConfigImplCopyWith<$Res>
       String? headerLegalName,
       String? fiscalRuc,
       String? dgiAuthorizationCode,
+      String? legalFooter,
+      String? taxExemptionReason,
       String? headerRuc,
       String? headerAddress,
       String? headerPhone,
@@ -265,6 +290,8 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
     Object? headerLegalName = freezed,
     Object? fiscalRuc = freezed,
     Object? dgiAuthorizationCode = freezed,
+    Object? legalFooter = freezed,
+    Object? taxExemptionReason = freezed,
     Object? headerRuc = freezed,
     Object? headerAddress = freezed,
     Object? headerPhone = freezed,
@@ -323,6 +350,14 @@ class __$$PrinterConfigImplCopyWithImpl<$Res>
           ? _value.dgiAuthorizationCode
           : dgiAuthorizationCode // ignore: cast_nullable_to_non_nullable
               as String?,
+      legalFooter: freezed == legalFooter
+          ? _value.legalFooter
+          : legalFooter // ignore: cast_nullable_to_non_nullable
+              as String?,
+      taxExemptionReason: freezed == taxExemptionReason
+          ? _value.taxExemptionReason
+          : taxExemptionReason // ignore: cast_nullable_to_non_nullable
+              as String?,
       headerRuc: freezed == headerRuc
           ? _value.headerRuc
           : headerRuc // ignore: cast_nullable_to_non_nullable
@@ -371,10 +406,12 @@ class _$PrinterConfigImpl implements _PrinterConfig {
       this.networkIp,
       this.networkPort = 9100,
       this.copies = 1,
-      this.headerBusinessName = 'OMNIFOOD NI',
+      this.headerBusinessName = '',
       this.headerLegalName,
       this.fiscalRuc,
       this.dgiAuthorizationCode,
+      this.legalFooter,
+      this.taxExemptionReason,
       this.headerRuc,
       this.headerAddress,
       this.headerPhone,
@@ -434,6 +471,19 @@ class _$PrinterConfigImpl implements _PrinterConfig {
   @override
   final String? dgiAuthorizationCode;
 
+  /// #540 AC-2/AC-5: optional legal/courtesy footer configured in Business
+  /// Profile (`local_configs['legal_footer']`). Null when blank/unconfigured.
+  /// Never written by [PrinterConfigService.savePrinterConfig].
+  @override
+  final String? legalFooter;
+
+  /// #540 AC-4: optional configured legal basis for temporary VAT exoneration
+  /// (e.g. MHCP-INTUR-DGI interinstitutional agreement for Semana Santa,
+  /// Fiestas Patrias, or Navidad Sin IVA). Read from
+  /// `local_configs['tax_exemption_reason']`. Null when blank/unconfigured.
+  @override
+  final String? taxExemptionReason;
+
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].
   @override
   final String? headerRuc;
@@ -455,7 +505,7 @@ class _$PrinterConfigImpl implements _PrinterConfig {
 
   @override
   String toString() {
-    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, dgiAuthorizationCode: $dgiAuthorizationCode, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
+    return 'PrinterConfig(driverType: $driverType, autoPrintInvoice: $autoPrintInvoice, autoPrintKitchen: $autoPrintKitchen, openDrawerOnCash: $openDrawerOnCash, paperWidthMm: $paperWidthMm, networkIp: $networkIp, networkPort: $networkPort, copies: $copies, headerBusinessName: $headerBusinessName, headerLegalName: $headerLegalName, fiscalRuc: $fiscalRuc, dgiAuthorizationCode: $dgiAuthorizationCode, legalFooter: $legalFooter, taxExemptionReason: $taxExemptionReason, headerRuc: $headerRuc, headerAddress: $headerAddress, headerPhone: $headerPhone, taxRegime: $taxRegime, logoBase64: $logoBase64, logoWidth: $logoWidth, logoHeight: $logoHeight, isLogoEnabled: $isLogoEnabled)';
   }
 
   @override
@@ -486,6 +536,10 @@ class _$PrinterConfigImpl implements _PrinterConfig {
                 other.fiscalRuc == fiscalRuc) &&
             (identical(other.dgiAuthorizationCode, dgiAuthorizationCode) ||
                 other.dgiAuthorizationCode == dgiAuthorizationCode) &&
+            (identical(other.legalFooter, legalFooter) ||
+                other.legalFooter == legalFooter) &&
+            (identical(other.taxExemptionReason, taxExemptionReason) ||
+                other.taxExemptionReason == taxExemptionReason) &&
             (identical(other.headerRuc, headerRuc) ||
                 other.headerRuc == headerRuc) &&
             (identical(other.headerAddress, headerAddress) ||
@@ -520,6 +574,8 @@ class _$PrinterConfigImpl implements _PrinterConfig {
         headerLegalName,
         fiscalRuc,
         dgiAuthorizationCode,
+        legalFooter,
+        taxExemptionReason,
         headerRuc,
         headerAddress,
         headerPhone,
@@ -558,6 +614,8 @@ abstract class _PrinterConfig implements PrinterConfig {
       final String? headerLegalName,
       final String? fiscalRuc,
       final String? dgiAuthorizationCode,
+      final String? legalFooter,
+      final String? taxExemptionReason,
       final String? headerRuc,
       final String? headerAddress,
       final String? headerPhone,
@@ -608,6 +666,19 @@ abstract class _PrinterConfig implements PrinterConfig {
   /// [PrinterConfigService.savePrinterConfig]. Null when unconfigured —
   /// absence on paper is the honest state, never a blank-looking value.
   String? get dgiAuthorizationCode;
+  @override
+
+  /// #540 AC-2/AC-5: optional legal/courtesy footer configured in Business
+  /// Profile (`local_configs['legal_footer']`). Null when blank/unconfigured.
+  /// Never written by [PrinterConfigService.savePrinterConfig].
+  String? get legalFooter;
+  @override
+
+  /// #540 AC-4: optional configured legal basis for temporary VAT exoneration
+  /// (e.g. MHCP-INTUR-DGI interinstitutional agreement for Semana Santa,
+  /// Fiestas Patrias, or Navidad Sin IVA). Read from
+  /// `local_configs['tax_exemption_reason']`. Null when blank/unconfigured.
+  String? get taxExemptionReason;
   @override
 
   /// Decorative printer header field (printer_header_ruc); must not shadow [fiscalRuc].

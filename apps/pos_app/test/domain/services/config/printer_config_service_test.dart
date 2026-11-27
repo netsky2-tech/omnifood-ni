@@ -73,7 +73,8 @@ void main() {
       expect(config.autoPrintKitchen, isFalse);
       expect(config.openDrawerOnCash, isTrue);
       expect(config.paperWidthMm, 58);
-      expect(config.headerBusinessName, 'OMNIFOOD NI');
+      expect(config.headerBusinessName, isEmpty);
+      expect(config.legalFooter, isNull);
     });
 
     test('hydrates saved config from local_configs DAO', () async {

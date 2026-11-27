@@ -176,6 +176,12 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
       ) as bool);
 
   @override
+  bool get hasContingencyManualReference => (super.noSuchMethod(
+        Invocation.getter(#hasContingencyManualReference),
+        returnValue: false,
+      ) as bool);
+
+  @override
   double get pointsToRedeem => (super.noSuchMethod(
         Invocation.getter(#pointsToRedeem),
         returnValue: 0.0,
@@ -515,6 +521,34 @@ class MockSaleViewModel extends _i1.Mock implements _i8.SaleViewModel {
         Invocation.method(
           #setBuzzerNumber,
           [number],
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void setContingencyManualReference({
+    required String? series,
+    required String? number,
+    required String? issuedAt,
+  }) =>
+      super.noSuchMethod(
+        Invocation.method(
+          #setContingencyManualReference,
+          [],
+          {
+            #series: series,
+            #number: number,
+            #issuedAt: issuedAt,
+          },
+        ),
+        returnValueForMissingStub: null,
+      );
+
+  @override
+  void clearContingencyManualReference() => super.noSuchMethod(
+        Invocation.method(
+          #clearContingencyManualReference,
+          [],
         ),
         returnValueForMissingStub: null,
       );
