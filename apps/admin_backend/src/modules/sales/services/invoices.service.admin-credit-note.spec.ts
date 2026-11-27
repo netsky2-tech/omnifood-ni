@@ -6,7 +6,11 @@ import { InvoicesService } from './invoices.service';
 import { Invoice } from '../entities/invoice.entity';
 import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Payment } from '../entities/payment.entity';
-import { InventoryMovement } from '../../inventory/entities/inventory-movement.entity';
+import {
+  InventoryMovement,
+  MovementType,
+} from '../../inventory/entities/inventory-movement.entity';
+import { Insumo } from '../../inventory/entities/insumo.entity';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { RecipeService } from '../../inventory/recipe.service';
@@ -48,7 +52,27 @@ describe('InvoicesService.createAdminCreditNote', () => {
     save: jest.Mock;
     delete: jest.Mock;
   };
-  let movementRepo: { create: jest.Mock; save: jest.Mock };
+  let movementRepo: {
+    find: jest.Mock;
+    create: jest.Mock;
+    save: jest.Mock;
+  };
+  let insumoRepo: {
+    findOne: jest.Mock;
+    save: jest.Mock;
+  };
+  let insumoQueryBuilder: {
+    setLock: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    getOne: jest.Mock;
+  };
+  let maxSeqQueryBuilder: {
+    select: jest.Mock;
+    where: jest.Mock;
+    andWhere: jest.Mock;
+    getRawOne: jest.Mock;
+  };
   let recipeService: { findActiveVersion: jest.Mock; getSnapshot: jest.Mock };
   let bomExplosionService: { explode: jest.Mock };
   let txManager: {
@@ -57,6 +81,7 @@ describe('InvoicesService.createAdminCreditNote', () => {
     getRepository: jest.Mock;
     findOne: jest.Mock;
     find: jest.Mock;
+    createQueryBuilder: jest.Mock;
   };
   let dataSource: { transaction: jest.Mock };
 
@@ -144,8 +169,25 @@ describe('InvoicesService.createAdminCreditNote', () => {
       delete: jest.fn(),
     };
     movementRepo = {
+      find: jest.fn().mockResolvedValue([]),
       create: jest.fn((x: unknown) => x),
-      save: jest.fn(),
+      save: jest.fn((x: unknown) => Promise.resolve(x)),
+    };
+    insumoRepo = {
+      findOne: jest.fn(),
+      save: jest.fn((x: unknown) => Promise.resolve(x)),
+    };
+    insumoQueryBuilder = {
+      setLock: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getOne: jest.fn(),
+    };
+    maxSeqQueryBuilder = {
+      select: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
+      getRawOne: jest.fn().mockResolvedValue({ maxSeq: '0' }),
     };
     recipeService = {
       findActiveVersion: jest.fn(),
@@ -155,7 +197,9 @@ describe('InvoicesService.createAdminCreditNote', () => {
 
     txManager = {
       query: jest.fn().mockResolvedValue([]),
-      save: jest.fn(),
+      save: jest.fn((_entity: unknown, val?: unknown) =>
+        Promise.resolve(val ?? _entity),
+      ),
       getRepository: jest.fn((target: unknown) => {
         if (target === Invoice) return invoiceRepo;
         if (target === InvoiceItem) return itemRepo;
@@ -163,10 +207,15 @@ describe('InvoicesService.createAdminCreditNote', () => {
         if (target === User) return userRepo;
         if (target === SystemParametersConfig) return seriesParamRepo;
         if (target === SystemParametersConfigActiveView) return seriesViewRepo;
+        if (target === InventoryMovement) return movementRepo;
+        if (target === Insumo) return insumoRepo;
         return undefined;
       }),
       findOne: jest.fn(),
       find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn((_entity: unknown, alias?: string) =>
+        alias === 'mov' ? maxSeqQueryBuilder : insumoQueryBuilder,
+      ),
     };
     dataSource = {
       transaction: jest.fn(
@@ -400,5 +449,155 @@ describe('InvoicesService.createAdminCreditNote', () => {
     const anonymousInsert = invoiceRepo.insert.mock.calls[1][0];
     expect(anonymousInsert.customerName).toBeNull();
     expect(anonymousInsert.customerTaxId).toBeNull();
+  });
+
+  it('DT 09-2007 3.4.a: reverses inventory movements on RESTOCK_ORIGINAL_BOM (partial return) with consecutive sourceSequence and timestamp', async () => {
+    const restockDto = dto();
+    restockDto.refundReasonPolicy = 'RESTOCK_ORIGINAL_BOM';
+    restockDto.items = [{ originInvoiceItemId: 'origin-item-1', quantity: 1 }];
+
+    const originSaleMov = {
+      id: 'sale-mov-1',
+      tenant_id: 'tenant-1',
+      insumoId: 'insumo-1',
+      type: MovementType.SALE,
+      quantity: -4,
+      unitCostNio: 25.5,
+      sourceDocumentId: 'invoice:origin-1',
+      sourceDocumentType: MovementType.SALE,
+      originInvoiceItemId: 'origin-item-1',
+    };
+    // 1st find: origin SALE movements; 2nd find: existing CREDIT_NOTE_RESTOCK compensations
+    txManager.find
+      .mockResolvedValueOnce([originSaleMov])
+      .mockResolvedValueOnce([]);
+    maxSeqQueryBuilder.getRawOne.mockResolvedValue({ maxSeq: '7' });
+
+    const insumoEntity = {
+      id: 'insumo-1',
+      tenant_id: 'tenant-1',
+      stock: 10,
+      existenciaActual: 10,
+      averageCost: 25.5,
+    };
+    insumoQueryBuilder.getOne.mockResolvedValue(insumoEntity);
+
+    await service.createAdminCreditNote('tenant-1', restockDto, authorizer);
+
+    // Origin item qty was 2, refund qty is 1 -> 50% of 4 = +2 restored
+    expect(insumoEntity.stock).toBe(12);
+    expect(insumoEntity.existenciaActual).toBe(12);
+    expect(movementRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenant_id: 'tenant-1',
+        insumoId: 'insumo-1',
+        type: MovementType.CREDIT_NOTE_RESTOCK,
+        quantity: 2,
+        previousStock: 10,
+        newStock: 12,
+        unitCostNio: 25.5,
+        sourceDeviceId: 'WEB_ADMIN',
+        sourceSequence: '8',
+        sourceDocumentId: 'cn-1',
+        sourceDocumentType: 'CREDIT_NOTE',
+        compensationForKardexId: 'sale-mov-1',
+        originMovementId: 'sale-mov-1',
+        originInvoiceItemId: 'origin-item-1',
+        refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+        timestamp: expect.any(Date),
+      }),
+    );
+    expect(txManager.save).toHaveBeenCalled();
+  });
+
+  it('DT 09-2007 3.4.a: reverses full discharged quantities across multiple movements with consecutive sourceSequences', async () => {
+    const restockDto = dto();
+    restockDto.refundReasonPolicy = 'RESTOCK_ORIGINAL_BOM';
+    restockDto.items = [{ originInvoiceItemId: 'origin-item-1', quantity: 2 }];
+
+    const movA = {
+      id: 'sale-mov-a',
+      tenant_id: 'tenant-1',
+      insumoId: 'insumo-a',
+      type: MovementType.SALE,
+      quantity: -4,
+      unitCostNio: 10,
+      sourceDocumentId: 'invoice:origin-1',
+      sourceDocumentType: MovementType.SALE,
+      originInvoiceItemId: 'origin-item-1',
+    };
+    const movB = {
+      id: 'sale-mov-b',
+      tenant_id: 'tenant-1',
+      insumoId: 'insumo-b',
+      type: MovementType.SALE,
+      quantity: -1.5,
+      unitCostNio: 40,
+      sourceDocumentId: 'invoice:origin-1',
+      sourceDocumentType: MovementType.SALE,
+      originInvoiceItemId: 'origin-item-1',
+    };
+    txManager.find
+      .mockResolvedValueOnce([movA, movB])
+      .mockResolvedValueOnce([]);
+    maxSeqQueryBuilder.getRawOne.mockResolvedValue({ maxSeq: '10' });
+
+    const insumoA = {
+      id: 'insumo-a',
+      tenant_id: 'tenant-1',
+      stock: 5,
+      existenciaActual: 5,
+      averageCost: 10,
+    };
+    const insumoB = {
+      id: 'insumo-b',
+      tenant_id: 'tenant-1',
+      stock: 2,
+      existenciaActual: 2,
+      averageCost: 40,
+    };
+    insumoQueryBuilder.getOne
+      .mockResolvedValueOnce(insumoA)
+      .mockResolvedValueOnce(insumoB);
+
+    await service.createAdminCreditNote('tenant-1', restockDto, authorizer);
+
+    expect(insumoA.stock).toBe(9);
+    expect(insumoB.stock).toBe(3.5);
+    expect(movementRepo.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        insumoId: 'insumo-a',
+        quantity: 4,
+        sourceSequence: '11',
+        sourceDocumentId: 'cn-1',
+        sourceDocumentType: 'CREDIT_NOTE',
+      }),
+    );
+    expect(movementRepo.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        insumoId: 'insumo-b',
+        quantity: 1.5,
+        sourceSequence: '12',
+        sourceDocumentId: 'cn-1',
+        sourceDocumentType: 'CREDIT_NOTE',
+      }),
+    );
+  });
+
+  it('DT 09-2007 3.4.a: succeeds cleanly without fabricating movements when origin invoice had no inventory movements', async () => {
+    const restockDto = dto();
+    restockDto.refundReasonPolicy = 'RESTOCK_ORIGINAL_BOM';
+    txManager.find.mockResolvedValueOnce([]);
+
+    const result = await service.createAdminCreditNote(
+      'tenant-1',
+      restockDto,
+      authorizer,
+    );
+
+    expect(result.id).toBe('cn-1');
+    expect(movementRepo.create).not.toHaveBeenCalled();
   });
 });
