@@ -79,13 +79,35 @@ if [ ! -f "${BACKEND_DIR}/.env" ]; then
     exit 1
 fi
 
-if [ -z "${DATABASE_URL:-}" ] && [ -z "${DATABASE_PUBLIC_URL:-}" ] && command -v railway >/dev/null 2>&1; then
-    echo "🔍 Resolving remote database URL via Railway..."
-    RAILWAY_DB_URL=$(railway variable list --service postgres --json 2>/dev/null | python3 -c "import sys, json; print(json.load(sys.stdin).get('DATABASE_PUBLIC_URL', ''))" 2>/dev/null || true)
-    if [ -n "${RAILWAY_DB_URL}" ]; then
-        export DATABASE_PUBLIC_URL="${RAILWAY_DB_URL}"
-        echo "✓ Remote database resolved from Railway."
+DB_URL_TRIMMED="${DATABASE_URL:-}"
+DB_PUBLIC_URL_TRIMMED="${DATABASE_PUBLIC_URL:-}"
+DB_URL_TRIMMED="${DB_URL_TRIMMED#"${DB_URL_TRIMMED%%[![:space:]]*}"}"
+DB_PUBLIC_URL_TRIMMED="${DB_PUBLIC_URL_TRIMMED#"${DB_PUBLIC_URL_TRIMMED%%[![:space:]]*}"}"
+
+if [ -z "${DB_URL_TRIMMED}" ] && [ -z "${DB_PUBLIC_URL_TRIMMED}" ]; then
+    if ! command -v railway >/dev/null 2>&1; then
+        echo "ERROR: Neither DATABASE_URL nor DATABASE_PUBLIC_URL is set, and 'railway' CLI is not installed." >&2
+        echo "Export DATABASE_URL or DATABASE_PUBLIC_URL pointing to the target remote PostgreSQL database before publishing." >&2
+        exit 1
     fi
+
+    echo "🔍 Resolving remote database URL via Railway..."
+    if ! RAILWAY_JSON=$(railway variable list --service postgres --json 2>&1); then
+        echo "ERROR: Failed to resolve remote database URL via 'railway variable list --service postgres --json'." >&2
+        echo "Railway CLI may be unauthenticated or unlinked. Export DATABASE_URL or DATABASE_PUBLIC_URL explicitly." >&2
+        echo "Railway output: ${RAILWAY_JSON}" >&2
+        exit 1
+    fi
+
+    RAILWAY_DB_URL=$(printf '%s' "${RAILWAY_JSON}" | python3 -c "import sys, json; data = json.load(sys.stdin); print((data.get('DATABASE_PUBLIC_URL') or data.get('DATABASE_URL') or '').strip())" 2>/dev/null || true)
+    if [ -z "${RAILWAY_DB_URL}" ]; then
+        echo "ERROR: Railway returned an empty database URL (DATABASE_PUBLIC_URL / DATABASE_URL)." >&2
+        echo "Export DATABASE_URL or DATABASE_PUBLIC_URL pointing to the target remote PostgreSQL database before publishing." >&2
+        exit 1
+    fi
+
+    export DATABASE_PUBLIC_URL="${RAILWAY_DB_URL}"
+    echo "✓ Remote database resolved from Railway."
 fi
 
 NODE_ARGS=(

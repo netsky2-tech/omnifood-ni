@@ -98,6 +98,14 @@ Stated honestly, because pretending otherwise is how the failure gets discovered
 - **Terminal update blocked and no physical access planned:** the terminal keeps selling with its current version until someone reaches it. Budget the visit; do not improvise remote workarounds.
 - Every one of these recoveries pays the reinstall cost described at the top: the local DGI sequence and unsynced documents are at risk, and reconciliation follows the incident procedure, not ad-hoc steps.
 
+## Publishing a POS release to production (fail-closed DB gate)
+
+`scripts/publish_pos_release.sh` (and `apps/admin_backend/src/scripts/publish-release.ts`) **fails closed** on the remote `app_releases` database target (issue `#945`):
+
+- **Required environment:** export `DATABASE_URL` or `DATABASE_PUBLIC_URL` pointing to the target remote PostgreSQL instance (for example, `export DATABASE_PUBLIC_URL="$(railway variable list --service postgres --json | python3 -c 'import sys, json; print(json.load(sys.stdin)["DATABASE_PUBLIC_URL"])')"`).
+- **Why local `.env` is intentionally ignored:** `publish-release.ts` never falls back to local TypeORM `dataSource` (`.env`) and rejects `localhost` / `127.0.0.1` / `::1` targets unless `ALLOW_LOCAL_RELEASE_DB=1` (or `--allow-local-db`) is explicitly passed for controlled local testing. Previously, a missing or unreachable remote URL could silently fall back to local `.env` or skip the DB write while still printing a success banner, leaving terminals unable to discover the release.
+- **Audit & verification:** before uploading any APK to R2, the publisher connects to the remote DB, logs the sanitized `host:port/db (schema=...)` target, and after each upsert reads back the `app_releases` row to verify `sha256` and `storage_key` before printing `ALL RELEASE ARTIFACTS PUBLISHED SUCCESSFULLY`.
+
 ## References
 
 - Feature document and decisions: `odd/tasks/release-signing-baseline.md`

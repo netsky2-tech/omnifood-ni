@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-redundant-type-constituents, @typescript-eslint/no-base-to-string */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-base-to-string */
 import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import * as https from 'https';
 import { Client } from 'pg';
-import dataSource from '../data-source';
 
 export interface ManifestArtifact {
   file: string;
@@ -22,19 +21,194 @@ export interface ReleaseManifestJson {
   artifacts: ManifestArtifact[];
 }
 
-function parseCliArgs(): {
+export interface PublishCliOptions {
   manifestPath: string;
   channel: string;
   minFromVersionCode: number;
   notes?: string;
   mandatory: boolean;
-} {
+  allowLocalDb: boolean;
+}
+
+export interface RemoteDbTarget {
+  connectionString: string;
+  host: string;
+  port: string;
+}
+
+export interface RemoteDbAuditInfo {
+  host: string;
+  port: string;
+  database: string;
+  schema: string;
+}
+
+export interface PgClientLike {
+  connect(): Promise<void>;
+  query(
+    sql: string,
+    params?: unknown[],
+  ): Promise<{ rows: Record<string, unknown>[] }>;
+  end(): Promise<void>;
+}
+
+export interface PublishReleaseDeps {
+  env?: Record<string, string | undefined>;
+  createPgClient?: (connectionString: string) => PgClientLike;
+  uploadToR2?: (params: {
+    endpoint: string;
+    bucket: string;
+    key: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    filePath: string;
+  }) => Promise<void>;
+  log?: (message: string) => void;
+}
+
+const LOCAL_DB_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+
+export function resolveRemoteDbConfig(
+  env: Record<string, string | undefined>,
+  allowLocalDb = false,
+): RemoteDbTarget {
+  const rawUrl =
+    env.DATABASE_URL?.trim() || env.DATABASE_PUBLIC_URL?.trim() || '';
+
+  if (!rawUrl) {
+    throw new Error(
+      'Missing remote database URL: set DATABASE_URL or DATABASE_PUBLIC_URL (local .env fallback is disabled).',
+    );
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error(
+      'Invalid DATABASE_URL / DATABASE_PUBLIC_URL format: unable to parse connection URL.',
+    );
+  }
+
+  const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const port = parsed.port || '5432';
+
+  if (!host) {
+    throw new Error(
+      'Invalid DATABASE_URL / DATABASE_PUBLIC_URL: missing database host.',
+    );
+  }
+
+  const localOptIn = allowLocalDb || env.ALLOW_LOCAL_RELEASE_DB === '1';
+  if (LOCAL_DB_HOSTS.has(host) && !localOptIn) {
+    throw new Error(
+      `Refusing to publish release to local database host "${host}". ` +
+        'Set ALLOW_LOCAL_RELEASE_DB=1 or pass --allow-local-db for controlled local testing.',
+    );
+  }
+
+  return {
+    connectionString: rawUrl,
+    host,
+    port,
+  };
+}
+
+export async function connectAndAuditRemoteDb(
+  client: PgClientLike,
+  target: RemoteDbTarget,
+  logFn: (message: string) => void = console.log,
+): Promise<RemoteDbAuditInfo> {
+  await client.connect();
+  const res = await client.query(
+    'SELECT current_database() AS db, current_schema() AS schema',
+  );
+  const row = res.rows[0] ?? {};
+  const database = String(row.db ?? '');
+  const schema = String(row.schema ?? '');
+
+  logFn(
+    `✓ Connected to remote database: ${target.host}:${target.port}/${database} (schema=${schema})`,
+  );
+
+  return {
+    host: target.host,
+    port: target.port,
+    database,
+    schema,
+  };
+}
+
+export async function verifyPublishedReleaseRow(
+  client: Pick<PgClientLike, 'query'>,
+  expected: {
+    channel: string;
+    abi: string;
+    versionCode: number;
+    sha256: string;
+    storageKey: string;
+  },
+): Promise<void> {
+  const selectSql = `
+    SELECT version_code, channel, abi, sha256, storage_key
+    FROM app_releases
+    WHERE channel = $1 AND abi = $2 AND version_code = $3
+  `;
+  const res = await client.query(selectSql, [
+    expected.channel,
+    expected.abi,
+    expected.versionCode,
+  ]);
+
+  if (!res.rows || res.rows.length === 0) {
+    throw new Error(
+      `Post-publish verification failed: no row found in app_releases for ` +
+        `channel=${expected.channel}, abi=${expected.abi}, version_code=${expected.versionCode}.`,
+    );
+  }
+
+  const row = res.rows[0];
+  const actualSha = String(row.sha256 ?? '').toLowerCase();
+  const expectedSha = expected.sha256.toLowerCase();
+  if (actualSha !== expectedSha) {
+    throw new Error(
+      `Post-publish verification failed: sha256 mismatch for ` +
+        `channel=${expected.channel}, abi=${expected.abi}, version_code=${expected.versionCode} ` +
+        `(expected ${expectedSha.slice(0, 12)}..., got ${actualSha.slice(0, 12)}...).`,
+    );
+  }
+
+  const actualKey = String(row.storage_key ?? '');
+  if (actualKey !== expected.storageKey) {
+    throw new Error(
+      `Post-publish verification failed: storage_key mismatch for ` +
+        `channel=${expected.channel}, abi=${expected.abi}, version_code=${expected.versionCode} ` +
+        `(expected ${expected.storageKey}, got ${actualKey}).`,
+    );
+  }
+
+  const actualVersionCode = Number(row.version_code);
+  const actualChannel = String(row.channel ?? '');
+  const actualAbi = String(row.abi ?? '');
+  if (
+    actualVersionCode !== expected.versionCode ||
+    actualChannel !== expected.channel ||
+    actualAbi !== expected.abi
+  ) {
+    throw new Error(
+      `Post-publish verification failed: identity mismatch in app_releases row.`,
+    );
+  }
+}
+
+function parseCliArgs(): PublishCliOptions {
   const args = process.argv.slice(2);
   let manifestPath = '';
   let channel = 'pilot';
   let minFromVersionCode = 1;
   let notes: string | undefined;
   let mandatory = false;
+  let allowLocalDb = false;
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -48,6 +222,8 @@ function parseCliArgs(): {
       notes = args[++i];
     } else if (arg === '--mandatory') {
       mandatory = true;
+    } else if (arg === '--allow-local-db') {
+      allowLocalDb = true;
     }
   }
 
@@ -58,7 +234,14 @@ function parseCliArgs(): {
     process.exit(1);
   }
 
-  return { manifestPath, channel, minFromVersionCode, notes, mandatory };
+  return {
+    manifestPath,
+    channel,
+    minFromVersionCode,
+    notes,
+    mandatory,
+    allowLocalDb,
+  };
 }
 
 function deriveAbiAndVersionCode(
@@ -224,12 +407,35 @@ async function uploadFileToR2({
   });
 }
 
-async function main() {
-  const options = parseCliArgs();
+export async function publishRelease(
+  options: PublishCliOptions,
+  deps: PublishReleaseDeps = {},
+): Promise<void> {
+  const env = deps.env ?? process.env;
+  const log = deps.log ?? console.log;
+  const uploadToR2 = deps.uploadToR2 ?? uploadFileToR2;
+  const createPgClient =
+    deps.createPgClient ??
+    ((connectionString: string): PgClientLike => {
+      const client = new Client({ connectionString });
+      return {
+        connect: async () => {
+          await client.connect();
+        },
+        query: async (sql: string, params?: unknown[]) => {
+          const res = (await client.query(sql, params)) as {
+            rows: Record<string, unknown>[];
+          };
+          return { rows: res.rows };
+        },
+        end: async () => {
+          await client.end();
+        },
+      };
+    });
 
   if (!fs.existsSync(options.manifestPath)) {
-    console.error(`Manifest file not found: ${options.manifestPath}`);
-    process.exit(1);
+    throw new Error(`Manifest file not found: ${options.manifestPath}`);
   }
 
   const manifestDir = path.dirname(path.resolve(options.manifestPath));
@@ -239,108 +445,80 @@ async function main() {
 
   const versionMatch = rawManifest.version.match(/^([0-9.]+)\+([0-9]+)$/);
   if (!versionMatch) {
-    console.error(
+    throw new Error(
       `Invalid version format in manifest: ${rawManifest.version} (expected x.y.z+buildNumber)`,
     );
-    process.exit(1);
   }
 
   const versionName = versionMatch[1];
   const baseBuildNumber = parseInt(versionMatch[2], 10);
 
-  const endpoint = process.env.R2_ENDPOINT?.trim();
-  const bucket = process.env.R2_BUCKET_NAME?.trim() || 'nhilos-pos';
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
+  const endpoint = env.R2_ENDPOINT?.trim();
+  const bucket = env.R2_BUCKET_NAME?.trim() || 'nhilos-pos';
+  const accessKeyId = env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = env.R2_SECRET_ACCESS_KEY?.trim();
 
   if (!endpoint || !accessKeyId || !secretAccessKey) {
-    console.error(
-      'Error: R2 credentials missing in environment (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY).',
+    throw new Error(
+      'R2 credentials missing in environment (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY).',
     );
-    process.exit(1);
   }
 
-  console.log(
+  log(
     '==============================================================================',
   );
-  console.log('🚀 OmniFood POS — OTA Release Publisher');
-  console.log(
+  log('🚀 OmniFood POS — OTA Release Publisher');
+  log(
     '==============================================================================',
   );
-  console.log(`📦 Manifest:     ${options.manifestPath}`);
-  console.log(
-    `🏷️  Version:      ${versionName} (Base Build: ${baseBuildNumber})`,
-  );
-  console.log(`📡 Channel:      ${options.channel}`);
-  console.log(`☁️  Bucket:       ${bucket}`);
-  console.log(
+  log(`📦 Manifest:     ${options.manifestPath}`);
+  log(`🏷️  Version:      ${versionName} (Base Build: ${baseBuildNumber})`);
+  log(`📡 Channel:      ${options.channel}`);
+  log(`☁️  Bucket:       ${bucket}`);
+  log(
     '------------------------------------------------------------------------------',
   );
 
-  // Digest gate: abort before the first R2 upload and before any DB write if
-  // the manifest does not match the bytes on disk.
+  // Digest gate: abort before DB connection, R2 upload, or DB write if the
+  // manifest does not match the bytes on disk.
   verifyManifestArtifacts(manifestDir, rawManifest.artifacts);
-  console.log('✓ All artifact digests match the manifest (fail-closed gate).');
+  log('✓ All artifact digests match the manifest (fail-closed gate).');
 
-  let dbConnected = false;
-  let pgClient: Client | null = null;
-  const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
+  // Fail-closed remote DB gate: validate URL & connect BEFORE any R2 upload.
+  const dbTarget = resolveRemoteDbConfig(env, options.allowLocalDb);
+  const pgClient = createPgClient(dbTarget.connectionString);
 
-  if (dbUrl) {
-    try {
-      pgClient = new Client({ connectionString: dbUrl });
-      await pgClient.connect();
-      console.log('✓ Connected to remote database via DATABASE_URL.');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(`⚠️  Remote database connection failed: ${msg}`);
-      pgClient = null;
-    }
-  }
+  try {
+    await connectAndAuditRemoteDb(pgClient, dbTarget, log);
 
-  if (!pgClient) {
-    try {
-      await dataSource.initialize();
-      dbConnected = true;
-      console.log('✓ Database connection initialized via local dataSource.');
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.warn(
-        `⚠️  Database connection skipped or failed (${msg}). Only R2 uploads will proceed.`,
+    for (const artifact of rawManifest.artifacts) {
+      const artifactPath = path.join(manifestDir, artifact.file);
+
+      const { abi, versionCode } = deriveAbiAndVersionCode(
+        artifact.file,
+        versionName,
+        baseBuildNumber,
       );
-    }
-  }
+      if (abi === 'universal') continue; // POS terminals install per-ABI builds
 
-  for (const artifact of rawManifest.artifacts) {
-    const artifactPath = path.join(manifestDir, artifact.file);
+      const storageKey = `releases/${options.channel}/nhilos-pos-${abi}-${versionCode}.apk`;
+      const normalizedSha = artifact.sha256.toLowerCase();
+      log(`\n📤 Uploading ${artifact.file} -> R2://${bucket}/${storageKey}`);
+      log(
+        `   ABI: ${abi} | versionCode: ${versionCode} | Size: ${artifact.size_human} (${artifact.size_bytes} bytes)`,
+      );
 
-    const { abi, versionCode } = deriveAbiAndVersionCode(
-      artifact.file,
-      versionName,
-      baseBuildNumber,
-    );
-    if (abi === 'universal') continue; // POS terminals install per-ABI builds
+      await uploadToR2({
+        endpoint,
+        bucket,
+        key: storageKey,
+        accessKeyId,
+        secretAccessKey,
+        filePath: artifactPath,
+      });
+      log(`   ✓ Upload complete to R2.`);
 
-    const storageKey = `releases/${options.channel}/nhilos-pos-${abi}-${versionCode}.apk`;
-    console.log(
-      `\n📤 Uploading ${artifact.file} -> R2://${bucket}/${storageKey}`,
-    );
-    console.log(
-      `   ABI: ${abi} | versionCode: ${versionCode} | Size: ${artifact.size_human} (${artifact.size_bytes} bytes)`,
-    );
-
-    await uploadFileToR2({
-      endpoint,
-      bucket,
-      key: storageKey,
-      accessKeyId,
-      secretAccessKey,
-      filePath: artifactPath,
-    });
-    console.log(`   ✓ Upload complete to R2.`);
-
-    if (pgClient || dbConnected) {
-      console.log(`   💾 Registering in app_releases table...`);
+      log(`   💾 Registering in app_releases table...`);
       const insertSql = `
         INSERT INTO app_releases (
           channel, abi, version_code, version_name, sha256,
@@ -361,7 +539,7 @@ async function main() {
         abi,
         versionCode,
         versionName,
-        artifact.sha256.toLowerCase(),
+        normalizedSha,
         artifact.size_bytes.toString(),
         storageKey,
         options.minFromVersionCode,
@@ -369,29 +547,32 @@ async function main() {
         options.notes || null,
       ];
 
-      if (pgClient) {
-        await pgClient.query(insertSql, queryParams);
-      } else {
-        await dataSource.query(insertSql, queryParams);
-      }
-      console.log(`   ✓ Release record persisted.`);
+      await pgClient.query(insertSql, queryParams);
+      await verifyPublishedReleaseRow(pgClient, {
+        channel: options.channel,
+        abi,
+        versionCode,
+        sha256: normalizedSha,
+        storageKey,
+      });
+      log(`   ✓ Release record persisted and verified in remote DB.`);
     }
-  }
 
-  if (pgClient) {
+    log(
+      '\n==============================================================================',
+    );
+    log('🎉 ALL RELEASE ARTIFACTS PUBLISHED SUCCESSFULLY!');
+    log(
+      '==============================================================================',
+    );
+  } finally {
     await pgClient.end();
   }
-  if (dbConnected) {
-    await dataSource.destroy();
-  }
+}
 
-  console.log(
-    '\n==============================================================================',
-  );
-  console.log('🎉 ALL RELEASE ARTIFACTS PUBLISHED SUCCESSFULLY!');
-  console.log(
-    '==============================================================================',
-  );
+async function main() {
+  const options = parseCliArgs();
+  await publishRelease(options);
 }
 
 if (require.main === module) {
