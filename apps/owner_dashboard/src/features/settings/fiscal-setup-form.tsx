@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   resolveDgiAuthorizationExpiryStatus,
 } from "./types";
-import { ShieldCheck, Loader2, Landmark, CalendarClock, AlertTriangle } from "lucide-react";
+import { ShieldCheck, Loader2, Landmark, CalendarClock, AlertTriangle, Info } from "lucide-react";
 
 /**
  * D-21 (#554): normalizes a snapshot date (date-only or full ISO-8601) to
@@ -210,7 +210,11 @@ export function FiscalSetupForm() {
             </CardDescription>
           </div>
           <Badge variant={selectedRegime === FiscalRegime.REGIMEN_GENERAL ? "default" : "secondary"}>
-            {selectedRegime === FiscalRegime.REGIMEN_GENERAL ? "Régimen General (15% IVA)" : "Cuota Fija (0% IVA)"}
+            {selectedRegime === FiscalRegime.REGIMEN_GENERAL
+              ? "Régimen General (15% IVA)"
+              : selectedRegime === FiscalRegime.CONTROL_INTERNO
+                ? "Control Interno (0% IVA — No fiscal)"
+                : "Cuota Fija (0% IVA)"}
           </Badge>
         </div>
       </CardHeader>
@@ -243,6 +247,23 @@ export function FiscalSetupForm() {
             <AlertDescription className="text-xs mt-1">
               La autorización DGI registrada venció el {expiryDisplayDate ||
                 savedExpiresAt}. Gestione su renovación ante la DGI lo antes posible.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* #1049 (S3): Non-fiscal notice when CONTROL_INTERNO is selected */}
+        {selectedRegime === FiscalRegime.CONTROL_INTERNO && (
+          <Alert
+            className="mb-6 border-amber-500/40 bg-amber-500/10 text-foreground"
+            data-testid="control-interno-non-fiscal-banner"
+          >
+            <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertTitle className="font-semibold text-sm">
+              NOTA DE VENTA — DOCUMENTO NO FISCAL
+            </AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground mt-1">
+              En modo Control Interno, los comprobantes emitidos llevan el título{" "}
+              <strong>NOTA DE VENTA — DOCUMENTO NO FISCAL</strong>, aplican 0% IVA y no tienen valor tributario ante la DGI. Podés pasar a Cuota Fija o Régimen General al formalizar tu negocio sin perder tu historial.
             </AlertDescription>
           </Alert>
         )}
@@ -280,7 +301,11 @@ export function FiscalSetupForm() {
 
             {/* RUC */}
             <div className="space-y-2">
-              <Label htmlFor="ruc">RUC (Número RUC) *</Label>
+              <Label htmlFor="ruc">
+                {selectedRegime === FiscalRegime.CONTROL_INTERNO
+                  ? "RUC / Cédula (Opcional)"
+                  : "RUC (Número RUC) *"}
+              </Label>
               <Input
                 id="ruc"
                 placeholder="Ej. J0310000012345"
@@ -298,17 +323,22 @@ export function FiscalSetupForm() {
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 {...register("regime")}
               >
+                <option value={FiscalRegime.CONTROL_INTERNO}>
+                  Control Interno (No inscrito en DGI)
+                </option>
                 <option value={FiscalRegime.CUOTA_FIJA}>
-                  Cuota Fija (Sin desglose formal de IVA)
+                  Cuota Fija (Ley 822)
                 </option>
                 <option value={FiscalRegime.REGIMEN_GENERAL}>
-                  Régimen General (15% IVA desglosado)
+                  Régimen General (IVA 15%)
                 </option>
               </select>
               <p className="text-xs text-muted-foreground">
-                {selectedRegime === FiscalRegime.CUOTA_FIJA
-                  ? "Tasa efectiva de IVA 0%. Factura simplificada sin desglose impositivo."
-                  : "Tasa efectiva de IVA 15%. Factura formal DGI con desglose de subtotal gravado e IVA."}
+                {selectedRegime === FiscalRegime.CONTROL_INTERNO
+                  ? "Modo operativo no fiscal: emite Nota de Venta (IVA 0%) sin valor tributario ante la DGI. Podés pasar a Cuota Fija o Régimen General al formalizar tu negocio sin perder tu historial."
+                  : selectedRegime === FiscalRegime.CUOTA_FIJA
+                    ? "Pequeño contribuyente inscrito en DGI. No recauda IVA; emite Comprobante de Venta."
+                    : "Contribuyente formal. Recauda IVA 15% y emite Factura de Venta con consecutivo DGI."}
               </p>
             </div>
 
