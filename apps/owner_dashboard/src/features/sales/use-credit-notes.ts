@@ -5,10 +5,10 @@ import {
   type IssueAdminCreditNoteBody,
 } from "./credit-notes-api";
 
-export function useAdminInvoices() {
+export function useAdminInvoices(contingencyOnly = false) {
   return useQuery({
-    queryKey: ["admin", "invoices"],
-    queryFn: ({ signal }) => fetchAdminInvoices({ signal }),
+    queryKey: ["admin", "invoices", { contingencyOnly }],
+    queryFn: ({ signal }) => fetchAdminInvoices({ signal, contingencyOnly }),
     staleTime: 60 * 1000,
   });
 }

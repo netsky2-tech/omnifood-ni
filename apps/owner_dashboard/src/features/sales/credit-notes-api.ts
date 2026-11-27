@@ -27,8 +27,15 @@ export interface AdminInvoice {
   type: string;
   isCanceled: boolean;
   customerId?: string | null;
+  contingencyManualSeries?: string | null;
+  contingencyManualNumber?: string | null;
+  contingencyManualIssuedAt?: string | null;
   items: AdminInvoiceItem[];
   payments?: AdminInvoicePayment[];
+}
+
+export interface FetchAdminInvoicesOptions extends ApiClientMethodOptions {
+  contingencyOnly?: boolean;
 }
 
 /** Result of a successful issuance: the allocated number is the fiscal fact. */
@@ -48,8 +55,12 @@ export interface IssueAdminCreditNoteBody {
   notes?: string;
 }
 
-export function fetchAdminInvoices(opts?: ApiClientMethodOptions) {
-  return api.get<AdminInvoice[]>("/sales/admin/invoices", opts);
+export function fetchAdminInvoices(opts?: FetchAdminInvoicesOptions) {
+  const { contingencyOnly, ...apiOpts } = opts ?? {};
+  const url = contingencyOnly
+    ? "/sales/admin/invoices?contingencyOnly=true"
+    : "/sales/admin/invoices";
+  return api.get<AdminInvoice[]>(url, apiOpts);
 }
 
 export function issueAdminCreditNote(
