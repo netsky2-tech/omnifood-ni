@@ -52,6 +52,7 @@ Conforme al procedimiento establecido en `docs/operations/release-signing-runboo
   sha256sum dist/release_candidate/app-arm64-v8a-release.apk
   # Hash registrado: __________________________________________________
   ```
+- [ ] **Publicación OTA Fail-Closed (`scripts/publish_pos_release.sh`):** Exportar `DATABASE_URL` o `DATABASE_PUBLIC_URL` de producción antes de ejecutar `scripts/publish_pos_release.sh --channel production` (el script ignora intencionalmente el `.env` local por `#945`, audita `host:port/db (schema=...)` y verifica el read-back en `app_releases` antes de reportar éxito).
 
 ---
 
