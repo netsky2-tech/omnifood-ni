@@ -36,12 +36,12 @@
 
 ## Tasks
 
-- [ ] `T1` (S1, S2) [worker] Backend migration (`inventory_policy`, `catalog_kind`, `managed_product_id`), schema build registration & real-PG migration `.db.spec.ts` — commit: pending
-- [ ] `T2` (S1, S2, S3, S4) [worker] Backend `ProductService` resale provisioning, `InsumoService` filtering, stock/CPP mirror to `products`, `InboundSyncService`, unit + real-PG coexistence `.db.spec.ts` — commit: pending
-- [ ] `T3` (S1, S4, S5) [worker] POS `inventoryPolicy` sync, D1/D2 honesty & cleanup, and offline coexistence unit/integration tests — commit: pending
-- [ ] `T4` (S6) [worker] Owner Dashboard toggle + Purchases resale selector + clean Insumos tab + onboarding CSV/docs + Vitest/build — commit: pending
-- [ ] `T5` (S7) [inline + S23 hardware] Real Samsung Galaxy S23 hardware E2E test (`resale_coexistence_s23_hardware_e2e_test.dart`) — commit: pending
-- [ ] `T6` (S1–S7) [verify] Independent `gentle-ai-verify` (Risk: item 1 + item 3), full local checks, PR closing `#518` & `#935` — commit: pending
+- [x] `T1` (S1, S2) [worker] Backend migration (`inventory_policy`, `catalog_kind`, `managed_product_id`), schema build registration & real-PG migration `.db.spec.ts` — commit: `090361dc`
+- [x] `T2` (S1, S2, S3, S4) [worker] Backend `ProductService` resale provisioning, `InsumoService` filtering, stock/CPP mirror to `products`, `InboundSyncService`, unit + real-PG coexistence `.db.spec.ts` — commit: `32babf89`
+- [x] `T3` (S1, S4, S5) [worker] POS `inventoryPolicy` sync, D1/D2 honesty & cleanup, and offline coexistence unit/integration tests — commit: `bd417144`
+- [x] `T4` (S6) [worker] Owner Dashboard toggle + Purchases resale selector + clean Insumos tab + onboarding CSV/docs + Vitest/build — commit: `0e169893`
+- [x] `T5` (S7) [inline + S23 hardware] Real Samsung Galaxy S23 hardware E2E test (`resale_coexistence_s23_hardware_e2e_test.dart`) — 3/3 `ALL_TESTS_PASSED` on `SM_S918B` (`R5CWB2LQJDJ`, ARM64)
+- [x] `T6` (S1–S7) [verify] Independent `gentle-ai-verify` (Risk: item 1 + item 3), `verify-schema-build.sh` (46/46, 0 RLS debt), full local checks — verified `S1`–`S7` `met`
 
 ## Log
 
