@@ -263,6 +263,7 @@ void main() {
       final result = await repository.loginOnline(
         'admin@omnifood.ni',
         'admin123',
+        tenantSlug: 'test-tenant',
       );
 
       expect(result, isNull);
@@ -305,7 +306,11 @@ void main() {
       when(() => securityProfileDao.findByUserId('u-1')).thenAnswer((_) async => localProfile);
       when(() => localAuthService.verifyPin(pin, r'$2b$10$pin-hash')).thenReturn(true);
 
-      final result = await repository.loginOnline(email, pin);
+      final result = await repository.loginOnline(
+        email,
+        pin,
+        tenantSlug: 'test-tenant',
+      );
 
       expect(result, isNotNull);
       expect(result?.id, equals('u-1'));
@@ -349,7 +354,11 @@ void main() {
     when(() => securityProfileDao.findByUserId('u-1')).thenAnswer((_) async => localProfile);
     when(() => localAuthService.verifyPin(pin, r'$2b$10$pin-hash')).thenReturn(true);
 
-    final result = await repository.loginOnline(email, pin);
+    final result = await repository.loginOnline(
+      email,
+      pin,
+      tenantSlug: 'test-tenant',
+    );
 
     expect(result, isNotNull);
     expect(result?.id, equals('u-1'));
@@ -370,7 +379,11 @@ void main() {
       ),
     );
 
-    final result = await repository.loginOnline('cashier@omnifood.ni', 'bad-pin');
+    final result = await repository.loginOnline(
+      'cashier@omnifood.ni',
+      'bad-pin',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(result, isNull);
     verifyNever(() => userDao.findUserByEmail(any()));
@@ -390,7 +403,11 @@ void main() {
       ),
     );
 
-    final result = await repository.loginOnline('cashier@omnifood.ni', 'bad-pin');
+    final result = await repository.loginOnline(
+      'cashier@omnifood.ni',
+      'bad-pin',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(result, isNull);
     verifyNever(() => userDao.findUserByEmail(any()));
@@ -427,7 +444,11 @@ void main() {
     when(() => securityProfileDao.findByUserId('u-1')).thenAnswer((_) async => localProfile);
     when(() => localAuthService.verifyPin('wrong', r'$2b$10$pin-hash')).thenReturn(false);
 
-    final result = await repository.loginOnline(email, 'wrong');
+    final result = await repository.loginOnline(
+      email,
+      'wrong',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(result, isNull);
     expect(repository.isPendingSync, isFalse);
@@ -445,7 +466,11 @@ void main() {
     when(() => userDao.findUserByEmail('unknown-user')).thenAnswer((_) async => null);
     when(() => userDao.findAllUsers()).thenAnswer((_) async => <UserEntity>[]);
 
-    final result = await repository.loginOnline('unknown-user', '1234');
+    final result = await repository.loginOnline(
+      'unknown-user',
+      '1234',
+      tenantSlug: 'test-tenant',
+    );
 
     expect(result, isNull);
     expect(repository.isPendingSync, isFalse);
@@ -484,7 +509,11 @@ void main() {
     when(() => securityProfileDao.findByUserId('u-1')).thenAnswer((_) async => localProfile);
     when(() => localAuthService.verifyPin(pin, r'$2b$10$pin-hash')).thenReturn(true);
 
-    final result = await repository.loginOnline(username, pin);
+    final result = await repository.loginOnline(
+      username,
+      pin,
+      tenantSlug: 'test-tenant',
+    );
 
     expect(result, isNotNull);
     expect(result?.id, equals('u-1'));

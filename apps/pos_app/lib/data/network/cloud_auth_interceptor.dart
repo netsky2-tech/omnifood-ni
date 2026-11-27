@@ -19,8 +19,8 @@ class CloudAuthInterceptor extends Interceptor {
   final Future<String?> Function()? tokenFallback;
 
   /// Resolves the provisioned tenant slug (issue #556) sent on the token
-  /// refresh payload. Returns null/blank for legacy unprovisioned installs,
-  /// in which case the key is omitted and the legacy wire contract holds.
+  /// refresh payload. Returns null/blank when the terminal is unlinked, in
+  /// which case refresh fails closed locally without issuing an HTTP request.
   final Future<String?> Function()? tenantSlugResolver;
 
   Completer<String?>? _inFlightRefresh;
@@ -187,8 +187,8 @@ class CloudAuthInterceptor extends Interceptor {
         return null;
       }
 
-      // Legacy/absent slug -> omit the key entirely so the wire contract for
-      // unprovisioned installs is unchanged (issue #556).
+      // Stage 3 (#556): tenantSlug is required on /identity/refresh; fail
+      // closed locally if the terminal has no linked slug.
       String cleanTenantSlug = '';
       if (tenantSlugResolver != null) {
         try {
@@ -197,12 +197,17 @@ class CloudAuthInterceptor extends Interceptor {
           cleanTenantSlug = '';
         }
       }
+      if (cleanTenantSlug.isEmpty) {
+        onReauthenticationRequired?.call();
+        completer.complete(null);
+        return null;
+      }
       final refreshResponse = await refreshDio.post<Map<String, dynamic>>(
         '/identity/refresh',
         data: {
           'userId': creds.userId,
           'refreshToken': creds.refreshToken,
-          if (cleanTenantSlug.isNotEmpty) 'tenantSlug': cleanTenantSlug,
+          'tenantSlug': cleanTenantSlug,
         },
       );
 

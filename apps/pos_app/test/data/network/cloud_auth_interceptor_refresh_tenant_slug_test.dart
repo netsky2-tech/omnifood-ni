@@ -5,10 +5,10 @@ import 'package:pos_app/domain/security/cloud_credential_coordinator.dart';
 import 'package:pos_app/domain/security/cloud_credentials.dart';
 import '../security/support/fake_cloud_credential_store.dart';
 
-/// Verifies the POST /identity/refresh wire contract for the optional
-/// `tenantSlug` field: it is sent only when the resolved stored slug is
-/// non-blank after trimming, and omitted entirely for legacy/unprovisioned
-/// installs (issue #556). Mirrors auth_repository_login_tenant_slug_test.
+/// Verifies the POST /identity/refresh wire contract for the required
+/// `tenantSlug` field: it is sent (trimmed) when the resolved stored slug is
+/// non-blank, and null/blank/missing-resolver slugs fail closed locally with
+/// zero HTTP requests and invoke `onReauthenticationRequired` (issue #556 stage 3).
 void main() {
   late FakeCloudCredentialStore store;
   late CloudCredentialCoordinator coordinator;
@@ -114,7 +114,7 @@ void main() {
   );
 
   test(
-    'refresh omits the tenantSlug key when the resolver returns null',
+    'refresh fails closed with zero HTTP requests when the resolver returns null',
     () async {
       final capturedBodies = <Map<String, dynamic>>[];
       final interceptor = buildInterceptor(
@@ -124,14 +124,13 @@ void main() {
 
       await trigger401Refresh(interceptor);
 
-      expect(capturedBodies, hasLength(1));
-      expect(capturedBodies.single.containsKey('tenantSlug'), isFalse);
-      expect(capturedBodies.single['userId'], 'user-123');
+      expect(capturedBodies, isEmpty);
+      expect(reauthEmitted, isTrue);
     },
   );
 
   test(
-    'refresh omits the tenantSlug key when the resolver returns a blank slug',
+    'refresh fails closed with zero HTTP requests when the resolver returns a blank slug',
     () async {
       final capturedBodies = <Map<String, dynamic>>[];
       final interceptor = buildInterceptor(
@@ -141,21 +140,21 @@ void main() {
 
       await trigger401Refresh(interceptor);
 
-      expect(capturedBodies, hasLength(1));
-      expect(capturedBodies.single.containsKey('tenantSlug'), isFalse);
+      expect(capturedBodies, isEmpty);
+      expect(reauthEmitted, isTrue);
     },
   );
 
   test(
-    'refresh omits the tenantSlug key when no resolver is provided (legacy)',
+    'refresh fails closed with zero HTTP requests when no resolver is provided',
     () async {
       final capturedBodies = <Map<String, dynamic>>[];
       final interceptor = buildInterceptor(capturedBodies: capturedBodies);
 
       await trigger401Refresh(interceptor);
 
-      expect(capturedBodies, hasLength(1));
-      expect(capturedBodies.single.containsKey('tenantSlug'), isFalse);
+      expect(capturedBodies, isEmpty);
+      expect(reauthEmitted, isTrue);
     },
   );
 
