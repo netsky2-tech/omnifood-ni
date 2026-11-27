@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import '../../models/inventory/batch_deduction.dart';
 import '../../models/inventory/forensic_alert.dart';
 import '../../models/inventory/insumo.dart';
+import '../../models/inventory/product.dart';
 import '../../models/inventory/inventory_movement.dart';
 import '../../models/fulfillment/fulfillment_contracts.dart';
 import '../../models/inventory/recipe.dart';
@@ -604,6 +605,17 @@ class MovementEngineImpl implements MovementEngine {
     );
   }
 
+  String? _canonicalDirectStockInsumoId(Product? product) {
+    final canonical = product?.insumoId;
+    if (canonical != null && canonical.trim().isNotEmpty) {
+      return canonical;
+    }
+    // Deprecated legacy fallback: kept only for unmigrated local rows.
+    // Canonical resolution uses product.insumoId from
+    // product_inventory_mapping_versions.
+    return product?.directStockInsumoId;
+  }
+
   @override
   Future<List<InventoryMovement>> getSaleMovements(
     String productId,
@@ -615,7 +627,7 @@ class MovementEngineImpl implements MovementEngine {
       case InventoryPolicy.directStock:
         return _getDirectStockMovements(
           productId,
-          product?.directStockInsumoId,
+          _canonicalDirectStockInsumoId(product),
           quantity,
         );
       case InventoryPolicy.notTracked:
@@ -636,8 +648,10 @@ class MovementEngineImpl implements MovementEngine {
   Future<List<InventoryMovement>> _getDirectStockMovements(
     String productId,
     String? insumoId,
-    double quantity,
-  ) async {
+    double quantity, {
+    MovementType moveType = MovementType.sale,
+    String? reason,
+  }) async {
     if (insumoId == null || insumoId.trim().isEmpty) {
       throw StateError(
         'DIRECT_STOCK product $productId requires an insumo link',
@@ -648,20 +662,24 @@ class MovementEngineImpl implements MovementEngine {
       throw StateError('DIRECT_STOCK insumo $insumoId is missing locally');
     }
     final insumo = insumos.single;
-    final batchDeductions = insumo.isPerishable
+    final isReversal = moveType == MovementType.reversal;
+    final delta = isReversal ? quantity : -quantity;
+    final batchDeductions = (!isReversal && insumo.isPerishable)
         ? await getBatchesForConsumption(insumo.id, quantity)
         : null;
     return [
       InventoryMovement(
         id: '${DateTime.now().microsecondsSinceEpoch}-${insumo.id}',
         insumoId: insumo.id,
-        type: MovementType.sale,
-        quantity: -quantity,
+        type: moveType,
+        quantity: delta,
         previousStock: insumo.stock,
-        newStock: insumo.stock - quantity,
+        newStock: insumo.stock + delta,
         timestamp: DateTime.now(),
+        reason: reason,
         unitCostNio: insumo.averageCost,
-        sourceDocumentType: 'PRODUCT_SALE',
+        sourceDocumentType:
+            isReversal ? 'PRODUCT_SALE_REVERSAL' : 'PRODUCT_SALE',
         sourceDocumentId: productId,
         batchDeductions: batchDeductions,
       ),
@@ -675,6 +693,22 @@ class MovementEngineImpl implements MovementEngine {
     String reason, {
     String? recipeVersionId,
   }) async {
+    final product = await repository.getProductById(productId);
+    switch (product?.inventoryPolicy) {
+      case InventoryPolicy.directStock:
+        return _getDirectStockMovements(
+          productId,
+          _canonicalDirectStockInsumoId(product),
+          quantity,
+          moveType: MovementType.reversal,
+          reason: reason,
+        );
+      case InventoryPolicy.notTracked:
+        return [];
+      case InventoryPolicy.recipeBom:
+      case null:
+        break;
+    }
     return await _generateMovements(
       productId,
       quantity,

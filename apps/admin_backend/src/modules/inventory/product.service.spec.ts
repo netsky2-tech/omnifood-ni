@@ -1,8 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource, Repository } from 'typeorm';
 import { ProductService, normalizeSearchTerm } from './product.service';
-import { Product, ProductType } from './entities/product.entity';
-import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  Product,
+  ProductInventoryPolicy,
+  ProductType,
+} from './entities/product.entity';
+import { Insumo, InsumoCatalogKind } from './entities/insumo.entity';
+import { Recipe } from './entities/recipe.entity';
+import { RecipeVersion } from './entities/recipe-version.entity';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ChangeLogService } from '../audit/change-log.service';
 import { ProductInventoryMappingService } from './services/product-inventory-mapping.service';
 
@@ -791,6 +802,243 @@ describe('ProductService', () => {
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
       expect(mockQueryRunner.release).toHaveBeenCalled();
       expect(mockQueryRunner.commitTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('DIRECT_STOCK resale policy (S1, S2)', () => {
+    const buildDirectStockHarness = () => {
+      const productRepo = mockRepo();
+      const insumoRepo = mockRepo();
+      const recipeRepo = mockRepo();
+      const recipeVersionRepo = mockRepo();
+      const mappingService = {
+        findEffective: jest.fn(),
+        supersede: jest.fn().mockResolvedValue({
+          id: 'map-1',
+          tenant_id: 'tenant-A',
+          product_id: 'prod-1',
+          insumo_id: 'ins-resale-1',
+        }),
+        deactivate: jest.fn().mockResolvedValue(undefined),
+      };
+      const manager = {
+        getRepository: jest.fn((entity: unknown) => {
+          if (entity === Product) return productRepo;
+          if (entity === Insumo) return insumoRepo;
+          if (entity === Recipe) return recipeRepo;
+          if (entity === RecipeVersion) return recipeVersionRepo;
+          return mockRepo();
+        }),
+      };
+      const ds = {
+        createQueryRunner: jest.fn(() => ({
+          connect: jest.fn(),
+          startTransaction: jest.fn(),
+          commitTransaction: jest.fn(),
+          rollbackTransaction: jest.fn(),
+          release: jest.fn(),
+          query: jest.fn(),
+          manager,
+        })),
+      } as unknown as DataSource;
+
+      const svc = new ProductService(
+        ds,
+        { log: jest.fn() } as unknown as ChangeLogService,
+        mappingService as unknown as ProductInventoryMappingService,
+      );
+
+      return {
+        svc,
+        productRepo,
+        insumoRepo,
+        recipeRepo,
+        recipeVersionRepo,
+        mappingService,
+        manager,
+      };
+    };
+
+    it('defaults inventory_policy to NOT_TRACKED on create (SOHO invariance)', async () => {
+      const { svc, productRepo, insumoRepo, mappingService } =
+        buildDirectStockHarness();
+      productRepo.create.mockImplementation((v) => v);
+      productRepo.save.mockImplementation(async (v) => ({ id: 'p-1', ...v }));
+
+      const created = await svc.create('tenant-A', {
+        name: 'Agua Pura',
+        uom: 'un',
+        product_type: ProductType.SIMPLE,
+      });
+
+      expect(created.inventory_policy).toBe(ProductInventoryPolicy.NOT_TRACKED);
+      expect(insumoRepo.save).not.toHaveBeenCalled();
+      expect(mappingService.supersede).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ProductType.COMPOUND,
+      ProductType.PREPARED,
+      ProductType.VARIANT_PARENT,
+    ])(
+      'rejects DIRECT_STOCK on create when product_type is %s',
+      async (productType) => {
+        const { svc, productRepo } = buildDirectStockHarness();
+
+        await expect(
+          svc.create('tenant-A', {
+            name: 'Combo',
+            uom: 'un',
+            product_type: productType,
+            inventory_policy: ProductInventoryPolicy.DIRECT_STOCK,
+          }),
+        ).rejects.toThrow(BadRequestException);
+
+        expect(productRepo.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('provisions backing PRODUCT_RESALE insumo and mapping on SIMPLE + DIRECT_STOCK create', async () => {
+      const { svc, productRepo, insumoRepo, mappingService, manager } =
+        buildDirectStockHarness();
+      productRepo.create.mockImplementation((v) => v);
+      productRepo.save.mockImplementation(async (v) => ({
+        id: 'prod-1',
+        ...v,
+      }));
+      insumoRepo.findOne.mockResolvedValue(null);
+      insumoRepo.create.mockImplementation((v) => v);
+      insumoRepo.save.mockImplementation(async (v) => ({
+        id: 'ins-resale-1',
+        stock: 0,
+        averageCost: 0,
+        ...v,
+      }));
+
+      const created = await svc.create('tenant-A', {
+        name: 'Coca-Cola 600ml',
+        uom: 'botella',
+        product_type: ProductType.SIMPLE,
+        inventory_policy: ProductInventoryPolicy.DIRECT_STOCK,
+        is_perishable: true,
+        warehouse_id: 'wh-1',
+      });
+
+      expect(created.inventory_policy).toBe(
+        ProductInventoryPolicy.DIRECT_STOCK,
+      );
+      expect(insumoRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenant_id: 'tenant-A',
+          managedProductId: 'prod-1',
+          catalogKind: InsumoCatalogKind.PRODUCT_RESALE,
+          name: 'Coca-Cola 600ml',
+          purchaseUom: 'botella',
+          consumptionUom: 'botella',
+          conversionFactor: 1,
+          is_perishable: true,
+          warehouse_id: 'wh-1',
+          is_active: true,
+        }),
+      );
+      expect(mappingService.supersede).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-A',
+          productId: 'prod-1',
+          insumoId: 'ins-resale-1',
+        }),
+        manager,
+      );
+    });
+
+    it('rejects switching to DIRECT_STOCK on update when product has a recipe', async () => {
+      const { svc, productRepo, recipeRepo } = buildDirectStockHarness();
+      productRepo.findOne.mockResolvedValue(
+        makeProduct({
+          id: 'prod-1',
+          product_type: ProductType.SIMPLE,
+          inventory_policy: ProductInventoryPolicy.NOT_TRACKED,
+        }),
+      );
+      recipeRepo.findOne.mockResolvedValue({ id: 'rec-1' });
+
+      await expect(
+        svc.update('prod-1', 'tenant-A', {
+          inventory_policy: ProductInventoryPolicy.DIRECT_STOCK,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('syncs updated product fields onto backing PRODUCT_RESALE insumo', async () => {
+      const { svc, productRepo, insumoRepo, recipeRepo, recipeVersionRepo } =
+        buildDirectStockHarness();
+      productRepo.findOne.mockResolvedValue(
+        makeProduct({
+          id: 'prod-1',
+          name: 'Jugo Viejo',
+          uom: 'un',
+          product_type: ProductType.SIMPLE,
+          inventory_policy: ProductInventoryPolicy.DIRECT_STOCK,
+        }),
+      );
+      recipeRepo.findOne.mockResolvedValue(null);
+      recipeVersionRepo.findOne.mockResolvedValue(null);
+      productRepo.save.mockImplementation(async (v) => v);
+      insumoRepo.findOne.mockResolvedValue({
+        id: 'ins-resale-1',
+        tenant_id: 'tenant-A',
+        managedProductId: 'prod-1',
+        catalogKind: InsumoCatalogKind.PRODUCT_RESALE,
+        name: 'Jugo Viejo',
+        purchaseUom: 'un',
+        consumptionUom: 'un',
+        conversionFactor: 1,
+        stock: 15,
+        averageCost: 22.5,
+      });
+      insumoRepo.save.mockImplementation(async (v) => v);
+
+      const updated = await svc.update('prod-1', 'tenant-A', {
+        name: 'Jugo Nuevo',
+        uom: 'botella',
+        is_perishable: true,
+      });
+
+      expect(insumoRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Jugo Nuevo',
+          purchaseUom: 'botella',
+          consumptionUom: 'botella',
+          is_perishable: true,
+        }),
+      );
+      expect(updated.stock).toBe(15);
+      expect(updated.averageCost).toBe(22.5);
+    });
+
+    it('deactivates active mapping without deleting insumo when switching DIRECT_STOCK -> NOT_TRACKED', async () => {
+      const { svc, productRepo, insumoRepo, mappingService, manager } =
+        buildDirectStockHarness();
+      productRepo.findOne.mockResolvedValue(
+        makeProduct({
+          id: 'prod-1',
+          product_type: ProductType.SIMPLE,
+          inventory_policy: ProductInventoryPolicy.DIRECT_STOCK,
+        }),
+      );
+      productRepo.save.mockImplementation(async (v) => v);
+
+      const updated = await svc.update('prod-1', 'tenant-A', {
+        inventory_policy: ProductInventoryPolicy.NOT_TRACKED,
+      });
+
+      expect(updated.inventory_policy).toBe(ProductInventoryPolicy.NOT_TRACKED);
+      expect(mappingService.deactivate).toHaveBeenCalledWith(
+        'tenant-A',
+        'prod-1',
+        manager,
+      );
+      expect(insumoRepo.save).not.toHaveBeenCalled();
     });
   });
 });

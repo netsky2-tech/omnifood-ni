@@ -109,6 +109,7 @@ describe('LoyaltyProfitAware (Real DB E2E)', () => {
     await bootstrap.query(`CREATE TABLE "${schema}".products (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id text NOT NULL, name text NOT NULL,
       uom text DEFAULT 'UND', product_type text DEFAULT 'SIMPLE',
+      inventory_policy varchar(24) NOT NULL DEFAULT 'NOT_TRACKED',
       category_code text, stock numeric(12,4) DEFAULT 100.0,
       "averageCost" numeric(12,2) DEFAULT 0.0, "sellPrice" numeric(12,2) DEFAULT 0.0,
       is_perishable boolean DEFAULT false, is_active boolean DEFAULT true,

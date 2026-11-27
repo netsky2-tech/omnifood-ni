@@ -1,7 +1,7 @@
 import { DataSource } from 'typeorm';
 import { TENANT_CONTEXT_SET_CONFIG_SQL } from '../../core/database/tenant-transaction';
 import { InsumoController } from './insumo.controller';
-import { Insumo } from './entities/insumo.entity';
+import { Insumo, InsumoCatalogKind } from './entities/insumo.entity';
 
 describe('InsumoController', () => {
   const insumoRepo = {
@@ -43,6 +43,8 @@ describe('InsumoController', () => {
         minStock: '1000.0000',
         maxStock: null,
         ivaRatePct: null,
+        catalogKind: InsumoCatalogKind.RAW_MATERIAL,
+        managedProductId: null,
       },
     ]);
     insumoRepo.findOne.mockResolvedValue(null);
@@ -52,7 +54,12 @@ describe('InsumoController', () => {
     new InsumoController(dataSource as unknown as DataSource);
 
   it('binds app.tenant_id inside one transaction before the first protected read, resolving the repository from that manager', async () => {
-    const result = await buildController().list(undefined, 'tenant-A');
+    const result = await buildController().list(
+      undefined,
+      undefined,
+      undefined,
+      'tenant-A',
+    );
 
     // The response boundary coerces the driver strings into JSON numbers.
     expect(result).toEqual([
@@ -69,6 +76,8 @@ describe('InsumoController', () => {
         minStock: 1000,
         maxStock: null,
         ivaRatePct: null,
+        catalogKind: InsumoCatalogKind.RAW_MATERIAL,
+        managedProductId: null,
       },
     ]);
     expect(typeof result[0].stock).toBe('number');
@@ -84,7 +93,11 @@ describe('InsumoController', () => {
     );
     expect(manager.getRepository).toHaveBeenCalledWith(Insumo);
     expect(insumoRepo.find).toHaveBeenCalledWith({
-      where: { tenant_id: 'tenant-A', is_active: true },
+      where: {
+        tenant_id: 'tenant-A',
+        is_active: true,
+        catalogKind: InsumoCatalogKind.RAW_MATERIAL,
+      },
       order: { name: 'ASC' },
     });
     // The pooled repository path must never serve this read (issue #512).
@@ -92,23 +105,59 @@ describe('InsumoController', () => {
   });
 
   it('keeps the includeInactive filter and preserves ordering', async () => {
-    await buildController().list('true', 'tenant-A');
+    await buildController().list('true', undefined, undefined, 'tenant-A');
 
     expect(insumoRepo.find).toHaveBeenCalledWith({
-      where: { tenant_id: 'tenant-A' },
+      where: {
+        tenant_id: 'tenant-A',
+        catalogKind: InsumoCatalogKind.RAW_MATERIAL,
+      },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('filters by catalogKind=PRODUCT_RESALE when requested', async () => {
+    await buildController().list(
+      undefined,
+      'PRODUCT_RESALE',
+      undefined,
+      'tenant-A',
+    );
+
+    expect(insumoRepo.find).toHaveBeenCalledWith({
+      where: {
+        tenant_id: 'tenant-A',
+        is_active: true,
+        catalogKind: InsumoCatalogKind.PRODUCT_RESALE,
+      },
+      order: { name: 'ASC' },
+    });
+  });
+
+  it('returns all catalog kinds when catalogKind=ALL or includeResale=true', async () => {
+    await buildController().list(undefined, 'ALL', undefined, 'tenant-A');
+    expect(insumoRepo.find).toHaveBeenCalledWith({
+      where: { tenant_id: 'tenant-A', is_active: true },
+      order: { name: 'ASC' },
+    });
+
+    insumoRepo.find.mockClear();
+    await buildController().list(undefined, undefined, 'true', 'tenant-A');
+    expect(insumoRepo.find).toHaveBeenCalledWith({
+      where: { tenant_id: 'tenant-A', is_active: true },
       order: { name: 'ASC' },
     });
   });
 
   it('fails closed without a tenant id before any SQL', async () => {
-    await expect(buildController().list(undefined, undefined)).rejects.toThrow(
-      'Tenant context is required',
-    );
+    await expect(
+      buildController().list(undefined, undefined, undefined, undefined),
+    ).rejects.toThrow('Tenant context is required');
     // A blank tenant id is rejected by the requireTenant guard before any
     // SQL is issued, so no transaction and no query ever runs.
-    await expect(buildController().list(undefined, '')).rejects.toThrow(
-      'Tenant context is required',
-    );
+    await expect(
+      buildController().list(undefined, undefined, undefined, ''),
+    ).rejects.toThrow('Tenant context is required');
     // Defense in depth: the binding helper would also reject a blank id
     // (TENANT_CONTEXT_REQUIRED) before borrowing a connection.
     expect(dataSource.transaction).not.toHaveBeenCalled();

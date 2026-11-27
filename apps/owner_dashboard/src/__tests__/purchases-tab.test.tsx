@@ -25,7 +25,7 @@ import {
   useCreateManualPurchase,
 } from "@/features/inventory/use-inventory-reports";
 import { useInsumos } from "@/features/recipes/use-recipes";
-import { fetchPurchasePreview } from "@/features/inventory/inventory-api";
+import { fetchPurchasePreview, fetchResaleInsumos } from "@/features/inventory/inventory-api";
 import { toast } from "@/hooks/use-toast";
 import type { PurchaseDocumentItem } from "@/features/inventory/types";
 
@@ -52,6 +52,7 @@ vi.mock("@/features/recipes/use-recipes", () => ({
 
 vi.mock("@/features/inventory/inventory-api", () => ({
   fetchPurchasePreview: vi.fn(),
+  fetchResaleInsumos: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -188,6 +189,20 @@ beforeEach(() => {
   mockCreatePurchase();
   mockInsumos();
   vi.mocked(fetchPurchasePreview).mockResolvedValue(PREVIEW_RESULT);
+  vi.mocked(fetchResaleInsumos).mockResolvedValue([
+    {
+      id: "ins-resale-1",
+      tenant_id: "t1",
+      name: "Coca-Cola 355ml",
+      purchaseUom: "UN",
+      consumptionUom: "UN",
+      conversionFactor: 1,
+      stock: 10,
+      averageCost: 15,
+      is_perishable: false,
+      is_active: true,
+    },
+  ]);
 });
 
 describe("PurchasesTab", () => {
@@ -822,6 +837,64 @@ describe("PurchasesTab — manual purchase form (SOHO purchases)", () => {
       "C$83.33",
     );
     expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+  });
+
+  it("switches between Materia Prima (Insumo) and Producto de Reventa and submits the resale backing insumoId", async () => {
+    const mutateAsync = mockCreatePurchase();
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+
+    const rawOption = screen.getByRole("radio", { name: "Materia Prima (Insumo)" });
+    const resaleOption = screen.getByRole("radio", { name: "Producto de Reventa" });
+    expect(rawOption).toBeChecked();
+    expect(resaleOption).not.toBeChecked();
+
+    await user.click(resaleOption);
+    expect(resaleOption).toBeChecked();
+
+    await waitFor(() => {
+      expect(fetchResaleInsumos).toHaveBeenCalled();
+    });
+
+    await pickSelect(user, "purchases-form-supplier", "Café Supplier");
+    await pickSelect(user, "purchases-form-insumo", /Coca-Cola 355ml/);
+    await user.type(screen.getByTestId("purchases-form-quantity"), "12");
+    await user.type(screen.getByTestId("purchases-form-unit-cost"), "15");
+    await user.type(screen.getByTestId("purchases-form-invoice-number"), "F-RESALE-1");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("purchases-form-submit")).toBeEnabled();
+    });
+    await user.click(screen.getByTestId("purchases-form-submit"));
+
+    await waitFor(() => {
+      expect(mutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          insumoId: "ins-resale-1",
+          supplierId: "sup-1",
+          quantity: 12,
+          unitCost: 15,
+          invoiceNumber: "F-RESALE-1",
+        }),
+      );
+    });
+  });
+
+  it("shows a helpful hint when Producto de Reventa is selected and none are configured yet", async () => {
+    vi.mocked(fetchResaleInsumos).mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(<PurchasesTab />, { wrapper: TestWrapper });
+
+    await user.click(screen.getByTestId("purchases-register-btn"));
+    await user.click(screen.getByRole("radio", { name: "Producto de Reventa" }));
+
+    expect(
+      await screen.findByText(
+        /Activá 'Controlar existencias' en un producto simple en Catálogo para registrar sus compras aquí\./,
+      ),
+    ).toBeInTheDocument();
   });
 });
 

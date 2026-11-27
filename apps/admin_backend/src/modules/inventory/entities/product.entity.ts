@@ -16,6 +16,11 @@ export enum ProductType {
   VARIANT_PARENT = 'VARIANT_PARENT',
 }
 
+export enum ProductInventoryPolicy {
+  NOT_TRACKED = 'NOT_TRACKED',
+  DIRECT_STOCK = 'DIRECT_STOCK',
+}
+
 @Entity('products')
 export class Product {
   @PrimaryGeneratedColumn('uuid')
@@ -46,6 +51,14 @@ export class Product {
     default: ProductType.SIMPLE,
   })
   product_type: ProductType;
+
+  @Column({
+    name: 'inventory_policy',
+    type: 'varchar',
+    length: 24,
+    default: ProductInventoryPolicy.NOT_TRACKED,
+  })
+  inventory_policy?: ProductInventoryPolicy;
 
   @Column({ nullable: true })
   category_code: string;

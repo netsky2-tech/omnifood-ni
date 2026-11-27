@@ -22,6 +22,7 @@ import {
 import { Supplier } from './entities/supplier.entity';
 import { PurchaseDocument } from './entities/purchase-document.entity';
 import { CostCalculatorService } from './cost-calculator.service';
+import { mirrorManagedResaleProductStock } from './services/product-resale-stock-mirror';
 import {
   bindTenantContext,
   runInTenantTransaction,
@@ -508,6 +509,7 @@ export class InventoryPurchaseService {
           insumo.existenciaActual = preview.projectedStock;
           insumo.averageCost = preview.projectedCppNio;
           const savedInsumo = await manager.save(Insumo, insumo);
+          await mirrorManagedResaleProductStock(manager, tenantId, savedInsumo);
 
           const movement = manager.create(InventoryMovement, {
             tenant_id: tenantId,
@@ -691,6 +693,7 @@ export class InventoryPurchaseService {
           insumo.existenciaActual = newStock;
           insumo.averageCost = projectedCppNio;
           const savedInsumo = await manager.save(Insumo, insumo);
+          await mirrorManagedResaleProductStock(manager, tenantId, savedInsumo);
 
           const compensatingMovement = manager.create(InventoryMovement, {
             tenant_id: tenantId,

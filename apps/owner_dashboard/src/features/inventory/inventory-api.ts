@@ -1,4 +1,5 @@
 import { api, type ApiClientMethodOptions } from "@/lib/api";
+import type { Insumo } from "@/features/recipes/types";
 import type {
   ValuationReport,
   CogsReport,
@@ -125,6 +126,10 @@ export function updateSupplier(id: string, input: UpdateSupplierInput) {
  */
 export function fetchPurchasePreview(input: ManualPurchaseInput) {
   return api.post<PurchasePreviewResult>("/inventory/purchase", input);
+}
+
+export function fetchResaleInsumos(opts?: ApiClientMethodOptions) {
+  return api.get<Insumo[]>("/insumos?catalogKind=PRODUCT_RESALE", opts);
 }
 
 /** Manual purchase registration — human route, reuses backend recordPurchase. */

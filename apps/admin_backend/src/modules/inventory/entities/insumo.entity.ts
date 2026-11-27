@@ -19,6 +19,11 @@ export const NEGATIVE_STOCK_POLICY = {
 export type NegativeStockPolicy =
   (typeof NEGATIVE_STOCK_POLICY)[keyof typeof NEGATIVE_STOCK_POLICY];
 
+export enum InsumoCatalogKind {
+  RAW_MATERIAL = 'RAW_MATERIAL',
+  PRODUCT_RESALE = 'PRODUCT_RESALE',
+}
+
 @Entity('insumos')
 export class Insumo {
   @PrimaryGeneratedColumn('uuid')
@@ -110,6 +115,21 @@ export class Insumo {
     default: NEGATIVE_STOCK_POLICY.RESTRICT,
   })
   negativeStockPolicy: NegativeStockPolicy;
+
+  @Column({
+    name: 'catalog_kind',
+    type: 'varchar',
+    length: 24,
+    default: InsumoCatalogKind.RAW_MATERIAL,
+  })
+  catalogKind?: InsumoCatalogKind;
+
+  @Column({
+    name: 'managed_product_id',
+    type: 'uuid',
+    nullable: true,
+  })
+  managedProductId?: string | null;
 
   @CreateDateColumn({ type: 'timestamptz' })
   created_at: Date;

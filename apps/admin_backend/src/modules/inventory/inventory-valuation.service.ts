@@ -8,6 +8,7 @@ import { DataSource, type EntityManager } from 'typeorm';
 import { isCalendarDay, toCalendarDay } from '../../core/database/calendar-day';
 import { runInTenantTransaction } from '../../core/database/tenant-transaction';
 import { Insumo } from './entities/insumo.entity';
+import { mirrorManagedResaleProductStock } from './services/product-resale-stock-mirror';
 import { InsumoMarketPrice } from './entities/insumo-market-price.entity';
 import {
   InventoryMovement,
@@ -347,8 +348,10 @@ export class InventoryValuationService {
       this.dataSource,
       tenantId,
       async (manager) => {
-        const candidates = await manager.query<InsumoCostCandidateRow[]>(
-          `SELECT id, stock, costo_promedio_nio
+        const candidates = await manager.query<
+          Array<InsumoCostCandidateRow & { managed_product_id?: string | null }>
+        >(
+          `SELECT id, stock, costo_promedio_nio, managed_product_id
            FROM insumos
           WHERE tenant_id = $1 AND stock > 0
           ORDER BY id`,
@@ -466,6 +469,11 @@ export class InventoryValuationService {
             WHERE tenant_id = $2 AND id = $3`,
             [reference.referenceNio, tenantId, insumoId],
           );
+          await mirrorManagedResaleProductStock(manager, tenantId, {
+            managedProductId: row.managed_product_id ?? null,
+            stock,
+            averageCost: reference.referenceNio,
+          });
 
           result.lines.push({
             insumoId,

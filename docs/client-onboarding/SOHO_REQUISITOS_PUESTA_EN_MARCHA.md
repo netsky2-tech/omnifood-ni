@@ -42,11 +42,13 @@ El menú es suficiente para preparar el catálogo inicial, siempre que cada prod
 | Sabores o variantes | Vainilla / Caramelo |
 | Extras disponibles | Shot adicional / Leche de almendra |
 | Precio de cada extra | C$ 20.00 |
+| Control de stock (`controla_stock`) | `si` para productos de reventa directa empacados (agua, gaseosas, jugos); `no` para servicios o ítems sin control directo |
 
 ### Recomendaciones para preparar el menú
 
 - Registrar cada tamaño o presentación que tenga un precio diferente.
-- Incluir productos empacados, como agua, gaseosas, galletas o café en bolsa.
+- Incluir productos empacados, como agua, gaseosas, galletas o café en bolsa, e indicar `controla_stock = si` en la plantilla para que descuenten 1 a 1 de su propio stock sin crear un insumo aparte.
+- Indicar `controla_stock = no` para servicios, ítems sin control o productos preparados con receta (que controlan sus ingredientes desde la receta).
 - Indicar claramente qué extras aumentan el precio.
 - Informar si algún producto está temporalmente fuera de venta.
 - Podemos comenzar con los productos de mayor rotación y agregar el resto después.

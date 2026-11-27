@@ -292,7 +292,17 @@ function ProductTable({
                     C${toFiniteNumber(p.sellPrice).toFixed(2)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                    {toFiniteNumber(p.stock).toFixed(2)}
+                    {p.product_type === "SIMPLE" &&
+                    p.inventory_policy !== "DIRECT_STOCK" ? (
+                      <span
+                        className="text-xs text-muted-foreground"
+                        title="Sin control de existencias"
+                      >
+                        Sin control
+                      </span>
+                    ) : (
+                      toFiniteNumber(p.stock).toFixed(2)
+                    )}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <ProductStatusBadge isActive={p.is_active} />
@@ -434,6 +444,9 @@ function ProductDialog({
   const [isPerishable, setIsPerishable] = useState(
     product?.is_perishable ?? false,
   );
+  const [trackDirectStock, setTrackDirectStock] = useState(
+    isEdit ? product?.inventory_policy === "DIRECT_STOCK" : false,
+  );
   const [editType, setEditType] = useState<StoredProductType>(
     product?.product_type ?? productType,
   );
@@ -482,12 +495,19 @@ function ProductDialog({
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
+  const effectiveType: StoredProductType | null = isEdit
+    ? editType
+    : createTypeAnswer;
+  const isSimpleProduct = effectiveType === "SIMPLE";
+
   const isDirty = isEdit
     ? name !== (product?.name ?? "") ||
       uom !== (product?.uom ?? "") ||
       categoryCode !== (product?.category_code ?? "") ||
       sellPrice !== (product ? toFiniteNumber(product.sellPrice) : 0) ||
       isPerishable !== (product?.is_perishable ?? false) ||
+      (editType === "SIMPLE" &&
+        trackDirectStock !== (product?.inventory_policy === "DIRECT_STOCK")) ||
       editType !== (product?.product_type ?? productType) ||
       imageUrl !== (product?.image_url ?? null)
     : name.trim() !== "" ||
@@ -495,6 +515,7 @@ function ProductDialog({
       categoryCode.trim() !== "" ||
       sellPrice !== 0 ||
       isPerishable !== false ||
+      (createTypeAnswer === "SIMPLE" && trackDirectStock !== false) ||
       createTypeAnswer !== null ||
       imageUrl !== null;
 
@@ -537,6 +558,15 @@ function ProductDialog({
             name: values.name.trim(),
             uom: values.uom.trim(),
             product_type: editType,
+            ...(editType === "SIMPLE"
+              ? {
+                  inventory_policy: trackDirectStock
+                    ? "DIRECT_STOCK"
+                    : "NOT_TRACKED",
+                }
+              : product.inventory_policy === "DIRECT_STOCK"
+                ? { inventory_policy: "NOT_TRACKED" }
+                : {}),
             category_code: categoryCode || undefined,
             sellPrice: toFiniteNumber(values.sellPrice),
             is_perishable: isPerishable,
@@ -557,6 +587,13 @@ function ProductDialog({
           name: values.name.trim(),
           uom: values.uom.trim(),
           product_type: createTypeAnswer,
+          ...(createTypeAnswer === "SIMPLE"
+            ? {
+                inventory_policy: trackDirectStock
+                  ? "DIRECT_STOCK"
+                  : "NOT_TRACKED",
+              }
+            : {}),
           category_code: categoryCode || undefined,
           sellPrice: toFiniteNumber(values.sellPrice),
           is_perishable: isPerishable,
@@ -855,6 +892,33 @@ function ProductDialog({
               Producto perecedero (control de caducidad)
             </label>
           </div>
+
+          {isSimpleProduct && (
+            <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  id="inventory_policy_direct_stock"
+                  data-testid="product-direct-stock-toggle"
+                  checked={trackDirectStock}
+                  onChange={(e) => setTrackDirectStock(e.target.checked)}
+                  disabled={isPending}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer disabled:opacity-50"
+                />
+                <label
+                  htmlFor="inventory_policy_direct_stock"
+                  className="text-xs sm:text-sm font-medium text-foreground cursor-pointer"
+                >
+                  Controlar existencias en este producto
+                </label>
+              </div>
+              <p className="pl-6 text-[11px] leading-relaxed text-muted-foreground">
+                Descuenta 1 a 1 de su propio stock en cada venta y permite
+                registrar compras directas sin crear un insumo aparte.
+              </p>
+            </div>
+          )}
 
           {isEdit && awaitingTypeChangeConfirm && isDestructiveTypeChange && product && (
             <div className="rounded-md border border-destructive/20 bg-destructive-50 p-3 space-y-2">

@@ -3,6 +3,7 @@ import { toFiniteNumber } from "@/lib/numeric";
 import type {
   Product,
   ProductType,
+  InventoryPolicy,
   CreateProductInput,
   UpdateProductInput,
 } from "./product-types";
@@ -14,11 +15,13 @@ import type {
  */
 export type RawProduct = Omit<
   Product,
-  "stock" | "averageCost" | "sellPrice"
+  "stock" | "averageCost" | "sellPrice" | "inventory_policy"
 > & {
   stock: unknown;
   averageCost: unknown;
   sellPrice: unknown;
+  inventory_policy?: unknown;
+  inventoryPolicy?: unknown;
 };
 
 interface RawPaginatedProductsResponse {
@@ -31,8 +34,12 @@ interface RawPaginatedProductsResponse {
 
 /** Mirrors the backend response boundary in `apps/admin_backend/src/modules/inventory/product-response.ts`. */
 export function normalizeProduct(raw: RawProduct): Product {
+  const rawPolicy = raw.inventory_policy ?? raw.inventoryPolicy;
+  const inventory_policy: InventoryPolicy =
+    rawPolicy === "DIRECT_STOCK" ? "DIRECT_STOCK" : "NOT_TRACKED";
   return {
     ...raw,
+    inventory_policy,
     stock: toFiniteNumber(raw.stock),
     averageCost: toFiniteNumber(raw.averageCost),
     sellPrice: toFiniteNumber(raw.sellPrice),

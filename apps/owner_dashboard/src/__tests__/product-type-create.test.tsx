@@ -182,16 +182,68 @@ describe("Product type creation question (issue #618)", () => {
     });
   });
 
-  it("answering 'se compra y se revende' sends product_type SIMPLE", async () => {
+  it("answering 'se compra y se revende' sends product_type SIMPLE with inventory_policy NOT_TRACKED by default and never shows an insumo picker", async () => {
     const user = await openCreateDialog();
 
     await user.click(screen.getByLabelText("No, se compra y se revende tal cual"));
+
+    const toggle = screen.getByLabelText("Controlar existencias en este producto");
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText(
+        "Descuenta 1 a 1 de su propio stock en cada venta y permite registrar compras directas sin crear un insumo aparte.",
+      ),
+    ).toBeInTheDocument();
+    // DEC-8: never show an insumo picker for SIMPLE products.
+    expect(screen.queryByLabelText(/insumo/i)).not.toBeInTheDocument();
+
     await user.click(screen.getByText("Crear"));
 
     await waitFor(() => {
       expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
     });
-    expect(mocks.createMutateAsync.mock.calls[0]![0].product_type).toBe("SIMPLE");
+    expect(mocks.createMutateAsync.mock.calls[0]![0]).toMatchObject({
+      product_type: "SIMPLE",
+      inventory_policy: "NOT_TRACKED",
+    });
+  });
+
+  it("toggling 'Controlar existencias en este producto' on a SIMPLE product sends inventory_policy DIRECT_STOCK", async () => {
+    const user = await openCreateDialog();
+
+    await user.click(screen.getByLabelText("No, se compra y se revende tal cual"));
+    const toggle = screen.getByLabelText("Controlar existencias en este producto");
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+
+    await user.click(screen.getByText("Crear"));
+
+    await waitFor(() => {
+      expect(mocks.createMutateAsync).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.createMutateAsync.mock.calls[0]![0]).toMatchObject({
+      product_type: "SIMPLE",
+      inventory_policy: "DIRECT_STOCK",
+    });
+  });
+
+  it("does NOT show 'Controlar existencias en este producto' for COMPOUND or VARIANT_PARENT", async () => {
+    const user = await openCreateDialog();
+
+    await user.click(screen.getByLabelText("Sí, se prepara con ingredientes"));
+    expect(
+      screen.queryByLabelText("Controlar existencias en este producto"),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByLabelText(
+        "Es un grupo de versiones del mismo ítem (por ejemplo por tamaño)",
+      ),
+    );
+    expect(
+      screen.queryByLabelText("Controlar existencias en este producto"),
+    ).not.toBeInTheDocument();
   });
 
   // C1: VARIANT_PARENT must stay creatable — the tab used to be the only way

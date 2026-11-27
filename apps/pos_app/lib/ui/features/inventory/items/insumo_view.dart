@@ -262,7 +262,9 @@ class _InsumoViewState extends State<InsumoView> {
           const Expanded(
             child: Text(
               'El catálogo se administra desde el Dashboard web. '
-              'Esta terminal no edita productos, precios ni recetas.',
+              'Esta terminal no edita productos, precios ni recetas. '
+              'PREPARADO descuenta ingredientes vía receta (BOM); '
+              'SIMPLE con \'Controlar existencias\' descuenta 1:1 automáticamente.',
               style: TextStyle(fontSize: 13),
             ),
           ),
@@ -545,8 +547,8 @@ class _ProductListRow extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             Expanded(
@@ -564,7 +566,8 @@ class _ProductListRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     'SKU ${product.sku ?? "N/A"} · C\$${product.sellPrice.toStringAsFixed(2)}'
-                    '${product.category != null ? ' · ${product.category}' : ''}',
+                    '${product.category != null ? ' · ${product.category}' : ''}'
+                    ' · ${_productTrackingLabel(product)}',
                     style: TextStyle(
                       color: colorScheme.onSurfaceVariant,
                       fontSize: 12,
@@ -1034,6 +1037,22 @@ _StockStatus _stockStatus(Insumo insumo) {
 /// through the BOH, so zero stock only means untracked. Only products that
 /// actually track stock (direct stock policy or link, or prepared products)
 /// show danger SIN STOCK when depleted and primary ACTIVO when positive.
+String _productTrackingLabel(Product product) {
+  if (product.isPrepared ||
+      product.inventoryPolicy == InventoryPolicy.recipeBom) {
+    return 'Receta BOM';
+  }
+  final hasDirectLink =
+      product.inventoryPolicy == InventoryPolicy.directStock ||
+      ((product.insumoId != null && product.insumoId!.isNotEmpty) ||
+          (product.directStockInsumoId != null &&
+              product.directStockInsumoId!.isNotEmpty));
+  if (product.inventoryPolicy != InventoryPolicy.notTracked && hasDirectLink) {
+    return 'Stock directo';
+  }
+  return 'Sin control de stock';
+}
+
 _StockStatus _productStockStatus(Product product) {
   // Explicit untracked policy or simple/resale product without direct stock
   // link: inventory is untracked, never depleted.

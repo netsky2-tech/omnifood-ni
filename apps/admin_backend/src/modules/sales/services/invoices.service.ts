@@ -28,6 +28,7 @@ import {
   InventoryMovement,
   MovementType,
 } from '../../inventory/entities/inventory-movement.entity';
+import { mirrorManagedResaleProductStock } from '../../inventory/services/product-resale-stock-mirror';
 import { InventorySyncReceipt } from '../../inventory/entities/inventory-sync-receipt.entity';
 import { InventorySyncOutbox } from '../../inventory/entities/inventory-sync-outbox.entity';
 import { SyncBatchRecordDto } from '../dto/sync-batch.dto';
@@ -686,6 +687,7 @@ export class InvoicesService {
           insumo.stock = newStock;
           insumo.existenciaActual = newStock;
           await manager.save(Insumo, insumo);
+          await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
           const unitCostNio = Number(
             mov.unitCostNio ?? insumo.averageCost ?? 0,
@@ -2504,6 +2506,7 @@ export class InvoicesService {
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
         await manager.save(Insumo, insumo);
+        await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
         const savedMovement = await manager.save(
           this.movementRepository.create({
@@ -2636,6 +2639,7 @@ export class InvoicesService {
       insumo.existenciaActual = newStock;
       insumo.averageCost = averageCostAfterNio;
       await manager.save(Insumo, insumo);
+      await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
       if (delta < 0) {
         // R13: an OUTFLOW leaves the aggregate, so the BATCH balances have to
@@ -2952,6 +2956,7 @@ export class InvoicesService {
     insumo.stock = newStock;
     insumo.existenciaActual = newStock;
     await manager.save(Insumo, insumo);
+    await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
     const savedMovement = await manager.save(
       this.movementRepository.create({
@@ -3624,6 +3629,7 @@ export class InvoicesService {
     insumo.stock = newStock;
     insumo.existenciaActual = newStock;
     await manager.save(Insumo, insumo);
+    await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
     await manager.save(
       this.movementRepository.create({
@@ -3808,6 +3814,7 @@ export class InvoicesService {
         insumo.stock = newStock;
         insumo.existenciaActual = newStock;
         await manager.save(Insumo, insumo);
+        await mirrorManagedResaleProductStock(manager, tenantId, insumo);
 
         await manager.save(
           movRepo.create({

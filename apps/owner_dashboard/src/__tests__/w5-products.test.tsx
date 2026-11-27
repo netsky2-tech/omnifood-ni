@@ -460,6 +460,7 @@ describe("W5 — ProductPage form validation (unit B, form sweep)", () => {
       category_code: undefined,
       sellPrice: 0,
       is_perishable: false,
+      inventory_policy: "NOT_TRACKED",
     });
   });
 

@@ -2,10 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { InboundSyncService } from './inbound-sync.service';
-import { Product, ProductType } from '../../inventory/entities/product.entity';
+import {
+  Product,
+  ProductInventoryPolicy,
+  ProductType,
+} from '../../inventory/entities/product.entity';
 import { Batch } from '../../inventory/entities/batch.entity';
 import { CatalogValue } from '../../catalog/entities/catalog-value.entity';
-import { Insumo } from '../../inventory/entities/insumo.entity';
+import { Insumo, InsumoCatalogKind } from '../../inventory/entities/insumo.entity';
 import { Supplier } from '../../inventory/entities/supplier.entity';
 import { Recipe } from '../../inventory/entities/recipe.entity';
 import { RecipeVersion } from '../../inventory/entities/recipe-version.entity';
@@ -392,6 +396,7 @@ describe('InboundSyncService', () => {
       category: null,
       warehouseId: 'wh-1',
       productType: ProductType.SIMPLE,
+      inventoryPolicy: ProductInventoryPolicy.NOT_TRACKED,
       mappingVersionId: null,
       insumoId: null,
       tenantId: 'tenant-abc',
@@ -3039,6 +3044,96 @@ describe('InboundSyncService', () => {
       );
 
       expect(response.deltas.voidedInvoices).toEqual([]);
+    });
+  });
+
+  describe('resale inventoryPolicy & PRODUCT_RESALE insumos (S3)', () => {
+    it('emits inventoryPolicy on InboundSyncProductDto defaulting to NOT_TRACKED', async () => {
+      productQb.getMany.mockResolvedValue([
+        {
+          id: 'p-not-tracked',
+          tenant_id: 'tenant-abc',
+          name: 'Café Americano',
+          uom: 'un',
+          product_type: ProductType.SIMPLE,
+          stock: 0,
+          averageCost: 0,
+          sellPrice: 45,
+          tax_rate: 0.15,
+          is_tax_exempt: false,
+          is_active: true,
+          is_perishable: false,
+          category_code: null,
+          warehouse_id: null,
+          created_at: new Date('2026-10-01T00:00:00Z'),
+          updated_at: new Date('2026-10-01T00:00:00Z'),
+        } as unknown as Product,
+        {
+          id: 'p-direct-stock',
+          tenant_id: 'tenant-abc',
+          name: 'Coca-Cola 600ml',
+          uom: 'botella',
+          product_type: ProductType.SIMPLE,
+          inventory_policy: ProductInventoryPolicy.DIRECT_STOCK,
+          stock: 24,
+          averageCost: 18,
+          sellPrice: 35,
+          tax_rate: 0.15,
+          is_tax_exempt: false,
+          is_active: true,
+          is_perishable: false,
+          category_code: null,
+          warehouse_id: null,
+          created_at: new Date('2026-10-01T00:00:00Z'),
+          updated_at: new Date('2026-10-01T00:00:00Z'),
+        } as unknown as Product,
+      ]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'products' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.products[0].inventoryPolicy).toBe(
+        ProductInventoryPolicy.NOT_TRACKED,
+      );
+      expect(response.deltas.products[1].inventoryPolicy).toBe(
+        ProductInventoryPolicy.DIRECT_STOCK,
+      );
+    });
+
+    it('includes PRODUCT_RESALE insumos in fetchInsumoDeltas so POS offline SALE_TIME_V1 works', async () => {
+      insumoQb.getMany.mockResolvedValue([
+        {
+          id: 'ins-resale-1',
+          tenant_id: 'tenant-abc',
+          name: 'Coca-Cola 600ml',
+          purchaseUom: 'botella',
+          consumptionUom: 'botella',
+          conversionFactor: 1,
+          stock: 24,
+          averageCost: 18,
+          is_active: true,
+          is_perishable: false,
+          negativeStockPolicy: 'RESTRICT',
+          catalogKind: InsumoCatalogKind.PRODUCT_RESALE,
+          managedProductId: 'p-direct-stock',
+          created_at: new Date('2026-10-01T00:00:00Z'),
+          updated_at: new Date('2026-10-01T00:00:00Z'),
+        } as unknown as Insumo,
+      ]);
+
+      const response = await service.getInboundDeltas(
+        'tenant-abc',
+        { types: 'insumos' },
+        undefined,
+        buildDefaultBoundManager(),
+      );
+
+      expect(response.deltas.insumos).toHaveLength(1);
+      expect(response.deltas.insumos[0].id).toBe('ins-resale-1');
     });
   });
 });
