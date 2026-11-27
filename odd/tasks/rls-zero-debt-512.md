@@ -12,8 +12,8 @@ Branch: `feat/rls-zero-debt-512` | Issue: `#512` | Risk: `item 1, item 2` (Postg
 - [x] **T1** (`S1, S2`) Bind `AuditController` (`getStreamHead`, `pushLogs`) and `AuditIntegrityService.runNightly` (per-tenant loop) to `runInTenantTransaction` + unit/DB tests — route: inline — commit: `537750b6`
 - [x] **T2** (`S1, S2`) Add migration `1811200000000-EnforceAuditLogsAndIntegrityAlertsRls.ts` + real-PG `NOSUPERUSER NOBYPASSRLS` two-tenant proof — route: inline — commit: `7a018ea9`
 - [x] **T3** (`S3`) Add `CashierSession` entity (`tenant_id: uuid`) + migration `1811300000000-EnforceCashierSessionsRls.ts` + real-PG two-tenant proof — route: inline — commit: `836ac77d`
-- [x] **T4** (`S4`) Promote manifest to **0 `debt`**, register scenario-2 replay in `verify-schema-build.sh`, update `audit-logs-read-rls.db.e2e-spec.ts`, and run full `verify-schema-build.sh` + DB & E2E proofs (all PASSED) — route: inline — commit: `pending`
-- [ ] **T5** (`S5`) Run independent `gentle-ai-verify`, push & open PR closing `#512` — route: verify — commit: pending
+- [x] **T4** (`S4`) Promote manifest to **0 `debt`**, register scenario-2 replay in `verify-schema-build.sh`, update `audit-logs-read-rls.db.e2e-spec.ts`, and run full `verify-schema-build.sh` + DB & E2E proofs (all PASSED) — route: inline — commit: `4fa5f22f`
+- [x] **T5** (`S5`) Independent `gentle-ai-verify` returned **S1–S5 `met`** + added durable `audit-integrity-nightly-rls.db.e2e-spec.ts` (2/2 PASS); ready for push & PR closing `#512` — route: verify — commit: `pending`
 
 ## Log
 - **L1** (user, verbatim): `Vamos con #512 (RLS en rutas transaccionales restantes)`
