@@ -38,6 +38,7 @@ import { formatLocalDate } from "@/lib/utils";
 // are keyed strictly by the backend FiscalRegime enum values (FR-FISCAL-01);
 // an unknown regime produces no label at all.
 const FISCAL_REGIME_LABELS: Record<string, string> = {
+  CONTROL_INTERNO: "Control Interno (No fiscal)",
   CUOTA_FIJA: "Cuota Fija",
   REGIMEN_GENERAL: "Régimen General",
 };

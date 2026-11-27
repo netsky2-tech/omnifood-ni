@@ -119,7 +119,9 @@ export class FiscalConfigVersionService {
     const fiscalRegime =
       rawRegime === FiscalRegime.REGIMEN_GENERAL
         ? FiscalRegime.REGIMEN_GENERAL
-        : FiscalRegime.CUOTA_FIJA;
+        : rawRegime === FiscalRegime.CONTROL_INTERNO
+          ? FiscalRegime.CONTROL_INTERNO
+          : FiscalRegime.CUOTA_FIJA;
 
     const rawTaxRate = paramMap.get(FISCAL_PARAM_KEYS.TAX_RATE_IVA);
     const taxRate =
@@ -127,7 +129,9 @@ export class FiscalConfigVersionService {
         ? rawTaxRate
         : fiscalRegime === FiscalRegime.REGIMEN_GENERAL
           ? DGI_NICARAGUA_TAX_RATES.REGIMEN_GENERAL
-          : DGI_NICARAGUA_TAX_RATES.CUOTA_FIJA;
+          : fiscalRegime === FiscalRegime.CONTROL_INTERNO
+            ? DGI_NICARAGUA_TAX_RATES.CONTROL_INTERNO
+            : DGI_NICARAGUA_TAX_RATES.CUOTA_FIJA;
 
     const rawPricesIncludeTax = paramMap.get(
       FISCAL_PARAM_KEYS.PRICES_INCLUDE_TAX,
