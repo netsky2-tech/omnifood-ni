@@ -22,12 +22,22 @@ import { type EntityManager } from 'typeorm';
 export async function readHighestInvoiceSequence(
   manager: EntityManager,
   tenantId: string,
+  prefix?: string,
 ): Promise<number> {
-  const rows: Array<{ maxSeq?: string | number | null }> = await manager.query(
-    `SELECT MAX(CAST(NULLIF(substring(invoice_number from '([0-9]+)$'), '') AS bigint)) AS "maxSeq"
+  const trimmedPrefix = prefix?.trim();
+  const rows: Array<{ maxSeq?: string | number | null }> = trimmedPrefix
+    ? await manager.query(
+        `SELECT MAX(CAST(NULLIF(substring(invoice_number from '([0-9]+)$'), '') AS bigint)) AS "maxSeq"
+         FROM invoices
+         WHERE tenant_id = $1
+           AND left(invoice_number, char_length($2)) = $2`,
+        [tenantId, trimmedPrefix],
+      )
+    : await manager.query(
+        `SELECT MAX(CAST(NULLIF(substring(invoice_number from '([0-9]+)$'), '') AS bigint)) AS "maxSeq"
          FROM invoices
          WHERE tenant_id = $1`,
-    [tenantId],
-  );
+        [tenantId],
+      );
   return rows?.[0]?.maxSeq ? Number(rows[0].maxSeq) : 0;
 }

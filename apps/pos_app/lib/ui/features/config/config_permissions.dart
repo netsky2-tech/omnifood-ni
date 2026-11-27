@@ -9,7 +9,10 @@ class ConfigPermission {
   /// quote prices), but can never change them.
   static const editExchangeRates = 'config.exchange_rates.edit';
 
-  static const all = <String>[editExchangeRates];
+  /// #526 B3: may export encrypted terminal SQLite backups and stage restores.
+  static const manageTerminalBackup = 'config.terminal_backup.manage';
+
+  static const all = <String>[editExchangeRates, manageTerminalBackup];
 }
 
 /// Fail-closed: owner/manager are granted; cashier, waiter and any unset

@@ -6,6 +6,7 @@ import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.
 import 'package:provider/provider.dart';
 import '../../../design_system/nhilos_tokens.dart';
 
+import 'terminal_backup_card.dart';
 import 'terminal_identity_view_model.dart';
 import 'widgets/ota_update_card.dart';
 
@@ -68,6 +69,8 @@ class TerminalIdentityView extends StatelessWidget {
                 const _CajaLabelCard(),
                 const SizedBox(height: 16),
                 const _ServerConfigCard(),
+                const SizedBox(height: 16),
+                const TerminalBackupCard(),
                 if (viewModel.otaCoordinator != null) ...[
                   const SizedBox(height: 16),
                   OtaUpdateCard(

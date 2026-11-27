@@ -59,10 +59,12 @@ void main() {
       );
     });
 
-    test('all contains exactly the FX edit permission', () {
-      expect(ConfigPermission.all, hasLength(1));
+    test('all contains the FX edit and terminal backup permissions', () {
+      expect(ConfigPermission.all, hasLength(2));
       expect(ConfigPermission.all, contains(ConfigPermission.editExchangeRates));
+      expect(ConfigPermission.all, contains(ConfigPermission.manageTerminalBackup));
       expect(ConfigPermission.editExchangeRates, 'config.exchange_rates.edit');
+      expect(ConfigPermission.manageTerminalBackup, 'config.terminal_backup.manage');
     });
   });
 }
