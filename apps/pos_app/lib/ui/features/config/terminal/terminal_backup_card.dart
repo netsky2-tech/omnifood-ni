@@ -9,6 +9,7 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import '../../../../data/database/app_database.dart';
 import '../../../../data/services/backup/terminal_backup_service.dart';
 import '../../../../domain/models/user.dart';
+import '../../../../domain/repositories/audit_repository.dart';
 import '../../../../domain/repositories/auth_repository.dart';
 import '../config_permissions.dart';
 
@@ -180,6 +181,23 @@ class _TerminalBackupCardState extends State<TerminalBackupCard> {
         destinationPath: destPath,
         passphrase: passphrase,
       );
+
+      // #526 B6: Record explicit forensic audit entry on backup export.
+      try {
+        final auditRepo =
+            Provider.of<AuditRepository?>(context, listen: false);
+        await auditRepo?.log(
+          'BACKUP_EXPORTED',
+          metadata: jsonEncode({
+            'invoiceCount': result.manifest.invoiceCount,
+            'dgiCurrentNumber': result.manifest.dgiCurrentNumber,
+            'auditChainStatus': result.auditChainReport.statusCode,
+            'payloadSha256': result.manifest.payloadSha256,
+          }),
+        );
+      } catch (_) {
+        // Non-fatal: backup file is already safely written.
+      }
 
       if (!mounted) return;
       setState(() {

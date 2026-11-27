@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/services/backup/terminal_backup_service.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
@@ -421,6 +422,24 @@ void main() async {
     capabilityCache: capabilityCache,
     forensicAlertDao: database.forensicAlertDao,
   );
+
+  // #526 B6/AC-10: Non-silent forensic audit event when a backup was restored.
+  if (appliedRestore != null) {
+    try {
+      await auditRepository.log(
+        'DATABASE_RESTORED',
+        metadata: jsonEncode({
+          'restoredAtIso': appliedRestore.restoredAtIso,
+          'invoiceCount': appliedRestore.manifest.invoiceCount,
+          'dgiCurrentNumber': appliedRestore.manifest.dgiCurrentNumber,
+          'auditChainReport': appliedRestore.auditChainReport,
+        }),
+      );
+    } catch (_) {
+      // Non-fatal: `last_database_restore_json` already persists the restore
+      // notice if no user session is active yet at cold start.
+    }
+  }
 
   final inventoryRepository = InventoryRepositoryImpl(
     insumoDao: database.insumoDao,

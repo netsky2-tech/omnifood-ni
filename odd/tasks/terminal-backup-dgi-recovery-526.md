@@ -18,8 +18,8 @@
 - [x] **T1** (`S1, S2`) Implement `AuditChainVerifier` and `TerminalBackupService` (AES-256+HMAC-SHA256 `.nhilosbak`, `VACUUM INTO`, B5 tripwire, atomic pending-restore swap) with TDD — route: inline — commit: `163bc9a6`
 - [x] **T2** (`S3`) Wire `applyPendingRestoreIfPresent()` in `main.dart` and add OWNER/MANAGER `_TerminalBackupCard` in `TerminalIdentityView` with widget tests — route: inline — commit: `05deb1ba`
 - [x] **T3** (`S4`) Add optional prefix-scoped watermark in `fiscal-sequence-watermark.ts` + real PG test & POS device-loss/double-boot tests (`AC-4`/`AC-5`/`AC-6`) — route: inline — commit: `c34da4e2`
-- [x] **T4** (`S5`) Build & run real Android hardware E2E (`#526` Scenario A) on Samsung Galaxy S23 (`R5CWB2LQJDJ`, 5/5 `ALL_TESTS_PASSED`), record evidence in `docs/operations/pilot-terminal-incident-procedure.md` — route: inline — commit: `pending`
-- [ ] **T5** (`S1-S5`) Run independent `gentle-ai-verify`, push & open PR closing `#526` — route: verify — commit: pending
+- [x] **T4** (`S5`) Build & run real Android hardware E2E (`#526` Scenario A) on Samsung Galaxy S23 (`R5CWB2LQJDJ`, 5/5 `ALL_TESTS_PASSED`), record evidence in `docs/operations/pilot-terminal-incident-procedure.md` — route: inline — commit: `60b0c458`
+- [x] **T5** (`S1-S5`) Run independent `gentle-ai-verify`, resolve all blockers (`LocalConfigEntity` import, `BACKUP_EXPORTED`/`DATABASE_RESTORED` audit events, PBKDF2 min-iterations guard), re-verify (`flutter analyze` 0 issues, 19/19 POS tests, real PG DB test, 5/5 S23 hardware E2E) — route: verify — commit: `pending`
 
 ## Log
 - **L1 (user):** "Si, procede y vamos con #526 (respaldo de terminal y contador DGI que hoy reinicia en 1 si muere la tablet). Recuerda siempre aplicar los test en dispositivo real para integrar con seguridad."

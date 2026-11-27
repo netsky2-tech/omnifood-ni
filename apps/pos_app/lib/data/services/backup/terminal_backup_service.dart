@@ -590,6 +590,11 @@ class TerminalBackupService {
 
     final iterations =
         (envelope['iterations'] as num?)?.toInt() ?? _pbkdf2Iterations;
+    if (iterations < _pbkdf2Iterations) {
+      throw const TerminalBackupException(
+        'Parámetros criptográficos del respaldo inválidos o degradados.',
+      );
+    }
     final manifestMap = envelope['manifest'] as Map<String, dynamic>?;
     final saltB64 = envelope['salt'] as String?;
     final ivB64 = envelope['iv'] as String?;
