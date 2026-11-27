@@ -165,7 +165,62 @@ class SalesRepositoryImpl implements SalesRepository {
       await _validateFulfillmentContext(fulfillmentContext);
     }
 
+    // #539 S3 (DT 09-2007 3.3.a): validate contingency manual back-entry
+    // completeness, date format, and anti-collision BEFORE allocating a DGI
+    // sequence number or persisting.
+    final hasAnyContingency =
+        invoice.contingencyManualSeries != null ||
+        invoice.contingencyManualNumber != null ||
+        invoice.contingencyManualIssuedAt != null;
+    final String? normalizedContingencySeries;
+    final String? normalizedContingencyNumber;
+    final String? normalizedContingencyIssuedAt;
+    if (hasAnyContingency) {
+      final rawSeries = invoice.contingencyManualSeries?.trim() ?? '';
+      final rawNumber = invoice.contingencyManualNumber?.trim() ?? '';
+      final rawIssuedAt = invoice.contingencyManualIssuedAt?.trim() ?? '';
+      if (rawSeries.isEmpty || rawNumber.isEmpty || rawIssuedAt.isEmpty) {
+        throw ArgumentError(
+          'Para registrar una factura de contingencia debe ingresar la serie manual, el número manual y la fecha de emisión manual (YYYY-MM-DD).',
+        );
+      }
+      if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(rawIssuedAt) ||
+          DateTime.tryParse(rawIssuedAt) == null) {
+        throw ArgumentError(
+          'La fecha de emisión manual de contingencia debe tener el formato YYYY-MM-DD.',
+        );
+      }
+      final dgiPrefixConfig =
+          await database.localConfigDao.getConfigByKey('dgi_prefix');
+      final dgiPrefix = dgiPrefixConfig?.value.trim() ?? '';
+      if (dgiPrefix.isNotEmpty &&
+          rawSeries.toUpperCase() == dgiPrefix.toUpperCase()) {
+        throw ArgumentError(
+          'La serie manual de contingencia ($rawSeries) no puede ser igual al prefijo computarizado DGI ($dgiPrefix).',
+        );
+      }
+      normalizedContingencySeries = rawSeries;
+      normalizedContingencyNumber = rawNumber;
+      normalizedContingencyIssuedAt = rawIssuedAt;
+    } else {
+      normalizedContingencySeries = null;
+      normalizedContingencyNumber = null;
+      normalizedContingencyIssuedAt = null;
+    }
+
     final finalNumber = await numberingService.getNextNumber();
+    if (hasAnyContingency) {
+      final normalizedFinalNumber = finalNumber.trim().toUpperCase();
+      final normalizedManualCombined =
+          '${normalizedContingencySeries!}-${normalizedContingencyNumber!}'
+              .toUpperCase();
+      if (normalizedContingencyNumber.toUpperCase() == normalizedFinalNumber ||
+          normalizedManualCombined == normalizedFinalNumber) {
+        throw ArgumentError(
+          'La numeración manual de contingencia ($normalizedManualCombined) no puede coincidir con la factura computarizada ($finalNumber).',
+        );
+      }
+    }
     final nextDgiSequence = _nextDgiSequence(finalNumber);
     final existingInvoice = await invoiceDao.getInvoiceById(invoice.id);
     final terminalId =
@@ -183,6 +238,9 @@ class SalesRepositoryImpl implements SalesRepository {
       sourceSequence: sourceSequence,
       idempotencyKey:
           invoice.idempotencyKey ?? 'sale:$terminalId:${invoice.id}',
+      contingencyManualSeries: normalizedContingencySeries,
+      contingencyManualNumber: normalizedContingencyNumber,
+      contingencyManualIssuedAt: normalizedContingencyIssuedAt,
     );
 
     // Frozen SALE_TIME_V1 lines are already bound to immutable sale-time facts.
@@ -641,6 +699,7 @@ class SalesRepositoryImpl implements SalesRepository {
       voidReason: voidReason ?? entity.voidReason,
       syncStatus: syncStatus ?? entity.syncStatus,
       paymentStatus: entity.paymentStatus,
+      paymentCondition: entity.paymentCondition,
       type: entity.type,
       customerId: entity.customerId,
       customerName: entity.customerName,
@@ -673,6 +732,9 @@ class SalesRepositoryImpl implements SalesRepository {
       tipAmountUsd: entity.tipAmountUsd,
       tipPercentage: entity.tipPercentage,
       tipEligibleBaseNio: entity.tipEligibleBaseNio,
+      contingencyManualSeries: entity.contingencyManualSeries,
+      contingencyManualNumber: entity.contingencyManualNumber,
+      contingencyManualIssuedAt: entity.contingencyManualIssuedAt,
     );
   }
 

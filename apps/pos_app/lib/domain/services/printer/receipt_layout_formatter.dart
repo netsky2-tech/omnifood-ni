@@ -139,19 +139,34 @@ class ReceiptLayoutFormatter {
 
   /// D-17 (DT 09-2007 QUINTO): the fiscal authorization number prints at
   /// the bottom-right of the printed document. One right-aligned line when
-  /// it fits at the current width; otherwise the label sits above a wrapped
-  /// value block ([formatKeyValue] idiom). Empty value renders nothing —
-  /// absence on paper is the honest state until the business fills the
-  /// field (#548: never fabricate presence).
+  /// it fits at the current width; otherwise wrapped lines are each
+  /// right-aligned to [maxCols] so 58mm tickets never fall back to left
+  /// alignment. Empty value renders nothing — absence on paper is the
+  /// honest state until the business fills the field (#548: never fabricate
+  /// presence).
   List<String> fiscalAuthorizationLines(String? number) {
     final value = sanitizeInlineText(number ?? '');
     if (value.isEmpty) return const [];
     const label = 'Autorización DGI:';
-    final oneLine = '$label $value';
+    final oneLine = sanitizeInlineText('$label $value');
     if (oneLine.length <= maxCols) {
       return [oneLine.padLeft(maxCols)];
     }
-    return formatKeyValue(label, value);
+    final cleanLabel = sanitizeInlineText(label);
+    final wrappedValue = wrap(value, maxCols);
+    return [
+      cleanLabel.length >= maxCols ? cleanLabel : cleanLabel.padLeft(maxCols),
+      ...wrappedValue.map(
+        (line) => line.length >= maxCols ? line : line.padLeft(maxCols),
+      ),
+    ];
+  }
+
+  /// DT 09-2007 1.7/1.8: human-readable fiscal condition label.
+  static String paymentConditionLabel(String paymentCondition) {
+    return paymentCondition.trim().toUpperCase() == 'CREDITO'
+        ? 'Credito'
+        : 'Contado';
   }
 
   /// A customer-block value is printable only when it is non-blank AND is not
@@ -531,6 +546,12 @@ class ReceiptLayoutFormatter {
         buffer.writeln(l);
       }
     }
+    if (doc.copyLabel != null && doc.copyLabel!.trim().isNotEmpty) {
+      buffer.writeln(doubleDivider());
+      for (final l in centerLines('*** ${doc.copyLabel!.trim()} ***')) {
+        buffer.writeln(l);
+      }
+    }
     buffer.writeln(doubleDivider());
     buffer.writeln(center(doc.documentTitle));
     buffer.writeln(center('No. ${doc.documentNumber}'));
@@ -626,6 +647,26 @@ class ReceiptLayoutFormatter {
     if (!doc.isCanceled && creditNoteReason != null) {
       for (final l in formatKeyValue('Motivo:', creditNoteReason)) {
         buffer.writeln(l);
+      }
+    }
+
+    if (doc.hasContingencyReference) {
+      for (final l in centerLines('INGRESO POR CONTINGENCIA')) {
+        buffer.writeln(l);
+      }
+      final ref =
+          '${doc.contingencyManualSeries!.trim()}-${doc.contingencyManualNumber!.trim()}';
+      for (final l in formatKeyValue('Ref. Factura Manual:', ref)) {
+        buffer.writeln(l);
+      }
+      if (doc.contingencyManualIssuedAt != null &&
+          doc.contingencyManualIssuedAt!.trim().isNotEmpty) {
+        for (final l in formatKeyValue(
+          'Fecha Manual:',
+          doc.contingencyManualIssuedAt!.trim(),
+        )) {
+          buffer.writeln(l);
+        }
       }
     }
 
@@ -906,10 +947,15 @@ class ReceiptLayoutFormatter {
     // 7. PAYMENT BREAKDOWN
     buffer.writeln(divider('-'));
     buffer.writeln(sectionHeader('DETALLE DE PAGO'));
+    // DT 09-2007 1.7/1.8: always indicate whether the invoice is Contado or Credito.
+    buffer.writeln(
+      formatTwoColumns(
+        'Condicion:',
+        paymentConditionLabel(doc.paymentCondition),
+      ),
+    );
 
-    if (doc.payments.isEmpty) {
-      buffer.writeln(formatTwoColumns('Condicion:', 'Contado'));
-    } else {
+    if (doc.payments.isNotEmpty) {
       for (final p in doc.payments) {
         final String amountFormatted;
         if (metrics.is80mm) {
@@ -1185,6 +1231,17 @@ class ReceiptLayoutFormatter {
           )
           .align(EscPosAlign.left);
     }
+    if (doc.copyLabel != null && doc.copyLabel!.trim().isNotEmpty) {
+      builder
+          .align(EscPosAlign.center)
+          .bold(true);
+      for (final l in centerLines('*** ${doc.copyLabel!.trim()} ***')) {
+        marginTextLine(builder, l);
+      }
+      builder
+          .bold(false)
+          .align(EscPosAlign.left);
+    }
     builder
         .textLine(marginLine(doubleDivider()))
         .bold(true)
@@ -1253,6 +1310,26 @@ class ReceiptLayoutFormatter {
     if (!doc.isCanceled && creditNoteReason != null) {
       for (final l in formatKeyValue('Motivo:', creditNoteReason)) {
         marginTextLine(builder, l);
+      }
+    }
+
+    if (doc.hasContingencyReference) {
+      for (final l in centerLines('INGRESO POR CONTINGENCIA')) {
+        marginTextLine(builder, l);
+      }
+      final ref =
+          '${doc.contingencyManualSeries!.trim()}-${doc.contingencyManualNumber!.trim()}';
+      for (final l in formatKeyValue('Ref. Factura Manual:', ref)) {
+        marginTextLine(builder, l);
+      }
+      if (doc.contingencyManualIssuedAt != null &&
+          doc.contingencyManualIssuedAt!.trim().isNotEmpty) {
+        for (final l in formatKeyValue(
+          'Fecha Manual:',
+          doc.contingencyManualIssuedAt!.trim(),
+        )) {
+          marginTextLine(builder, l);
+        }
       }
     }
 
@@ -1607,9 +1684,16 @@ class ReceiptLayoutFormatter {
         .textLine(marginLine(sectionHeader('DETALLE DE PAGO')))
         .align(EscPosAlign.left);
 
-    if (doc.payments.isEmpty) {
-      marginTextLine(builder, formatTwoColumns('Condicion:', 'Contado'));
-    } else {
+    // DT 09-2007 1.7/1.8: always indicate whether the invoice is Contado or Credito.
+    marginTextLine(
+      builder,
+      formatTwoColumns(
+        'Condicion:',
+        paymentConditionLabel(doc.paymentCondition),
+      ),
+    );
+
+    if (doc.payments.isNotEmpty) {
       for (final p in doc.payments) {
         final String amountFormatted;
         if (metrics.is80mm) {

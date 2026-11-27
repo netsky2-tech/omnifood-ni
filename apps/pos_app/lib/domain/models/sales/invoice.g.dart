@@ -23,6 +23,7 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       paymentStatus:
           $enumDecodeNullable(_$PaymentStatusEnumMap, json['paymentStatus']) ??
               PaymentStatus.pending,
+      paymentCondition: json['paymentCondition'] as String? ?? 'CONTADO',
       type: $enumDecodeNullable(_$InvoiceTypeEnumMap, json['type']) ??
           InvoiceType.regular,
       customerId: json['customerId'] as String?,
@@ -51,6 +52,9 @@ _$InvoiceImpl _$$InvoiceImplFromJson(Map<String, dynamic> json) =>
       bcnOfficialRate: (json['bcnOfficialRate'] as num?)?.toDouble() ?? 36.6241,
       commercialRate: (json['commercialRate'] as num?)?.toDouble() ?? 36.50,
       totalUsd: (json['totalUsd'] as num?)?.toDouble() ?? 0.0,
+      contingencyManualSeries: json['contingencyManualSeries'] as String?,
+      contingencyManualNumber: json['contingencyManualNumber'] as String?,
+      contingencyManualIssuedAt: json['contingencyManualIssuedAt'] as String?,
     );
 
 Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
@@ -66,6 +70,7 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'voidReason': instance.voidReason,
       'syncStatus': _$SyncStatusEnumMap[instance.syncStatus]!,
       'paymentStatus': _$PaymentStatusEnumMap[instance.paymentStatus]!,
+      'paymentCondition': instance.paymentCondition,
       'type': _$InvoiceTypeEnumMap[instance.type]!,
       'customerId': instance.customerId,
       'customerName': instance.customerName,
@@ -93,6 +98,9 @@ Map<String, dynamic> _$$InvoiceImplToJson(_$InvoiceImpl instance) =>
       'bcnOfficialRate': instance.bcnOfficialRate,
       'commercialRate': instance.commercialRate,
       'totalUsd': instance.totalUsd,
+      'contingencyManualSeries': instance.contingencyManualSeries,
+      'contingencyManualNumber': instance.contingencyManualNumber,
+      'contingencyManualIssuedAt': instance.contingencyManualIssuedAt,
     };
 
 const _$SyncStatusEnumMap = {

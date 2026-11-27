@@ -258,6 +258,8 @@ class ReceiptDocument {
   final double totalUsd;
 
   final List<ReceiptPayment> payments;
+  /// DT 09-2007 1.7/1.8: fiscal payment condition ('CONTADO' | 'CREDITO').
+  final String paymentCondition;
   final String? footerMessage;
   final List<int>? logoRasterBytes;
   final bool isTaxExempt;
@@ -305,6 +307,14 @@ class ReceiptDocument {
   /// banner. Defaults to true so every existing sale path stays byte-identical.
   final bool isFiscalDocument;
 
+  /// #539 S3 (DT 09-2007 3.3.b): manual contingency invoice back-entry
+  /// cross-reference fields and copy banner ('ORIGINAL' /
+  /// 'COPIA - ADJUNTAR COPIA MANUAL').
+  final String? contingencyManualSeries;
+  final String? contingencyManualNumber;
+  final String? contingencyManualIssuedAt;
+  final String? copyLabel;
+
   const ReceiptDocument({
     required this.businessName,
     this.legalName,
@@ -334,6 +344,7 @@ class ReceiptDocument {
     this.bcnOfficialRate = 36.6241,
     required this.totalUsd,
     this.payments = const [],
+    this.paymentCondition = 'CONTADO',
     this.footerMessage,
     this.logoRasterBytes,
     this.isTaxExempt = false,
@@ -348,10 +359,19 @@ class ReceiptDocument {
     this.tipPercentage,
     this.loyaltyFeedback,
     this.isFiscalDocument = true,
+    this.contingencyManualSeries,
+    this.contingencyManualNumber,
+    this.contingencyManualIssuedAt,
+    this.copyLabel,
   }) : grossSubtotal = grossSubtotal ?? (discountTotal > 0 ? (subtotal + discountTotal) : subtotal);
 
   bool get isCuotaFija => taxRegime.isCuotaFija;
   bool get isGlobalTaxExempt => isTaxExempt || globalTaxOverride;
+
+  /// True when a manual contingency cross-reference is present (DT 09-2007 3.3.b).
+  bool get hasContingencyReference =>
+      (contingencyManualSeries?.trim().isNotEmpty ?? false) &&
+      (contingencyManualNumber?.trim().isNotEmpty ?? false);
 
   /// True when a voluntary tip was captured. A zero tip is indistinguishable
   /// from "no tip": neither prints a tip block.
@@ -398,6 +418,7 @@ class ReceiptDocument {
         bcnOfficialRate: bcnOfficialRate,
         totalUsd: totalUsd,
         payments: payments,
+        paymentCondition: paymentCondition,
         footerMessage: footerMessage,
         logoRasterBytes: logoBytes,
         isTaxExempt: isTaxExempt,
@@ -412,6 +433,10 @@ class ReceiptDocument {
         tipPercentage: tipPercentage,
         loyaltyFeedback: loyaltyFeedback,
         isFiscalDocument: isFiscalDocument,
+        contingencyManualSeries: contingencyManualSeries,
+        contingencyManualNumber: contingencyManualNumber,
+        contingencyManualIssuedAt: contingencyManualIssuedAt,
+        copyLabel: copyLabel,
       );
   String get regimeHeader => taxRegime.receiptRegimeHeader;
   String? get fiscalNotice => taxRegime.fiscalNotice;
@@ -485,6 +510,7 @@ class ReceiptDocument {
     DateTime? reprintAt,
     String? originDocumentReference,
     PostPaidFeedback? loyaltyFeedback,
+    String? copyLabel,
   }) {
     final receiptLines = items
         .map((item) => ReceiptLine.fromInvoiceItem(item, taxRegime: taxRegime))
@@ -583,6 +609,7 @@ class ReceiptDocument {
       bcnOfficialRate: invoice.bcnOfficialRate > 0 ? invoice.bcnOfficialRate : 36.6241,
       totalUsd: totalUsdCalc,
       payments: payments.map(ReceiptPayment.fromPayment).toList(),
+      paymentCondition: invoice.paymentCondition,
       footerMessage: footerMessage,
       logoRasterBytes: logoRasterBytes,
       isTaxExempt: taxRegime.isRegimenGeneral &&
@@ -605,6 +632,24 @@ class ReceiptDocument {
       tipAmountUsd: invoice.tipAmountUsd ?? 0.0,
       tipPercentage: invoice.tipPercentage,
       loyaltyFeedback: loyaltyFeedback,
+      contingencyManualSeries:
+          (invoice.contingencyManualSeries != null &&
+                  invoice.contingencyManualSeries!.trim().isNotEmpty)
+              ? invoice.contingencyManualSeries!.trim()
+              : null,
+      contingencyManualNumber:
+          (invoice.contingencyManualNumber != null &&
+                  invoice.contingencyManualNumber!.trim().isNotEmpty)
+              ? invoice.contingencyManualNumber!.trim()
+              : null,
+      contingencyManualIssuedAt:
+          (invoice.contingencyManualIssuedAt != null &&
+                  invoice.contingencyManualIssuedAt!.trim().isNotEmpty)
+              ? invoice.contingencyManualIssuedAt!.trim()
+              : null,
+      copyLabel: (copyLabel != null && copyLabel.trim().isNotEmpty)
+          ? copyLabel.trim()
+          : null,
     );
   }
 

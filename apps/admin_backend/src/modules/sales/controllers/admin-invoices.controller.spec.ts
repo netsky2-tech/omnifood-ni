@@ -326,4 +326,60 @@ describe('AdminInvoicesController', () => {
       expect(serviceMock.voidAdminInvoice).not.toHaveBeenCalled();
     });
   });
+
+  describe('GET /sales/admin/invoices (contingencyOnly filter & fields)', () => {
+    beforeEach(() => {
+      serviceMock.findAll?.mockClear();
+    });
+
+    it('passes contingencyOnly=true to InvoicesService.findAll and exposes contingencyManual* fields', async () => {
+      injectedUser = buildPrincipal('OWNER');
+      serviceMock.findAll?.mockResolvedValueOnce([
+        {
+          id: 'inv-cont-1',
+          number: '001-001-01-00000030',
+          subtotal: '100.00',
+          totalTax: '15.00',
+          total: '115.00',
+          bcnOfficialRate: '36.6241',
+          commercialRate: '36.5000',
+          totalUsd: '3.15',
+          contingencyManualSeries: 'MAN-A',
+          contingencyManualNumber: '000042',
+          contingencyManualIssuedAt: '2026-04-15',
+          items: [],
+          payments: [],
+        },
+      ]);
+
+      const res = await request(app.getHttpServer()).get(
+        '/sales/admin/invoices?contingencyOnly=true',
+      );
+
+      expect(res.status).toBe(200);
+      expect(serviceMock.findAll).toHaveBeenCalledWith('tenant-1', {
+        contingencyOnly: true,
+      });
+      expect(res.body).toEqual([
+        expect.objectContaining({
+          id: 'inv-cont-1',
+          contingencyManualSeries: 'MAN-A',
+          contingencyManualNumber: '000042',
+          contingencyManualIssuedAt: '2026-04-15',
+        }),
+      ]);
+    });
+
+    it('calls findAll without contingencyOnly when query param is omitted', async () => {
+      injectedUser = buildPrincipal('OWNER');
+      serviceMock.findAll?.mockResolvedValueOnce([]);
+
+      const res = await request(app.getHttpServer()).get(
+        '/sales/admin/invoices',
+      );
+
+      expect(res.status).toBe(200);
+      expect(serviceMock.findAll).toHaveBeenCalledWith('tenant-1');
+    });
+  });
 });

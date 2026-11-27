@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
 import { LoadingState } from "@/components/ui/loading-state";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useRbac } from "@/lib/rbac";
@@ -10,7 +11,6 @@ import {
   type AdminInvoice,
   type AdminInvoiceItem,
 } from "./credit-notes-api";
-import { useQuery } from "@tanstack/react-query";
 
 /**
  * B1c-2 slice B (D-14, #553 part 2): the credit-note issuance tab.
@@ -89,6 +89,16 @@ function translateSeriesError(message: string): string {
 
 function originItems(invoice: AdminInvoice): AdminInvoiceItem[] {
   return invoice.items ?? [];
+}
+
+function formatContingencyRef(invoice: AdminInvoice): string | null {
+  const series = invoice.contingencyManualSeries?.trim();
+  const number = invoice.contingencyManualNumber?.trim();
+  if (!series || !number) return null;
+  const date = invoice.contingencyManualIssuedAt?.trim().slice(0, 10);
+  return date
+    ? `Ref. manual: ${series}-${number} · ${date}`
+    : `Ref. manual: ${series}-${number}`;
 }
 
 function IssuanceDialog({
@@ -186,6 +196,14 @@ function IssuanceDialog({
               <span className="font-mono">{invoice.number}</span> · Total{" "}
               {formatCurrency(invoice.total)}
             </p>
+            {formatContingencyRef(invoice) && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="warning">Contingencia manual</Badge>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {formatContingencyRef(invoice)}
+                </span>
+              </div>
+            )}
             <div className="rounded-md border border-border p-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Se anularán todos los ítems por su cantidad total
@@ -281,9 +299,10 @@ function IssuanceDialog({
 export function CreditNotesTab() {
   const { canPerformAction } = useRbac();
   const canIssue = canPerformAction("creditNotes.issue");
+  const [contingencyOnly, setContingencyOnly] = useState(false);
   const { data: invoices, isLoading } = useQuery({
-    queryKey: ["admin", "invoices"],
-    queryFn: ({ signal }) => fetchAdminInvoices({ signal }),
+    queryKey: ["admin", "invoices", { contingencyOnly }],
+    queryFn: ({ signal }) => fetchAdminInvoices({ signal, contingencyOnly }),
   });
   const [selected, setSelected] = useState<AdminInvoice | null>(null);
 
@@ -296,73 +315,108 @@ export function CreditNotesTab() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Emitir una Nota de Crédito es la corrección fiscal para una venta
-        existente. Solo se emiten notas de ticket completo; para correcciones
-        parciales use el procedimiento administrativo.
-      </p>
-      <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
-        <div className="overflow-x-auto w-full">
-          <table className="w-full text-sm min-w-[540px]">
-            <thead>
-              <tr className="border-b border-border bg-muted/60">
-                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                  Factura
-                </th>
-                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                  Estado
-                </th>
-                <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                  Total
-                </th>
-                <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
-                  Fecha
-                </th>
-                {canIssue && (
-                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
-                    <span className="sr-only">Acciones</span>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Emitir una Nota de Crédito es la corrección fiscal para una venta
+          existente. Solo se emiten notas de ticket completo; para correcciones
+          parciales use el procedimiento administrativo.
+        </p>
+        <label className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-xs hover:bg-muted/50 transition-colors">
+          <input
+            type="checkbox"
+            checked={contingencyOnly}
+            onChange={(event) => setContingencyOnly(event.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:ring-offset-2"
+            data-testid="contingency-only-filter"
+          />
+          <span>Solo contingencia manual</span>
+        </label>
+      </div>
+      {visible.length === 0 ? (
+        <EmptyState
+          message={
+            contingencyOnly
+              ? "Sin facturas de contingencia manual registradas"
+              : "Sin facturas disponibles"
+          }
+        />
+      ) : (
+        <div className="rounded-lg border border-border bg-card shadow-xs overflow-hidden">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-sm min-w-[540px]">
+              <thead>
+                <tr className="border-b border-border bg-muted/60">
+                  <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                    Factura
                   </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((invoice) => (
-                <tr
-                  key={invoice.id}
-                  className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
-                >
-                  <td className="px-4 py-3 font-mono text-xs font-medium text-foreground">
-                    {invoice.number}
-                  </td>
-                  <td className="px-4 py-3 text-foreground">
-                    {rowStateLabel(invoice)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
-                    {formatCurrency(invoice.total)}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
-                    {new Date(invoice.created_at).toLocaleDateString("es-NI")}
-                  </td>
+                  <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                    Estado
+                  </th>
+                  <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                    Total
+                  </th>
+                  <th className="px-4 py-3 text-left font-semibold uppercase text-xs text-muted-foreground">
+                    Fecha
+                  </th>
                   {canIssue && (
-                    <td className="px-4 py-3 text-right">
-                      {isIssuable(invoice) && (
-                        <button
-                          type="button"
-                          className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
-                          onClick={() => setSelected(invoice)}
-                          data-testid={`issue-credit-note-${invoice.id}`}
-                        >
-                          Emitir Nota de Crédito
-                        </button>
-                      )}
-                    </td>
+                    <th className="px-4 py-3 text-right font-semibold uppercase text-xs text-muted-foreground">
+                      <span className="sr-only">Acciones</span>
+                    </th>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {visible.map((invoice) => {
+                  const contingencyRef = formatContingencyRef(invoice);
+                  return (
+                    <tr
+                      key={invoice.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-mono text-xs font-medium text-foreground">
+                          {invoice.number}
+                        </div>
+                        {contingencyRef && (
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <Badge variant="warning">Contingencia manual</Badge>
+                            <span className="font-mono text-[11px] text-muted-foreground">
+                              {contingencyRef}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {rowStateLabel(invoice)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums font-semibold text-foreground">
+                        {formatCurrency(invoice.total)}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                        {new Date(invoice.created_at).toLocaleDateString("es-NI")}
+                      </td>
+                      {canIssue && (
+                        <td className="px-4 py-3 text-right">
+                          {isIssuable(invoice) && (
+                            <button
+                              type="button"
+                              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                              onClick={() => setSelected(invoice)}
+                              data-testid={`issue-credit-note-${invoice.id}`}
+                            >
+                              Emitir Nota de Crédito
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
       {selected && (
         <IssuanceDialog
           invoice={selected}

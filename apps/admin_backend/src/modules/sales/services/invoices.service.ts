@@ -7,7 +7,14 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, In, Repository } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  Not,
+  Repository,
+} from 'typeorm';
 import { createHash, randomUUID } from 'crypto';
 import { LoyaltyLedgerService } from '../../loyalty/services/loyalty-ledger.service';
 import { LoyaltyProgram } from '../../loyalty/entities/loyalty-program.entity';
@@ -39,6 +46,11 @@ import {
   toCalendarDay,
   todayCalendarDay,
 } from '../../../core/database/calendar-day';
+import {
+  currentLocalDateKey,
+  formatLocalDateKey,
+  isValidLocalDateKey,
+} from '../../../core/reporting/reporting-period';
 import { RecipePublicationState } from '../../inventory/entities/recipe-version.entity';
 import {
   Insumo,
@@ -275,6 +287,7 @@ export class InvoicesService {
       );
       this.assertCreditNoteReasonAndAuthorization(dto);
       await this.assertCreditNoteAuthorizingActor(tenantId, dto, manager);
+      await this.assertContingencyManualReferenceValid(tenantId, dto, manager);
       await this.validateInvoiceRecipeVersions(tenantId, dto);
       const handledDuplicate = await this.skipMatchingCreditNoteReplay(
         tenantId,
@@ -524,12 +537,13 @@ export class InvoicesService {
       );
 
       try {
+        const creditNoteCreatedAt = new Date();
         const invoiceRepo = manager.getRepository(Invoice);
         const inserted = await invoiceRepo.insert(
           invoiceRepo.create({
             tenant_id: tenantId,
             number: allocated.number,
-            created_at: new Date(),
+            created_at: creditNoteCreatedAt,
             userId: authorizer.userId,
             subtotal: round4(total - totalTax),
             totalTax,
@@ -561,6 +575,20 @@ export class InvoicesService {
             .insert(
               items.map((item) => ({ ...item, invoiceId: creditNoteId })),
             );
+        }
+
+        if (dto.refundReasonPolicy === CREDIT_NOTE_RESTOCK_POLICY) {
+          await this.appendAdminCreditNoteInventoryReversal({
+            tenantId,
+            creditNoteId,
+            creditNoteCreatedAt,
+            originInvoiceId: dto.originInvoiceId,
+            originItemsById,
+            requestedItems: dto.items,
+            refundReasonPolicy: dto.refundReasonPolicy,
+            userId: authorizer.userId,
+            manager,
+          });
         }
 
         return {
@@ -623,6 +651,7 @@ export class InvoicesService {
           `Invoice '${invoiceId}' is already canceled`,
         );
       }
+      this.assertSameDayManaguaVoid(invoice);
 
       const effectiveReason = dto.reasonDetail?.trim()
         ? `${dto.reason.trim()} \u2014 ${dto.reasonDetail.trim()}`
@@ -820,10 +849,99 @@ export class InvoicesService {
     };
   }
 
-  async findAll(tenantId: string): Promise<Invoice[]> {
+  private async assertContingencyManualReferenceValid(
+    tenantId: string,
+    dto: SyncInvoiceDto,
+    manager: EntityManager,
+  ): Promise<void> {
+    const rawSeries = dto.contingencyManualSeries;
+    const rawNumber = dto.contingencyManualNumber;
+    const rawIssuedAt = dto.contingencyManualIssuedAt;
+
+    const anyProvided =
+      (rawSeries !== undefined && rawSeries !== null) ||
+      (rawNumber !== undefined && rawNumber !== null) ||
+      (rawIssuedAt !== undefined && rawIssuedAt !== null);
+
+    if (!anyProvided) {
+      return;
+    }
+
+    const series = typeof rawSeries === 'string' ? rawSeries.trim() : '';
+    const manualNumber = typeof rawNumber === 'string' ? rawNumber.trim() : '';
+    const issuedAt = typeof rawIssuedAt === 'string' ? rawIssuedAt.trim() : '';
+
+    if (!series || !manualNumber || !issuedAt) {
+      throw new BadRequestException(
+        'CONTINGENCY_REF_INCOMPLETE: contingencyManualSeries, contingencyManualNumber, and contingencyManualIssuedAt must all be non-blank when any contingency reference field is provided.',
+      );
+    }
+
+    if (!isValidLocalDateKey(issuedAt)) {
+      throw new BadRequestException(
+        'CONTINGENCY_REF_INCOMPLETE: contingencyManualIssuedAt must be a valid YYYY-MM-DD date.',
+      );
+    }
+
+    const invoiceNumber = (dto.number ?? '').trim();
+    const lastDash = invoiceNumber.lastIndexOf('-');
+    const invoicePrefix =
+      lastDash > 0 ? invoiceNumber.slice(0, lastDash).trim() : null;
+
+    if (
+      (invoicePrefix &&
+        series.toUpperCase() === invoicePrefix.toUpperCase()) ||
+      manualNumber.toUpperCase() === invoiceNumber.toUpperCase() ||
+      `${series}-${manualNumber}`.toUpperCase() === invoiceNumber.toUpperCase()
+    ) {
+      throw new BadRequestException(
+        'CONTINGENCY_SERIES_COLLISION: Manual contingency series/number must be distinct from the computerized DGI invoice series and number (DT 09-2007 3.3.a).',
+      );
+    }
+
+    const paramRepo = manager.getRepository(SystemParametersConfigActiveView);
+    if (paramRepo && typeof paramRepo.findOne === 'function') {
+      const dgiPrefixParam = await paramRepo.findOne({
+        where: {
+          tenant_id: tenantId,
+          paramKey: In(['dgi_prefix', 'DGI_PREFIX']),
+        },
+      });
+      const rawParamValue = dgiPrefixParam?.paramValue;
+      let configuredPrefix: string | null = null;
+      if (typeof rawParamValue === 'string') {
+        configuredPrefix = rawParamValue.trim();
+      } else if (
+        rawParamValue &&
+        typeof rawParamValue === 'object' &&
+        !Array.isArray(rawParamValue)
+      ) {
+        const obj = rawParamValue as Record<string, unknown>;
+        const candidate = obj.prefix ?? obj.value ?? obj.dgi_prefix;
+        if (typeof candidate === 'string') {
+          configuredPrefix = candidate.trim();
+        }
+      }
+      if (
+        configuredPrefix &&
+        series.toUpperCase() === configuredPrefix.toUpperCase()
+      ) {
+        throw new BadRequestException(
+          'CONTINGENCY_SERIES_COLLISION: Manual contingency series cannot match the tenant configured DGI prefix (DT 09-2007 3.3.a).',
+        );
+      }
+    }
+  }
+
+  async findAll(
+    tenantId: string,
+    options?: { contingencyOnly?: boolean },
+  ): Promise<Invoice[]> {
     return this.withTenantBoundTransaction(tenantId, async (manager) =>
       this.invoiceRepoFor(manager).find({
-        where: { tenant_id: tenantId },
+        where: options?.contingencyOnly
+          ? { tenant_id: tenantId, contingencyManualSeries: Not(IsNull()) }
+          : { tenant_id: tenantId },
         relations: ['items', 'items.modifiers', 'payments'],
         order: { created_at: 'DESC' },
       }),
@@ -1178,6 +1296,14 @@ export class InvoicesService {
 
       await this.dataSource.transaction('SERIALIZABLE', async (manager) => {
         await bindTenantContext(manager, tenantId);
+        if (record.documentType === 'SALE_CANCEL' && record.invoice?.id) {
+          const existingForCancel = await this.invoiceRepoFor(manager).findOne({
+            where: { id: record.invoice.id, tenant_id: tenantId },
+          });
+          if (existingForCancel && !existingForCancel.isCanceled) {
+            this.assertSameDayManaguaVoid(existingForCancel);
+          }
+        }
         if (record.invoice) {
           await this.validateInvoiceRecipeVersions(
             tenantId,
@@ -1596,6 +1722,14 @@ export class InvoicesService {
         // core — never a parallel transport or a split write.
         await this.appendLoyaltyLedgerRecord(tenantId, record, manager);
         const acceptedAt = new Date();
+        if (record.documentType === 'SALE_CANCEL' && record.invoice?.id) {
+          const existingForCancel = await this.invoiceRepoFor(manager).findOne({
+            where: { id: record.invoice.id, tenant_id: tenantId },
+          });
+          if (existingForCancel && !existingForCancel.isCanceled) {
+            this.assertSameDayManaguaVoid(existingForCancel);
+          }
+        }
         if (record.invoice) {
           v1Outcome = await this.outcomeService.validateSaleTimeSnapshot(
             tenantId,
@@ -1872,6 +2006,93 @@ export class InvoicesService {
             code: 'SYNC_CONFLICT',
             retryable: false,
             message,
+          }),
+        };
+      }
+      if (
+        error instanceof BadRequestException &&
+        message.includes('CROSS_DAY_VOID_PROHIBITED')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CROSS_DAY_VOID_PROHIBITED',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof BadRequestException &&
+        message.includes('CONTINGENCY_REF_INCOMPLETE')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_REF_INCOMPLETE',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        error instanceof BadRequestException &&
+        message.includes('CONTINGENCY_SERIES_COLLISION')
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_SERIES_COLLISION',
+            retryable: false,
+            message,
+          }),
+        };
+      }
+      if (
+        dbErr?.code === '23505' &&
+        (dbErr?.constraint === 'uq_invoices_tenant_contingency_manual_ref' ||
+          message.includes('uq_invoices_tenant_contingency_manual_ref'))
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_MANUAL_REF_DUPLICATE',
+            retryable: false,
+            message:
+              'Manual contingency invoice reference has already been back-entered for this tenant.',
+          }),
+        };
+      }
+      if (
+        dbErr?.code === '23514' &&
+        (dbErr?.constraint ===
+          'chk_invoices_contingency_not_same_as_system_number' ||
+          message.includes(
+            'chk_invoices_contingency_not_same_as_system_number',
+          ))
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_SERIES_COLLISION',
+            retryable: false,
+            message:
+              'Manual contingency reference collides with computerized invoice number.',
+          }),
+        };
+      }
+      if (
+        dbErr?.code === '23514' &&
+        (dbErr?.constraint === 'chk_invoices_contingency_manual_ref_complete' ||
+          message.includes('chk_invoices_contingency_manual_ref_complete'))
+      ) {
+        return {
+          accepted: false,
+          result: this.buildResult(record, SYNC_RESULT_STATUS.REJECTED, {
+            code: 'CONTINGENCY_REF_INCOMPLETE',
+            retryable: false,
+            message:
+              'Manual contingency reference fields must all be non-blank.',
           }),
         };
       }
@@ -3429,6 +3650,191 @@ export class InvoicesService {
         user_id: invoice.userId,
       }),
     );
+  }
+
+  private resolveManaguaIssueDate(
+    localIssueDate?: string | null,
+    createdAt?: Date | string | null,
+  ): string | null {
+    if (localIssueDate && isValidLocalDateKey(localIssueDate)) {
+      return localIssueDate;
+    }
+    if (createdAt != null) {
+      const instant =
+        createdAt instanceof Date ? createdAt : new Date(createdAt);
+      if (!Number.isNaN(instant.getTime())) {
+        return formatLocalDateKey(instant);
+      }
+    }
+    return null;
+  }
+
+  private assertSameDayManaguaVoid(
+    invoice: Pick<Invoice, 'localIssueDate' | 'created_at'>,
+  ): void {
+    const issueDay = this.resolveManaguaIssueDate(
+      invoice.localIssueDate,
+      invoice.created_at,
+    );
+    const todayManagua = currentLocalDateKey();
+    if (issueDay && issueDay !== todayManagua) {
+      throw new BadRequestException(
+        `CROSS_DAY_VOID_PROHIBITED: Cross-day invoice cancellation is prohibited under DGI DT 09-2007 3.4.b (issued ${issueDay}, current Managua date ${todayManagua}). Issue a Credit Note (Nota de Crédito) instead.`,
+      );
+    }
+  }
+
+  private async appendAdminCreditNoteInventoryReversal(input: {
+    tenantId: string;
+    creditNoteId: string;
+    creditNoteCreatedAt: Date;
+    originInvoiceId: string;
+    originItemsById: Map<string, InvoiceItem>;
+    requestedItems: Array<{ originInvoiceItemId: string; quantity: number }>;
+    refundReasonPolicy: string;
+    userId: string;
+    manager: EntityManager;
+  }): Promise<void> {
+    const {
+      tenantId,
+      creditNoteId,
+      creditNoteCreatedAt,
+      originInvoiceId,
+      originItemsById,
+      requestedItems,
+      refundReasonPolicy,
+      userId,
+      manager,
+    } = input;
+
+    const originMovements = await manager.find(InventoryMovement, {
+      where: {
+        tenant_id: tenantId,
+        sourceDocumentId: `${INVOICE_SOURCE_DOCUMENT_PREFIX}${originInvoiceId}`,
+        type: MovementType.SALE,
+      },
+    });
+    if (!originMovements.length) {
+      return;
+    }
+
+    const existingCompensations = await manager.find(InventoryMovement, {
+      where: {
+        tenant_id: tenantId,
+        sourceDocumentType: 'CREDIT_NOTE',
+        originMovementId: In(originMovements.map((m) => m.id)),
+      },
+    });
+
+    const maxSeqRow = await manager
+      .createQueryBuilder(InventoryMovement, 'mov')
+      .select('COALESCE(MAX(mov.source_sequence), 0)', 'maxSeq')
+      .where('mov.tenant_id = :tenantId', { tenantId })
+      .andWhere('mov.source_device_id = :deviceId', { deviceId: 'WEB_ADMIN' })
+      .andWhere(
+        "mov.source_document_type IN ('SALE', 'SALE_CANCEL', 'CREDIT_NOTE')",
+      )
+      .getRawOne<{ maxSeq?: string | number }>();
+    let nextSeq = Number(maxSeqRow?.maxSeq ?? 0) + 1;
+
+    const movRepo = manager.getRepository(InventoryMovement);
+
+    for (const requested of requestedItems) {
+      const originItem = originItemsById.get(requested.originInvoiceItemId);
+      if (!originItem) continue;
+
+      const originQuantity = Math.abs(Number(originItem.quantity));
+      if (originQuantity === 0) continue;
+      const refundQuantity = Math.abs(Number(requested.quantity));
+      const refundRatio = refundQuantity / originQuantity;
+
+      const movementsForLine = originMovements.filter((m) =>
+        this.isMovementBoundToOriginInvoiceItem(
+          m,
+          requested.originInvoiceItemId,
+        ),
+      );
+      if (!movementsForLine.length) {
+        continue;
+      }
+
+      for (const originMovement of movementsForLine) {
+        const quantity = round4(
+          Math.abs(Number(originMovement.quantity)) * refundRatio,
+        );
+        if (quantity <= 0) continue;
+
+        const existingForOriginMovement = existingCompensations.filter(
+          (m) =>
+            m.originMovementId === originMovement.id &&
+            m.originInvoiceItemId === requested.originInvoiceItemId,
+        );
+        const priorCompensatedQuantity = round4(
+          existingForOriginMovement.reduce(
+            (sum, m) => sum + Math.abs(Number(m.quantity)),
+            0,
+          ),
+        );
+        const originMovementQuantity = round4(
+          Math.abs(Number(originMovement.quantity)),
+        );
+        if (
+          round4(priorCompensatedQuantity + quantity) > originMovementQuantity
+        ) {
+          throw new BadRequestException(
+            'credit-note restock quantity exceeds the remaining origin movement quantity',
+          );
+        }
+
+        const insumo = await manager
+          .createQueryBuilder(Insumo, 'insumo')
+          .setLock('pessimistic_write')
+          .where('insumo.id = :insumoId', { insumoId: originMovement.insumoId })
+          .andWhere('insumo.tenant_id = :tenantId', { tenantId })
+          .getOne();
+        if (!insumo) {
+          this.logger.warn(
+            `Skipping admin credit-note restock due to unresolved insumo ${originMovement.insumoId}`,
+          );
+          continue;
+        }
+
+        const previousStock = Number(insumo.stock);
+        const newStock = round4(previousStock + quantity);
+        const unitCostNio = round4(
+          Number(originMovement.unitCostNio ?? insumo.averageCost ?? 0),
+        );
+        const averageCostAfterNio = round4(Number(insumo.averageCost ?? 0));
+        insumo.stock = newStock;
+        insumo.existenciaActual = newStock;
+        await manager.save(Insumo, insumo);
+
+        await manager.save(
+          movRepo.create({
+            tenant_id: tenantId,
+            insumoId: originMovement.insumoId,
+            type: MovementType.CREDIT_NOTE_RESTOCK,
+            quantity,
+            previousStock,
+            newStock,
+            averageCostAfterNio,
+            unitCostNio,
+            totalCostNio: round4(quantity * unitCostNio),
+            idempotencyKey: `admin-credit-note:${creditNoteId}:${requested.originInvoiceItemId}:${originMovement.id}`,
+            sourceDeviceId: 'WEB_ADMIN',
+            sourceSequence: String(nextSeq++),
+            sourceDocumentId: creditNoteId,
+            sourceDocumentType: 'CREDIT_NOTE',
+            compensationForKardexId: originMovement.id,
+            originMovementId: originMovement.id,
+            originInvoiceItemId: requested.originInvoiceItemId,
+            refundReasonPolicy,
+            timestamp: creditNoteCreatedAt,
+            user_id: userId,
+          }),
+        );
+      }
+    }
   }
 
   private isCreditNoteInvoice(dto: SyncInvoiceDto): boolean {

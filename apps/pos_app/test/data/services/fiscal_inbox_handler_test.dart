@@ -2377,5 +2377,72 @@ void main() {
         );
       });
     });
+
+    group('DT 09-2007 QUINTO dgiAuthorizationCode completeness (#539 S1)', () {
+      test(
+        'isProjectionComplete detects missing or drifted dgi_authorization_code when cloud asserts it, and preserves local-only value when cloud omits it',
+        () async {
+          final authEnvelope = {
+            'tenantId': tenantId,
+            'businessName': 'Café DGI Test',
+            'ruc': 'J0310000123456',
+            'fiscalRegime': 'REGIMEN_GENERAL',
+            'pricesIncludeTax': true,
+            'taxRate': 15,
+            'dgiAuthorizationCode': 'DGI-AUT-2026-001',
+            'dgiAuthorizationIssuedAt': '2026-01-01',
+            'dgiAuthorizationExpiresAt': '2027-12-31',
+            'configVersion': {
+              'revision': 7,
+              'fingerprint':
+                  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            },
+          };
+
+          await handler.handleFiscalEnvelope(authEnvelope);
+          expect(
+            await handler.isProjectionComplete(authEnvelope, tenantId),
+            isTrue,
+          );
+
+          // Drift: wrong local authorization code -> must return false so replay repairs it
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: FiscalProjectionKeys.dgiAuthorizationCode,
+              value: 'WRONG-CODE',
+            ),
+          );
+          expect(
+            await handler.isProjectionComplete(authEnvelope, tenantId),
+            isFalse,
+          );
+
+          // Missing local key -> must return false
+          await database.localConfigDao.deleteConfig(
+            FiscalProjectionKeys.dgiAuthorizationCode,
+          );
+          expect(
+            await handler.isProjectionComplete(authEnvelope, tenantId),
+            isFalse,
+          );
+
+          // Cloud omits dgiAuthorizationCode -> local-only value must NOT break completeness
+          await database.localConfigDao.saveConfig(
+            LocalConfigEntity(
+              key: FiscalProjectionKeys.dgiAuthorizationCode,
+              value: 'LOCAL-ENTERED-CAFD',
+            ),
+          );
+          final omittedEnvelope = Map<String, dynamic>.from(authEnvelope)
+            ..remove('dgiAuthorizationCode')
+            ..remove('dgiAuthorizationIssuedAt')
+            ..remove('dgiAuthorizationExpiresAt');
+          expect(
+            await handler.isProjectionComplete(omittedEnvelope, tenantId),
+            isTrue,
+          );
+        },
+      );
+    });
   });
 }

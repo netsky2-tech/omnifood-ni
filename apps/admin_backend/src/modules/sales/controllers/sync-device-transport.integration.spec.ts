@@ -13,6 +13,7 @@ import {
   DeviceSyncCredentialStatus,
 } from '../../identity/entities/device-sync-credential.entity';
 import { Tenant } from '../../tenant/entities/tenant.entity';
+import { User, UserRole } from '../../identity/entities/user.entity';
 import { SyncTransportGuard } from '../../identity/guards/sync-transport.guard';
 import { SyncBatchController } from './sync-batch.controller';
 import { InboundSyncController } from './inbound-sync.controller';
@@ -59,6 +60,7 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
 
   let mockCredentialRecord: Partial<DeviceSyncCredential>;
   let mockTenantRecord: Partial<Tenant>;
+  let mockUserRecord: Partial<User> | null;
   // The tenant-bound transaction manager created in beforeAll and passed to
   // the service as the fourth argument of getInboundDeltas (issue #470).
   let boundManager: object;
@@ -105,6 +107,13 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
             findOne: jest
               .fn()
               .mockImplementation(() => Promise.resolve(mockTenantRecord)),
+          };
+        }
+        if (entity === User) {
+          return {
+            findOne: jest
+              .fn()
+              .mockImplementation(() => Promise.resolve(mockUserRecord)),
           };
         }
         throw new Error(`Unexpected entity: ${entity}`);
@@ -193,6 +202,8 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
       ruc: 'J1234567890123',
       is_active: true,
     };
+
+    mockUserRecord = null;
   });
 
   afterAll(async () => {
@@ -351,7 +362,87 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
       );
     });
 
-    it('fails closed (403 Forbidden) when batch contains CREDIT_NOTE under device transport until DSI-6', async () => {
+    const buildValidCreditNoteInvoice = (
+      overrides: Record<string, unknown> = {},
+    ) => ({
+      id: '55555555-5555-4555-8555-555555555555',
+      number: 'NC-0001',
+      createdAt: new Date().toISOString(),
+      userId: '66666666-6666-4666-8666-666666666666',
+      subtotal: -100,
+      totalTax: -15,
+      total: -115,
+      paymentStatus: 'REFUNDED',
+      type: 'creditNote',
+      originInvoiceId: '77777777-7777-4777-8777-777777777777',
+      refundReasonCode: 'CUSTOMER_RETURN',
+      refundReasonPolicy: 'RESTOCK_ORIGINAL_BOM',
+      authorizedByUserId: '11111111-1111-4111-8111-111111111111',
+      authorizedByRole: 'manager',
+      items: [
+        {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          productId: '88888888-8888-4888-8888-888888888888',
+          productName: 'Hamburguesa',
+          quantity: -1,
+          unitPrice: 100,
+          originalTaxRate: 0.15,
+          appliedTaxRate: 0.15,
+          taxAmount: -15,
+          total: -115,
+          discount: 0,
+          originInvoiceItemId: '99999999-9999-4999-8999-999999999999',
+        },
+      ],
+      payments: [],
+      ...overrides,
+    });
+
+    it('allows CREDIT_NOTE under device transport when DB-verified active same-tenant MANAGER authorizes it (201)', async () => {
+      const token = await signDeviceToken();
+      mockUserRecord = {
+        id: '11111111-1111-4111-8111-111111111111',
+        tenant_id: 'tenant-omega',
+        role: UserRole.MANAGER,
+        is_active: true,
+      };
+      syncBatchMock.mockResolvedValue({
+        received: 1,
+        processed: 1,
+        duplicates: 0,
+        results: [],
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/v1/sync/batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          records: [
+            {
+              idempotencyKey: 'credit-note-rec-ok',
+              sourceDeviceId: 'pos-terminal-01',
+              sourceSequence: 4,
+              documentType: 'CREDIT_NOTE',
+              invoice: buildValidCreditNoteInvoice(),
+            },
+          ],
+        })
+        .expect(201);
+
+      expect(syncBatchMock).toHaveBeenCalledWith(
+        'tenant-omega',
+        expect.any(Array),
+      );
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          status: 'success',
+          received: 1,
+          processed: 1,
+        }),
+      );
+    });
+
+    it('fails closed (403 Forbidden) when CREDIT_NOTE under device transport lacks supervisor metadata', async () => {
       const token = await signDeviceToken();
 
       await request(app.getHttpServer())
@@ -364,6 +455,129 @@ describe('Sync Device Transport Integration (DSI-2)', () => {
               sourceDeviceId: 'pos-terminal-01',
               sourceSequence: 4,
               documentType: 'CREDIT_NOTE',
+            },
+          ],
+        })
+        .expect(403);
+
+      expect(syncBatchMock).not.toHaveBeenCalled();
+    });
+
+    it('fails closed (403 Forbidden) when CREDIT_NOTE under device transport has cashier role', async () => {
+      const token = await signDeviceToken();
+
+      await request(app.getHttpServer())
+        .post('/v1/sync/batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          records: [
+            {
+              idempotencyKey: 'credit-note-rec-cashier',
+              sourceDeviceId: 'pos-terminal-01',
+              sourceSequence: 4,
+              documentType: 'CREDIT_NOTE',
+              invoice: buildValidCreditNoteInvoice({
+                authorizedByRole: 'cashier',
+              }),
+            },
+          ],
+        })
+        .expect(403);
+
+      expect(syncBatchMock).not.toHaveBeenCalled();
+    });
+
+    it('fails closed (403 Forbidden) when CREDIT_NOTE under device transport has unknown or cross-tenant or inactive supervisor', async () => {
+      const token = await signDeviceToken();
+
+      // Unknown user (mockUserRecord === null)
+      await request(app.getHttpServer())
+        .post('/v1/sync/batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          records: [
+            {
+              idempotencyKey: 'credit-note-rec-unknown',
+              sourceDeviceId: 'pos-terminal-01',
+              sourceSequence: 4,
+              documentType: 'CREDIT_NOTE',
+              invoice: buildValidCreditNoteInvoice(),
+            },
+          ],
+        })
+        .expect(403);
+
+      // Cross-tenant user
+      mockUserRecord = {
+        id: '11111111-1111-4111-8111-111111111111',
+        tenant_id: 'tenant-other',
+        role: UserRole.MANAGER,
+        is_active: true,
+      };
+      await request(app.getHttpServer())
+        .post('/v1/sync/batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          records: [
+            {
+              idempotencyKey: 'credit-note-rec-cross-tenant',
+              sourceDeviceId: 'pos-terminal-01',
+              sourceSequence: 4,
+              documentType: 'CREDIT_NOTE',
+              invoice: buildValidCreditNoteInvoice(),
+            },
+          ],
+        })
+        .expect(403);
+
+      // Inactive user
+      mockUserRecord = {
+        id: '11111111-1111-4111-8111-111111111111',
+        tenant_id: 'tenant-omega',
+        role: UserRole.MANAGER,
+        is_active: false,
+      };
+      await request(app.getHttpServer())
+        .post('/v1/sync/batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          records: [
+            {
+              idempotencyKey: 'credit-note-rec-inactive',
+              sourceDeviceId: 'pos-terminal-01',
+              sourceSequence: 4,
+              documentType: 'CREDIT_NOTE',
+              invoice: buildValidCreditNoteInvoice(),
+            },
+          ],
+        })
+        .expect(403);
+
+      expect(syncBatchMock).not.toHaveBeenCalled();
+    });
+
+    it('fails closed (403 Forbidden) when CREDIT_NOTE under device transport forges manager role for a DB cashier user', async () => {
+      const token = await signDeviceToken();
+      mockUserRecord = {
+        id: '11111111-1111-4111-8111-111111111111',
+        tenant_id: 'tenant-omega',
+        role: UserRole.CASHIER,
+        is_active: true,
+      };
+
+      await request(app.getHttpServer())
+        .post('/v1/sync/batch')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          records: [
+            {
+              idempotencyKey: 'credit-note-rec-forged',
+              sourceDeviceId: 'pos-terminal-01',
+              sourceSequence: 4,
+              documentType: 'CREDIT_NOTE',
+              invoice: buildValidCreditNoteInvoice({
+                authorizedByRole: 'manager',
+              }),
             },
           ],
         })

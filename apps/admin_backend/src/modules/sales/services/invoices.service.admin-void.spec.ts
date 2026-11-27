@@ -298,4 +298,109 @@ describe('InvoicesService.voidAdminInvoice', () => {
       ),
     ).rejects.toThrow(ConflictException);
   });
+
+  it('allows same-day Managua void including 00:00:00 to 23:59:59 Managua boundary', async () => {
+    jest.useFakeTimers();
+    try {
+      // 2026-04-16 23:59:59 Managua = 2026-04-17T05:59:59.000Z
+      jest.setSystemTime(new Date('2026-04-17T05:59:59.000Z'));
+
+      const sameDayBoundaryInvoice = {
+        id: invoiceId,
+        number: '001-001-01-00000005',
+        tenant_id: tenantId,
+        type: 'regular',
+        isCanceled: false,
+        voidReason: null,
+        // 2026-04-16 00:00:00 Managua = 2026-04-16T06:00:00.000Z
+        created_at: new Date('2026-04-16T06:00:00.000Z'),
+        localIssueDate: null,
+      };
+      invoiceRepo.findOne.mockResolvedValue(sameDayBoundaryInvoice);
+
+      const result = await service.voidAdminInvoice(
+        tenantId,
+        invoiceId,
+        { reason: 'ERROR_DE_CAPTURA' },
+        authorizer,
+      );
+
+      expect(result.isCanceled).toBe(true);
+      expect(invoiceRepo.save).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('rejects cross-day Managua void at 23:59:59 vs 00:00:00 next day with DT 09-2007 3.4.b Credit Note message and zero DB mutation', async () => {
+    jest.useFakeTimers();
+    try {
+      // Current time: 2026-04-16 00:00:00 Managua = 2026-04-16T06:00:00.000Z
+      jest.setSystemTime(new Date('2026-04-16T06:00:00.000Z'));
+
+      const previousDayInvoice = {
+        id: invoiceId,
+        number: '001-001-01-00000005',
+        tenant_id: tenantId,
+        type: 'regular',
+        isCanceled: false,
+        voidReason: null,
+        // 2026-04-15 23:59:59 Managua = 2026-04-16T05:59:59.000Z
+        created_at: new Date('2026-04-16T05:59:59.000Z'),
+        localIssueDate: null,
+      };
+      invoiceRepo.findOne.mockResolvedValue(previousDayInvoice);
+
+      await expect(
+        service.voidAdminInvoice(
+          tenantId,
+          invoiceId,
+          { reason: 'ERROR_DE_CAPTURA' },
+          authorizer,
+        ),
+      ).rejects.toThrow(
+        expect.objectContaining({
+          name: 'BadRequestException',
+          message: expect.stringMatching(/DT 09-2007.*3\.4\.b.*Nota de Cr[eé]dito/i),
+        }),
+      );
+
+      expect(invoiceRepo.save).not.toHaveBeenCalled();
+      expect(movementRepo.save).not.toHaveBeenCalled();
+      expect(auditRepo.save).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('prefers persisted localIssueDate over created_at when enforcing same-day Managua void', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.setSystemTime(new Date('2026-04-16T15:00:00.000Z'));
+
+      invoiceRepo.findOne.mockResolvedValue({
+        id: invoiceId,
+        number: '001-001-01-00000005',
+        tenant_id: tenantId,
+        type: 'regular',
+        isCanceled: false,
+        voidReason: null,
+        localIssueDate: '2026-04-15',
+        created_at: new Date('2026-04-16T12:00:00.000Z'),
+      });
+
+      await expect(
+        service.voidAdminInvoice(
+          tenantId,
+          invoiceId,
+          { reason: 'ERROR_DE_CAPTURA' },
+          authorizer,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(invoiceRepo.save).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

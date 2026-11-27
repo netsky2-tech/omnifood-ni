@@ -182,7 +182,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 84,
+      version: 86,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -266,7 +266,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `catalog_values` (`id` TEXT NOT NULL, `catalog_type` TEXT NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `is_active` INTEGER NOT NULL, `sort_order` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `customer_id` TEXT, `customer_name` TEXT, `customer_tax_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `cloud_inventory_outcome` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `invoice_number` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `user_id` TEXT NOT NULL, `subtotal` REAL NOT NULL, `total_tax` REAL NOT NULL, `total` REAL NOT NULL, `is_canceled` INTEGER NOT NULL, `void_reason` TEXT, `sync_status` TEXT NOT NULL, `payment_status` TEXT NOT NULL, `payment_condition` TEXT NOT NULL, `customer_id` TEXT, `customer_name` TEXT, `customer_tax_id` TEXT, `global_tax_override` INTEGER NOT NULL, `type` TEXT NOT NULL, `related_invoice_id` TEXT, `origin_invoice_id` TEXT, `refund_reason_policy` TEXT, `refund_reason_code` TEXT, `authorized_by_user_id` TEXT, `authorized_by_role` TEXT, `terminal_id` TEXT, `source_sequence` INTEGER, `idempotency_key` TEXT, `payload_hash` TEXT, `inventory_policy_version` TEXT, `inventory_outcome` TEXT, `inventory_outcome_reason` TEXT, `cloud_inventory_outcome` TEXT, `bcn_official_rate` REAL NOT NULL, `commercial_rate` REAL NOT NULL, `total_usd` REAL NOT NULL, `shift_id` TEXT, `local_issue_date` TEXT, `tip_amount_nio` REAL, `tip_amount_usd` REAL, `tip_percentage` REAL, `tip_eligible_base_nio` REAL, `fiscal_header_snapshot` TEXT, `contingency_manual_series` TEXT, `contingency_manual_number` TEXT, `contingency_manual_issued_at` TEXT, FOREIGN KEY (`shift_id`) REFERENCES `cashier_sessions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `invoice_items` (`id` TEXT NOT NULL, `invoice_id` TEXT NOT NULL, `product_id` TEXT NOT NULL, `product_name` TEXT NOT NULL, `quantity` REAL NOT NULL, `unit_price` REAL NOT NULL, `original_tax_rate` REAL NOT NULL, `applied_tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `total` REAL NOT NULL, `discount` REAL NOT NULL, `variant_id` TEXT, `notes` TEXT, `recipe_version_id` TEXT, `inventory_snapshot_json` TEXT, `inventory_snapshot_version` TEXT, `origin_invoice_item_id` TEXT, `discount_origin_json` TEXT, FOREIGN KEY (`invoice_id`) REFERENCES `invoices` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
@@ -3291,6 +3291,7 @@ class _$InvoiceDao extends InvoiceDao {
                   'void_reason': item.voidReason,
                   'sync_status': item.syncStatus,
                   'payment_status': item.paymentStatus,
+                  'payment_condition': item.paymentCondition,
                   'customer_id': item.customerId,
                   'customer_name': item.customerName,
                   'customer_tax_id': item.customerTaxId,
@@ -3319,7 +3320,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'tip_amount_usd': item.tipAmountUsd,
                   'tip_percentage': item.tipPercentage,
                   'tip_eligible_base_nio': item.tipEligibleBaseNio,
-                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot
+                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot,
+                  'contingency_manual_series': item.contingencyManualSeries,
+                  'contingency_manual_number': item.contingencyManualNumber,
+                  'contingency_manual_issued_at': item.contingencyManualIssuedAt
                 }),
         _invoiceEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -3337,6 +3341,7 @@ class _$InvoiceDao extends InvoiceDao {
                   'void_reason': item.voidReason,
                   'sync_status': item.syncStatus,
                   'payment_status': item.paymentStatus,
+                  'payment_condition': item.paymentCondition,
                   'customer_id': item.customerId,
                   'customer_name': item.customerName,
                   'customer_tax_id': item.customerTaxId,
@@ -3365,7 +3370,10 @@ class _$InvoiceDao extends InvoiceDao {
                   'tip_amount_usd': item.tipAmountUsd,
                   'tip_percentage': item.tipPercentage,
                   'tip_eligible_base_nio': item.tipEligibleBaseNio,
-                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot
+                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot,
+                  'contingency_manual_series': item.contingencyManualSeries,
+                  'contingency_manual_number': item.contingencyManualNumber,
+                  'contingency_manual_issued_at': item.contingencyManualIssuedAt
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -3393,6 +3401,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3421,7 +3430,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [id]);
   }
 
@@ -3441,6 +3456,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3469,7 +3485,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [number]);
   }
 
@@ -3489,6 +3511,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3517,7 +3540,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?));
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?));
   }
 
   @override
@@ -3536,6 +3565,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3564,7 +3594,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [status]);
   }
 
@@ -3587,6 +3623,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3615,7 +3652,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [startTime, endTime]);
   }
 
@@ -3635,6 +3678,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3663,7 +3707,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [userId]);
   }
 
@@ -3690,6 +3740,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3718,7 +3769,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?));
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?));
   }
 
   @override
@@ -3753,6 +3810,7 @@ class _$InvoiceDao extends InvoiceDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -3781,7 +3839,13 @@ class _$InvoiceDao extends InvoiceDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [key]);
   }
 
@@ -4225,6 +4289,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'void_reason': item.voidReason,
                   'sync_status': item.syncStatus,
                   'payment_status': item.paymentStatus,
+                  'payment_condition': item.paymentCondition,
                   'customer_id': item.customerId,
                   'customer_name': item.customerName,
                   'customer_tax_id': item.customerTaxId,
@@ -4253,7 +4318,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'tip_amount_usd': item.tipAmountUsd,
                   'tip_percentage': item.tipPercentage,
                   'tip_eligible_base_nio': item.tipEligibleBaseNio,
-                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot
+                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot,
+                  'contingency_manual_series': item.contingencyManualSeries,
+                  'contingency_manual_number': item.contingencyManualNumber,
+                  'contingency_manual_issued_at': item.contingencyManualIssuedAt
                 }),
         _invoiceItemEntityInsertionAdapter = InsertionAdapter(
             database,
@@ -4493,6 +4561,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'void_reason': item.voidReason,
                   'sync_status': item.syncStatus,
                   'payment_status': item.paymentStatus,
+                  'payment_condition': item.paymentCondition,
                   'customer_id': item.customerId,
                   'customer_name': item.customerName,
                   'customer_tax_id': item.customerTaxId,
@@ -4521,7 +4590,10 @@ class _$SalesTransactionDao extends SalesTransactionDao {
                   'tip_amount_usd': item.tipAmountUsd,
                   'tip_percentage': item.tipPercentage,
                   'tip_eligible_base_nio': item.tipEligibleBaseNio,
-                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot
+                  'fiscal_header_snapshot': item.fiscalHeaderSnapshot,
+                  'contingency_manual_series': item.contingencyManualSeries,
+                  'contingency_manual_number': item.contingencyManualNumber,
+                  'contingency_manual_issued_at': item.contingencyManualIssuedAt
                 }),
         _insumoEntityUpdateAdapter = UpdateAdapter(
             database,
@@ -4616,6 +4688,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -4644,7 +4717,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [id]);
   }
 
@@ -4665,6 +4744,7 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             voidReason: row['void_reason'] as String?,
             syncStatus: row['sync_status'] as String,
             paymentStatus: row['payment_status'] as String,
+            paymentCondition: row['payment_condition'] as String,
             customerId: row['customer_id'] as String?,
             customerName: row['customer_name'] as String?,
             customerTaxId: row['customer_tax_id'] as String?,
@@ -4693,7 +4773,13 @@ class _$SalesTransactionDao extends SalesTransactionDao {
             tipAmountNio: row['tip_amount_nio'] as double?,
             tipAmountUsd: row['tip_amount_usd'] as double?,
             tipPercentage: row['tip_percentage'] as double?,
-            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?),
+            tipEligibleBaseNio: row['tip_eligible_base_nio'] as double?,
+            contingencyManualSeries:
+                row['contingency_manual_series'] as String?,
+            contingencyManualNumber:
+                row['contingency_manual_number'] as String?,
+            contingencyManualIssuedAt:
+                row['contingency_manual_issued_at'] as String?),
         arguments: [relatedId]);
   }
 

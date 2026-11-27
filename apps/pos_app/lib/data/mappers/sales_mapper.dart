@@ -325,6 +325,9 @@ class SalesMapper {
         (e) => e.name == entity.paymentStatus,
         orElse: () => PaymentStatus.pending,
       ),
+      paymentCondition: entity.paymentCondition.trim().toUpperCase() == 'CREDITO'
+          ? 'CREDITO'
+          : 'CONTADO',
       type: InvoiceType.values.firstWhere(
         (e) => e.name == entity.type,
         orElse: () => InvoiceType.regular,
@@ -355,6 +358,9 @@ class SalesMapper {
       tipAmountUsd: entity.tipAmountUsd,
       tipPercentage: entity.tipPercentage,
       tipEligibleBaseNio: entity.tipEligibleBaseNio,
+      contingencyManualSeries: entity.contingencyManualSeries,
+      contingencyManualNumber: entity.contingencyManualNumber,
+      contingencyManualIssuedAt: entity.contingencyManualIssuedAt,
     );
   }
 
@@ -371,6 +377,9 @@ class SalesMapper {
       voidReason: domain.voidReason,
       syncStatus: domain.syncStatus.name,
       paymentStatus: domain.paymentStatus.name,
+      paymentCondition: domain.paymentCondition.trim().toUpperCase() == 'CREDITO'
+          ? 'CREDITO'
+          : 'CONTADO',
       type: domain.type.name,
       customerId: domain.customerId,
       customerName: domain.customerName,
@@ -398,6 +407,9 @@ class SalesMapper {
       tipAmountUsd: domain.tipAmountUsd,
       tipPercentage: domain.tipPercentage,
       tipEligibleBaseNio: domain.tipEligibleBaseNio,
+      contingencyManualSeries: domain.contingencyManualSeries,
+      contingencyManualNumber: domain.contingencyManualNumber,
+      contingencyManualIssuedAt: domain.contingencyManualIssuedAt,
     );
   }
 
@@ -685,6 +697,12 @@ class SalesMapper {
       'voidReason': invoice.voidReason,
       'syncStatus': invoice.syncStatus.name,
       'paymentStatus': invoice.paymentStatus.name,
+      // #539 S4 (DT 09-2007 1.7/1.8): emit paymentCondition only when non-default
+      // ('CREDITO') so pre-existing CONTADO outbox payload hashes stay byte-identical
+      // (same hash-safety contract as customerName/customerTaxId). Backend defaults
+      // omitted paymentCondition to 'CONTADO'.
+      if (invoice.paymentCondition.trim().toUpperCase() == 'CREDITO')
+        'paymentCondition': 'CREDITO',
       'type': invoice.type.name,
       'customerId': invoice.customerId,
       // odd/factura-con-nombre: the customer snapshot keys are emitted ONLY
@@ -732,6 +750,15 @@ class SalesMapper {
         'authorizedByUserId': invoice.authorizedByUserId,
       if (invoice.authorizedByRole?.isNotEmpty ?? false)
         'authorizedByRole': invoice.authorizedByRole,
+      // #539 S3 (DT 09-2007 3.3.a/3.3.b): emit contingency manual fields
+      // ONLY when non-null/non-blank so non-contingency sales keep
+      // byte-identical payload hashes.
+      if (invoice.contingencyManualSeries?.trim().isNotEmpty ?? false)
+        'contingencyManualSeries': invoice.contingencyManualSeries!.trim(),
+      if (invoice.contingencyManualNumber?.trim().isNotEmpty ?? false)
+        'contingencyManualNumber': invoice.contingencyManualNumber!.trim(),
+      if (invoice.contingencyManualIssuedAt?.trim().isNotEmpty ?? false)
+        'contingencyManualIssuedAt': invoice.contingencyManualIssuedAt!.trim(),
       'terminalId': invoice.terminalId ?? 'term-main',
       'documentType': invoice.type == InvoiceType.creditNote
           ? 'CREDIT_NOTE'

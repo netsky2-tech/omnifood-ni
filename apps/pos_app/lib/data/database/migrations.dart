@@ -3673,6 +3673,52 @@ final migration83_84 = Migration(83, 84, (database) async {
     );
   }
 });
+
+/// #539 S4 (DT 09-2007 1.7/1.8): persist fiscal payment condition
+/// ('CONTADO' | 'CREDITO') on invoices so every ticket states its condition.
+final migration84_85 = Migration(84, 85, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('payment_condition')) {
+    await database.execute(
+      "ALTER TABLE invoices ADD COLUMN payment_condition TEXT NOT NULL DEFAULT 'CONTADO'",
+    );
+  }
+});
+
+/// #539 S3 (DT 09-2007 3.3.a/3.3.b): persist manual contingency invoice
+/// cross-reference fields on invoices for outage back-entry.
+final migration85_86 = Migration(85, 86, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(invoices)');
+  if (columns.isEmpty) {
+    return;
+  }
+  final existing = columns
+      .map((column) => column['name'] as String?)
+      .whereType<String>()
+      .toSet();
+  if (!existing.contains('contingency_manual_series')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN contingency_manual_series TEXT',
+    );
+  }
+  if (!existing.contains('contingency_manual_number')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN contingency_manual_number TEXT',
+    );
+  }
+  if (!existing.contains('contingency_manual_issued_at')) {
+    await database.execute(
+      'ALTER TABLE invoices ADD COLUMN contingency_manual_issued_at TEXT',
+    );
+  }
+});
 final allMigrations = [
   migration10_11,
   migration11_12,
@@ -3748,6 +3794,8 @@ final allMigrations = [
   migration81_82,
   migration82_83,
   migration83_84,
+  migration84_85,
+  migration85_86,
 ];
 
 /// B2e D-3 — reconciliation of rows invented at 15% by the old fail-open

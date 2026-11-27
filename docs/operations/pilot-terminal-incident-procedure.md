@@ -96,12 +96,11 @@ When the system comes back, the manual tickets are **not** finished business. Th
 
 Steps:
 1. Collect every used manual form (original issued to customer; **keep the duplicate**).
-2. Enter each as a computerized invoice **in the same order** as the manual numbering.
-3. Annotate each computerized invoice with the manual number it replaces.
-4. Print each in **original and duplicate**; staple the manual duplicate to it as support.
-5. Give the accountant the reconciliation list (manual number ↔ system number ↔ amount) the same day.
-
-**Product reality:** step 3 has **no field in our system today** — there is no way to record "this invoice replaces manual ticket N". The workaround until #539 S3 lands is a paper register kept with the fiscal binder and the accountant notified the same day. **That is a workaround, not compliance**, and it is why #539 S3 sits in the gate (#531 G5.4) rather than the backlog.
+2. In the POS, open the **"Contingencia Manual"** back-entry flow and enter each ticket **in the same order** as the manual numbering, recording the manual **series**, **number**, and **issue date** (`YYYY-MM-DD`).
+   - The POS and backend enforce **anti-collision** against the computerized `dgi_prefix` (DT 09-2007 3.3.a: manual series must differ from the computerized series) and persist the cross-reference note (`contingency_manual_series`, `contingency_manual_number`, `contingency_manual_issued_at`).
+3. The POS automatically prints the computerized invoice twice — **`ORIGINAL`** and **`COPIA - ADJUNTAR COPIA MANUAL`** — with the manual invoice cross-reference printed on both copies.
+4. Staple the manual duplicate (`copia de la facturación manual`) to the computerized `COPIA` as fiscal support.
+5. Once online, verify cloud sync and audit the back-entered tickets in the **Owner Dashboard → Ventas → Notas de Crédito** using the **"Solo contingencia manual"** filter (`Contingencia manual` badge + `Ref. manual: <SERIE>-<NUM> · <YYYY-MM-DD>`), and deliver the reconciliation list (manual number ↔ system number ↔ amount) to the accountant the same day.
 
 ## What this procedure does NOT fix
 
