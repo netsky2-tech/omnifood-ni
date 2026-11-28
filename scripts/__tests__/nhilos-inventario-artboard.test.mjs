@@ -521,3 +521,12 @@ test("S18-voseo: zero voseo forms in visible copy", () => {
     assert.ok(!re.test(plain), `voseo form detected: ${re}`);
   }
 });
+
+// G27 (issue #1023): Pack Cocina must not advertise deferred capabilities (combos, menú QR)
+test("G27 (issue #1023): Pack Cocina does not advertise combos or menú QR in visible copy or JSON-LD", () => {
+  const { vis, ld } = loadPage();
+  const haystack = (txt(vis) + " " + JSON.stringify(ld || {})).toLowerCase();
+  for (const deferred of ["combos", "menú qr", "menu qr"]) {
+    assert.ok(!haystack.includes(deferred), `deferred capability advertised: ${deferred}`);
+  }
+});
