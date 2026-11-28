@@ -73,6 +73,10 @@ export function FiscalSetupForm() {
 
   const selectedRegime = watch("regime");
   const pricesIncludeTax = watch("pricesIncludeTax");
+  const isFormalizingFromControlInterno =
+    initialData?.regime === FiscalRegime.CONTROL_INTERNO &&
+    (selectedRegime === FiscalRegime.CUOTA_FIJA ||
+      selectedRegime === FiscalRegime.REGIMEN_GENERAL);
 
   // D-21 (#554): expiry warning reads the SAVED snapshot (query data — the
   // GET response, or the POST response after a save). Informational only:
@@ -266,6 +270,77 @@ export function FiscalSetupForm() {
               <strong>NOTA DE VENTA — DOCUMENTO NO FISCAL</strong>, aplican 0% IVA y no tienen valor tributario ante la DGI. Podés pasar a Cuota Fija o Régimen General al formalizar tu negocio sin perder tu historial.
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* #1049 (S3 — NHILOS Luxury +1): Formalization transition card */}
+        {isFormalizingFromControlInterno && (
+          <div
+            role="status"
+            data-testid="formalization-transition-card"
+            className="mb-6 rounded-lg border border-border border-l-4 border-l-primary bg-card p-4 text-card-foreground shadow-sm"
+          >
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                Formalización del negocio
+              </h3>
+              <Badge
+                variant="outline"
+                className="border-primary/30 bg-primary/5 text-xs font-medium text-primary"
+              >
+                {selectedRegime === FiscalRegime.CUOTA_FIJA
+                  ? "Control Interno → Cuota Fija"
+                  : "Control Interno → Régimen General"}
+              </Badge>
+            </div>
+            <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70"
+                  aria-hidden="true"
+                />
+                <span>
+                  <strong className="font-medium text-foreground">Historial intacto:</strong>{" "}
+                  tus Notas de Venta (
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                    NV-
+                  </code>
+                  ) previas se conservan para tu control.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70"
+                  aria-hidden="true"
+                />
+                <span>
+                  <strong className="font-medium text-foreground">Nuevo documento:</strong>{" "}
+                  desde la próxima venta se emitirá{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                    Comprobante de Venta
+                  </code>{" "}
+                  (0% IVA) o{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                    Factura de Venta
+                  </code>{" "}
+                  (15% IVA) con tu RUC/Cédula.
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70"
+                  aria-hidden="true"
+                />
+                <span>
+                  <strong className="font-medium text-foreground">Consecutivo DGI limpio:</strong>{" "}
+                  la numeración interna{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                    NV-
+                  </code>{" "}
+                  se retira automáticamente al guardar para no mezclarse con tu serie fiscal.
+                </span>
+              </li>
+            </ul>
+          </div>
         )}
 
         {/* DGI Immutability Invariant Alert (ODAV-31) */}

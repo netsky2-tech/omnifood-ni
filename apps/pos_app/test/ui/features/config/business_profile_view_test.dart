@@ -970,4 +970,53 @@ void main() {
       expect(find.textContaining('Definido por la oficina'), findsNothing);
     });
   });
+
+  group('Formalización del negocio transition card (#1049)', () {
+    testWidgets(
+        'renders structured 3-point transition card when upgrading from CONTROL_INTERNO to CUOTA_FIJA or REGIMEN_GENERAL, and not otherwise',
+        (tester) async {
+      when(() => mockDao.getConfigByKey(any())).thenAnswer((_) async => null);
+      when(() => mockDao.getConfigByKey('tax_regime')).thenAnswer(
+          (_) async => LocalConfigEntity(key: 'tax_regime', value: 'CONTROL_INTERNO'));
+
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+
+      // Staying in CONTROL_INTERNO -> upgrade card is absent
+      expect(find.byKey(const Key('control_interno_upgrade_notice')), findsNothing);
+      expect(find.byKey(const Key('control_interno_notice')), findsOneWidget);
+
+      // Switch to CUOTA_FIJA
+      await tester.ensureVisible(find.byKey(const Key('tax_regime_dropdown')));
+      await tester.tap(find.byKey(const Key('tax_regime_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Régimen Simplificado (Cuota Fija)').last);
+      await tester.pumpAndSettle();
+
+      final upgradeNotice = find.byKey(const Key('control_interno_upgrade_notice'));
+      expect(upgradeNotice, findsOneWidget);
+      expect(find.text('Formalización del negocio'), findsOneWidget);
+      expect(find.text('Control Interno → Cuota Fija'), findsOneWidget);
+      expect(find.textContaining('Historial intacto:'), findsOneWidget);
+      expect(find.textContaining('Nuevo documento:'), findsOneWidget);
+      expect(find.textContaining('Consecutivo DGI limpio:'), findsOneWidget);
+
+      // Switch to REGIMEN_GENERAL
+      await tester.tap(find.byKey(const Key('tax_regime_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Régimen General').last);
+      await tester.pumpAndSettle();
+
+      expect(upgradeNotice, findsOneWidget);
+      expect(find.text('Control Interno → Régimen General'), findsOneWidget);
+
+      // Switch back to CONTROL_INTERNO -> upgrade card disappears
+      await tester.tap(find.byKey(const Key('tax_regime_dropdown')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Control Interno (No inscrito en DGI)').last);
+      await tester.pumpAndSettle();
+
+      expect(upgradeNotice, findsNothing);
+    });
+  });
 }

@@ -216,5 +216,68 @@ describe("T3 (S3) — CONTROL_INTERNO Fiscal Regime", () => {
         expect(fetchSpy).toHaveBeenCalledTimes(1);
       },
     );
+
+    it("renders Formalización del negocio transition card when switching from saved CONTROL_INTERNO to CUOTA_FIJA or REGIMEN_GENERAL, and not otherwise", async () => {
+      const user = userEvent.setup();
+      mockInitialFiscalSetup(FiscalRegime.CONTROL_INTERNO, "");
+
+      render(
+        <TestWrapper>
+          <FiscalSetupForm />
+        </TestWrapper>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fiscal-setup-form")).toBeInTheDocument();
+      });
+
+      // Staying in saved CONTROL_INTERNO -> card must NOT render
+      expect(screen.queryByTestId("formalization-transition-card")).not.toBeInTheDocument();
+
+      const regimeSelect = screen.getByLabelText(/Régimen Fiscal/i);
+
+      // Switch CONTROL_INTERNO -> CUOTA_FIJA
+      await user.selectOptions(regimeSelect, FiscalRegime.CUOTA_FIJA);
+      const cuotaFijaCard = screen.getByTestId("formalization-transition-card");
+      expect(cuotaFijaCard).toBeInTheDocument();
+      expect(cuotaFijaCard).toHaveAttribute("role", "status");
+      expect(cuotaFijaCard).toHaveTextContent("Formalización del negocio");
+      expect(cuotaFijaCard).toHaveTextContent("Control Interno → Cuota Fija");
+      expect(cuotaFijaCard).toHaveTextContent("Historial intacto:");
+      expect(cuotaFijaCard).toHaveTextContent("Nuevo documento:");
+      expect(cuotaFijaCard).toHaveTextContent("Consecutivo DGI limpio:");
+
+      // Switch CONTROL_INTERNO -> REGIMEN_GENERAL
+      await user.selectOptions(regimeSelect, FiscalRegime.REGIMEN_GENERAL);
+      const regimenGeneralCard = screen.getByTestId("formalization-transition-card");
+      expect(regimenGeneralCard).toBeInTheDocument();
+      expect(regimenGeneralCard).toHaveTextContent("Control Interno → Régimen General");
+
+      // Switch back to CONTROL_INTERNO -> card disappears
+      await user.selectOptions(regimeSelect, FiscalRegime.CONTROL_INTERNO);
+      expect(screen.queryByTestId("formalization-transition-card")).not.toBeInTheDocument();
+    });
+
+    it("does NOT render formalization transition card when initial saved regime is already REGIMEN_GENERAL", async () => {
+      const user = userEvent.setup();
+      mockInitialFiscalSetup(FiscalRegime.REGIMEN_GENERAL, "J0310000012345");
+
+      render(
+        <TestWrapper>
+          <FiscalSetupForm />
+        </TestWrapper>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("fiscal-setup-form")).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId("formalization-transition-card")).not.toBeInTheDocument();
+
+      // Even if switching to CUOTA_FIJA from REGIMEN_GENERAL, it is not a CONTROL_INTERNO formalization
+      const regimeSelect = screen.getByLabelText(/Régimen Fiscal/i);
+      await user.selectOptions(regimeSelect, FiscalRegime.CUOTA_FIJA);
+      expect(screen.queryByTestId("formalization-transition-card")).not.toBeInTheDocument();
+    });
   });
 });

@@ -247,29 +247,9 @@ class _BusinessProfileViewState extends State<BusinessProfileView> with RouteAwa
                       ),
                     ] else if (viewModel.upgradedFromControlInterno) ...[
                       const SizedBox(height: 12),
-                      Container(
+                      _FormalizationTransitionCard(
                         key: const Key('control_interno_upgrade_notice'),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: colorScheme.primary),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(Icons.upgrade, color: colorScheme.primary, size: 20),
-                            const SizedBox(width: 10),
-                            const Expanded(
-                              child: Text(
-                                'Transición a régimen formal DGI: ingrese su RUC o cédula y verifique su prefijo '
-                                'y consecutivo inicial autorizado (el prefijo interno NV- fue limpiado; sus notas '
-                                'anteriores se conservan intactas).',
-                                style: TextStyle(fontSize: 12.5),
-                              ),
-                            ),
-                          ],
-                        ),
+                        targetRegime: viewModel.taxRegime,
                       ),
                     ],
                     const SizedBox(height: 16),
@@ -702,6 +682,157 @@ class _BusinessProfileViewState extends State<BusinessProfileView> with RouteAwa
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _FormalizationTransitionCard extends StatelessWidget {
+  final TaxRegime? targetRegime;
+
+  const _FormalizationTransitionCard({
+    super.key,
+    required this.targetRegime,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final targetLabel = targetRegime == TaxRegime.cuotaFija
+        ? 'Control Interno → Cuota Fija'
+        : 'Control Interno → Régimen General';
+
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        width: double.infinity,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: colorScheme.outlineVariant),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: colorScheme.primary, width: 4),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Formalización del negocio',
+                      style: textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: colorScheme.primary.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Text(
+                        targetLabel,
+                        style: textTheme.labelSmall?.copyWith(
+                          color: colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildBullet(
+                context,
+                lead: 'Historial intacto: ',
+                body:
+                    'tus Notas de Venta (NV-) previas se conservan para tu control.',
+              ),
+              const SizedBox(height: 6),
+              _buildBullet(
+                context,
+                lead: 'Nuevo documento: ',
+                body:
+                    'desde la próxima venta se emitirá Comprobante de Venta (0% IVA) o Factura de Venta (15% IVA) con tu RUC/Cédula.',
+              ),
+              const SizedBox(height: 6),
+              _buildBullet(
+                context,
+                lead: 'Consecutivo DGI limpio: ',
+                body:
+                    'la numeración interna NV- se retira automáticamente al guardar para no mezclarse con tu serie fiscal.',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBullet(
+    BuildContext context, {
+    required String lead,
+    required String body,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final baseStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+          height: 1.4,
+        );
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withValues(alpha: 0.75),
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              style: baseStyle,
+              children: [
+                TextSpan(
+                  text: lead,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                TextSpan(text: body),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
