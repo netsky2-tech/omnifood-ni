@@ -183,6 +183,11 @@ class _HardwareE2ECreditNoteSyncAppState
                     .map(
                       (r) => {
                         'idempotencyKey': r['idempotencyKey'],
+                        'invoiceId': r['invoiceId'],
+                        'terminalId': r['terminalId'],
+                        'flowType': r['flowType'] ?? 'SALES',
+                        'sourceSequence': r['sourceSequence'],
+                        'documentType': r['documentType'],
                         'status': 'APPLIED',
                       },
                     )
