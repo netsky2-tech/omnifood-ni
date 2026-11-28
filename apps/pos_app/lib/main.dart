@@ -930,6 +930,107 @@ void main() async {
   );
 }
 
+ThemeData buildNhilosPosTheme() {
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: const ColorScheme(
+      brightness: Brightness.light,
+      primary: NhilosColors.brandPrimary, // Deep Teal (#1E3A40)
+      onPrimary: Colors.white,
+      primaryContainer: NhilosColors.brandNavy, // Navy (#0F292E)
+      onPrimaryContainer: Colors.white,
+      secondary: NhilosColors.textSecondary, // Slate 500 (#64748B)
+      onSecondary: Colors.white,
+      tertiary: NhilosColors.brandNavy,
+      onTertiary: Colors.white,
+      error: NhilosColors.danger, // Red 600 (#DC2626)
+      onError: Colors.white,
+      errorContainer: NhilosColors.dangerLight,
+      onErrorContainer: NhilosColors.danger,
+      surface: NhilosColors.surface, // Pure White
+      onSurface: NhilosColors.textPrimary, // Slate 900 (#0F172A)
+      surfaceContainerHighest: NhilosColors.neutralGray, // Slate 100 (#F1F5F9)
+      onSurfaceVariant: NhilosColors.textSecondary, // Slate 500
+      outline: NhilosColors.borderStrong, // Slate 300 (#CBD5E1)
+      outlineVariant: NhilosColors.border, // Slate 200 (#E2E8F0)
+    ),
+    scaffoldBackgroundColor: NhilosColors.background, // Slate 50 (#F8FAFC)
+    fontFamily: 'Inter',
+    textTheme: const TextTheme(
+      headlineLarge: TextStyle(
+        fontSize: 32,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.64, // -0.02em
+        height: 1.25, // 40px
+        color: NhilosColors.textPrimary,
+      ),
+      headlineMedium: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.24, // -0.01em
+        height: 1.33, // 32px
+        color: NhilosColors.textPrimary,
+      ),
+      bodyLarge: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w400,
+        height: 1.55, // 28px
+        color: NhilosColors.textPrimary,
+      ),
+      bodyMedium: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        height: 1.5, // 24px
+        color: NhilosColors.textPrimary,
+      ),
+      labelLarge: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        height: 1.42, // 20px
+      ),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        elevation: 0,
+        backgroundColor: NhilosColors.brandPrimary,
+        foregroundColor: Colors.white,
+        minimumSize: const Size(0, 48),
+        shape: const RoundedRectangleBorder(
+          borderRadius: NhilosRadii.buttonRadius,
+        ),
+      ),
+    ),
+    inputDecorationTheme: const InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: NhilosRadii.buttonRadius,
+        borderSide: BorderSide(color: NhilosColors.border, width: 1),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: NhilosRadii.buttonRadius,
+        borderSide: BorderSide(color: NhilosColors.border, width: 1),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: NhilosRadii.buttonRadius,
+        borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
+      ),
+      contentPadding: EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 12,
+      ),
+    ),
+    cardTheme: const CardThemeData(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: NhilosRadii.cardRadius,
+        side: BorderSide(color: NhilosColors.border, width: 1),
+      ),
+      color: Colors.white,
+    ),
+  );
+}
+
 class MyApp extends StatelessWidget {
   final AlertService alertService;
   final String initialRoute;
@@ -943,104 +1044,7 @@ class MyApp extends StatelessWidget {
         scaffoldMessengerKey: rootScaffoldMessengerKey,
         title: 'NHILOS POS',
         navigatorObservers: [appRouteObserver],
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: const ColorScheme(
-            brightness: Brightness.light,
-            primary: NhilosColors.brandPrimary, // Deep Teal (#1E3A40)
-            onPrimary: Colors.white,
-            primaryContainer: NhilosColors.brandNavy, // Navy (#0F292E)
-            onPrimaryContainer: Colors.white,
-            secondary: NhilosColors.textSecondary, // Slate 500 (#64748B)
-            onSecondary: Colors.white,
-            tertiary: NhilosColors.brandNavy,
-            onTertiary: Colors.white,
-            error: NhilosColors.danger, // Red 600 (#DC2626)
-            onError: Colors.white,
-            errorContainer: NhilosColors.dangerLight,
-            onErrorContainer: NhilosColors.danger,
-            surface: NhilosColors.surface, // Pure White
-            onSurface: NhilosColors.textPrimary, // Slate 900 (#0F172A)
-            surfaceContainerHighest: NhilosColors.neutralGray, // Slate 100 (#F1F5F9)
-            onSurfaceVariant: NhilosColors.textSecondary, // Slate 500
-            outline: NhilosColors.borderStrong, // Slate 300 (#CBD5E1)
-            outlineVariant: NhilosColors.border, // Slate 200 (#E2E8F0)
-          ),
-          scaffoldBackgroundColor: NhilosColors.background, // Slate 50 (#F8FAFC)
-          fontFamily: 'Inter',
-          textTheme: const TextTheme(
-            headlineLarge: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.64, // -0.02em
-              height: 1.25, // 40px
-              color: NhilosColors.textPrimary,
-            ),
-            headlineMedium: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.24, // -0.01em
-              height: 1.33, // 32px
-              color: NhilosColors.textPrimary,
-            ),
-            bodyLarge: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w400,
-              height: 1.55, // 28px
-              color: NhilosColors.textPrimary,
-            ),
-            bodyMedium: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-              height: 1.5, // 24px
-              color: NhilosColors.textPrimary,
-            ),
-            labelLarge: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              height: 1.42, // 20px
-            ),
-          ),
-          elevatedButtonTheme: ElevatedButtonThemeData(
-            style: ElevatedButton.styleFrom(
-              elevation: 0,
-              backgroundColor: NhilosColors.brandPrimary,
-              foregroundColor: Colors.white,
-              minimumSize: const Size.fromHeight(48),
-              shape: const RoundedRectangleBorder(
-                borderRadius: NhilosRadii.buttonRadius,
-              ),
-            ),
-          ),
-          inputDecorationTheme: const InputDecorationTheme(
-            filled: true,
-            fillColor: Colors.white,
-            border: OutlineInputBorder(
-              borderRadius: NhilosRadii.buttonRadius,
-              borderSide: BorderSide(color: NhilosColors.border, width: 1),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: NhilosRadii.buttonRadius,
-              borderSide: BorderSide(color: NhilosColors.border, width: 1),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: NhilosRadii.buttonRadius,
-              borderSide: BorderSide(color: NhilosColors.brandPrimary, width: 1.5),
-            ),
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
-            ),
-          ),
-          cardTheme: const CardThemeData(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: NhilosRadii.cardRadius,
-              side: BorderSide(color: NhilosColors.border, width: 1),
-            ),
-            color: Colors.white,
-          ),
-        ),
+        theme: buildNhilosPosTheme(),
         initialRoute: initialRoute,
         onGenerateInitialRoutes: (String initialRouteName) {
           // Single-route initial stack: Flutter's default would root the

@@ -43,9 +43,12 @@ class _ShrinkageViewState extends State<ShrinkageView> {
 
           return Padding(
             padding: const EdgeInsets.all(16.0),
-            child: ElevatedButton(
-              onPressed: () => _showShrinkageForm(context),
-              child: const Text('REGISTRAR MERMA'),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => _showShrinkageForm(context),
+                child: const Text('REGISTRAR MERMA'),
+              ),
             ),
           );
         },

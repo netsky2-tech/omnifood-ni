@@ -102,7 +102,7 @@ class PinPad extends StatelessWidget {
         elevation: 0,
         backgroundColor: NhilosColors.surface,
         foregroundColor: NhilosColors.textPrimary,
-        minimumSize: const Size.fromHeight(48), // hit-area-min per §18.3
+        minimumSize: const Size(0, 48), // hit-area-min per §18.3
         padding: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(
           borderRadius: NhilosRadii.buttonRadius,
@@ -135,7 +135,7 @@ class PinPad extends StatelessWidget {
         elevation: 0,
         backgroundColor: NhilosColors.neutralGray, // Slate 100 per §18.2
         foregroundColor: NhilosColors.neutralGrayDark, // Slate 600
-        minimumSize: const Size.fromHeight(48),
+        minimumSize: const Size(0, 48),
         padding: EdgeInsets.zero,
         shape: const RoundedRectangleBorder(
           borderRadius: NhilosRadii.buttonRadius,
