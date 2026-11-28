@@ -241,22 +241,27 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            ElevatedButton.icon(
-              key: const Key('go_to_pos_button'),
-              onPressed: () {
-                // Trigger an immediate sync so the fresh terminal
-                // credentials and any pending outbox items are
-                // propagated to cloud as soon as the POS screen
-                // loads (the periodic 5-minute timer is too slow
-                // for post-activation readiness).
-                context.read<SyncService>().triggerManualSync();
-                Navigator.of(context).pushReplacementNamed('/home');
-              },
-              icon: const Icon(Icons.point_of_sale),
-              label: const Text('Ir al POS'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 32, vertical: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                key: const Key('go_to_pos_button'),
+                onPressed: () {
+                  // Trigger an immediate sync so the fresh terminal
+                  // credentials and any pending outbox items are
+                  // propagated to cloud as soon as the POS screen
+                  // loads (the periodic 5-minute timer is too slow
+                  // for post-activation readiness).
+                  context.read<SyncService>().triggerManualSync();
+                  Navigator.of(context).pushReplacementNamed('/home');
+                },
+                icon: const Icon(Icons.point_of_sale),
+                label: const Text('Ir al POS'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
+                ),
               ),
             ),
           ],
