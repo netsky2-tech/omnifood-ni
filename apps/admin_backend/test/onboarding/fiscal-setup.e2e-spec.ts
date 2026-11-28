@@ -400,7 +400,7 @@ describe('FiscalSetup (Integration & E2E)', () => {
 
     const body = response.body as BadRequestResponseBody;
     expect(body.message).toContain(
-      'regime must be either CUOTA_FIJA or REGIMEN_GENERAL',
+      'regime must be CONTROL_INTERNO, CUOTA_FIJA or REGIMEN_GENERAL',
     );
   });
 
