@@ -425,7 +425,7 @@ class _TipDialogState extends State<TipDialog> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.teal.shade700,
                 foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(48),
+                minimumSize: const Size(0, 48),
               ),
               child: const Text('APLICAR PROPINA'),
             ),

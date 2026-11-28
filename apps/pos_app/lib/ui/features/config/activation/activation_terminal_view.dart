@@ -407,32 +407,35 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
                 ),
               ),
               const SizedBox(height: 12),
-              ElevatedButton(
-                key: const Key('run_pre_offline_button'),
-                onPressed: viewModel
-                            .isPhaseLoading(
-                                ActivationSessionPhase.preOfflineChecks) ||
-                        _pinController.text.trim().isEmpty
-                    ? null
-                    : () {
-                        // Capture the PIN for this single call and clear the
-                        // field immediately: the screen never retains the
-                        // credential, not even while the phase runs.
-                        final pin = _pinController.text;
-                        _pinController.clear();
-                        setState(() {});
-                        viewModel.runPreOfflineChecks(
-                          authorizedUserPin: pin,
-                        );
-                      },
-                child: viewModel.isPhaseLoading(
-                        ActivationSessionPhase.preOfflineChecks)
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Ejecutar verificaciones previas'),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  key: const Key('run_pre_offline_button'),
+                  onPressed: viewModel
+                              .isPhaseLoading(
+                                  ActivationSessionPhase.preOfflineChecks) ||
+                          _pinController.text.trim().isEmpty
+                      ? null
+                      : () {
+                          // Capture the PIN for this single call and clear the
+                          // field immediately: the screen never retains the
+                          // credential, not even while the phase runs.
+                          final pin = _pinController.text;
+                          _pinController.clear();
+                          setState(() {});
+                          viewModel.runPreOfflineChecks(
+                            authorizedUserPin: pin,
+                          );
+                        },
+                  child: viewModel.isPhaseLoading(
+                          ActivationSessionPhase.preOfflineChecks)
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Ejecutar verificaciones previas'),
+                ),
               ),
             ],
             if (checks.isNotEmpty) ...[
@@ -584,21 +587,24 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               ],
               const SizedBox(height: 12),
             ],
-            ElevatedButton(
-              key: const Key('run_controlled_sale_button'),
-              onPressed: _controlledSaleAction(viewModel),
-              child: viewModel.isPhaseLoading(
-                      ActivationSessionPhase.controlledOfflineSale)
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(
-                      isInvoiceFreeContract
-                          ? 'Verificar secuencia fiscal'
-                          : 'Ejecutar venta de verificación',
-                    ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                key: const Key('run_controlled_sale_button'),
+                onPressed: _controlledSaleAction(viewModel),
+                child: viewModel.isPhaseLoading(
+                        ActivationSessionPhase.controlledOfflineSale)
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        isInvoiceFreeContract
+                            ? 'Verificar secuencia fiscal'
+                            : 'Ejecutar venta de verificación',
+                      ),
+              ),
             ),
             if (viewModel.preOfflineChecksSucceeded != true) ...[
               const SizedBox(height: 8),
@@ -938,17 +944,20 @@ class _ActivationTerminalViewState extends State<ActivationTerminalView> {
               ),
               const SizedBox(height: 12),
             ],
-            ElevatedButton(
-              key: const Key('run_reconnect_button'),
-              onPressed: _reconnectAction(viewModel),
-              child: viewModel.isPhaseLoading(
-                      ActivationSessionPhase.reconnectSync)
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Reconectar y finalizar'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                key: const Key('run_reconnect_button'),
+                onPressed: _reconnectAction(viewModel),
+                child: viewModel.isPhaseLoading(
+                        ActivationSessionPhase.reconnectSync)
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Reconectar y finalizar'),
+              ),
             ),
             if (viewModel.controlledSaleSucceeded != true) ...[
               const SizedBox(height: 8),

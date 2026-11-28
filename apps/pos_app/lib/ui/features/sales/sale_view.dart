@@ -2214,23 +2214,26 @@ class _BoxOpeningContentState extends State<BoxOpeningContent> {
                   },
                 ),
                 SizedBox(height: isHandheld ? 16 : 24),
-                ElevatedButton(
-                  onPressed: viewModel.currentUserRole != null && viewModel.currentUserRole != UserRole.waiter
-                      ? () async {
-                          final balance = double.tryParse(controller.text) ?? 0.0;
-                          final balanceUsd = double.tryParse(usdController.text) ?? 0.0;
-                          await context.read<SaleViewModel>().openSession(
-                            balance,
-                            balanceUsd: balanceUsd,
-                          );
-                          if (context.mounted) {
-                            try {
-                              context.read<CashShiftViewModel>().init();
-                            } catch (_) {}
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: viewModel.currentUserRole != null && viewModel.currentUserRole != UserRole.waiter
+                        ? () async {
+                            final balance = double.tryParse(controller.text) ?? 0.0;
+                            final balanceUsd = double.tryParse(usdController.text) ?? 0.0;
+                            await context.read<SaleViewModel>().openSession(
+                              balance,
+                              balanceUsd: balanceUsd,
+                            );
+                            if (context.mounted) {
+                              try {
+                                context.read<CashShiftViewModel>().init();
+                              } catch (_) {}
+                            }
                           }
-                        }
-                      : null,
-                  child: const Text('ABRIR CAJA'),
+                        : null,
+                    child: const Text('ABRIR CAJA'),
+                  ),
                 ),
               ],
             ),
