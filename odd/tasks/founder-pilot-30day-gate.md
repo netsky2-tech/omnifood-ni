@@ -156,3 +156,57 @@ Reopen this gate item the moment a second terminal is contemplated: at that poin
 - **#517 lands after #519** and must be reviewed against #519's determinism contract, or it reintroduces the ledger-rewrite problem #519's compensating-transaction design exists to prevent.
 - **#528 R1 and #529 P1 (indexes + measurement) go first** — they are cheap and they determine how much of #528/#529 is actually needed.
 - **#526 B1 (cloud-owned counter) subsumes several #520 units** — if you take B1, revisit #520's D3/D5 rather than implementing both independently.
+
+---
+
+## Measured Gate Execution Record (2026-11-28, `main` + `#531`/`#534` suite)
+
+All technical assertions below were verified against current `main` (`0d91065d` + `feat/pilot-gate-diagnostics-531-534`) on real **PostgreSQL 16** and real **Samsung Galaxy S23 (`SM_S918B`, `R5CWB2LQJDJ`, ARM64, Floor SQLite v86)** hardware. Field/accountant items remain explicitly marked `pending_field_signoff` and are **never** fabricated from CI/dev.
+
+### Quantitative Benchmarks Measured (2026-11-28)
+- **G1.5 — Real S23 Checkout Latency (`pilot_30day_gate_s23_hardware_e2e_test.dart`, 10 checkouts):** `p50 = 32 ms`, `p95 = 151 ms`, `max = 151 ms` (gate: `< 1000 ms` → **PASS**, 6.6× margin).
+- **G2.2 / G2.5 + `#534` `Q-A1` / `Q-A2` (Real S23 Floor SQLite):** purchase intake → 11 sales → `Q-A1`: `outcome=APPLIED, reason=ALL_LINES_DEDUCTED, count=11`; **`Q-A2` missing movements = `0`** (**PASS**).
+- **G4.5 — Real PostgreSQL 16 30-Day Volume (`pilot-30day-volume-gate.db.spec.ts`, 3,000 invoices + 9,000 items):**
+  - `daily_sales_30d`: `execMs = 1.49 ms` (`wallMs = 4.75 ms`, gate `< 500 ms` → **PASS**)
+  - `top_products_30d`: `execMs = 3.54 ms` (`wallMs = 3.44 ms`, gate `< 500 ms` → **PASS**)
+  - `monthly_fiscal_summary_30d`: `execMs = 1.17 ms` (`wallMs = 1.30 ms`, gate `< 500 ms` → **PASS**)
+  - `#534` `Q-B1`/`Q-B2`: `uq_invoices_tenant_invoice_number` blocks duplicates by default; clean 3,000-invoice tenant `0` duplicates / `0` gaps; positive detection verified on injected duplicate (`copies = 2`) and gap (`missing_count = 1`).
+- **G5.3 — Real S23 Mid-Shift Close & Reopen Persistence:** closed and reopened on-disk SQLite mid-shift → `shift=shift-s23-pilot-1`, `products=2`, `pending_invoices=11`, `dgi_cursor=12` 100% intact (**PASS**).
+- **G5.5 / `#534` `Q-A3..Q-A6` (Real S23 Telemetry + `scripts/pilot/pilot_field_diagnostics.sh`):** `Q-A3` cursor `12`, `Q-A4` `pending=11` invoices / `is_synced=0` audit_logs `11`, `Q-A5` daily count `11`, `Q-A6` SQLite file size **`802,816 B (784.0 KB)`**. Reusable read-only CLI `scripts/pilot/pilot_field_diagnostics.sh` (`--sqlite` / `--adb` / `--pg-tenant` / `--json`) verified.
+
+### Per-Item Verdict Matrix (`G0.1`–`G6.2`)
+
+| Item | Verdict | Evidence / Owner |
+|---|---|---|
+| `G0.1` | `pass` (decided) | Single-terminal pilot decision recorded `2026-09-24` (multi-terminal deferred to `#532`). |
+| `G1.1` | `pass` | `#525` closed (`sales_history_view.dart`, `ANULADO` receipt). |
+| `G1.2` | `pass` | `#522` & `#525` closed; `credit_note_sync_quarantine_s23_hardware_e2e_test.dart` (`3/3` S23) + X/Z `PR #738`. |
+| `G1.3` | **`pending_field_signoff`** | Requires client accountant written confirmation on Cuota Fija IVA classification & receipt wording. |
+| `G1.4` | `pass` | `receipt_layout_formatter.dart` prints gross → discount → net; authorizer recorded in forensic log. |
+| `G1.5` | `pass` | Measured on S23: `p50=32ms`, `p95=151ms`, `max=151ms` (`< 1000ms`). |
+| `G1.6` | `pass` | `#539` & `#540` closed; `dt09_2007_s23_hardware_e2e_test.dart` `[1/5]` proves `QUINTO` DGI auth code. |
+| `G1.7` | `pass` | `#539` & `#522` closed; `dt09_2007_s23_hardware_e2e_test.dart` `[2/5]` + NC lane `3/3` S23. |
+| `G2.1` | `pass` | `#519` & `#524` closed; inventory deductions & kardex stock snapshots repaired. |
+| `G2.2` | `pass` | S23 `Q-A1`: `11/11 APPLIED (ALL_LINES_DEDUCTED)`, `Q-A2 = 0`. |
+| `G2.3` | `pass` | `#523` closed (`PR #609–#635`). |
+| `G2.4` | `pass` | `#521` closed (`notTracked` products never paint `SIN STOCK`). |
+| `G2.5` | `pass` | S23 `pilot_30day_gate_s23_hardware_e2e_test.dart` `[2/4]` purchase → sale → Kardex movement verified. |
+| `G3.1` | **`pending_field_signoff`** | Boot overwrite fixed (`#520`/`#526`); requires client's real projected 30-day volume & DGI resolution letter. |
+| `G3.2` | `pass` | `#520` & `#526` closed; `terminal_backup_s23_hardware_e2e_test.dart` `[4/5]` double-boot monotonic cursor. |
+| `G3.3` | `pass` | Business Profile operator UI + `D-21` consecutive model (`#554`) + written procedure. |
+| `G3.4` | `pass` | `#526` closed; `terminal_backup_s23_hardware_e2e_test.dart` `[3/5]` B5 replay tripwire (`409`). |
+| `G3.5` | **`pending_field_signoff`** | Requires client accountant sign-off on dead-device unsynced fiscal documents (`docs/operations/pilot-terminal-incident-procedure.md`). |
+| `G4.1` | `pass` | `#530` closed (`catch(_){}` removed); loyalty also unused in SOHO pilot. |
+| `G4.2` | `pass` | `#530` closed (void reverses loyalty atomically). |
+| `G4.3` | `waived (G0.1)` | Single-terminal pilot (`#532` tracks multi-terminal). |
+| `G4.3b` | `pass` | `#527` (`PR #760`) closed; `replaceProductOptions` `@transaction` atomic. |
+| `G4.4` | **`pending_field_signoff`** | Requires written owner acknowledgment for `PRICE_ONLY` modifier extras (`DEC-7`). |
+| `G4.5` | `pass` | PG 16 30-day 3,000-invoice benchmark: `1.17–3.54 ms` (`< 500ms`), indexes landed (`#529` / `PR #757`). |
+| `G5.1` | `pass` | Written procedure in `docs/operations/pilot-terminal-incident-procedure.md`. |
+| `G5.2` | `pass` | `#526` closed; `.nhilosbak` encrypted backup/restore proven on S23 (`5/5`). |
+| `G5.3` | `pass` | S23 `[3/4]` mid-shift DB close/reopen preserved shift, catalog, pending queue, and DGI cursor. |
+| `G5.4` | **`pending_field_signoff`** | Software anti-collision & back-entry shipped (`#539`); physical preprinted contingency book reported to DGI required before opening. |
+| `G5.5` | `partial (waivable)` | `scripts/pilot/pilot_field_diagnostics.sh` measures `Q-A3..Q-A6` on demand; scheduled retention purge/remote telemetry tracked in open `#528`. |
+| `G6.1` | `pass` | Business Profile DGI config, manual sync, `.nhilosbak` backup/restore, and `pilot_field_diagnostics.sh` operate without APK rebuild. |
+| `G6.2` | `partial (waivable)` | Local diagnostic pull via `adb`; remote error pull tracked in open `#528`. |
+| `#534` `Q-B1/Q-B2` (prod) | **`pending_field_signoff`** | Run `scripts/pilot/pilot_field_diagnostics.sh --pg-tenant <client-tenant-uuid>` against the live client tenant once provisioned. |
