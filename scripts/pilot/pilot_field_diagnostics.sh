@@ -147,6 +147,10 @@ if [[ -n "${ADB_SERIAL}" ]]; then
     echo "Error: pulled SQLite copy from ${ADB_SERIAL} is empty" >&2
     exit 1
   fi
+  if ! head -c 16 "${TMP_DB}" | grep -q "^SQLite format 3"; then
+    echo "Error: databases/${ADB_DB_NAME} on ${ADB_SERIAL} (${ADB_PACKAGE}) is not a valid SQLite database: $(head -c 200 "${TMP_DB}" | tr '\r\n' ' ')" >&2
+    exit 1
+  fi
   SQLITE_PATH="${TMP_DB}"
 fi
 
