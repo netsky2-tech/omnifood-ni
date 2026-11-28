@@ -4,6 +4,7 @@ import '../../models/sales/invoice_item.dart';
 import '../../models/sales/payment.dart';
 import '../../models/user.dart';
 import '../../models/fulfillment/fulfillment_checkout_context.dart';
+import '../../models/sync/quarantined_sync_document.dart';
 
 enum RefundReasonPolicy {
   restockOriginalBom,
@@ -117,6 +118,64 @@ abstract class SalesRepository {
   // Reporting
   Future<List<Invoice>> getInvoicesBySessionId(String sessionId);
   Future<List<Payment>> getPaymentsBySessionId(String sessionId);
+}
+
+abstract interface class SalesQuarantineRepository {
+  Future<void> markAsQuarantined(
+    String invoiceId, {
+    String? reason,
+    String? code,
+    DateTime? quarantinedAt,
+  });
+  Future<void> retryQuarantinedDocument(String invoiceId);
+  Future<int> getQuarantinedCount();
+  Future<List<QuarantinedSyncDocument>> getQuarantinedDocuments();
+}
+
+extension SalesRepositoryQuarantineExtension on SalesRepository {
+  Future<void> markAsQuarantined(
+    String invoiceId, {
+    String? reason,
+    String? code,
+    DateTime? quarantinedAt,
+  }) async {
+    final self = this;
+    if (self is SalesQuarantineRepository) {
+      final repo = self as SalesQuarantineRepository;
+      await repo.markAsQuarantined(
+        invoiceId,
+        reason: reason,
+        code: code,
+        quarantinedAt: quarantinedAt,
+      );
+    }
+  }
+
+  Future<void> retryQuarantinedDocument(String invoiceId) async {
+    final self = this;
+    if (self is SalesQuarantineRepository) {
+      final repo = self as SalesQuarantineRepository;
+      await repo.retryQuarantinedDocument(invoiceId);
+    }
+  }
+
+  Future<int> getQuarantinedCount() async {
+    final self = this;
+    if (self is SalesQuarantineRepository) {
+      final repo = self as SalesQuarantineRepository;
+      return repo.getQuarantinedCount();
+    }
+    return 0;
+  }
+
+  Future<List<QuarantinedSyncDocument>> getQuarantinedDocuments() async {
+    final self = this;
+    if (self is SalesQuarantineRepository) {
+      final repo = self as SalesQuarantineRepository;
+      return repo.getQuarantinedDocuments();
+    }
+    return const [];
+  }
 }
 
 /// D-13: everything the print path needs to reproduce a document AS ISSUED.

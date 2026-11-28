@@ -22,6 +22,7 @@ import 'package:pos_app/data/repositories/inventory/inventory_repository_impl.da
 import 'package:pos_app/data/services/sync_service.dart';
 import 'package:pos_app/data/services/network_connectivity_service.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
+import 'package:pos_app/domain/models/sync/quarantined_sync_document.dart';
 import 'package:pos_app/data/models/local_config_entity.dart';
 import 'package:pos_app/data/models/user_entity.dart';
 import 'package:pos_app/data/models/customer/customer_entity.dart';
@@ -95,9 +96,12 @@ class MutableOhacTestOutbox
   Future<int?> lowestQuarantinedAssertionSequence() async => lowestQuarantined;
 }
 
-class MockSalesRepository implements SalesRepository {
+class MockSalesRepository
+    implements SalesRepository, SalesQuarantineRepository {
   List<Map<String, dynamic>> unsyncedAggregates = [];
   final List<List<String>> syncedInvoiceIdBatches = [];
+  final Map<String, QuarantinedSyncDocument> quarantinedById = {};
+  final List<Map<String, dynamic>> quarantinedAggregates = [];
 
   @override
   Future<List<Map<String, dynamic>>> getUnsyncedAggregates() async =>
@@ -119,7 +123,55 @@ class MockSalesRepository implements SalesRepository {
   @override
   Future<void> markAsSynced(List<String> invoiceIds) async {
     syncedInvoiceIdBatches.add(invoiceIds);
+    for (final id in invoiceIds) {
+      unsyncedAggregates.removeWhere((agg) => agg['id'] == id);
+      quarantinedById.remove(id);
+      quarantinedAggregates.removeWhere((agg) => agg['id'] == id);
+    }
   }
+
+  @override
+  Future<void> markAsQuarantined(
+    String invoiceId, {
+    String? reason,
+    String? code,
+    DateTime? quarantinedAt,
+  }) async {
+    final index = unsyncedAggregates.indexWhere((a) => a['id'] == invoiceId);
+    final agg = index >= 0 ? unsyncedAggregates.removeAt(index) : null;
+    if (agg != null) {
+      quarantinedAggregates.removeWhere((a) => a['id'] == invoiceId);
+      quarantinedAggregates.add(agg);
+    }
+    quarantinedById[invoiceId] = QuarantinedSyncDocument(
+      invoiceId: invoiceId,
+      invoiceNumber: agg?['number']?.toString() ?? invoiceId,
+      documentType: agg?['documentType']?.toString() ?? 'CREDIT_NOTE',
+      total: (agg?['total'] as num?)?.toDouble() ?? 0.0,
+      reason: reason ?? 'Rechazado',
+      code: code,
+      quarantinedAt: quarantinedAt ?? DateTime.now().toUtc(),
+    );
+  }
+
+  @override
+  Future<void> retryQuarantinedDocument(String invoiceId) async {
+    quarantinedById.remove(invoiceId);
+    final qIndex = quarantinedAggregates.indexWhere((a) => a['id'] == invoiceId);
+    if (qIndex >= 0) {
+      final agg = quarantinedAggregates.removeAt(qIndex);
+      if (!unsyncedAggregates.any((a) => a['id'] == invoiceId)) {
+        unsyncedAggregates.add(agg);
+      }
+    }
+  }
+
+  @override
+  Future<int> getQuarantinedCount() async => quarantinedById.length;
+
+  @override
+  Future<List<QuarantinedSyncDocument>> getQuarantinedDocuments() async =>
+      quarantinedById.values.toList(growable: false);
 
   @override
   Future<int> getInventoryDivergenceCount() async => 0;
@@ -927,14 +979,8 @@ void main() {
   });
 
   test(
-    'DSI-6: holds local credit notes OUT of the device sales batch',
+    '#522 S2: syncs local credit notes in isolated 1-record envelopes',
     () async {
-      // SyncCreditNoteAuthGuard (sync-credit-note-auth.guard.ts:38-73)
-      // fails closed with 403 for ANY device batch containing CREDIT_NOTE,
-      // stalling unrelated sales and tripping AUTH_BLOCKED
-      // (AP_KNOWN_LIMITATIONS.md L3). The client therefore never puts a
-      // credit note on the wire while DSI-6 is unimplemented: the note
-      // stays pending locally and nothing is posted.
       mockSalesRepository.unsyncedAggregates = [
         {
           'id': 'credit-note-1',
@@ -945,6 +991,9 @@ void main() {
           'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-1',
           'originInvoiceId': 'sale-1',
           'refundReasonPolicy': 'FINANCIAL_ONLY',
+          'refundReasonCode': 'DEVOLUCION',
+          'authorizedByUserId': '11111111-1111-4111-8111-111111111111',
+          'authorizedByRole': 'manager',
           'items': [
             {
               'id': 'credit-line-1',
@@ -961,17 +1010,22 @@ void main() {
       final salesPosts = capturedPosts
           .where((post) => post.path == '/v1/sync/batch')
           .toList(growable: false);
-      expect(salesPosts, isEmpty,
-          reason: 'a device envelope with a CREDIT_NOTE record would be '
-              'rejected wholesale with 403');
-      // The held note is NOT acknowledged locally — it stays pending for
-      // DSI-6.
-      expect(mockSalesRepository.syncedInvoiceIdBatches, isEmpty);
+      expect(salesPosts, hasLength(1));
+      final records =
+          ((salesPosts.single.body as Map<String, dynamic>)['records']
+                  as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      expect(records, hasLength(1));
+      expect(records.single['invoiceId'], 'credit-note-1');
+      expect(records.single['documentType'], 'CREDIT_NOTE');
+      expect(mockSalesRepository.syncedInvoiceIdBatches.single, [
+        'credit-note-1',
+      ]);
     },
   );
 
   test(
-    'DSI-6: a normal sale still syncs when a credit note is pending',
+    '#522 S2: regular SALE + CREDIT_NOTE → 2 separate POSTs to /v1/sync/batch (sale first, then 1-record credit note envelope) → both synced',
     () async {
       mockSalesRepository.unsyncedAggregates = [
         {
@@ -983,6 +1037,9 @@ void main() {
           'idempotencyKey': 'credit-note:pos-terminal-1:credit-note-1',
           'originInvoiceId': 'sale-1',
           'refundReasonPolicy': 'FINANCIAL_ONLY',
+          'refundReasonCode': 'DEVOLUCION',
+          'authorizedByUserId': '11111111-1111-4111-8111-111111111111',
+          'authorizedByRole': 'manager',
           'items': [
             {
               'id': 'credit-line-1',
@@ -1009,22 +1066,23 @@ void main() {
       final salesPosts = capturedPosts
           .where((post) => post.path == '/v1/sync/batch')
           .toList(growable: false);
-      expect(salesPosts, hasLength(1));
-      final postedRecords =
-          (salesPosts.single.body as Map<String, dynamic>)['records']
-              as List<dynamic>;
-      // Only the sale travels; the pending credit note is held back.
-      expect(postedRecords, hasLength(1));
-      expect((postedRecords.single as Map<String, dynamic>)['documentType'],
-          'SALE');
-      expect(
-        (postedRecords.single as Map<String, dynamic>)['idempotencyKey'],
-        'sale:pos-terminal-1:sale-1',
-      );
-      // The sale is acknowledged; the credit note stays pending locally.
+      expect(salesPosts, hasLength(2));
+      final firstRecords =
+          ((salesPosts[0].body as Map<String, dynamic>)['records']
+                  as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      final secondRecords =
+          ((salesPosts[1].body as Map<String, dynamic>)['records']
+                  as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      expect(firstRecords.map((r) => r['invoiceId']), ['sale-1']);
+      expect(secondRecords.map((r) => r['invoiceId']), ['credit-note-1']);
       expect(mockSalesRepository.syncedInvoiceIdBatches, [
         ['sale-1'],
+        ['credit-note-1'],
       ]);
+      expect(await syncService.getPendingOutboxCount(), 0);
+      expect(await syncService.getQuarantinedCount(), 0);
     },
   );
 
@@ -1215,8 +1273,7 @@ void main() {
   );
 
   test(
-    'DSI-6: orders sale aggregates by local source sequence and holds the '
-    'credit note out of the batch',
+    '#522 S2: orders regular sales first, then credit notes in isolated 1-record envelopes',
     () async {
       mockSalesRepository.unsyncedAggregates = [
         {
@@ -1241,19 +1298,27 @@ void main() {
 
       await syncService.triggerManualSync();
 
-      final salesPost = capturedPosts.firstWhere(
-        (post) => post.path == '/v1/sync/batch',
-      );
-      final records =
-          ((salesPost.body as Map<String, dynamic>)['records'] as List<dynamic>)
+      final salesPosts = capturedPosts
+          .where((post) => post.path == '/v1/sync/batch')
+          .toList(growable: false);
+      expect(salesPosts, hasLength(2));
+      final firstRecords =
+          ((salesPosts[0].body as Map<String, dynamic>)['records']
+                  as List<dynamic>)
               .cast<Map<String, dynamic>>();
-      // Only the sale travels (DSI-6 hold); ordering by source sequence is
-      // preserved for the documents that do travel.
-      expect(records.map((record) => record['invoiceId']), [
+      final secondRecords =
+          ((salesPosts[1].body as Map<String, dynamic>)['records']
+                  as List<dynamic>)
+              .cast<Map<String, dynamic>>();
+      expect(firstRecords.map((record) => record['invoiceId']), [
         'sale-before-credit-note',
       ]);
-      expect(mockSalesRepository.syncedInvoiceIdBatches.single, [
-        'sale-before-credit-note',
+      expect(secondRecords.map((record) => record['invoiceId']), [
+        'credit-note-after-sale',
+      ]);
+      expect(mockSalesRepository.syncedInvoiceIdBatches, [
+        ['sale-before-credit-note'],
+        ['credit-note-after-sale'],
       ]);
     },
   );
@@ -7788,7 +7853,7 @@ void main() {
     );
 
     test(
-      'getPendingOutboxCount excludes DSI-6-held credit notes from the pending count',
+      '#522 S2: getPendingOutboxCount includes pending CREDIT_NOTE records',
       () async {
         mockSalesRepository.unsyncedAggregates = [
           {'id': 'sale-1', 'documentType': 'INVOICE'},
@@ -7797,9 +7862,7 @@ void main() {
 
         final count = await syncService.getPendingOutboxCount();
 
-        // DSI-6 holds credit notes out of outbound batches, so they are not
-        // actionable pending work: the badge must not count them.
-        expect(count, 1);
+        expect(count, 2);
       },
     );
 
@@ -9786,6 +9849,288 @@ void main() {
         await database.close();
       }
     });
+  });
+
+  group('#522 S2: Isolated CREDIT_NOTE sync lane & durable quarantine', () {
+    test(
+      'CREDIT_NOTE rejected with 403 while concurrent SALE returns 200 → SALE synced, CREDIT_NOTE quarantined with reason, terminal NOT AUTH_BLOCKED',
+      () async {
+        final localDio = Dio();
+        localDio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.method.toUpperCase() == 'POST' &&
+                  options.path == '/v1/sync/batch') {
+                final records =
+                    ((options.data as Map<String, dynamic>)['records']
+                            as List<dynamic>)
+                        .cast<Map<String, dynamic>>();
+                if (records.any((r) => r['documentType'] == 'CREDIT_NOTE')) {
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      response: Response<dynamic>(
+                        requestOptions: options,
+                        statusCode: 403,
+                        data: {
+                          'code': 'SUPERVISOR_INACTIVE',
+                          'message': 'Supervisor inactivo o sin permisos',
+                        },
+                      ),
+                      type: DioExceptionType.badResponse,
+                    ),
+                  );
+                  return;
+                }
+                handler.resolve(
+                  Response<dynamic>(
+                    requestOptions: options,
+                    statusCode: 200,
+                    data: {
+                      'status': 'OK',
+                      'results': records
+                          .map((r) => {...r, 'status': 'APPLIED'})
+                          .toList(growable: false),
+                    },
+                  ),
+                );
+                return;
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {'ok': true},
+                ),
+              );
+            },
+          ),
+        );
+        final localSync = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          localDio,
+        );
+        final rejections = <SalesRecordRejection>[];
+        final sub = localSync.onSalesRecordRejected.listen(rejections.add);
+        addTearDown(() async {
+          await sub.cancel();
+          localSync.dispose();
+        });
+
+        mockSalesRepository.unsyncedAggregates = [
+          {
+            'id': 'sale-ok-1',
+            'number': 'F001-001',
+            'documentType': 'SALE',
+            'terminalId': 'pos-1',
+            'sourceSequence': 10,
+            'idempotencyKey': 'sale:pos-1:sale-ok-1',
+            'total': 100.0,
+          },
+          {
+            'id': 'cn-403-1',
+            'number': 'NC-001',
+            'documentType': 'CREDIT_NOTE',
+            'terminalId': 'pos-1',
+            'sourceSequence': 11,
+            'idempotencyKey': 'credit-note:pos-1:cn-403-1',
+            'originInvoiceId': 'sale-ok-1',
+            'refundReasonCode': 'DEVOLUCION',
+            'authorizedByUserId': '11111111-1111-4111-8111-111111111111',
+            'authorizedByRole': 'manager',
+            'total': -50.0,
+          },
+        ];
+
+        final outcome = await localSync.triggerManualSync();
+
+        expect(outcome.status, SyncRunStatus.complete);
+        expect(localSync.isAuthBlocked, isFalse);
+        expect(mockSalesRepository.syncedInvoiceIdBatches, [
+          ['sale-ok-1'],
+        ]);
+        expect(await localSync.getQuarantinedCount(), 1);
+        final docs = await localSync.getQuarantinedDocuments();
+        expect(docs, hasLength(1));
+        expect(docs.single.invoiceId, 'cn-403-1');
+        expect(docs.single.code, 'SUPERVISOR_INACTIVE');
+        expect(docs.single.reason, 'Supervisor inactivo o sin permisos');
+        expect(await localSync.getPendingOutboxCount(), 0);
+        await Future<void>.delayed(Duration.zero);
+        expect(rejections, hasLength(1));
+        expect(rejections.single.invoiceId, 'cn-403-1');
+        expect(rejections.single.retryable, isFalse);
+      },
+    );
+
+    test(
+      'CREDIT_NOTE transient 503 → remains pending (NOT quarantined) and does NOT set AUTH_BLOCKED',
+      () async {
+        final localDio = Dio();
+        localDio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.method.toUpperCase() == 'POST' &&
+                  options.path == '/v1/sync/batch') {
+                final records =
+                    ((options.data as Map<String, dynamic>)['records']
+                            as List<dynamic>)
+                        .cast<Map<String, dynamic>>();
+                if (records.any((r) => r['documentType'] == 'CREDIT_NOTE')) {
+                  handler.reject(
+                    DioException(
+                      requestOptions: options,
+                      response: Response<dynamic>(
+                        requestOptions: options,
+                        statusCode: 503,
+                        data: {'message': 'Service Unavailable'},
+                      ),
+                      type: DioExceptionType.badResponse,
+                    ),
+                  );
+                  return;
+                }
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {'ok': true},
+                ),
+              );
+            },
+          ),
+        );
+        final localSync = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          localDio,
+        );
+        addTearDown(localSync.dispose);
+
+        mockSalesRepository.unsyncedAggregates = [
+          {
+            'id': 'cn-503-1',
+            'number': 'NC-503',
+            'documentType': 'CREDIT_NOTE',
+            'terminalId': 'pos-1',
+            'sourceSequence': 12,
+            'idempotencyKey': 'credit-note:pos-1:cn-503-1',
+            'total': -25.0,
+          },
+        ];
+
+        await localSync.triggerManualSync();
+
+        expect(localSync.isAuthBlocked, isFalse);
+        expect(await localSync.getQuarantinedCount(), 0);
+        expect(await localSync.getPendingOutboxCount(), 1);
+      },
+    );
+
+    test(
+      'retryQuarantinedDocument(id) resets to pending, re-sends with same idempotencyKey, transitions to synced, and clears quarantine metadata',
+      () async {
+        var rejectCreditNote = true;
+        final sentCreditNoteKeys = <String>[];
+        final localDio = Dio();
+        localDio.interceptors.add(
+          InterceptorsWrapper(
+            onRequest: (options, handler) {
+              if (options.method.toUpperCase() == 'POST' &&
+                  options.path == '/v1/sync/batch') {
+                final records =
+                    ((options.data as Map<String, dynamic>)['records']
+                            as List<dynamic>)
+                        .cast<Map<String, dynamic>>();
+                if (records.any((r) => r['documentType'] == 'CREDIT_NOTE')) {
+                  sentCreditNoteKeys.add(
+                    records.single['idempotencyKey'] as String,
+                  );
+                  if (rejectCreditNote) {
+                    handler.reject(
+                      DioException(
+                        requestOptions: options,
+                        response: Response<dynamic>(
+                          requestOptions: options,
+                          statusCode: 403,
+                          data: {
+                            'code': 'SUPERVISOR_UNAUTHORIZED',
+                            'message': 'Supervisor no autorizado',
+                          },
+                        ),
+                        type: DioExceptionType.badResponse,
+                      ),
+                    );
+                    return;
+                  }
+                  handler.resolve(
+                    Response<dynamic>(
+                      requestOptions: options,
+                      statusCode: 200,
+                      data: {
+                        'status': 'OK',
+                        'results': records
+                            .map((r) => {...r, 'status': 'APPLIED'})
+                            .toList(growable: false),
+                      },
+                    ),
+                  );
+                  return;
+                }
+              }
+              handler.resolve(
+                Response<dynamic>(
+                  requestOptions: options,
+                  statusCode: 200,
+                  data: {'ok': true},
+                ),
+              );
+            },
+          ),
+        );
+        final localSync = SyncService(
+          mockAuditRepository,
+          mockSalesRepository,
+          mockInventoryRepository,
+          localDio,
+        );
+        addTearDown(localSync.dispose);
+
+        mockSalesRepository.unsyncedAggregates = [
+          {
+            'id': 'cn-retry-1',
+            'number': 'NC-RETRY',
+            'documentType': 'CREDIT_NOTE',
+            'terminalId': 'pos-1',
+            'sourceSequence': 15,
+            'idempotencyKey': 'credit-note:pos-1:cn-retry-1',
+            'total': -75.0,
+          },
+        ];
+
+        await localSync.triggerManualSync();
+        expect(await localSync.getQuarantinedCount(), 1);
+        expect(await localSync.getPendingOutboxCount(), 0);
+
+        // Supervisor restored; operator retries the quarantined credit note.
+        rejectCreditNote = false;
+        await localSync.retryQuarantinedDocument('cn-retry-1');
+
+        expect(await localSync.getQuarantinedCount(), 0);
+        expect(await localSync.getPendingOutboxCount(), 0);
+        expect(mockSalesRepository.syncedInvoiceIdBatches, [
+          ['cn-retry-1'],
+        ]);
+        expect(sentCreditNoteKeys, [
+          'credit-note:pos-1:cn-retry-1',
+          'credit-note:pos-1:cn-retry-1',
+        ]);
+      },
+    );
   });
 }
 
