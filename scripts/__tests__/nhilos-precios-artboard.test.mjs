@@ -482,3 +482,11 @@ test("G4: el importe de un cargo puede envolver y la pista no se infla", () => {
     "en móvil la pista debe ser minmax(0, 1fr): con `1fr` el min-content del hijo la infla",
   );
 });
+
+// G5 (issue #1023): Pack Cocina must not advertise deferred capabilities (combos, menú QR)
+test("G5: Pack Cocina does not advertise combos or menú QR in visible copy or JSON-LD", () => {
+  const haystack = (txt(vis) + " " + JSON.stringify(ld)).toLowerCase();
+  for (const deferred of ["combos", "menú qr", "menu qr"]) {
+    assert.ok(!haystack.includes(deferred), `deferred capability advertised: ${deferred}`);
+  }
+});
