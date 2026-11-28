@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/localization/label_map.dart';
 import '../../../../data/services/sync_service.dart';
 import '../../../../data/services/network_connectivity_service.dart';
+import '../../../../domain/models/sync/quarantined_sync_document.dart';
 import '../../../design_system/nhilos_tokens.dart';
 import '../../../design_system/responsive_layout.dart';
 
@@ -22,6 +23,8 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
   Timer? _refreshTimer;
   int _pendingCount = 0;
   int _pendingAuditCount = 0;
+  int _quarantinedCount = 0;
+  List<QuarantinedSyncDocument> _quarantinedDocs = const [];
 
   /// R-16: age of the oldest unconfirmed pending item in the outbox (from
   /// [SyncService.getOldestPendingItemAge]). The badge's stall signal: when
@@ -113,11 +116,19 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
       try {
         oldestPendingAge = await syncService.getOldestPendingItemAge();
       } catch (_) {}
+      int quarantinedCount = _quarantinedCount;
+      List<QuarantinedSyncDocument> quarantinedDocs = _quarantinedDocs;
+      try {
+        quarantinedCount = await syncService.getQuarantinedCount();
+        quarantinedDocs = await syncService.getQuarantinedDocuments();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _pendingCount = count;
           _pendingAuditCount = auditCount;
           _oldestPendingAge = oldestPendingAge;
+          _quarantinedCount = quarantinedCount;
+          _quarantinedDocs = quarantinedDocs;
         });
       }
     } catch (_) {}
@@ -183,9 +194,12 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         _oldestPendingAge! > SyncService.pendingStallThreshold;
     // When the audit stream is the only thing pending, show its count on
     // the badge instead of the (zero) business outbox count.
-    final int badgeCount = auditDegraded && _pendingCount == 0
-        ? _pendingAuditCount
-        : _pendingCount;
+    // When quarantined documents exist, include them so the badge counter is visible.
+    final int badgeCount = _quarantinedCount > 0
+        ? _pendingCount + _quarantinedCount
+        : (auditDegraded && _pendingCount == 0
+            ? _pendingAuditCount
+            : _pendingCount);
 
     Color iconColor;
     IconData iconData;
@@ -223,7 +237,7 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         (status == CloudSyncStatus.idle ||
             status == CloudSyncStatus.offline);
     final bool businessQueueEmpty =
-        _pendingCount == 0 && _pendingAuditCount == 0;
+        _pendingCount == 0 && _pendingAuditCount == 0 && _quarantinedCount == 0;
 
     if (!isOnline || status == CloudSyncStatus.offline) {
       if (businessQueueEmpty && lastPassAcceptedByServer) {
@@ -273,6 +287,14 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
         'AUDIT_SYNC_DEGRADED_TOOLTIP',
         kAuditDegradedLabels,
       ).replaceFirst('{count}', '$_pendingAuditCount');
+    } else if (_quarantinedCount > 0) {
+      // S3: quarantined documents require operator review/retry. Calm amber
+      // NHILOS Luxury +1 warning token, never generic red alarmism.
+      iconColor = NhilosColors.warning;
+      iconData = Icons.warning_amber_rounded;
+      tooltip = _pendingCount > 0
+          ? '$_pendingCount pendiente(s) · $_quarantinedCount en cuarentena'
+          : '$_quarantinedCount documento(s) en cuarentena — requiere revisión';
     } else if (_pendingCount > 0) {
       iconColor = NhilosColors.warning;
       iconData = Icons.cloud_upload;
@@ -390,6 +412,10 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
           );
           statusColor = NhilosColors.warning;
           statusIcon = Icons.cloud_upload;
+        } else if (_quarantinedCount > 0) {
+          statusLabel = '$_quarantinedCount documento(s) en cuarentena';
+          statusColor = NhilosColors.warning;
+          statusIcon = Icons.warning_amber_rounded;
         } else if (_pendingCount > 0) {
           statusLabel = '$_pendingCount cambios locales pendientes';
           statusColor = NhilosColors.warning;
@@ -456,6 +482,13 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                     label: 'Pendientes en Outbox:',
                     value: '$_pendingCount documento(s)',
                   ),
+                  if (_quarantinedCount > 0) ...[
+                    const SizedBox(height: 8),
+                    _DialogDetailRow(
+                      label: 'En cuarentena:',
+                      value: '$_quarantinedCount documento(s)',
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   // D-18: the audit stream truth lives next to the outbox
                   // row, never inside the error detail box (audit is not a
@@ -568,6 +601,14 @@ class _CloudSyncStatusBadgeState extends State<CloudSyncStatusBadge>
                       return _InertRecipesDetailSection(report: report);
                     },
                   ),
+                  if (_quarantinedDocs.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _QuarantinedDocumentsSection(
+                      syncService: syncService,
+                      initialDocs: _quarantinedDocs,
+                      onRetried: () => _refreshPendingCount(),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -660,6 +701,155 @@ class _StatusBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _QuarantinedDocumentsSection extends StatefulWidget {
+  final SyncService? syncService;
+  final List<QuarantinedSyncDocument> initialDocs;
+  final VoidCallback onRetried;
+
+  const _QuarantinedDocumentsSection({
+    required this.syncService,
+    required this.initialDocs,
+    required this.onRetried,
+  });
+
+  @override
+  State<_QuarantinedDocumentsSection> createState() =>
+      _QuarantinedDocumentsSectionState();
+}
+
+class _QuarantinedDocumentsSectionState
+    extends State<_QuarantinedDocumentsSection> {
+  late List<QuarantinedSyncDocument> _docs;
+  String? _retryingInvoiceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _docs = List<QuarantinedSyncDocument>.from(widget.initialDocs);
+  }
+
+  Future<void> _retry(QuarantinedSyncDocument doc) async {
+    final syncService = widget.syncService;
+    if (syncService == null || _retryingInvoiceId != null) return;
+    setState(() => _retryingInvoiceId = doc.invoiceId);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    try {
+      await syncService.retryQuarantinedDocument(doc.invoiceId);
+      final updated = await syncService.getQuarantinedDocuments();
+      widget.onRetried();
+      if (!mounted) return;
+      setState(() {
+        _docs = updated;
+        _retryingInvoiceId = null;
+      });
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Reintento ejecutado para ${doc.invoiceNumber}.',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _retryingInvoiceId = null);
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo reintentar la sincronización.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_docs.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Documentos en cuarentena',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: NhilosColors.warning,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 6),
+        for (final doc in _docs)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: NhilosColors.warningLight,
+                borderRadius: NhilosRadii.chipRadius,
+                border: Border.all(
+                  color: NhilosColors.warning.withValues(alpha: 0.30),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          doc.invoiceNumber,
+                          style: NhilosTextStyles.tabular(
+                            base: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: NhilosColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Semantics(
+                        label: 'Reintentar sincronización de ${doc.invoiceNumber}',
+                        button: true,
+                        child: OutlinedButton(
+                          key: Key('retry_quarantined_doc_${doc.invoiceId}'),
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                          ),
+                          onPressed: _retryingInvoiceId == doc.invoiceId
+                              ? null
+                              : () => _retry(doc),
+                          child: Text(
+                            _retryingInvoiceId == doc.invoiceId
+                                ? 'Reintentando...'
+                                : 'Reintentar',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    doc.reason,
+                    style: const TextStyle(
+                      color: NhilosColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

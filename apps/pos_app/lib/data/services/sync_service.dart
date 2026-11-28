@@ -10,6 +10,7 @@ import '../../domain/security/ohac_integrity_classifier.dart';
 import '../../domain/security/ohac_observability.dart';
 import '../../domain/security/ohac_outbox_registry.dart';
 import '../../domain/repositories/sales/sales_repository.dart';
+import '../../domain/models/sync/quarantined_sync_document.dart';
 import '../../domain/models/inventory/inventory_movement.dart';
 import '../../domain/repositories/inventory/inventory_repository.dart';
 import '../../domain/models/inventory/purchase.dart';
@@ -478,16 +479,8 @@ class SyncService {
   Future<int> getPendingOutboxCount() async {
     int count = 0;
     try {
-      // DSI-6 (openspec/changes/device-sync-credit-note-authorization):
-      // credit notes are deliberately HELD OUT of outbound device batches
-      // until DSI-6 re-enables their transport, so they are not actionable
-      // pending work. Counting them would keep the sync badge permanently
-      // above zero during the hold; exclude them here, mirroring the
-      // outbound filter in _syncSales (documentType != 'CREDIT_NOTE').
       final sales = await _salesRepository.getUnsyncedAggregates();
-      count += sales
-          .where((aggregate) => aggregate['documentType'] != 'CREDIT_NOTE')
-          .length;
+      count += sales.length;
     } catch (e, st) {
       _logOutboxCountFailure('sales', e, st);
     }
@@ -616,6 +609,29 @@ class SyncService {
     }
 
     return count;
+  }
+
+  Future<int> getQuarantinedCount() async {
+    try {
+      return await _salesRepository.getQuarantinedCount();
+    } catch (e, st) {
+      _logOutboxCountFailure('quarantined sales', e, st);
+      return 0;
+    }
+  }
+
+  Future<List<QuarantinedSyncDocument>> getQuarantinedDocuments() async {
+    try {
+      return await _salesRepository.getQuarantinedDocuments();
+    } catch (e, st) {
+      _logOutboxCountFailure('quarantined documents', e, st);
+      return const [];
+    }
+  }
+
+  Future<void> retryQuarantinedDocument(String invoiceId) async {
+    await _salesRepository.retryQuarantinedDocument(invoiceId);
+    await _runDomain('sales', _syncSalesDocuments);
   }
 
   /// R-16: age of the oldest unconfirmed pending item in the locally
@@ -1268,121 +1284,55 @@ class SyncService {
           final keyB = (b['idempotencyKey'] as String?) ?? '';
           return keyA.compareTo(keyB);
         });
-      // DSI-6 (openspec/changes/device-sync-credit-note-authorization):
-      // while device-batch CREDIT_NOTE authorization auditing is
-      // unimplemented, the backend fails closed — SyncCreditNoteAuthGuard
-      // 403s the ENTIRE envelope containing any CREDIT_NOTE record
-      // (sync-credit-note-auth.guard.ts:38-73), which stalls unrelated
-      // sales and trips the misleading AUTH_BLOCKED flag (see
-      // AP_KNOWN_LIMITATIONS.md L3). Local credit notes are therefore HELD
-      // OUT of outbound device batches — same exclusion pattern as
-      // _isCreditNoteRestockMovement in the inventory outbox — and remain
-      // pending locally until DSI-6 re-enables their transport. Nothing in
-      // the backend guard is weakened.
-      final deviceSafeRecords = records
+      final regularRecords = records
           .where((record) => record['documentType'] != 'CREDIT_NOTE')
-          .toList(growable: false);
-      final sentRecords = deviceSafeRecords
           .take(_batchEnvelopeLimit)
           .toList(growable: false);
-      if (sentRecords.isEmpty) {
-        // Everything pending was held back (DSI-6 hold): never post an
-        // empty envelope.
-        return;
+      final creditNoteRecords = records
+          .where((record) => record['documentType'] == 'CREDIT_NOTE')
+          .take(_batchEnvelopeLimit)
+          .toList(growable: false);
+
+      if (regularRecords.isNotEmpty) {
+        await _postSalesBatchEnvelope(
+          regularRecords,
+          quarantineOnNonRetryable: false,
+        );
       }
-      developer.log(
-        'Sales sync: posting ${sentRecords.length} records to /v1/sync/batch',
-        name: 'SyncService',
-      );
-      final response = await _dio.post(
-        '/v1/sync/batch',
-        data: {'records': sentRecords},
-        options: Options(
-          headers: {HttpHeaders.contentTypeHeader: 'application/json'},
-        ),
-      );
-      developer.log(
-        'Sales sync: response status=${response.statusCode}',
-        name: 'SyncService',
-      );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final resultsByKey = _parseSyncResults(response.data);
-        final legacyAcceptedIds = <String>[];
 
-        for (final record in sentRecords) {
-          final invoiceId = record['invoiceId'] as String?;
-          final idempotencyKey = record['idempotencyKey'] as String?;
-          if (invoiceId == null || idempotencyKey == null) continue;
-
-          final result = resultsByKey[idempotencyKey];
-          if (result != null && result.shouldMarkSalesSynced(record)) {
-            // FD-01: the cloud APPLIED the sale and DECLARED the difference
-            // that the inventory could not back. This is NOT a failure and it
-            // does not hold the sale: it is a difference to reconcile in the
-            // backoffice. It is logged so the trail says so out loud.
-            if (result.inventoryOutcome == 'APPLIED_WITH_DIVERGENCE') {
-              developer.log(
-                '[SYNC_SALES_DIVERGENCE] sale $invoiceId was applied with an '
-                'inventory difference to reconcile (${result.message ?? 'sin detalle'})',
-                name: 'SyncService',
-              );
-            }
-            if (result.acknowledgedMovementCorrelationIds != null ||
-                result.inventoryOutcome != null) {
-              try {
-                await _salesRepository.acknowledgeSaleSync(
-                  invoiceId: invoiceId,
-                  outcome: result.inventoryOutcome,
-                  acknowledgedCorrelationIds:
-                      result.acknowledgedMovementCorrelationIds ??
-                      const <String>[],
-                );
-              } catch (e, st) {
-                developer.log(
-                  'Sales sync integrity failure for $invoiceId: $e',
-                  name: 'SyncService',
-                  error: e,
-                  stackTrace: st,
-                );
-              }
-            } else {
-              legacyAcceptedIds.add(invoiceId);
-            }
-          } else if (result != null) {
-            // Issue #506: a per-record result that is neither accepted nor
-            // retried must not stay silent. Do NOT change acceptance
-            // semantics here: the record intentionally stays pending.
-            final rejection = SalesRecordRejection(
-              invoiceId: invoiceId,
-              idempotencyKey: idempotencyKey,
-              status: result.status,
-              code: result.code,
-              message: result.message,
-              retryable: result.retryable,
-            );
-            developer.log(
-              '[SYNC_SALES_REJECTED] per-record rejection (record stays '
-              'pending): invoiceId=$invoiceId status=${result.status} '
-              'code=${result.code ?? '<none>'} '
-              'retryable=${result.retryable ?? '<absent>'} '
-              'message=${result.message ?? ''}',
-              name: 'SyncService',
-            );
-            _salesRejectionController.add(rejection);
-          }
-        }
-
-        if (legacyAcceptedIds.isNotEmpty) {
-          await _salesRepository.markAsSynced(legacyAcceptedIds);
-        } else if (resultsByKey.isEmpty) {
-          final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
-            sentRecords,
-            response.data,
+      Object? firstTransientError;
+      StackTrace? firstTransientStackTrace;
+      for (final creditNoteRecord in creditNoteRecords) {
+        try {
+          await _postSalesBatchEnvelope(
+            [creditNoteRecord],
+            quarantineOnNonRetryable: true,
           );
-          if (acceptedInvoiceIds.isNotEmpty) {
-            await _salesRepository.markAsSynced(acceptedInvoiceIds);
+        } on DioException catch (dioErr, stackTrace) {
+          if (_isFatalDeviceAuthOrPlanError(dioErr)) {
+            rethrow;
           }
+          final statusCode = dioErr.response?.statusCode;
+          if (statusCode == 403 ||
+              statusCode == 400 ||
+              statusCode == 409 ||
+              statusCode == 422) {
+            await _quarantineRejectedCreditNoteRecord(
+              creditNoteRecord,
+              dioErr,
+            );
+            continue;
+          }
+          // Transient error (408/429/5xx/network): keep 'pending' for retry.
+          firstTransientError ??= dioErr;
+          firstTransientStackTrace ??= stackTrace;
         }
+      }
+      if (firstTransientError != null) {
+        Error.throwWithStackTrace(
+          firstTransientError,
+          firstTransientStackTrace!,
+        );
       }
     } catch (e, st) {
       developer.log(
@@ -1392,6 +1342,197 @@ class SyncService {
         stackTrace: st,
       );
       rethrow;
+    }
+  }
+
+  bool _isFatalDeviceAuthOrPlanError(DioException dioErr) {
+    if (dioErr.error is DeviceSyncRevokedException ||
+        dioErr.error is DeviceSyncUnavailableException) {
+      return true;
+    }
+    final statusCode = dioErr.response?.statusCode;
+    if (statusCode == 401) return true;
+    final data = dioErr.response?.data;
+    if (data is Map &&
+        (data['code'] == 'DEVICE_REVOKED' ||
+            data['error'] == 'DEVICE_REVOKED')) {
+      return true;
+    }
+    return classifySyncFailure(dioErr).planBlocked;
+  }
+
+  ({String? code, String message}) _extractRejectionDetails(
+    DioException dioErr,
+  ) {
+    final data = dioErr.response?.data;
+    Object? body = data;
+    if (data is String) {
+      try {
+        body = jsonDecode(data);
+      } catch (_) {
+        body = null;
+      }
+    }
+    String? code;
+    String? message;
+    if (body is Map) {
+      final rawCode = body['code'];
+      if (rawCode is String && rawCode.trim().isNotEmpty) {
+        code = rawCode.trim();
+      }
+      final rawMsg = body['message'] ?? body['error'];
+      if (rawMsg is String && rawMsg.trim().isNotEmpty) {
+        message = rawMsg.trim();
+      } else if (rawMsg is List && rawMsg.isNotEmpty) {
+        message = rawMsg.map((e) => e.toString()).join('; ');
+      }
+    }
+    return (
+      code: code,
+      message:
+          message ??
+          dioErr.message ??
+          'Rechazado por el servidor (HTTP ${dioErr.response?.statusCode ?? 'desconocido'})',
+    );
+  }
+
+  Future<void> _quarantineRejectedCreditNoteRecord(
+    Map<String, Object?> record,
+    DioException dioErr,
+  ) async {
+    final invoiceId = record['invoiceId'] as String?;
+    final idempotencyKey = record['idempotencyKey'] as String?;
+    final details = _extractRejectionDetails(dioErr);
+    developer.log(
+      '[SYNC_CREDIT_NOTE_QUARANTINED] invoiceId=$invoiceId '
+      'status=${dioErr.response?.statusCode} '
+      'code=${details.code ?? '<none>'} message=${details.message}',
+      name: 'SyncService',
+    );
+    if (invoiceId != null) {
+      await _salesRepository.markAsQuarantined(
+        invoiceId,
+        reason: details.message,
+        code: details.code,
+        quarantinedAt: DateTime.now().toUtc(),
+      );
+    }
+    if (invoiceId != null && idempotencyKey != null) {
+      _salesRejectionController.add(
+        SalesRecordRejection(
+          invoiceId: invoiceId,
+          idempotencyKey: idempotencyKey,
+          status: 'REJECTED',
+          retryable: false,
+          code: details.code,
+          message: details.message,
+        ),
+      );
+    }
+  }
+
+  Future<void> _postSalesBatchEnvelope(
+    List<Map<String, Object?>> sentRecords, {
+    required bool quarantineOnNonRetryable,
+  }) async {
+    developer.log(
+      'Sales sync: posting ${sentRecords.length} records to /v1/sync/batch',
+      name: 'SyncService',
+    );
+    final response = await _dio.post(
+      '/v1/sync/batch',
+      data: {'records': sentRecords},
+      options: Options(
+        headers: {HttpHeaders.contentTypeHeader: 'application/json'},
+      ),
+    );
+    developer.log(
+      'Sales sync: response status=${response.statusCode}',
+      name: 'SyncService',
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final resultsByKey = _parseSyncResults(response.data);
+      final legacyAcceptedIds = <String>[];
+
+      for (final record in sentRecords) {
+        final invoiceId = record['invoiceId'] as String?;
+        final idempotencyKey = record['idempotencyKey'] as String?;
+        if (invoiceId == null || idempotencyKey == null) continue;
+
+        final result = resultsByKey[idempotencyKey];
+        if (result != null && result.shouldMarkSalesSynced(record)) {
+          // FD-01: the cloud APPLIED the sale and DECLARED the difference
+          // that the inventory could not back. This is NOT a failure and it
+          // does not hold the sale: it is a difference to reconcile in the
+          // backoffice. It is logged so the trail says so out loud.
+          if (result.inventoryOutcome == 'APPLIED_WITH_DIVERGENCE') {
+            developer.log(
+              '[SYNC_SALES_DIVERGENCE] sale $invoiceId was applied with an '
+              'inventory difference to reconcile (${result.message ?? 'sin detalle'})',
+              name: 'SyncService',
+            );
+          }
+          if (result.acknowledgedMovementCorrelationIds != null ||
+              result.inventoryOutcome != null) {
+            try {
+              await _salesRepository.acknowledgeSaleSync(
+                invoiceId: invoiceId,
+                outcome: result.inventoryOutcome,
+                acknowledgedCorrelationIds:
+                    result.acknowledgedMovementCorrelationIds ??
+                    const <String>[],
+              );
+            } catch (e, st) {
+              developer.log(
+                'Sales sync integrity failure for $invoiceId: $e',
+                name: 'SyncService',
+                error: e,
+                stackTrace: st,
+              );
+            }
+          } else {
+            legacyAcceptedIds.add(invoiceId);
+          }
+        } else if (result != null) {
+          if (quarantineOnNonRetryable && result.retryable == false) {
+            await _salesRepository.markAsQuarantined(
+              invoiceId,
+              reason: result.message ?? result.code ?? result.status,
+              code: result.code,
+              quarantinedAt: DateTime.now().toUtc(),
+            );
+          }
+          final rejection = SalesRecordRejection(
+            invoiceId: invoiceId,
+            idempotencyKey: idempotencyKey,
+            status: result.status,
+            code: result.code,
+            message: result.message,
+            retryable: result.retryable,
+          );
+          developer.log(
+            '[SYNC_SALES_REJECTED] per-record rejection: '
+            'invoiceId=$invoiceId status=${result.status} '
+            'code=${result.code ?? '<none>'} '
+            'retryable=${result.retryable ?? '<absent>'} '
+            'message=${result.message ?? ''}',
+            name: 'SyncService',
+          );
+          _salesRejectionController.add(rejection);
+        }
+      }
+
+      if (legacyAcceptedIds.isNotEmpty) {
+        await _salesRepository.markAsSynced(legacyAcceptedIds);
+      } else if (resultsByKey.isEmpty) {
+        final acceptedInvoiceIds = _acceptedSalesInvoiceIds(
+          sentRecords,
+          response.data,
+        );
+        if (acceptedInvoiceIds.isNotEmpty) {
+          await _salesRepository.markAsSynced(acceptedInvoiceIds);
+        }
+      }
     }
   }
 

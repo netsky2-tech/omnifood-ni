@@ -1,10 +1,24 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:provider/provider.dart';
+import 'package:pos_app/data/models/inventory/kardex_correction_entity.dart';
+import 'package:pos_app/data/services/sync_service.dart';
+import 'package:pos_app/domain/models/audit_log.dart';
+import 'package:pos_app/domain/models/inventory/count_session_document.dart';
+import 'package:pos_app/domain/models/inventory/forensic_alert.dart';
+import 'package:pos_app/domain/models/inventory/inventory_movement.dart';
+import 'package:pos_app/domain/models/inventory/production_order_document.dart';
+import 'package:pos_app/domain/models/inventory/purchase.dart';
+import 'package:pos_app/domain/models/inventory/recipe_version_document.dart';
 import 'package:pos_app/domain/models/sales/invoice.dart';
 import 'package:pos_app/domain/models/sales/invoice_item.dart';
+import 'package:pos_app/domain/models/sync/quarantined_sync_document.dart';
 import 'package:pos_app/domain/models/user.dart';
+import 'package:pos_app/domain/repositories/audit_repository.dart';
+import 'package:pos_app/domain/repositories/inventory/inventory_repository.dart';
+import 'package:pos_app/domain/repositories/sales/sales_repository.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sales_history_view_model.dart';
 import 'package:pos_app/presentation/features/sales/view_models/sale_view_model.dart';
 import 'package:pos_app/ui/features/sales/sales_history_view.dart';
@@ -29,15 +43,24 @@ void main() {
   late MockSaleViewModel mockSaleViewModel;
   late _FakeSalesHistoryViewModel fakeHistoryViewModel;
 
-  Invoice buildInvoice({bool isCanceled = false}) => Invoice(
-        id: 'inv-1',
-        number: '001-001-01-00000001',
+  Invoice buildInvoice({
+    bool isCanceled = false,
+    InvoiceType type = InvoiceType.regular,
+    SyncStatus syncStatus = SyncStatus.pending,
+  }) =>
+      Invoice(
+        id: type == InvoiceType.creditNote ? 'cn-1' : 'inv-1',
+        number: type == InvoiceType.creditNote
+            ? 'NC-001-001-01-00000001'
+            : '001-001-01-00000001',
         createdAt: DateTime(2026, 8, 27, 10, 30),
         userId: 'cashier-1',
         subtotal: 100.0,
         totalTax: 15.0,
         total: 115.0,
         isCanceled: isCanceled,
+        type: type,
+        syncStatus: syncStatus,
       );
 
   setUp(() {
@@ -49,6 +72,9 @@ void main() {
     WidgetTester tester, {
     UserRole role = UserRole.cashier,
     bool isCanceled = false,
+    InvoiceType type = InvoiceType.regular,
+    SyncStatus syncStatus = SyncStatus.pending,
+    SyncService? syncService,
   }) async {
     when(mockSaleViewModel.canVoidInvoice).thenReturn(role != UserRole.waiter);
     when(mockSaleViewModel.canReprint).thenReturn(role != UserRole.waiter);
@@ -62,9 +88,16 @@ void main() {
             value: fakeHistoryViewModel,
           ),
           ChangeNotifierProvider<SaleViewModel>.value(value: mockSaleViewModel),
+          if (syncService != null) Provider<SyncService>.value(value: syncService),
         ],
         child: MaterialApp(
-          home: InvoiceDetailScreen(invoice: buildInvoice(isCanceled: isCanceled)),
+          home: InvoiceDetailScreen(
+            invoice: buildInvoice(
+              isCanceled: isCanceled,
+              type: type,
+              syncStatus: syncStatus,
+            ),
+          ),
         ),
       ),
     );
@@ -121,13 +154,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // §23.1: object (origin invoice number), scope, consequence,
-      // irreversibility; plus the DEC-3 pilot disclosure: the note stays
-      // on this terminal and is not sent to the cloud during the pilot.
+      // irreversibility; plus honest automatic cloud sync disclosure (and
+      // quarantine fallback if authorization needs review).
       expect(find.text('Factura afectada: 001-001-01-00000001'),
           findsOneWidget);
       expect(find.textContaining('todos los artículos'), findsOneWidget);
       expect(find.textContaining('permanente'), findsOneWidget);
-      expect(find.textContaining('no se envía al cloud'), findsOneWidget);
+      expect(find.textContaining('sincronizará automáticamente'), findsOneWidget);
+      expect(find.textContaining('no se envía al cloud'), findsNothing);
 
       // §23.3: the confirm button is the explicit verb, disabled until the
       // mandatory reason is typed (the reason is persisted audit metadata —
@@ -170,17 +204,15 @@ void main() {
         '001-001-01-00000001',
         'Cliente desiste de la compra',
       )).called(1);
-      // §19.2/§31 + H8 honesty split: LOCAL issuance claimed, print
-      // observed, and the DEC-3 pilot scope named (no cloud sync during
-      // the pilot — #553 honesty ceiling reconciled with the decision log).
+      // §19.2/§31 + H8 honesty split: issuance claimed, print observed,
+      // and automatic cloud sync named (no obsolete pilot disclaimer).
       expect(
           find.text(
-              'Nota de crédito emitida. Copia fiscal impresa. Durante el '
-              'piloto, la nota queda registrada en este terminal: no se '
-              'envía al cloud.'),
+              'Nota de crédito emitida. Copia fiscal impresa. '
+              'Se sincronizará automáticamente con el cloud.'),
           findsOneWidget);
       expect(find.textContaining('emitida correctamente'), findsNothing);
-      expect(find.textContaining('no se envía al cloud'), findsOneWidget);
+      expect(find.textContaining('no se envía al cloud'), findsNothing);
       // The list reloads: a credit note is a new fiscal document.
       expect(fakeHistoryViewModel.loadInvoicesCalls, 1);
     });
@@ -205,8 +237,8 @@ void main() {
       expect(find.textContaining('Nota de crédito emitida'), findsOneWidget);
       expect(find.textContaining('No se pudo imprimir la copia fiscal'),
           findsOneWidget);
-      // DEC-3 pilot scope: never a silent local-only note.
-      expect(find.textContaining('no se envía al cloud'), findsOneWidget);
+      expect(find.textContaining('sincronizará automáticamente'), findsOneWidget);
+      expect(find.textContaining('no se envía al cloud'), findsNothing);
       expect(fakeHistoryViewModel.loadInvoicesCalls, 1);
     });
 
@@ -233,6 +265,90 @@ void main() {
           findsOneWidget);
       expect(find.text('Acceso denegado.'), findsOneWidget);
       expect(fakeHistoryViewModel.loadInvoicesCalls, 0);
+    });
+  });
+
+  group('S3: credit-note sync status & quarantine retry (NHILOS Luxury +1)', () {
+    testWidgets('synced credit note renders Sincronizada status card',
+        (tester) async {
+      final fakeSync = _FakeSyncService();
+
+      await pumpDetailScreen(
+        tester,
+        role: UserRole.owner,
+        type: InvoiceType.creditNote,
+        syncStatus: SyncStatus.synced,
+        syncService: fakeSync,
+      );
+
+      expect(find.text('Sincronizada'), findsOneWidget);
+      expect(
+        find.byKey(const Key('retry_quarantined_credit_note_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('pending credit note renders Pendiente de envío status card',
+        (tester) async {
+      final fakeSync = _FakeSyncService();
+
+      await pumpDetailScreen(
+        tester,
+        role: UserRole.owner,
+        type: InvoiceType.creditNote,
+        syncStatus: SyncStatus.pending,
+        syncService: fakeSync,
+      );
+
+      expect(find.text('Pendiente de envío'), findsOneWidget);
+      expect(
+        find.byKey(const Key('retry_quarantined_credit_note_button')),
+        findsNothing,
+      );
+    });
+
+    testWidgets(
+        'quarantined credit note renders En cuarentena with durable reason and retry button',
+        (tester) async {
+      final fakeSync = _FakeSyncService()
+        ..quarantinedDocs = [
+          const QuarantinedSyncDocument(
+            invoiceId: 'cn-1',
+            invoiceNumber: 'NC-001-001-01-00000001',
+            documentType: 'CREDIT_NOTE',
+            total: 115.0,
+            reason: 'Supervisor inactivo o sin permisos vigentes',
+            code: 'SUPERVISOR_FORBIDDEN',
+          ),
+        ];
+
+      await pumpDetailScreen(
+        tester,
+        role: UserRole.owner,
+        type: InvoiceType.creditNote,
+        syncStatus: SyncStatus.pending,
+        syncService: fakeSync,
+      );
+
+      expect(find.text('En cuarentena'), findsOneWidget);
+      expect(
+        find.text('Supervisor inactivo o sin permisos vigentes'),
+        findsOneWidget,
+      );
+      final retryButton =
+          find.byKey(const Key('retry_quarantined_credit_note_button'));
+      expect(retryButton, findsOneWidget);
+      expect(find.text('Reintentar sincronización'), findsOneWidget);
+
+      await tester.tap(retryButton);
+      await tester.pumpAndSettle();
+
+      expect(fakeSync.retriedInvoiceIds, ['cn-1']);
+      expect(fakeHistoryViewModel.loadInvoicesCalls, 1);
+      expect(
+        find.textContaining('Reintento de sincronización'),
+        findsOneWidget,
+      );
     });
   });
 }
@@ -280,4 +396,77 @@ class _FakeSalesHistoryViewModel extends ChangeNotifier
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeAuditRepo implements AuditRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+
+  @override
+  Future<AuditSyncOutcome> syncLogs() async =>
+      const AuditSyncOutcome.complete();
+}
+
+class _FakeSalesRepo implements SalesRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+
+  @override
+  Future<List<Map<String, dynamic>>> getUnsyncedAggregates() async => [];
+}
+
+class _FakeInventoryRepo implements InventoryRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError();
+
+  @override
+  Future<List<InventoryMovement>> getUnsyncedMovements() async => [];
+
+  @override
+  Future<List<Purchase>> getUnsyncedPurchases() async => [];
+
+  @override
+  Future<List<CountSessionDocument>> getUnsyncedCountSessionDocuments() async =>
+      [];
+
+  @override
+  Future<List<ProductionOrderDocument>> getUnsyncedProductionOrders() async =>
+      [];
+
+  @override
+  Future<List<RecipeVersionDocument>>
+      getUnsyncedRecipeVersionDocuments() async => [];
+
+  @override
+  Future<List<ForensicAlert>> getUnsyncedForensicAlerts() async => [];
+
+  @override
+  Future<List<KardexCorrectionEntity>> getKardexCorrections() async => [];
+}
+
+class _FakeSyncService extends SyncService {
+  _FakeSyncService()
+      : super(
+          _FakeAuditRepo(),
+          _FakeSalesRepo(),
+          _FakeInventoryRepo(),
+          Dio(),
+        );
+
+  List<QuarantinedSyncDocument> quarantinedDocs = const [];
+  final List<String> retriedInvoiceIds = [];
+
+  @override
+  CloudSyncStatus get status => CloudSyncStatus.idle;
+
+  @override
+  Future<List<QuarantinedSyncDocument>> getQuarantinedDocuments() async =>
+      quarantinedDocs;
+
+  @override
+  Future<void> retryQuarantinedDocument(String invoiceId) async {
+    retriedInvoiceIds.add(invoiceId);
+    quarantinedDocs =
+        quarantinedDocs.where((d) => d.invoiceId != invoiceId).toList();
+  }
 }

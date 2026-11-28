@@ -37,8 +37,11 @@ import 'package:pos_app/data/models/fulfillment/fulfillment_persistence_entities
 import 'package:pos_app/data/mappers/audit_mapper.dart';
 import 'package:pos_app/domain/models/user.dart';
 import 'package:pos_app/domain/models/fulfillment/fulfillment_checkout_context.dart';
+import 'package:pos_app/domain/models/sync/quarantined_sync_document.dart';
 
-class SalesRepositoryImpl implements SalesRepository {
+class SalesRepositoryImpl
+    implements SalesRepository, SalesQuarantineRepository {
+  static const String _quarantineReasonsConfigKey = 'sync_quarantine_reasons';
   @override
   Future<void> acknowledgeSaleSync({
     required String invoiceId,
@@ -92,6 +95,7 @@ class SalesRepositoryImpl implements SalesRepository {
         effectiveOutcome,
       );
     }
+    await _clearQuarantineReasons([invoiceId]);
   }
 
   @override
@@ -669,6 +673,132 @@ class SalesRepositoryImpl implements SalesRepository {
   Future<void> markAsSynced(List<String> invoiceIds) async {
     if (invoiceIds.isEmpty) return;
     await invoiceDao.updateSyncStatusForIds(invoiceIds, 'synced');
+    await _clearQuarantineReasons(invoiceIds);
+  }
+
+  @override
+  Future<void> markAsQuarantined(
+    String invoiceId, {
+    String? reason,
+    String? code,
+    DateTime? quarantinedAt,
+  }) async {
+    await invoiceDao.updateSyncStatusForIds([invoiceId], 'quarantined');
+    final reasons = await _readQuarantineReasons();
+    reasons[invoiceId] = <String, dynamic>{
+      'reason': (reason != null && reason.trim().isNotEmpty)
+          ? reason.trim()
+          : 'Rechazado permanentemente por el servidor',
+      if (code != null && code.trim().isNotEmpty) 'code': code.trim(),
+      'quarantinedAt':
+          (quarantinedAt ?? DateTime.now().toUtc()).toIso8601String(),
+    };
+    await _writeQuarantineReasons(reasons);
+  }
+
+  @override
+  Future<void> retryQuarantinedDocument(String invoiceId) async {
+    final entity = await invoiceDao.getInvoiceById(invoiceId);
+    if (entity == null) return;
+    if (entity.syncStatus == 'quarantined') {
+      await invoiceDao.updateSyncStatusForIds([invoiceId], 'pending');
+    }
+    await _clearQuarantineReasons([invoiceId]);
+  }
+
+  @override
+  Future<int> getQuarantinedCount() async {
+    final entities = await invoiceDao.getInvoicesBySyncStatus('quarantined');
+    return entities.length;
+  }
+
+  @override
+  Future<List<QuarantinedSyncDocument>> getQuarantinedDocuments() async {
+    final entities = await invoiceDao.getInvoicesBySyncStatus('quarantined');
+    if (entities.isEmpty) return const [];
+    final reasons = await _readQuarantineReasons();
+    final docs = entities
+        .map((entity) {
+          final meta = reasons[entity.id];
+          final rawReason = meta?['reason'];
+          final rawCode = meta?['code'];
+          final rawAt = meta?['quarantinedAt'];
+          final parsedAt = rawAt is String ? DateTime.tryParse(rawAt) : null;
+          return QuarantinedSyncDocument(
+            invoiceId: entity.id,
+            invoiceNumber: entity.number,
+            documentType:
+                entity.type == 'creditNote' ? 'CREDIT_NOTE' : 'SALE',
+            total: entity.total,
+            reason: (rawReason is String && rawReason.trim().isNotEmpty)
+                ? rawReason
+                : 'Rechazado permanentemente por el servidor',
+            code: (rawCode is String && rawCode.trim().isNotEmpty)
+                ? rawCode
+                : null,
+            quarantinedAt:
+                parsedAt ??
+                DateTime.fromMillisecondsSinceEpoch(
+                  entity.createdAt,
+                  isUtc: true,
+                ),
+          );
+        })
+        .toList(growable: false);
+    return docs;
+  }
+
+  Future<Map<String, Map<String, dynamic>>> _readQuarantineReasons() async {
+    final config = await database.localConfigDao.getConfigByKey(
+      _quarantineReasonsConfigKey,
+    );
+    final raw = config?.value.trim() ?? '';
+    if (raw.isEmpty) return <String, Map<String, dynamic>>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return <String, Map<String, dynamic>>{};
+      final result = <String, Map<String, dynamic>>{};
+      for (final entry in decoded.entries) {
+        if (entry.key is String && entry.value is Map) {
+          result[entry.key as String] = Map<String, dynamic>.from(
+            entry.value as Map,
+          );
+        }
+      }
+      return result;
+    } catch (_) {
+      return <String, Map<String, dynamic>>{};
+    }
+  }
+
+  Future<void> _writeQuarantineReasons(
+    Map<String, Map<String, dynamic>> reasons,
+  ) async {
+    if (reasons.isEmpty) {
+      await database.localConfigDao.deleteConfig(_quarantineReasonsConfigKey);
+      return;
+    }
+    await database.localConfigDao.saveConfig(
+      LocalConfigEntity(
+        key: _quarantineReasonsConfigKey,
+        value: jsonEncode(reasons),
+        description: 'Durable quarantine reasons for sync-rejected documents',
+      ),
+    );
+  }
+
+  Future<void> _clearQuarantineReasons(Iterable<String> invoiceIds) async {
+    final reasons = await _readQuarantineReasons();
+    if (reasons.isEmpty) return;
+    var changed = false;
+    for (final id in invoiceIds) {
+      if (reasons.remove(id) != null) {
+        changed = true;
+      }
+    }
+    if (changed) {
+      await _writeQuarantineReasons(reasons);
+    }
   }
 
   /// #548: the single copy point for invoice rewrites. Carries EVERY column

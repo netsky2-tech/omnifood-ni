@@ -249,6 +249,37 @@ describe("failure states (honesty rule #548)", () => {
     expect(screen.queryByTestId("issued-number")).not.toBeInTheDocument();
   });
 
+  describe("POS-synced credit note metadata (S3)", () => {
+    it("renders origin reference, refund reason code, and authorization context cleanly", async () => {
+      mockedFetch.mockResolvedValue([
+        buildInvoice({
+          id: "inv-origin",
+          number: "001-001-01-00000010",
+          type: "regular",
+        }),
+        buildInvoice({
+          id: "inv-cn-pos",
+          number: "NC-001-001-01-00000005",
+          type: "creditNote",
+          total: -115,
+          originInvoiceId: "inv-origin",
+          refundReasonCode: "CUSTOMER_RETURN",
+          authorizedByUserId: "sup-manager-1",
+          authorizedByRole: "manager",
+        } as Partial<AdminInvoice>),
+      ]);
+
+      renderWithProviders(<CreditNotesTab />);
+      await screen.findByText("NC-001-001-01-00000005");
+
+      expect(screen.getByText(/Factura origen:/)).toBeInTheDocument();
+      expect(screen.getAllByText(/001-001-01-00000010/)).toHaveLength(2);
+      expect(screen.getByText(/CUSTOMER_RETURN/)).toBeInTheDocument();
+      expect(screen.getByText(/Gerente/)).toBeInTheDocument();
+      expect(screen.getByText(/sup-manager-1/)).toBeInTheDocument();
+    });
+  });
+
   it("translates the series-unconfigured error into actionable Spanish", async () => {
     const user = userEvent.setup();
     mockedIssue.mockRejectedValue(

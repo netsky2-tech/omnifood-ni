@@ -183,6 +183,65 @@ describe('FiscalReportsService', () => {
       expect(result.creditNoteCount).toBe(1);
     });
 
+    it('should normalize negative-signed persisted creditNote rows so they offset taxable sales and VAT payable', async () => {
+      const mockInvoices: Partial<Invoice>[] = [
+        {
+          id: 'inv-reg-1',
+          tenant_id: tenantId,
+          number: '001-001-01-00000010',
+          type: 'regular',
+          subtotal: 217.39,
+          totalTax: 32.61,
+          total: 250,
+          isCanceled: false,
+          created_at: new Date('2026-08-10T10:00:00.000Z'),
+          items: [
+            {
+              id: 'item-reg-1',
+              productId: 'p-1',
+              productName: 'Pizza Queso',
+              quantity: 2,
+              unitPrice: 125,
+              discount: 32.61,
+              originalTaxRate: 0.15,
+              appliedTaxRate: 0.15,
+              taxAmount: 32.61,
+              total: 250,
+            } as InvoiceItem,
+          ],
+        },
+        {
+          id: 'inv-cn-neg',
+          tenant_id: tenantId,
+          number: 'NC-001-00000001',
+          type: 'creditNote',
+          subtotal: -217.39,
+          totalTax: -32.61,
+          total: -250,
+          isCanceled: false,
+          created_at: new Date('2026-08-10T11:00:00.000Z'),
+          items: [],
+        },
+      ];
+
+      mockInvoiceRepo.find.mockResolvedValue(mockInvoices);
+
+      const result = await service.getMonthlySummary(tenantId, {
+        year: 2026,
+        month: 8,
+      });
+
+      expect(result.totalGrossSales).toBe(250);
+      expect(result.totalTaxableSales).toBe(217.39);
+      expect(result.totalTaxCollected).toBe(32.61);
+      expect(result.totalCreditNotes).toBe(250);
+      expect(result.totalCreditNotesTax).toBe(32.61);
+      expect(result.netTaxableSales).toBe(0);
+      expect(result.netTaxPayable).toBe(0);
+      expect(result.invoiceCount).toBe(1);
+      expect(result.creditNoteCount).toBe(1);
+    });
+
     it('should return zeroes when month has no records', async () => {
       mockInvoiceRepo.find.mockResolvedValue([]);
 

@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../../data/services/sync_service.dart';
+import '../../../domain/models/sync/quarantined_sync_document.dart';
 import '../../../presentation/features/sales/view_models/sales_history_view_model.dart';
 import '../../../presentation/features/sales/view_models/sale_view_model.dart';
 import '../../../domain/models/sales/invoice.dart';
@@ -81,6 +84,8 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
   Invoice? _selectedInvoice;
   bool _isSearching = false;
   final TextEditingController _searchController = TextEditingController();
+  StreamSubscription<CloudSyncStatus>? _syncStatusSub;
+  Map<String, QuarantinedSyncDocument> _quarantinedById = const {};
 
   @override
   void initState() {
@@ -90,12 +95,36 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
         _searchController.clear();
         context.read<SalesHistoryViewModel>().setSearchQuery('');
         context.read<SalesHistoryViewModel>().loadInvoices();
+        _subscribeSyncStatus();
+        _refreshQuarantinedDocs();
       }
     });
   }
 
+  void _subscribeSyncStatus() {
+    try {
+      final syncService = context.read<SyncService>();
+      _syncStatusSub = syncService.onStatusChanged.listen((_) {
+        _refreshQuarantinedDocs();
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _refreshQuarantinedDocs() async {
+    if (!mounted) return;
+    try {
+      final syncService = context.read<SyncService>();
+      final docs = await syncService.getQuarantinedDocuments();
+      if (!mounted) return;
+      setState(() {
+        _quarantinedById = {for (final doc in docs) doc.invoiceId: doc};
+      });
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    _syncStatusSub?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -362,6 +391,11 @@ class _SalesHistoryViewState extends State<SalesHistoryView> {
                                   color: NhilosColors.neutralGrayDark,
                                 ),
                               ),
+                            ),
+                          if (invoice.type == InvoiceType.creditNote)
+                            _CreditNoteSyncChip(
+                              invoice: invoice,
+                              quarantinedDoc: _quarantinedById[invoice.id],
                             ),
                         ],
                       ),
@@ -746,6 +780,10 @@ class InvoiceDetailsPanel extends StatelessWidget {
           // D-14: the operator's name, resolved from the view model's
           // id→name map — never the device-observed UUID.
           Text('Usuario: ${viewModel.userNameFor(invoice.userId)}'),
+          if (invoice.type == InvoiceType.creditNote) ...[
+            const SizedBox(height: 12),
+            _CreditNoteSyncStatusCard(invoice: invoice),
+          ],
           const Divider(height: 24),
           
           Expanded(
@@ -1220,12 +1258,12 @@ class InvoiceDetailsPanel extends StatelessWidget {
                 'registrada y no puede eliminarse (normativa DGI).',
               ),
               const SizedBox(height: 8),
-              // DEC-3 pilot disclosure: the note is issued at the register
-              // and is deliberately NOT synced to the cloud during the
-              // pilot (DSI-6 pending). No silent local-only documents.
+              // S3: honest automatic cloud sync disclosure (and quarantine
+              // fallback if authorization needs review).
               const Text(
-                'Durante el piloto, la nota queda registrada en este '
-                'terminal: no se envía al cloud.',
+                'La nota queda guardada localmente y se sincronizará '
+                'automáticamente con el cloud. Si la autorización requiere '
+                'revisión, permanecerá en cuarentena hasta reintentarse.',
               ),
               const SizedBox(height: 16),
               TextField(
@@ -1270,15 +1308,13 @@ class InvoiceDetailsPanel extends StatelessWidget {
                                 content: Text(
                                   printed
                                       ? 'Nota de crédito emitida. Copia fiscal '
-                                          'impresa. Durante el piloto, la '
-                                          'nota queda registrada en este '
-                                          'terminal: no se envía al cloud.'
+                                          'impresa. Se sincronizará '
+                                          'automáticamente con el cloud.'
                                       : 'Nota de crédito emitida. No se pudo '
                                           'imprimir la copia fiscal; use '
                                           'REIMPRIMIR para reintentarlo. '
-                                          'Durante el piloto, la nota queda '
-                                          'registrada en este terminal: no '
-                                          'se envía al cloud.',
+                                          'Se sincronizará automáticamente con '
+                                          'el cloud.',
                                 ),
                               ),
                             );
@@ -1308,4 +1344,271 @@ class InvoiceDetailsPanel extends StatelessWidget {
     );
   }
 
+}
+
+enum _CreditNoteSyncState { synced, pending, quarantined }
+
+_CreditNoteSyncState _resolveCreditNoteSyncState(
+  Invoice invoice,
+  QuarantinedSyncDocument? quarantinedDoc,
+) {
+  if (quarantinedDoc != null) return _CreditNoteSyncState.quarantined;
+  if (invoice.syncStatus == SyncStatus.synced) {
+    return _CreditNoteSyncState.synced;
+  }
+  return _CreditNoteSyncState.pending;
+}
+
+class _CreditNoteSyncChip extends StatelessWidget {
+  final Invoice invoice;
+  final QuarantinedSyncDocument? quarantinedDoc;
+
+  const _CreditNoteSyncChip({
+    required this.invoice,
+    required this.quarantinedDoc,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _resolveCreditNoteSyncState(invoice, quarantinedDoc);
+    final (label, bg, border, fg) = switch (state) {
+      _CreditNoteSyncState.synced => (
+          'Sincronizada',
+          NhilosColors.successLight,
+          NhilosColors.successBorder,
+          NhilosColors.success,
+        ),
+      _CreditNoteSyncState.pending => (
+          'Pendiente de envío',
+          NhilosColors.neutralGray,
+          NhilosColors.border,
+          NhilosColors.neutralGrayDark,
+        ),
+      _CreditNoteSyncState.quarantined => (
+          'En cuarentena',
+          NhilosColors.warningLight,
+          NhilosColors.warningBorder,
+          NhilosColors.warning,
+        ),
+    };
+
+    return Semantics(
+      label: 'Estado de sincronización: $label',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: NhilosRadii.badgeRadius,
+          border: Border.all(color: border),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: fg,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CreditNoteSyncStatusCard extends StatefulWidget {
+  final Invoice invoice;
+
+  const _CreditNoteSyncStatusCard({required this.invoice});
+
+  @override
+  State<_CreditNoteSyncStatusCard> createState() =>
+      _CreditNoteSyncStatusCardState();
+}
+
+class _CreditNoteSyncStatusCardState extends State<_CreditNoteSyncStatusCard> {
+  StreamSubscription<CloudSyncStatus>? _statusSub;
+  QuarantinedSyncDocument? _quarantinedDoc;
+  bool _retrying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+    _loadQuarantinedState();
+  }
+
+  @override
+  void didUpdateWidget(covariant _CreditNoteSyncStatusCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.invoice.id != widget.invoice.id ||
+        oldWidget.invoice.syncStatus != widget.invoice.syncStatus) {
+      _loadQuarantinedState();
+    }
+  }
+
+  SyncService? _readSyncService() {
+    try {
+      return context.read<SyncService>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _subscribe() {
+    final syncService = _readSyncService();
+    if (syncService == null) return;
+    _statusSub = syncService.onStatusChanged.listen((_) {
+      _loadQuarantinedState();
+    });
+  }
+
+  Future<void> _loadQuarantinedState() async {
+    final syncService = _readSyncService();
+    if (syncService == null) return;
+    try {
+      final docs = await syncService.getQuarantinedDocuments();
+      if (!mounted) return;
+      QuarantinedSyncDocument? match;
+      for (final doc in docs) {
+        if (doc.invoiceId == widget.invoice.id) {
+          match = doc;
+          break;
+        }
+      }
+      setState(() => _quarantinedDoc = match);
+    } catch (_) {}
+  }
+
+  Future<void> _handleRetry() async {
+    final syncService = _readSyncService();
+    if (syncService == null || _retrying) return;
+    setState(() => _retrying = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final historyVm = context.read<SalesHistoryViewModel>();
+    try {
+      await syncService.retryQuarantinedDocument(widget.invoice.id);
+      await _loadQuarantinedState();
+      await historyVm.loadInvoices();
+      if (!mounted) return;
+      final stillQuarantined = _quarantinedDoc != null;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            stillQuarantined
+                ? 'La nota de crédito sigue en cuarentena. Revise el motivo.'
+                : 'Reintento de sincronización ejecutado.',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('No se pudo reintentar la sincronización.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _retrying = false);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _statusSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = _resolveCreditNoteSyncState(widget.invoice, _quarantinedDoc);
+    final (label, subtitle, bg, border, fg, icon) = switch (state) {
+      _CreditNoteSyncState.synced => (
+          'Sincronizada',
+          'Respaldada en el cloud.',
+          NhilosColors.successLight,
+          NhilosColors.successBorder,
+          NhilosColors.success,
+          Icons.cloud_done_outlined,
+        ),
+      _CreditNoteSyncState.pending => (
+          'Pendiente de envío',
+          'Se sincronizará automáticamente con el cloud.',
+          NhilosColors.neutralGray,
+          NhilosColors.border,
+          NhilosColors.neutralGrayDark,
+          Icons.cloud_upload_outlined,
+        ),
+      _CreditNoteSyncState.quarantined => (
+          'En cuarentena',
+          _quarantinedDoc!.reason,
+          NhilosColors.warningLight,
+          NhilosColors.warningBorder,
+          NhilosColors.warning,
+          Icons.warning_amber_rounded,
+        ),
+    };
+
+    return Semantics(
+      label: 'Estado de sincronización de nota de crédito: $label',
+      container: true,
+      child: Container(
+        key: const Key('credit_note_sync_status_card'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: NhilosRadii.cardRadius,
+          border: Border.all(color: border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: fg, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: fg,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                color: NhilosColors.textSecondary,
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+            if (state == _CreditNoteSyncState.quarantined) ...[
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: const Key('retry_quarantined_credit_note_button'),
+                onPressed: _retrying ? null : _handleRetry,
+                icon: _retrying
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh, size: 16),
+                label: Text(
+                  _retrying ? 'Reintentando...' : 'Reintentar sincronización',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -177,7 +177,11 @@ export class SyncCreditNoteAuthGuard implements CanActivate {
               is_active: true,
             },
           });
-          if (!found || found.tenant_id !== tenantId || found.is_active !== true) {
+          if (
+            !found ||
+            found.tenant_id !== tenantId ||
+            found.is_active !== true
+          ) {
             throw new ForbiddenException(
               'CREDIT_NOTE authorizing supervisor must be an active same-tenant manager or owner',
             );

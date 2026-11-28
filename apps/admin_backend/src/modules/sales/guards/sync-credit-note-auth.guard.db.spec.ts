@@ -55,6 +55,7 @@ import { InvoiceItem } from '../entities/invoice-item.entity';
 import { Invoice } from '../entities/invoice.entity';
 import { Payment } from '../entities/payment.entity';
 import { InvoicesService } from '../services/invoices.service';
+import { FiscalReportsService } from '../services/fiscal-reports.service';
 import { SyncCreditNoteAuthGuard } from './sync-credit-note-auth.guard';
 
 const postgresConnection = {
@@ -147,7 +148,10 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
           controllers: [SyncBatchController],
           providers: [
             { provide: InvoicesService, useValue: invoicesService },
-            { provide: DEVICE_SYNC_JWT_CONFIG, useValue: mockDeviceSyncJwtConfig },
+            {
+              provide: DEVICE_SYNC_JWT_CONFIG,
+              useValue: mockDeviceSyncJwtConfig,
+            },
             { provide: IDENTITY_JWT_CONFIG, useValue: mockIdentityJwtConfig },
             { provide: JwtService, useValue: jwtService },
             { provide: DataSource, useValue: dataSource },
@@ -170,6 +174,7 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
         const tenantA = randomUUID();
         const tenantB = randomUUID();
         const managerAId = randomUUID();
+        const inactiveManagerAId = randomUUID();
         const cashierAId = randomUUID();
         const managerBId = randomUUID();
         const attemptId = randomUUID();
@@ -199,7 +204,8 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
           `INSERT INTO users (id, tenant_id, email, password_hash, name, role, is_active, created_at, updated_at)
            VALUES ($1, $2, 'mgr-a@test.local', 'hash', 'Manager A', $3, true, now(), now()),
                   ($4, $2, 'cash-a@test.local', 'hash', 'Cashier A', $5, true, now(), now()),
-                  ($6, $7, 'mgr-b@test.local', 'hash', 'Manager B', $3, true, now(), now())`,
+                  ($6, $7, 'mgr-b@test.local', 'hash', 'Manager B', $3, true, now(), now()),
+                  ($8, $2, 'inactive-mgr-a@test.local', 'hash', 'Inactive Manager A', $3, false, now(), now())`,
           [
             managerAId,
             tenantA,
@@ -208,6 +214,7 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
             UserRole.CASHIER,
             managerBId,
             tenantB,
+            inactiveManagerAId,
           ],
         );
 
@@ -220,7 +227,14 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
              created_at, updated_at
            )
            VALUES ($1, $2, $3, $4, $4, 'PASS', $5, now(), 1, 'fp-fiscal-1', $6, 'fp-prod-1', now(), now())`,
-          [attemptId, tenantA, onboardingSessionId, terminalId, managerAId, productId],
+          [
+            attemptId,
+            tenantA,
+            onboardingSessionId,
+            terminalId,
+            managerAId,
+            productId,
+          ],
         );
 
         await dataSource.query(
@@ -372,7 +386,35 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
           )
           .expect(403);
 
-        // 2) Cross-tenant supervisor: Tenant B manager -> 403 Forbidden
+        // 2) Explicit CASHIER role -> 403 Forbidden
+        await request(app.getHttpServer())
+          .post('/v1/sync/batch')
+          .set('Authorization', `Bearer ${token}`)
+          .send(
+            buildPayload(
+              `cn-cashier-${creditNoteId}`,
+              cashierAId,
+              'cashier',
+              1,
+            ),
+          )
+          .expect(403);
+
+        // 3) Inactive same-tenant supervisor -> 403 Forbidden
+        await request(app.getHttpServer())
+          .post('/v1/sync/batch')
+          .set('Authorization', `Bearer ${token}`)
+          .send(
+            buildPayload(
+              `cn-inactive-${creditNoteId}`,
+              inactiveManagerAId,
+              'manager',
+              1,
+            ),
+          )
+          .expect(403);
+
+        // 4) Cross-tenant supervisor: Tenant B manager -> 403 Forbidden
         await request(app.getHttpServer())
           .post('/v1/sync/batch')
           .set('Authorization', `Bearer ${token}`)
@@ -381,19 +423,44 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
           )
           .expect(403);
 
-        const [stockBefore] = (await dataSource.query(
+        const rejectedRows: Array<{ id: string }> = await dataSource.query(
+          `SELECT id FROM invoices WHERE id = $1`,
+          [creditNoteId],
+        );
+        expect(rejectedRows).toHaveLength(0);
+
+        const fiscalReportsService = new FiscalReportsService(
+          dataSource.getRepository(Invoice),
+          dataSource.getRepository(User),
+          dataSource,
+        );
+        const summaryBefore =
+          await fiscalReportsService.getMonthlySummary(tenantA);
+        expect(summaryBefore.totalGrossSales).toBe(250);
+        expect(summaryBefore.totalTaxableSales).toBe(250);
+        expect(summaryBefore.totalTaxCollected).toBe(32.61);
+        expect(summaryBefore.netTaxableSales).toBe(250);
+        expect(summaryBefore.netTaxPayable).toBe(32.61);
+        expect(summaryBefore.invoiceCount).toBe(1);
+        expect(summaryBefore.creditNoteCount).toBe(0);
+
+        const [stockBefore]: Array<{ stock: string }> = await dataSource.query(
           `SELECT stock FROM insumos WHERE id = $1`,
           [insumoId],
-        )) as Array<{ stock: string }>;
+        );
         expect(Number(stockBefore.stock)).toBe(8);
 
-        // 3) Genuine active same-tenant MANAGER -> 201 Created + persists + reverses inventory
+        // 5) Genuine active same-tenant MANAGER -> 201 Created + APPLIED + persists + reverses inventory
+        const validPayload = buildPayload(
+          `cn-valid-${creditNoteId}`,
+          managerAId,
+          'manager',
+          1,
+        );
         const okRes = await request(app.getHttpServer())
           .post('/v1/sync/batch')
           .set('Authorization', `Bearer ${token}`)
-          .send(
-            buildPayload(`cn-valid-${creditNoteId}`, managerAId, 'manager', 1),
-          )
+          .send(validPayload)
           .expect(201);
 
         expect(okRes.body).toEqual(
@@ -401,20 +468,27 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
             status: 'success',
             received: 1,
             processed: 1,
+            results: [
+              expect.objectContaining({
+                idempotencyKey: `cn-valid-${creditNoteId}`,
+                status: 'ACCEPTED',
+                code: 'APPLIED',
+              }),
+            ],
           }),
         );
 
-        const [persistedCn] = (await dataSource.query(
-          `SELECT id, type, origin_invoice_id, authorized_by_user_id, authorized_by_role
-           FROM invoices WHERE id = $1`,
-          [creditNoteId],
-        )) as Array<{
+        const [persistedCn]: Array<{
           id: string;
           type: string;
           origin_invoice_id: string;
           authorized_by_user_id: string;
           authorized_by_role: string;
-        }>;
+        }> = await dataSource.query(
+          `SELECT id, type, origin_invoice_id, authorized_by_user_id, authorized_by_role
+           FROM invoices WHERE id = $1`,
+          [creditNoteId],
+        );
         expect(persistedCn).toEqual({
           id: creditNoteId,
           type: 'creditNote',
@@ -423,12 +497,58 @@ describe('SyncCreditNoteAuthGuard (real PostgreSQL DB + HTTP E2E)', () => {
           authorized_by_role: 'manager',
         });
 
-        const [stockAfter] = (await dataSource.query(
+        const [stockAfter]: Array<{
+          stock: string;
+          existencia_actual: string;
+        }> = await dataSource.query(
           `SELECT stock, existencia_actual FROM insumos WHERE id = $1`,
           [insumoId],
-        )) as Array<{ stock: string; existencia_actual: string }>;
+        );
         expect(Number(stockAfter.stock)).toBe(10);
         expect(Number(stockAfter.existencia_actual)).toBe(10);
+
+        // 6) FiscalReportsService.getMonthlySummary offsets gross/taxable sales & VAT
+        const summaryAfter =
+          await fiscalReportsService.getMonthlySummary(tenantA);
+        expect(summaryAfter.totalGrossSales).toBe(250);
+        expect(summaryAfter.totalTaxableSales).toBe(250);
+        expect(summaryAfter.totalTaxCollected).toBe(32.61);
+        expect(summaryAfter.totalCreditNotes).toBe(250);
+        expect(summaryAfter.totalCreditNotesTax).toBe(32.61);
+        expect(summaryAfter.netTaxableSales).toBe(32.61);
+        expect(summaryAfter.netTaxPayable).toBe(0);
+        expect(summaryAfter.invoiceCount).toBe(1);
+        expect(summaryAfter.creditNoteCount).toBe(1);
+
+        // 7) Idempotency: re-sending same CREDIT_NOTE with same idempotencyKey -> DUPLICATE, no double-offset
+        const dupRes = await request(app.getHttpServer())
+          .post('/v1/sync/batch')
+          .set('Authorization', `Bearer ${token}`)
+          .send(validPayload)
+          .expect(201);
+
+        expect(dupRes.body).toEqual(
+          expect.objectContaining({
+            status: 'success',
+            received: 1,
+            processed: 0,
+            duplicates: 1,
+            results: [
+              expect.objectContaining({
+                idempotencyKey: `cn-valid-${creditNoteId}`,
+                status: 'DUPLICATE',
+              }),
+            ],
+          }),
+        );
+
+        const summaryAfterDup =
+          await fiscalReportsService.getMonthlySummary(tenantA);
+        expect(summaryAfterDup.totalCreditNotes).toBe(250);
+        expect(summaryAfterDup.totalCreditNotesTax).toBe(32.61);
+        expect(summaryAfterDup.netTaxableSales).toBe(32.61);
+        expect(summaryAfterDup.netTaxPayable).toBe(0);
+        expect(summaryAfterDup.creditNoteCount).toBe(1);
       } finally {
         if (app) {
           await app.close();

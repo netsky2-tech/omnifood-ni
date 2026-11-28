@@ -23,7 +23,8 @@ import 'package:pos_app/domain/security/device_sync_exchange_port.dart';
 import '../security/support/fake_cloud_credential_store.dart';
 
 class _MockAuditRepo extends Mock implements AuditRepository {}
-class _MockSalesRepo extends Mock implements SalesRepository {}
+class _MockSalesRepo extends Mock
+    implements SalesRepository, SalesQuarantineRepository {}
 class _MockInventoryRepo extends Mock implements InventoryRepository {}
 class _MockExchangePort extends Mock implements DeviceSyncExchangePort {}
 class _MockDeviceSyncStore extends Mock implements DeviceSyncCredentialStore {}
@@ -504,6 +505,99 @@ void main() {
       expect(outcome.status, SyncRunStatus.partial);
       expect(syncService.isAuthBlocked, isFalse);
       verify(() => inventoryRepo.markMovementAsFailed('mov-1', error: any(named: 'error'))).called(1);
+    },
+  );
+
+  test(
+    '#522 S2: CREDIT_NOTE 403 over device transport quarantines only the credit note while concurrent SALE succeeds and terminal stays unblocked',
+    () async {
+      when(() => salesRepo.getUnsyncedAggregates()).thenAnswer(
+        (_) async => [
+          {
+            'id': 'sale-dev-1',
+            'number': 'F001-010',
+            'documentType': 'SALE',
+            'terminalId': 'term-1',
+            'sourceSequence': 1,
+            'idempotencyKey': 'sale:term-1:sale-dev-1',
+          },
+          {
+            'id': 'cn-dev-403',
+            'number': 'NC-010',
+            'documentType': 'CREDIT_NOTE',
+            'terminalId': 'term-1',
+            'sourceSequence': 2,
+            'idempotencyKey': 'credit-note:term-1:cn-dev-403',
+            'originInvoiceId': 'sale-dev-1',
+            'refundReasonCode': 'DEVOLUCION',
+            'authorizedByUserId': '11111111-1111-4111-8111-111111111111',
+            'authorizedByRole': 'manager',
+          },
+        ],
+      );
+      when(() => salesRepo.markAsSynced(any())).thenAnswer((_) async {});
+      when(
+        () => salesRepo.markAsQuarantined(
+          any(),
+          reason: any(named: 'reason'),
+          code: any(named: 'code'),
+          quarantinedAt: any(named: 'quarantinedAt'),
+        ),
+      ).thenAnswer((_) async {});
+
+      syncDio.httpClientAdapter = _MockHttpClientAdapter((options) {
+        if (options.path.contains('alerts')) {
+          return ResponseBody.fromString(
+            '{"alerts": []}',
+            200,
+            headers: {
+              HttpHeaders.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        if (options.path == '/v1/sync/batch') {
+          final records =
+              ((options.data as Map<String, dynamic>)['records'] as List<dynamic>)
+                  .cast<Map<String, dynamic>>();
+          if (records.any((r) => r['documentType'] == 'CREDIT_NOTE')) {
+            return ResponseBody.fromString(
+              '{"code": "SUPERVISOR_INACTIVE", "message": "Supervisor inactivo"}',
+              403,
+              headers: {
+                HttpHeaders.contentTypeHeader: [Headers.jsonContentType],
+              },
+            );
+          }
+          return ResponseBody.fromString(
+            '{"status": "OK", "results": [{"idempotencyKey": "sale:term-1:sale-dev-1", "terminalId": "term-1", "flowType": "sales", "sourceSequence": 1, "status": "APPLIED"}]}',
+            200,
+            headers: {
+              HttpHeaders.contentTypeHeader: [Headers.jsonContentType],
+            },
+          );
+        }
+        return ResponseBody.fromString(
+          '{"ok": true}',
+          200,
+          headers: {
+            HttpHeaders.contentTypeHeader: [Headers.jsonContentType],
+          },
+        );
+      });
+
+      final outcome = await syncService.triggerManualSync();
+
+      expect(outcome.status, SyncRunStatus.complete);
+      expect(syncService.isAuthBlocked, isFalse);
+      verify(() => salesRepo.markAsSynced(['sale-dev-1'])).called(1);
+      verify(
+        () => salesRepo.markAsQuarantined(
+          'cn-dev-403',
+          reason: 'Supervisor inactivo',
+          code: 'SUPERVISOR_INACTIVE',
+          quarantinedAt: any(named: 'quarantinedAt'),
+        ),
+      ).called(1);
     },
   );
 }

@@ -3427,4 +3427,128 @@ void main() {
       expect(contJson['contingencyManualIssuedAt'], '2026-11-27');
     });
   });
+
+  group('#522 S2: durable quarantine state & retry in SalesRepositoryImpl', () {
+    late AppDatabase db;
+    late SalesRepositoryImpl realRepo;
+
+    setUpAll(() {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+    });
+
+    setUp(() async {
+      db = await $FloorAppDatabase.inMemoryDatabaseBuilder().build();
+      realRepo = SalesRepositoryImpl(
+        database: db,
+        invoiceDao: db.invoiceDao,
+        itemDao: db.invoiceItemDao,
+        paymentDao: db.paymentDao,
+        transactionDao: db.salesTransactionDao,
+        numberingService: MockDgiNumberingService(),
+        movementEngine: MockMovementEngine(),
+        auditRepository: MockAuditRepository(),
+        processInventoryUseCase: MockProcessSaleInventoryUseCase(),
+        reverseInventoryUseCase: MockReverseSaleInventoryUseCase(),
+        inventoryRepository: MockInventoryRepository(),
+      );
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    test(
+      'markAsQuarantined persists status and metadata; getQuarantinedCount/Documents return it; retryQuarantinedDocument resets to pending with same idempotencyKey and clears metadata',
+      () async {
+        final now = DateTime.utc(2026, 7, 13, 12, 0, 0);
+        await db.invoiceDao.insertInvoice(
+          InvoiceEntity(
+            id: 'cn-q-1',
+            number: 'NC-001',
+            createdAt: now.millisecondsSinceEpoch,
+            userId: 'cashier-1',
+            subtotal: -100,
+            totalTax: -15,
+            total: -115,
+            syncStatus: 'pending',
+            paymentStatus: 'paid',
+            type: 'creditNote',
+            terminalId: 'term-1',
+            sourceSequence: 42,
+            idempotencyKey: 'credit-note:term-1:cn-q-1',
+          ),
+        );
+
+        await realRepo.markAsQuarantined(
+          'cn-q-1',
+          reason: 'Supervisor inactivo',
+          code: 'SUPERVISOR_INACTIVE',
+          quarantinedAt: now,
+        );
+
+        final afterQuarantine = await db.invoiceDao.getInvoiceById('cn-q-1');
+        expect(afterQuarantine?.syncStatus, 'quarantined');
+        expect(await realRepo.getQuarantinedCount(), 1);
+        expect(await realRepo.getUnsyncedAggregates(), isEmpty);
+
+        final docs = await realRepo.getQuarantinedDocuments();
+        expect(docs, hasLength(1));
+        expect(docs.single.invoiceId, 'cn-q-1');
+        expect(docs.single.invoiceNumber, 'NC-001');
+        expect(docs.single.documentType, 'CREDIT_NOTE');
+        expect(docs.single.total, -115);
+        expect(docs.single.reason, 'Supervisor inactivo');
+        expect(docs.single.code, 'SUPERVISOR_INACTIVE');
+        expect(docs.single.quarantinedAt, now);
+
+        await realRepo.retryQuarantinedDocument('cn-q-1');
+
+        final afterRetry = await db.invoiceDao.getInvoiceById('cn-q-1');
+        expect(afterRetry?.syncStatus, 'pending');
+        expect(afterRetry?.idempotencyKey, 'credit-note:term-1:cn-q-1');
+        expect(afterRetry?.sourceSequence, 42);
+        expect(await realRepo.getQuarantinedCount(), 0);
+        expect(await realRepo.getQuarantinedDocuments(), isEmpty);
+        expect(await realRepo.getUnsyncedAggregates(), hasLength(1));
+      },
+    );
+
+    test('markAsSynced clears any prior quarantine metadata', () async {
+      final now = DateTime.utc(2026, 7, 13, 12, 0, 0);
+      await db.invoiceDao.insertInvoice(
+        InvoiceEntity(
+          id: 'cn-q-2',
+          number: 'NC-002',
+          createdAt: now.millisecondsSinceEpoch,
+          userId: 'cashier-1',
+          subtotal: -50,
+          totalTax: -7.5,
+          total: -57.5,
+          syncStatus: 'pending',
+          paymentStatus: 'paid',
+          type: 'creditNote',
+          terminalId: 'term-1',
+          sourceSequence: 43,
+          idempotencyKey: 'credit-note:term-1:cn-q-2',
+        ),
+      );
+
+      await realRepo.markAsQuarantined(
+        'cn-q-2',
+        reason: 'Error temporal',
+        code: 'ERR',
+        quarantinedAt: now,
+      );
+      expect(await realRepo.getQuarantinedCount(), 1);
+
+      await realRepo.markAsSynced(['cn-q-2']);
+      expect(await realRepo.getQuarantinedCount(), 0);
+      expect(await realRepo.getQuarantinedDocuments(), isEmpty);
+      expect(
+        await db.localConfigDao.getConfigByKey('sync_quarantine_reasons'),
+        isNull,
+      );
+    });
+  });
 }

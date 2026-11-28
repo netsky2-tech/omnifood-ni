@@ -101,6 +101,51 @@ function formatContingencyRef(invoice: AdminInvoice): string | null {
     : `Ref. manual: ${series}-${number}`;
 }
 
+type CreditNoteInvoiceMetadata = AdminInvoice & {
+  originInvoiceId?: string | null;
+  relatedInvoiceId?: string | null;
+  refundReasonCode?: string | null;
+  authorizedByUserId?: string | null;
+  authorizedByRole?: string | null;
+};
+
+function formatAuthorizedRole(role?: string | null): string | null {
+  const normalized = role?.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "owner") return "Propietario";
+  if (normalized === "manager") return "Gerente";
+  return role!.trim();
+}
+
+function formatCreditNoteContext(
+  invoice: CreditNoteInvoiceMetadata,
+  invoiceNumberById: Map<string, string>,
+): {
+  originRef: string | null;
+  reasonCode: string | null;
+  authorization: string | null;
+} | null {
+  if (invoice.type !== "creditNote") return null;
+  const rawOriginId =
+    invoice.originInvoiceId?.trim() || invoice.relatedInvoiceId?.trim() || null;
+  const originRef = rawOriginId
+    ? (invoiceNumberById.get(rawOriginId) ?? rawOriginId)
+    : null;
+  const reasonCode = invoice.refundReasonCode?.trim() || null;
+  const roleLabel = formatAuthorizedRole(invoice.authorizedByRole);
+  const authUser = invoice.authorizedByUserId?.trim() || null;
+  let authorization: string | null = null;
+  if (roleLabel && authUser) {
+    authorization = `${roleLabel} (${authUser})`;
+  } else if (roleLabel) {
+    authorization = roleLabel;
+  } else if (authUser) {
+    authorization = authUser;
+  }
+  if (!originRef && !reasonCode && !authorization) return null;
+  return { originRef, reasonCode, authorization };
+}
+
 function IssuanceDialog({
   invoice,
   onClose,
@@ -312,6 +357,9 @@ export function CreditNotesTab() {
   // The backend list endpoint is unpaginated (findAll); cap the display to
   // the most recent rows so the picker stays a picker, not a report.
   const visible = invoices.slice(0, 50);
+  const invoiceNumberById = new Map(
+    invoices.map((inv) => [inv.id, inv.number]),
+  );
 
   return (
     <div className="space-y-6">
@@ -368,6 +416,10 @@ export function CreditNotesTab() {
               <tbody>
                 {visible.map((invoice) => {
                   const contingencyRef = formatContingencyRef(invoice);
+                  const creditNoteContext = formatCreditNoteContext(
+                    invoice as CreditNoteInvoiceMetadata,
+                    invoiceNumberById,
+                  );
                   return (
                     <tr
                       key={invoice.id}
@@ -383,6 +435,31 @@ export function CreditNotesTab() {
                             <span className="font-mono text-[11px] text-muted-foreground">
                               {contingencyRef}
                             </span>
+                          </div>
+                        )}
+                        {creditNoteContext && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                            {creditNoteContext.originRef && (
+                              <span>
+                                Factura origen:{" "}
+                                <span className="font-mono text-foreground/80">
+                                  {creditNoteContext.originRef}
+                                </span>
+                              </span>
+                            )}
+                            {creditNoteContext.reasonCode && (
+                              <span>
+                                Motivo:{" "}
+                                <span className="font-mono text-foreground/80">
+                                  {creditNoteContext.reasonCode}
+                                </span>
+                              </span>
+                            )}
+                            {creditNoteContext.authorization && (
+                              <span>
+                                Autorizada por: {creditNoteContext.authorization}
+                              </span>
+                            )}
                           </div>
                         )}
                       </td>
