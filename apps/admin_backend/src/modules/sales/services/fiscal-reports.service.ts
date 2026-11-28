@@ -82,9 +82,11 @@ export class FiscalReportsService {
 
       if (isCreditNote) {
         creditNoteCount += 1;
-        totalCreditNotes = round2(totalCreditNotes + Number(inv.total ?? 0));
+        totalCreditNotes = round2(
+          totalCreditNotes + Math.abs(Number(inv.total ?? 0)),
+        );
         totalCreditNotesTax = round2(
-          totalCreditNotesTax + Number(inv.totalTax ?? 0),
+          totalCreditNotesTax + Math.abs(Number(inv.totalTax ?? 0)),
         );
       } else {
         invoiceCount += 1;
