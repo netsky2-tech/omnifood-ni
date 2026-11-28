@@ -122,8 +122,27 @@ class BusinessProfileViewModel extends ChangeNotifier {
 
   TaxRegime? get taxRegime => TaxRegime.fromString(_config['tax_regime']);
 
+  bool _upgradedFromControlInterno = false;
+  bool get upgradedFromControlInterno => _upgradedFromControlInterno;
+
   void setTaxRegime(TaxRegime regime) {
+    final previous = taxRegime;
     _config['tax_regime'] = regime.code;
+    if (previous == TaxRegime.controlInterno && regime.isFiscal) {
+      _upgradedFromControlInterno = true;
+      if ((_config['dgi_prefix'] ?? '').trim().toUpperCase() == 'NV-') {
+        _config['dgi_prefix'] = regime.isRegimenGeneral ? 'F-' : '';
+        final existingStart = (_config['dgi_range_start'] ?? '').trim();
+        final existingNumber =
+            int.tryParse((_config['dgi_current_number'] ?? '').trim());
+        if (existingStart.isEmpty || existingNumber == null || existingNumber <= 0) {
+          _config['dgi_current_number'] = '1';
+          _config['dgi_range_start'] = '1';
+        }
+      }
+    } else if (regime.isControlInterno) {
+      _upgradedFromControlInterno = false;
+    }
     notifyListeners();
   }
 
@@ -320,7 +339,51 @@ class BusinessProfileViewModel extends ChangeNotifier {
       );
       _cloudManagedKeys = _parseManagedKeys(markerEntity?.value);
 
-      for (final entry in newConfig.entries) {
+      final effectiveConfig = Map<String, String>.from(newConfig);
+      final targetRegime = TaxRegime.fromString(effectiveConfig['tax_regime']);
+      var forceWritePrefix = false;
+
+      if (targetRegime == TaxRegime.controlInterno) {
+        final formNumber = effectiveConfig['dgi_current_number']?.trim() ?? '';
+        final persistedNumberEntity =
+            await _configDao.getConfigByKey('dgi_current_number');
+        final persistedNumber = persistedNumberEntity?.value.trim() ?? '';
+        if (formNumber.isEmpty && persistedNumber.isEmpty) {
+          if ((effectiveConfig['dgi_prefix']?.trim() ?? '').isEmpty) {
+            effectiveConfig['dgi_prefix'] = 'NV-';
+          }
+          effectiveConfig['dgi_current_number'] = '1';
+        }
+      } else if (targetRegime != null && targetRegime.isFiscal) {
+        final currentPrefix =
+            (effectiveConfig['dgi_prefix'] ?? '').trim().toUpperCase();
+        if (currentPrefix == 'NV-') {
+          effectiveConfig['dgi_prefix'] =
+              targetRegime.isRegimenGeneral ? 'F-' : '';
+          final persistedNumberEntity =
+              await _configDao.getConfigByKey('dgi_current_number');
+          final persistedNumber = persistedNumberEntity?.value.trim() ?? '';
+          final incomingNumber =
+              effectiveConfig['dgi_current_number']?.trim() ?? '';
+          final incomingStart =
+              effectiveConfig['dgi_range_start']?.trim() ?? '';
+          final parsedIncoming = int.tryParse(incomingNumber);
+          final hasExplicitOperatorNumber = parsedIncoming != null &&
+              parsedIncoming > 0 &&
+              (incomingNumber != persistedNumber || incomingStart.isNotEmpty);
+
+          if (!hasExplicitOperatorNumber) {
+            effectiveConfig['dgi_current_number'] = '1';
+          }
+          if (incomingStart.isEmpty) {
+            effectiveConfig['dgi_range_start'] =
+                effectiveConfig['dgi_current_number']!;
+          }
+          forceWritePrefix = true;
+        }
+      }
+
+      for (final entry in effectiveConfig.entries) {
         if (entry.key == _retiredKey) {
           // D-21: the retired range-end key is dropped on write.
           continue;
@@ -331,8 +394,10 @@ class BusinessProfileViewModel extends ChangeNotifier {
           continue;
         }
         if (_sequenceKeys.contains(entry.key) &&
-            entry.value.trim().isEmpty) {
-          // Blank sequence value = leave the persisted row untouched.
+            entry.value.trim().isEmpty &&
+            !(forceWritePrefix && entry.key == 'dgi_prefix')) {
+          // Blank sequence value = leave the persisted row untouched,
+          // unless we are explicitly clearing the internal 'NV-' prefix on upgrade.
           continue;
         }
         if (!canEditExchangeRates && _fxWriteKeys.contains(entry.key)) {
@@ -350,8 +415,9 @@ class BusinessProfileViewModel extends ChangeNotifier {
       final managedValues = <String, String>{
         for (final key in _cloudManagedKeys) key: _config[key] ?? '',
       };
-      _config = Map.from(newConfig);
+      _config = Map.from(effectiveConfig);
       _config.addAll(managedValues);
+      _upgradedFromControlInterno = false;
     } finally {
       _isLoading = false;
       notifyListeners();

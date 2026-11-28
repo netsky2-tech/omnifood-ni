@@ -78,6 +78,65 @@ describe('FiscalSetupDto (ValidationPipe boundary)', () => {
     );
   });
 
+  describe('CONTROL_INTERNO regime (issue #1049, S1)', () => {
+    it.each([
+      ['omitted', undefined],
+      ['null', null],
+      ['empty string', ''],
+      ['whitespace only', '   '],
+    ])('accepts CONTROL_INTERNO when RUC is %s', async (_label, ruc) => {
+      const body: Record<string, unknown> = {
+        ...validBody(),
+        regime: FiscalRegime.CONTROL_INTERNO,
+      };
+      if (ruc === undefined) {
+        delete body.ruc;
+      } else {
+        body.ruc = ruc;
+      }
+
+      const dto = await transformBody(body);
+      expect(dto.regime).toBe(FiscalRegime.CONTROL_INTERNO);
+    });
+
+    it('accepts CONTROL_INTERNO when a valid RUC is provided', async () => {
+      const dto = await transformBody({
+        ...validBody(),
+        regime: FiscalRegime.CONTROL_INTERNO,
+        ruc: '  001-150885-1004J  ',
+      });
+      expect(dto.regime).toBe(FiscalRegime.CONTROL_INTERNO);
+      expect(dto.ruc).toBe('001-150885-1004J');
+    });
+
+    it.each([
+      ['non-RUC prefix (CF)', 'CF-12345'],
+      ['wrong letter (K)', 'K0310000055555'],
+      ['J-RUC too short (12 digits)', 'J031000005555'],
+    ])(
+      'rejects CONTROL_INTERNO when a non-empty invalid RUC is provided (%s)',
+      async (_label, ruc) => {
+        await expect(
+          transformBody({
+            ...validBody(),
+            regime: FiscalRegime.CONTROL_INTERNO,
+            ruc,
+          }),
+        ).rejects.toThrow(BadRequestException);
+      },
+    );
+
+    it.each([FiscalRegime.CUOTA_FIJA, FiscalRegime.REGIMEN_GENERAL])(
+      'still rejects %s when RUC is omitted',
+      async (regime) => {
+        const body: Record<string, unknown> = { ...validBody(), regime };
+        delete body.ruc;
+
+        await expect(transformBody(body)).rejects.toThrow(BadRequestException);
+      },
+    );
+  });
+
   describe('accepts valid issuer RUC values', () => {
     it('accepts a legal J-RUC', async () => {
       const dto = await transformBody(validBody());

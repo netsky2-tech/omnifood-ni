@@ -128,7 +128,7 @@ class InvoiceFiscalCalculator {
     bool isGlobalTaxExempt = false,
     bool pricesIncludeTax = false,
   }) {
-    if (taxRegime == null || taxRegime.isCuotaFija) {
+    if (taxRegime == null || !taxRegime.collectsIva) {
       return (taxAmount: 0.0, appliedRate: 0.0);
     }
     // Régimen General
@@ -296,8 +296,8 @@ class InvoiceFiscalCalculator {
         lineTax = 0.0;
         lineTaxableBase = 0.0;
         lineExemptBase = 0.0;
-      } else if (taxRegime.isCuotaFija) {
-        // Cuota Fija (Art. 244 Ley 822):
+      } else if (!taxRegime.collectsIva) {
+        // Cuota Fija (Art. 244 Ley 822) & Control Interno:
         // La empresa NO recauda IVA al consumidor.
         // NUNCA se cataloga como "venta exenta" ni se agrega IVA.
         appliedRate = 0.0;
@@ -335,7 +335,7 @@ class InvoiceFiscalCalculator {
       // Every other branch (Cuota Fija, exempt, flag off) keeps the legacy
       // net-base + added-tax composition.
       final bool extracted = pricesIncludeTax &&
-          !taxRegime.isCuotaFija &&
+          taxRegime.isRegimenGeneral &&
           appliedRate > 0 &&
           !isGlobalTaxExempt;
       final lineSubtotal = extracted ? lineTaxableBase : netBase;
@@ -494,7 +494,7 @@ class InvoiceFiscalCalculator {
           ? businessName!.trim()
           : '',
       legalName: legalName,
-      ruc: businessRuc,
+      ruc: calculation.taxRegime!.isControlInterno ? null : businessRuc,
       taxRegime: calculation.taxRegime!,
       address: businessAddress,
       phone: businessPhone,
@@ -520,7 +520,9 @@ class InvoiceFiscalCalculator {
       logoRasterBytes: logoRasterBytes,
       isTaxExempt: isDocTaxExempt,
       fiscalAuthorizationNumber:
-          (fiscalAuthorizationNumber != null && fiscalAuthorizationNumber.trim().isNotEmpty)
+          (!calculation.taxRegime!.isControlInterno &&
+                  fiscalAuthorizationNumber != null &&
+                  fiscalAuthorizationNumber.trim().isNotEmpty)
               ? fiscalAuthorizationNumber.trim()
               : null,
       tipAmountNio: tipAmountNio,

@@ -1704,4 +1704,74 @@ void main() {
       },
     );
   });
+
+  group('TaxRegime.controlInterno — 0% IVA lock', () {
+    test(
+      'forces appliedRate = 0.0 and taxAmount = 0.0 on all lines even with taxRate 0.15 and pricesIncludeTax',
+      () {
+        const cart = [
+          CartItem(
+            productId: 'pulperia-1',
+            productName: 'Gaseosa 1L',
+            quantity: 2,
+            unitPrice: 45.00,
+            taxRate: 0.15,
+          ),
+          CartItem(
+            productId: 'pulperia-2',
+            productName: 'Arroz 1lb',
+            quantity: 1,
+            unitPrice: 20.00,
+            taxRate: 0.0,
+          ),
+        ];
+
+        final result = calculator.calculate(
+          cart: cart,
+          taxRegime: TaxRegime.controlInterno,
+          commercialRate: 36.50,
+          bcnOfficialRate: 36.6241,
+          pricesIncludeTax: true,
+        );
+
+        expect(result.taxRegime, TaxRegime.controlInterno);
+        expect(result.subtotal, equals(110.00));
+        expect(result.taxableSubtotal, equals(0.00));
+        expect(result.exemptSubtotal, equals(0.00));
+        expect(result.totalTax, equals(0.00));
+        expect(result.total, equals(110.00));
+        for (final line in result.lines) {
+          expect(line.appliedTaxRate, equals(0.00));
+          expect(line.taxAmount, equals(0.00));
+          expect(line.taxableBase, equals(0.00));
+          expect(line.exemptBase, equals(0.00));
+          expect(line.lineTotal, equals(line.lineSubtotal));
+        }
+
+        final doc = calculator.buildReceiptDocument(
+          calculation: result,
+          invoiceNumber: 'NV-00000001',
+          businessName: 'Pulpería La Esquina',
+          businessRuc: '',
+          fiscalAuthorizationNumber: 'SHOULD-NOT-APPEAR',
+        );
+
+        expect(doc.documentTitle, equals('NOTA DE VENTA'));
+        expect(doc.isTaxExempt, isFalse);
+        expect(doc.totalTax, equals(0.00));
+        expect(doc.total, equals(110.00));
+      },
+    );
+
+    test('computeLineTax returns 0.0 tax and 0.0 appliedRate under controlInterno', () {
+      final res = InvoiceFiscalCalculator.computeLineTax(
+        taxRegime: TaxRegime.controlInterno,
+        netBase: 100.0,
+        itemTaxRate: 0.15,
+        pricesIncludeTax: true,
+      );
+      expect(res.taxAmount, equals(0.0));
+      expect(res.appliedRate, equals(0.0));
+    });
+  });
 }

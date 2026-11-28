@@ -217,6 +217,39 @@ describe('FiscalConfigVersionService (Unit & Triangulation)', () => {
         service.getEffectiveFiscalPayload('non-existent'),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('preserves CONTROL_INTERNO regime and 0.0 taxRate in effective payload and snapshot (#1049, S1)', async () => {
+      const controlInternoParams: SystemParametersConfig[] = [
+        {
+          id: '1',
+          tenant_id: tenantId,
+          tenant: mockTenant,
+          paramKey: 'FISCAL_REGIME',
+          paramValue: FiscalRegime.CONTROL_INTERNO,
+          version: 1,
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+          isActive: true,
+          createdBy: 'user-1',
+          createdAt: new Date(),
+        },
+      ];
+      sysParamRepo.find.mockResolvedValue(controlInternoParams);
+      tenantRepo.findOne.mockResolvedValue({
+        ...mockTenant,
+        ruc: null,
+      });
+      revisionRepo.findOne.mockResolvedValue(null);
+
+      const payload = await service.getEffectiveFiscalPayload(tenantId);
+      expect(payload.fiscalRegime).toBe(FiscalRegime.CONTROL_INTERNO);
+      expect(payload.taxRate).toBe(0);
+      expect(payload.ruc).toBeNull();
+
+      const snapshot = await service.getFiscalConfigSnapshot(tenantId);
+      expect(snapshot.fiscalRegime).toBe(FiscalRegime.CONTROL_INTERNO);
+      expect(snapshot.taxRate).toBe(0);
+    });
   });
 
   // D-21 (#554): the DGI authorization fields ride the fingerprinted

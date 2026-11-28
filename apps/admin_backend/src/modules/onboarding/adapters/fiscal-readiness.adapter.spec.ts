@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { FiscalReadinessAdapter } from './fiscal-readiness.adapter';
 import { FiscalSetupService } from '../services/fiscal-setup.service';
-import { TenantOperationMode } from '../dto/fiscal-setup.dto';
+import { FiscalRegime, TenantOperationMode } from '../dto/fiscal-setup.dto';
 import type { FiscalSetupResponse } from '../dto/fiscal-setup.dto';
 
 describe('FiscalReadinessAdapter (Unit)', () => {
@@ -190,5 +190,57 @@ describe('FiscalReadinessAdapter (Unit)', () => {
 
     expect(result.commercialFxSpreadConfigured).toBeUndefined();
     expect(result.operationMode).toBeNull();
+  });
+
+  describe('CONTROL_INTERNO regime (issue #1049, S1)', () => {
+    it.each([
+      ['null', null],
+      ['empty string', ''],
+      ['whitespace only', '   '],
+      ['undefined', undefined],
+    ])(
+      'passes minimum configuration under CONTROL_INTERNO when RUC is %s',
+      async (_label, ruc) => {
+        fiscalSetupService.getFiscalSetup.mockResolvedValue(
+          configWith({
+            regime: FiscalRegime.CONTROL_INTERNO,
+            taxRateIva: 0,
+            ruc,
+          }),
+        );
+
+        const result = await adapter.evaluateFiscalReadiness('tenant-1');
+
+        expect(result.minimumConfigurationValid).toBe(true);
+        expect(result.fiscalRegime).toBe(FiscalRegime.CONTROL_INTERNO);
+      },
+    );
+
+    it('rejects CONTROL_INTERNO when a non-empty invalid RUC is present', async () => {
+      fiscalSetupService.getFiscalSetup.mockResolvedValue(
+        configWith({
+          regime: FiscalRegime.CONTROL_INTERNO,
+          taxRateIva: 0,
+          ruc: 'CF-12345',
+        }),
+      );
+
+      const result = await adapter.evaluateFiscalReadiness('tenant-1');
+
+      expect(result.minimumConfigurationValid).toBe(false);
+    });
+
+    it.each([FiscalRegime.CUOTA_FIJA, FiscalRegime.REGIMEN_GENERAL])(
+      'still rejects %s when RUC is null',
+      async (regime) => {
+        fiscalSetupService.getFiscalSetup.mockResolvedValue(
+          configWith({ regime, ruc: null }),
+        );
+
+        const result = await adapter.evaluateFiscalReadiness('tenant-1');
+
+        expect(result.minimumConfigurationValid).toBe(false);
+      },
+    );
   });
 });

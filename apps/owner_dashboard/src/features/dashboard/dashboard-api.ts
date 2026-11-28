@@ -14,7 +14,7 @@ import { api, type ApiClientMethodOptions } from "@/lib/api";
 import { toFiniteNumber } from "@/lib/numeric";
 
 /** Fiscal regimes accepted by the backend (FiscalRegime enum). */
-export type FiscalRegime = "CUOTA_FIJA" | "REGIMEN_GENERAL";
+export type FiscalRegime = "CONTROL_INTERNO" | "CUOTA_FIJA" | "REGIMEN_GENERAL";
 
 /** Normalized fiscal profile the strip is allowed to consume. */
 export interface FiscalProfile {
@@ -191,12 +191,18 @@ export function normalizeDashboardReport(raw: unknown): DashboardV2Report {
 
 /**
  * Normalizes the fiscal-setup response. Returns null when the regime is not
- * one of the two known values: per FR-FISCAL-04 an unreliable regime must
+ * one of the known values: per FR-FISCAL-04 an unreliable regime must
  * never be inferred or defaulted into an authoritative IVA conclusion.
  */
 export function normalizeFiscalProfile(raw: unknown): FiscalProfile | null {
   const r = (typeof raw === "object" && raw !== null ? raw : {}) as Record<string, unknown>;
-  if (r.regime !== "CUOTA_FIJA" && r.regime !== "REGIMEN_GENERAL") return null;
+  if (
+    r.regime !== "CONTROL_INTERNO" &&
+    r.regime !== "CUOTA_FIJA" &&
+    r.regime !== "REGIMEN_GENERAL"
+  ) {
+    return null;
+  }
   return { regime: r.regime };
 }
 

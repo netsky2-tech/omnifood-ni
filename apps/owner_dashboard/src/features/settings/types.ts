@@ -8,6 +8,7 @@ import {
 // --- Fiscal Setup ---
 
 export const FiscalRegime = {
+  CONTROL_INTERNO: "CONTROL_INTERNO",
   CUOTA_FIJA: "CUOTA_FIJA",
   REGIMEN_GENERAL: "REGIMEN_GENERAL",
 } as const;
@@ -80,21 +81,26 @@ export const DGI_AUTHORIZATION_CODE_PATTERN = /^[A-Za-z0-9\-/]*$/;
 export const COMPANY_IDENTITY_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const fiscalSetupSchema = z.object({
-  regime: z.enum([FiscalRegime.CUOTA_FIJA, FiscalRegime.REGIMEN_GENERAL], {
-    errorMap: () => ({ message: "El régimen debe ser CUOTA_FIJA o REGIMEN_GENERAL" }),
-  }),
+  regime: z.enum(
+    [
+      FiscalRegime.CONTROL_INTERNO,
+      FiscalRegime.CUOTA_FIJA,
+      FiscalRegime.REGIMEN_GENERAL,
+    ],
+    {
+      errorMap: () => ({
+        message:
+          "El régimen debe ser CONTROL_INTERNO, CUOTA_FIJA o REGIMEN_GENERAL",
+      }),
+    },
+  ),
   businessName: z
     .string()
     .trim()
     .min(1, "El nombre comercial es obligatorio"),
-  // PR-1: issuer RUC mandatory; HTTP enforcement lands in PR-2.
-  ruc: z
-    .string()
-    .trim()
-    .min(1, RUC_ACCEPTED_FORMS_MESSAGE)
-    .refine((ruc) => isValidNicaraguaFiscalId(ruc), {
-      message: RUC_ACCEPTED_FORMS_MESSAGE,
-    }),
+  // Under CONTROL_INTERNO, RUC is optional (if non-empty, validated below);
+  // under CUOTA_FIJA and REGIMEN_GENERAL, RUC remains mandatory.
+  ruc: z.string().trim().optional(),
   // Issue #75: strict FX range — the commercial rate is a C$ per USD rate,
   // so anything below 10 or above 100 is a data-entry error. Mirrors the
   // backend FiscalSetupDto (Min 10 / Max 100) and the POS validator.
@@ -206,6 +212,33 @@ export const fiscalSetupSchema = z.object({
   ),
 })
 .superRefine((values, ctx) => {
+  // #1049 (T3): Under CONTROL_INTERNO, RUC is optional (if non-empty, still
+  // validated via isValidNicaraguaFiscalId). Under CUOTA_FIJA and
+  // REGIMEN_GENERAL, RUC remains mandatory and validated.
+  if (values.regime === FiscalRegime.CONTROL_INTERNO) {
+    if (
+      values.ruc &&
+      values.ruc.length > 0 &&
+      !isValidNicaraguaFiscalId(values.ruc)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ruc"],
+        message: RUC_ACCEPTED_FORMS_MESSAGE,
+      });
+    }
+  } else if (
+    !values.ruc ||
+    values.ruc.length === 0 ||
+    !isValidNicaraguaFiscalId(values.ruc)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ruc"],
+      message: RUC_ACCEPTED_FORMS_MESSAGE,
+    });
+  }
+
   // D-21 (#554): the authorization dates are optional but PAIRED — if one is
   // filled the other must be too — and expiry must be on or after issuance,
   // mirroring the backend DgiAuthorizationDateRangeConstraint.
