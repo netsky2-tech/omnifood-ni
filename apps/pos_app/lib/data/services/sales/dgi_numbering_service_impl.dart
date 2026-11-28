@@ -34,10 +34,23 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
   /// falls back to the configured cursor. Works for both folio formats
   /// (plain `3` and padded `001-001-01-00000003`): the trailing decimal run
   /// is the consecutivo either way.
-  Future<int> _resolveNextSequence(int configuredCurrent) async {
+  Future<int> _resolveNextSequence(
+    int configuredCurrent, {
+    required String configuredPrefix,
+  }) async {
     if (_invoiceDao != null) {
       final lastInvoice = await _invoiceDao.getLastInvoice();
       if (lastInvoice != null && lastInvoice.number.isNotEmpty) {
+        final isLastNonFiscalNv =
+            lastInvoice.number.trim().toUpperCase().startsWith('NV-');
+        final isConfiguredNv =
+            configuredPrefix.trim().toUpperCase() == 'NV-';
+        if (isLastNonFiscalNv && !isConfiguredNv) {
+          // Non-fiscal CONTROL_INTERNO (NV-) history must never advance or
+          // hijack the fiscal sequence after formalization to CUOTA_FIJA or
+          // REGIMEN_GENERAL.
+          return configuredCurrent;
+        }
         final lastSequence = _extractSequenceNumber(lastInvoice.number);
         if (lastSequence >= configuredCurrent) {
           return lastSequence + 1;
@@ -88,7 +101,10 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
     // decimal consecutivo with no padding and no prefix (1, 2, 3, ...).
     final prefix = prefixEntity?.value.trim() ?? '';
     final configuredCurrent = await _readConfiguredCurrent();
-    final validSequence = await _resolveNextSequence(configuredCurrent);
+    final validSequence = await _resolveNextSequence(
+      configuredCurrent,
+      configuredPrefix: prefix,
+    );
 
     if (prefix.isEmpty) {
       return validSequence.toString();
@@ -100,8 +116,13 @@ class DgiNumberingServiceImpl implements DgiNumberingService {
 
   @override
   Future<void> incrementNumber() async {
+    final prefixEntity = await _configDao.getConfigByKey(_keyPrefix);
+    final prefix = prefixEntity?.value.trim() ?? '';
     final configuredCurrent = await _readConfiguredCurrent();
-    final validSequence = await _resolveNextSequence(configuredCurrent);
+    final validSequence = await _resolveNextSequence(
+      configuredCurrent,
+      configuredPrefix: prefix,
+    );
 
     // `_resolveNextSequence` already advances past a persisted invoice.
     // Do not advance twice when the configured cursor still points at that

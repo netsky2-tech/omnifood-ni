@@ -561,7 +561,7 @@ class ReceiptLayoutFormatter {
     }
     buffer.writeln(doubleDivider());
     buffer.writeln(center(
-      doc.taxRegime.isControlInterno
+      doc.taxRegime.isControlInterno && !doc.isCreditNote
           ? TaxRegime.controlInterno.defaultReceiptTitle
           : doc.documentTitle,
     ));
@@ -1272,7 +1272,7 @@ class ReceiptLayoutFormatter {
         .textLine(marginLine(doubleDivider()))
         .bold(true)
         .textLine(marginLine(
-          doc.taxRegime.isControlInterno
+          doc.taxRegime.isControlInterno && !doc.isCreditNote
               ? TaxRegime.controlInterno.defaultReceiptTitle
               : doc.documentTitle,
         ))

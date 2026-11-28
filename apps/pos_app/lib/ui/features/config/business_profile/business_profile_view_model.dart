@@ -132,8 +132,13 @@ class BusinessProfileViewModel extends ChangeNotifier {
       _upgradedFromControlInterno = true;
       if ((_config['dgi_prefix'] ?? '').trim().toUpperCase() == 'NV-') {
         _config['dgi_prefix'] = regime.isRegimenGeneral ? 'F-' : '';
-        _config['dgi_current_number'] = '1';
-        _config['dgi_range_start'] = '1';
+        final existingStart = (_config['dgi_range_start'] ?? '').trim();
+        final existingNumber =
+            int.tryParse((_config['dgi_current_number'] ?? '').trim());
+        if (existingStart.isEmpty || existingNumber == null || existingNumber <= 0) {
+          _config['dgi_current_number'] = '1';
+          _config['dgi_range_start'] = '1';
+        }
       }
     } else if (regime.isControlInterno) {
       _upgradedFromControlInterno = false;
@@ -355,9 +360,24 @@ class BusinessProfileViewModel extends ChangeNotifier {
         if (currentPrefix == 'NV-') {
           effectiveConfig['dgi_prefix'] =
               targetRegime.isRegimenGeneral ? 'F-' : '';
-          effectiveConfig['dgi_current_number'] = '1';
-          if ((effectiveConfig['dgi_range_start']?.trim() ?? '').isEmpty) {
-            effectiveConfig['dgi_range_start'] = '1';
+          final persistedNumberEntity =
+              await _configDao.getConfigByKey('dgi_current_number');
+          final persistedNumber = persistedNumberEntity?.value.trim() ?? '';
+          final incomingNumber =
+              effectiveConfig['dgi_current_number']?.trim() ?? '';
+          final incomingStart =
+              effectiveConfig['dgi_range_start']?.trim() ?? '';
+          final parsedIncoming = int.tryParse(incomingNumber);
+          final hasExplicitOperatorNumber = parsedIncoming != null &&
+              parsedIncoming > 0 &&
+              (incomingNumber != persistedNumber || incomingStart.isNotEmpty);
+
+          if (!hasExplicitOperatorNumber) {
+            effectiveConfig['dgi_current_number'] = '1';
+          }
+          if (incomingStart.isEmpty) {
+            effectiveConfig['dgi_range_start'] =
+                effectiveConfig['dgi_current_number']!;
           }
           forceWritePrefix = true;
         }

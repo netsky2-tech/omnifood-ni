@@ -231,6 +231,32 @@ void main() {
     });
   });
 
+  group('CONTROL_INTERNO -> fiscal formalization (NV- history isolation)', () {
+    test(
+        'ignores non-fiscal NV- invoice when configured prefix is fiscal (F-)',
+        () async {
+      await database.invoiceDao.insertInvoice(
+        InvoiceEntity(
+          id: 'inv-nv-27',
+          number: 'NV-00000027',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'cashier-1',
+          subtotal: 100,
+          totalTax: 0,
+          total: 100,
+        ),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_prefix', value: 'F-'),
+      );
+      await database.localConfigDao.saveConfig(
+        LocalConfigEntity(key: 'dgi_current_number', value: '1'),
+      );
+
+      expect(await service.getNextNumber(), 'F-00000001');
+    });
+  });
+
   group('D-1: reads never rewrite a configured sequence', () {
     test('repeated reads leave the config byte-identical', () async {
       await service.initializeRange(prefix: '001-001-01-', start: 1);

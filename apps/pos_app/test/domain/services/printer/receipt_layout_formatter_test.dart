@@ -2333,5 +2333,40 @@ void main() {
         }
       });
     }
+
+    test('preserves NOTA DE CREDITO title under CONTROL_INTERNO while keeping non-fiscal footer (text & ESC/POS)', () {
+      final formatter = ReceiptLayoutFormatter.format58mm();
+      final creditNote = Invoice(
+        id: 'cn-ci-1',
+        number: 'NV-00000002',
+        createdAt: DateTime(2026, 12, 1, 11, 0),
+        userId: 'u1',
+        subtotal: 50.00,
+        totalTax: 0.00,
+        total: 50.00,
+        type: InvoiceType.creditNote,
+      );
+      final doc = ReceiptDocument.fromInvoice(
+        creditNote,
+        items: const [],
+        payments: const [],
+        businessName: 'Pulpería La Esquina',
+        taxRegime: TaxRegime.controlInterno,
+      );
+
+      final text = formatter.formatReceiptDocumentText(doc);
+      final escPosBytes = formatter.formatReceiptDocumentEscPos(doc);
+      final escPosAscii = String.fromCharCodes(
+        escPosBytes.where((b) => b == 10 || (b >= 32 && b <= 126)),
+      );
+
+      for (final rendered in [text, escPosAscii]) {
+        expect(rendered, contains('NOTA DE CREDITO'));
+        expect(rendered, isNot(contains('NOTA DE VENTA')));
+        expect(rendered, contains('DOCUMENTO NO FISCAL'));
+        expect(rendered, contains('NO VALIDO COMO FACTURA'));
+        expect(rendered, contains('SOLO CONTROL INTERNO'));
+      }
+    });
   });
 }

@@ -133,5 +133,36 @@ void main() {
       expect(savedMap['dgi_current_number'], '1');
       expect(savedMap['ruc'], 'J0310000000001');
     });
+
+    test('upgrading CONTROL_INTERNO -> REGIMEN_GENERAL preserves explicit operator dgi_current_number and dgi_range_start', () async {
+      when(() => mockConfigDao.getConfigByKey('tax_regime'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'tax_regime', value: 'CONTROL_INTERNO'));
+      when(() => mockConfigDao.getConfigByKey('dgi_prefix'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_prefix', value: 'NV-'));
+      when(() => mockConfigDao.getConfigByKey('dgi_current_number'))
+          .thenAnswer((_) async => LocalConfigEntity(key: 'dgi_current_number', value: '27'));
+      await viewModel.loadConfig();
+
+      await viewModel.saveConfig({
+        'business_name': 'Ferretería El Progreso S.A.',
+        'ruc': 'J0310000000001',
+        'tax_regime': 'REGIMEN_GENERAL',
+        'dgi_prefix': 'NV-',
+        'dgi_current_number': '500',
+        'dgi_range_start': '500',
+      });
+
+      expect(viewModel.config['tax_regime'], 'REGIMEN_GENERAL');
+      expect(viewModel.config['dgi_prefix'], 'F-');
+      expect(viewModel.config['dgi_current_number'], '500');
+      expect(viewModel.config['dgi_range_start'], '500');
+
+      final saved = verify(() => mockConfigDao.saveConfig(captureAny())).captured.cast<LocalConfigEntity>();
+      final savedMap = {for (final e in saved) e.key: e.value};
+      expect(savedMap['dgi_prefix'], 'F-');
+      expect(savedMap['dgi_current_number'], '500');
+      expect(savedMap['dgi_range_start'], '500');
+      expect(savedMap['ruc'], 'J0310000000001');
+    });
   });
 }

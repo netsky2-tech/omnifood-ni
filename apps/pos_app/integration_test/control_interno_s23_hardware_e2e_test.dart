@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pos_app/data/database/app_database.dart';
+import 'package:pos_app/data/models/sales/invoice_entity.dart';
 import 'package:pos_app/data/services/sales/dgi_numbering_service_impl.dart';
 import 'package:pos_app/domain/models/config/tax_regime.dart';
 import 'package:pos_app/domain/models/sales/cart_item.dart';
@@ -102,8 +103,9 @@ class _HardwareE2EControlInternoAppState
     try {
       db1 = await $FloorAppDatabase.databaseBuilder(db1Path).build();
       final configDao1 = db1.localConfigDao;
+      final invoiceDao1 = db1.invoiceDao;
       final vm1 = BusinessProfileViewModel(configDao1);
-      final numbering1 = DgiNumberingServiceImpl(configDao1);
+      final numbering1 = DgiNumberingServiceImpl(configDao1, invoiceDao1);
       const calculator = InvoiceFiscalCalculator();
       final fmt58 = ReceiptLayoutFormatter.format58mm();
       final fmt80 = ReceiptLayoutFormatter.format80mm();
@@ -261,6 +263,19 @@ class _HardwareE2EControlInternoAppState
         'E2E_RESULT: PASS [1/3] CONTROL_INTERNO setup without RUC, NV-00000001, 0% IVA, and honest 58mm/80mm + ESC/POS tickets verified',
       );
 
+      // Persist NV-00000027 in real SQLite invoices before formalizing to CUOTA_FIJA
+      await invoiceDao1.insertInvoice(
+        InvoiceEntity(
+          id: 'e2e-nv-1-27',
+          number: 'NV-00000027',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'e2e-cashier',
+          subtotal: calc1.subtotal,
+          totalTax: 0.0,
+          total: calc1.total,
+        ),
+      );
+
       // =======================================================================
       // CASE 2 — Smooth Formalization Transition (CONTROL_INTERNO -> CUOTA_FIJA)
       // =======================================================================
@@ -384,8 +399,9 @@ class _HardwareE2EControlInternoAppState
 
       db2 = await $FloorAppDatabase.databaseBuilder(db2Path).build();
       final configDao2 = db2.localConfigDao;
+      final invoiceDao2 = db2.invoiceDao;
       final vm2 = BusinessProfileViewModel(configDao2);
-      final numbering2 = DgiNumberingServiceImpl(configDao2);
+      final numbering2 = DgiNumberingServiceImpl(configDao2, invoiceDao2);
 
       await vm2.loadConfig();
       await vm2.saveConfig({
@@ -409,6 +425,19 @@ class _HardwareE2EControlInternoAppState
       _assertTrue(
         (await configDao2.getConfigByKey('dgi_current_number'))?.value == '2',
         'Case 3 cursor advanced to 2 after issuing NV-00000001',
+      );
+
+      // Persist NV-00000027 in real SQLite invoices before formalizing to REGIMEN_GENERAL
+      await invoiceDao2.insertInvoice(
+        InvoiceEntity(
+          id: 'e2e-nv-2-27',
+          number: 'NV-00000027',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          userId: 'e2e-cashier',
+          subtotal: 100.0,
+          totalTax: 0.0,
+          total: 100.0,
+        ),
       );
 
       // Reload VM config so it reflects current SQLite state, then upgrade
@@ -436,6 +465,29 @@ class _HardwareE2EControlInternoAppState
       _assertTrue(
         docNumber3 == 'F-00000001',
         'Case 3 DgiNumberingServiceImpl.getNextNumber() == F-00000001 (got $docNumber3)',
+      );
+
+      // Also verify custom start ('F-00000500') when operator enters explicit dgi_current_number/dgi_range_start
+      await vm2.saveConfig({
+        ...vm2.config,
+        'tax_regime': 'CONTROL_INTERNO',
+        'dgi_prefix': 'NV-',
+        'dgi_current_number': '27',
+        'dgi_range_start': '',
+      });
+      await vm2.loadConfig();
+      await vm2.saveConfig({
+        ...vm2.config,
+        'tax_regime': 'REGIMEN_GENERAL',
+        'ruc': 'J0310000001234',
+        'dgi_prefix': 'NV-',
+        'dgi_current_number': '500',
+        'dgi_range_start': '500',
+      });
+      final customStartNumber = await numbering2.getNextNumber();
+      _assertTrue(
+        customStartNumber == 'F-00000500',
+        'Case 3 custom start DgiNumberingServiceImpl.getNextNumber() == F-00000500 (got $customStartNumber)',
       );
 
       final calc3 = calculator.calculate(
